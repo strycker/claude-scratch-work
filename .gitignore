@@ -15,7 +15,6 @@ build/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
 
 # Data — raw/processed data should not be versioned
 data/raw/
