@@ -1,0 +1,39 @@
+# Environment
+.env
+*.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data — raw/processed data should not be versioned
+data/raw/
+data/processed/
+data/regimes/
+outputs/figures/
+outputs/models/
+outputs/reports/
+
+# Secrets / API keys (always use .env instead)
+*.key
+config/secrets.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

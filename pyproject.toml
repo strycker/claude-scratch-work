@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "market-regime"
+version = "0.1.0"
+description = "Market regime classification and prediction pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    # Data
+    "pandas>=2.0",
+    "numpy>=1.25",
+    "pyarrow>=14.0",          # parquet I/O
+    # Data ingestion
+    "fredapi>=0.5",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",              # fast HTML parser for BS4
+    # Feature engineering / ML
+    "scikit-learn>=1.4",
+    "scipy>=1.11",
+    # Config
+    "pyyaml>=6.0",
+    # Visualization
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    # Reporting (optional — add API key later)
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "ipykernel",
+    "jupyterlab",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

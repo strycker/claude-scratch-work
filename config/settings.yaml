@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────
+#  Market Regime Pipeline — Global Settings
+#  Edit values here; never hardcode them in source files.
+# ─────────────────────────────────────────────────────────
+
+data:
+  start_date: "1950-01-01"
+  end_date: null          # null → today
+  frequency: "Q"          # quarterly resampling target
+
+# FRED series to fetch.  Key = friendly name used throughout code.
+fred:
+  series:
+    gdp:              "GDP"          # Nominal GDP, quarterly
+    cpi:              "CPIAUCSL"     # CPI all-urban consumers
+    unemployment:     "UNRATE"       # Unemployment rate
+    fed_funds:        "FEDFUNDS"     # Effective fed funds rate
+    treasury_10y:     "GS10"         # 10-year Treasury yield
+    treasury_2y:      "GS2"          # 2-year Treasury yield
+    sp500_pe:         "MULTPL/SP500_PE_RATIO_QUARTER"  # via FRED/Quandl alt
+    m2:               "M2SL"         # M2 money supply
+    credit_spread:    "BAMLH0A0HYM2" # High-yield OAS spread
+    real_gdp:         "GDPC1"        # Real GDP
+    pce:              "PCEPI"        # PCE price index (Fed's preferred inflation)
+    industrial_prod:  "INDPRO"       # Industrial production index
+
+# multpl.com tables to scrape (URL slug → friendly name)
+multpl:
+  tables:
+    sp500_pe:         "sp-500-pe-ratio"
+    sp500_div_yield:  "sp-500-dividend-yield"
+    sp500_price:      "sp-500-historical-annual-returns"
+    shiller_pe:       "shiller-pe"
+
+# Feature engineering
+features:
+  log_transform:
+    - gdp
+    - cpi
+    - m2
+    - real_gdp
+    - pce
+    - industrial_prod
+  derivative_orders: [1, 2, 3]        # smoothed differences to compute
+  derivative_window: 4                 # rolling window (quarters) for smoothing
+  cross_ratios:
+    - [treasury_10y, treasury_2y]      # yield curve slope
+    - [cpi, m2]                        # money supply inflation ratio
+  bernstein_degree: 5                  # polynomial degree for gap filling
+
+# Unsupervised clustering
+clustering:
+  pca_variance_threshold: 0.90        # keep components explaining ≥90% variance
+  n_clusters: 6
+  size_constrained: true              # attempt equal-size clusters
+  min_cluster_size: 8                 # quarters per cluster minimum
+  random_state: 42
+
+# Supervised prediction
+prediction:
+  test_size: 0.20                     # fraction held out for evaluation
+  random_state: 42
+  n_estimators: 200                   # RandomForest trees
+  forward_horizons_quarters: [1, 2, 4, 8]  # horizons for transition predictions
+
+# Asset classes to track (tickers or descriptors — data source TBD)
+assets:
+  etfs:
+    - SPY    # S&P 500
+    - GLD    # Gold
+    - TLT    # Long-term Treasuries
+    - USO    # Oil
+    - QQQ    # Nasdaq / Tech
+    - IWM    # Small-cap
+    - VNQ    # Real estate
+    - AGG    # Aggregate bonds
+    - DXY    # USD index (proxy)
