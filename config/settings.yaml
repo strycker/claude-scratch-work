@@ -1,77 +1,265 @@
-# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 #  Market Regime Pipeline — Global Settings
 #  Edit values here; never hardcode them in source files.
-# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
 data:
   start_date: "1950-01-01"
-  end_date: null          # null → today
-  frequency: "Q"          # quarterly resampling target
+  end_date:   "2025-09-30"    # set to null to use today
+  frequency:  "Q"             # quarterly resampling target
 
-# FRED series to fetch.  Key = friendly name used throughout code.
+# ── FRED series ───────────────────────────────────────────────────────────────
+# shift: true → series is lagged one quarter to account for publication delay.
+# GDP and GNP are released after the quarter ends — shifting prevents look-ahead.
 fred:
   series:
-    gdp:              "GDP"          # Nominal GDP, quarterly
-    cpi:              "CPIAUCSL"     # CPI all-urban consumers
-    unemployment:     "UNRATE"       # Unemployment rate
-    fed_funds:        "FEDFUNDS"     # Effective fed funds rate
-    treasury_10y:     "GS10"         # 10-year Treasury yield
-    treasury_2y:      "GS2"          # 2-year Treasury yield
-    sp500_pe:         "MULTPL/SP500_PE_RATIO_QUARTER"  # via FRED/Quandl alt
-    m2:               "M2SL"         # M2 money supply
-    credit_spread:    "BAMLH0A0HYM2" # High-yield OAS spread
-    real_gdp:         "GDPC1"        # Real GDP
-    pce:              "PCEPI"        # PCE price index (Fed's preferred inflation)
-    industrial_prod:  "INDPRO"       # Industrial production index
+    GDP:
+      name:  "fred_gdp"
+      shift: true
+    GNP:
+      name:  "fred_gnp"
+      shift: true
+    BAA:
+      name:  "fred_baa"
+      shift: false
+    AAA:
+      name:  "fred_aaa"
+      shift: false
+    CPIAUCSL:
+      name:  "fred_cpi"
+      shift: false
+    GS10:
+      name:  "fred_gs10"
+      shift: false
+    TB3MS:
+      name:  "fred_tb3ms"
+      shift: false
 
-# multpl.com tables to scrape (URL slug → friendly name)
+# ── multpl.com series ─────────────────────────────────────────────────────────
+# Each entry: [short_name, description, url, value_type]
+# value_type controls how raw strings are parsed:
+#   num      → strip commas, cast to float
+#   percent  → strip %, cast, divide by 100  (stored as decimal fraction)
+#   million  → strip " million", cast to float
+#   trillion → strip " trillion", cast to float
 multpl:
-  tables:
-    sp500_pe:         "sp-500-pe-ratio"
-    sp500_div_yield:  "sp-500-dividend-yield"
-    sp500_price:      "sp-500-historical-annual-returns"
-    shiller_pe:       "shiller-pe"
+  datasets:
+    - [book,                 "SP500 Book Value Per Share",          "https://www.multpl.com/s-p-500-book-value/table/by-quarter",                             num]
+    - [dividend,             "SP500 Dividend",                      "https://www.multpl.com/s-p-500-dividend/table/by-month",                                 num]
+    - [div_growth,           "SP500 Dividend Growth",               "https://www.multpl.com/s-p-500-dividend-growth/table/by-quarter",                        percent]
+    - [div_yield,            "SP500 Dividend Yield",                "https://www.multpl.com/s-p-500-dividend-yield/table/by-month",                           percent]
+    - [earn,                 "SP500 Earnings",                      "https://www.multpl.com/s-p-500-earnings/table/by-month",                                 num]
+    - [earn_yld,             "SP500 Earnings Yield",                "https://www.multpl.com/s-p-500-earnings-yield/table/by-month",                           percent]
+    - [earn_growth,          "SP500 Earnings Growth",               "https://www.multpl.com/s-p-500-earnings-growth/table/by-quarter",                        percent]
+    - [real_earn_growth,     "SP500 Real Earnings Growth",          "https://www.multpl.com/s-p-500-real-earnings-growth/table/by-quarter",                   percent]
+    - [sp500_pe,             "SP500 PE Ratio",                      "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",                                 num]
+    - [sp500,                "SP500 Historical Prices",             "https://www.multpl.com/s-p-500-historical-prices/table/by-month",                        num]
+    - [sp500_adj,            "SP500 Inflation Adjusted Prices",     "https://www.multpl.com/inflation-adjusted-s-p-500/table/by-month",                       num]
+    - [price_book,           "SP500 Price to Book Value",           "https://www.multpl.com/s-p-500-price-to-book/table/by-quarter",                          num]
+    - [price_sales,          "SP500 Price to Sales Ratio",          "https://www.multpl.com/s-p-500-price-to-sales/table/by-quarter",                         num]
+    - [cape_shiller,         "Shiller PE 10 Ratio",                 "https://www.multpl.com/shiller-pe/table/by-month",                                       num]
+    - [sales,                "SP500 Sales Per Share",               "https://www.multpl.com/s-p-500-sales/table/by-quarter",                                  num]
+    - [sales_growth,         "SP500 Sales Per Share Growth",        "https://www.multpl.com/s-p-500-sales-growth/table/by-quarter",                           percent]
+    - [real_sales,           "SP500 Real Sales Per Share",          "https://www.multpl.com/s-p-500-real-sales/table/by-quarter",                             num]
+    - [real_sales_growth,    "SP500 Real Sales Per Share Growth",   "https://www.multpl.com/s-p-500-real-sales-growth/table/by-quarter",                      percent]
+    - [1mo_ustreas,          "US 1 Month Treasury Rate",            "https://www.multpl.com/1-month-treasury-rate/table/by-month",                            percent]
+    - [6mo_ustreas,          "US 6 Month Treasury Rate",            "https://www.multpl.com/6-month-treasury-rate/table/by-month",                            percent]
+    - [1yr_ustreas,          "US 1 Year Treasury Rate",             "https://www.multpl.com/1-year-treasury-rate/table/by-month",                             percent]
+    - [2yr_ustreas,          "US 2 Year Treasury Rate",             "https://www.multpl.com/2-year-treasury-rate/table/by-month",                             percent]
+    - [3yr_ustreas,          "US 3 Year Treasury Rate",             "https://www.multpl.com/3-year-treasury-rate/table/by-month",                             percent]
+    - [5yr_ustreas,          "US 5 Year Treasury Rate",             "https://www.multpl.com/5-year-treasury-rate/table/by-month",                             percent]
+    - [10yr_ustreas,         "US 10 Year Treasury Rate",            "https://www.multpl.com/10-year-treasury-rate/table/by-month",                            percent]
+    - [20yr_ustreas,         "US 20 Year Treasury Rate",            "https://www.multpl.com/20-year-treasury-rate/table/by-month",                            percent]
+    - [30yr_ustreas,         "US 30 Year Treasury Rate",            "https://www.multpl.com/30-year-treasury-rate/table/by-month",                            percent]
+    - [5yr_real_int,         "US 5 Year Real Interest Rate",        "https://www.multpl.com/5-year-real-interest-rate/table/by-month",                        percent]
+    - [10yr_real_int,        "US 10 Year Real Interest Rate",       "https://www.multpl.com/10-year-real-interest-rate/table/by-month",                       percent]
+    - [20yr_real_int,        "US 20 Year Real Interest Rate",       "https://www.multpl.com/20-year-real-interest-rate/table/by-month",                       percent]
+    - [30yr_real_int,        "US 30 Year Real Interest Rate",       "https://www.multpl.com/30-year-real-interest-rate/table/by-month",                       percent]
+    - [cpi,                  "US Consumer Price Index",             "https://www.multpl.com/cpi/table/by-month",                                              num]
+    - [fed_debt,             "US Federal Debt Percent",             "https://www.multpl.com/u-s-federal-debt-percent/table/by-year",                          percent]
+    - [gdp,                  "US GDP",                              "https://www.multpl.com/us-gdp/table/by-year",                                            trillion]
+    - [gdp_growth,           "US GDP Growth Rate",                  "https://www.multpl.com/us-gdp-growth-rate/table/by-quarter",                             percent]
+    - [real_gdp,             "US Real GDP",                         "https://www.multpl.com/us-gdp-inflation-adjusted/table/by-quarter",                      trillion]
+    - [real_gdp_growth,      "US Real GDP Growth Rate",             "https://www.multpl.com/us-real-gdp-growth-rate/table/by-quarter",                        percent]
+    - [real_gdp_per_cap,     "US Real GDP Per Capita",              "https://www.multpl.com/us-real-gdp-per-capita/table/by-quarter",                         num]
+    - [us_home_prices,       "US Home Prices",                      "https://www.multpl.com/case-shiller-home-price-index-inflation-adjusted/table/by-month", num]
+    - [us_avg_income,        "US Average Income",                   "https://www.multpl.com/us-average-income/table/by-year",                                 num]
+    - [us_med_income,        "US Median Income",                    "https://www.multpl.com/us-median-income/table/by-year",                                  num]
+    - [us_med_income_growth, "US Median Income Growth",             "https://www.multpl.com/us-median-income-growth/table/by-year",                           percent]
+    - [us_med_real_income,   "US Median Real Income",               "https://www.multpl.com/us-median-real-income/table/by-year",                             num]
+    - [us_infl,              "US Inflation Rate",                   "https://www.multpl.com/inflation/table/by-month",                                        percent]
+    - [us_pop,               "US Population",                       "https://www.multpl.com/united-states-population/table/by-month",                         million]
+    - [us_pop_growth,        "US Population Growth Rate",           "https://www.multpl.com/us-population-growth-rate/table/by-month",                        percent]
 
-# Feature engineering
+# ── Feature engineering ───────────────────────────────────────────────────────
 features:
-  log_transform:
-    - gdp
+  # Columns to log-transform (applied after cross-asset ratios are computed)
+  log_columns:
+    - cape_shiller
     - cpi
-    - m2
+    - div_yield
+    - div_yield2        # derived ratio: dividend / sp500
+    - dividend
+    - earn
+    - earn_yld
+    - fed_debt
+    - fred_cpi
+    - fred_gdp
+    - fred_gnp
+    - gdp
+    - price_div         # derived ratio: sp500 / dividend
+    - price_gdp         # derived ratio: sp500 / gdp
+    - price_gdp2        # derived ratio: sp500 / fred_gdp
+    - price_gnp2        # derived ratio: sp500 / fred_gnp
     - real_gdp
-    - pce
-    - industrial_prod
-  derivative_orders: [1, 2, 3]        # smoothed differences to compute
-  derivative_window: 4                 # rolling window (quarters) for smoothing
-  cross_ratios:
-    - [treasury_10y, treasury_2y]      # yield curve slope
-    - [cpi, m2]                        # money supply inflation ratio
-  bernstein_degree: 5                  # polynomial degree for gap filling
+    - real_price2       # derived ratio: sp500 / cpi
+    - real_price3       # derived ratio: sp500 / fred_cpi
+    - real_price_gdp2   # derived ratio: sp500_adj / gdp
+    - sp500
+    - sp500_adj
+    - us_pop
 
-# Unsupervised clustering
+  # Features retained after log-transform, before gap fill and derivatives.
+  # Dropping noisy/redundant columns here keeps the derivative computation clean.
+  initial_features:
+    - 10yr_ustreas
+    - credit_spread
+    - div_minus_baa
+    - fred_aaa
+    - fred_baa
+    - fred_gs10
+    - fred_tb3ms
+    - gdp_growth
+    - log_cape_shiller
+    - log_cpi
+    - log_div_yield
+    - log_div_yield2
+    - log_dividend
+    - log_earn
+    - log_earn_yld
+    - log_fed_debt
+    - log_fred_cpi
+    - log_fred_gdp
+    - log_fred_gnp
+    - log_gdp
+    - log_price_div
+    - log_price_gdp
+    - log_price_gdp2
+    - log_price_gnp2
+    - log_real_gdp
+    - log_real_price2
+    - log_real_price3
+    - log_real_price_gdp2
+    - log_sp500
+    - log_sp500_adj
+    - log_us_pop
+    - real_gdp_growth
+    - real_gdp_per_cap
+    - sp500_pe
+    - us_infl
+    - us_pop_growth
+
+  # Final feature set fed into PCA + clustering.
+  # Uses d1+d2 for most series; d1+d2+d3 only for sp500 series (higher-order
+  # momentum is informative there). Raw levels kept where the series is already
+  # a rate/growth figure (credit_spread, gdp_growth, sp500_pe, us_infl).
+  clustering_features:
+    - 10yr_ustreas_d1
+    - 10yr_ustreas_d2
+    - credit_spread
+    - credit_spread_d1
+    - div_minus_baa_d1
+    - div_minus_baa_d2
+    - fred_aaa_d1
+    - fred_aaa_d2
+    - fred_baa_d1
+    - fred_baa_d2
+    - fred_gs10_d1
+    - fred_gs10_d2
+    - fred_tb3ms_d1
+    - fred_tb3ms_d2
+    - gdp_growth
+    - gdp_growth_d1
+    - log_cape_shiller_d1
+    - log_cape_shiller_d2
+    - log_cpi_d1
+    - log_cpi_d2
+    - log_div_yield_d1
+    - log_div_yield_d2
+    - log_div_yield2_d1
+    - log_div_yield2_d2
+    - log_dividend_d1
+    - log_dividend_d2
+    - log_earn_d1
+    - log_earn_d2
+    - log_earn_yld_d1
+    - log_earn_yld_d2
+    - log_fed_debt_d1
+    - log_fed_debt_d2
+    - log_fred_cpi_d1
+    - log_fred_cpi_d2
+    - log_fred_gdp_d1
+    - log_fred_gdp_d2
+    - log_fred_gnp_d1
+    - log_fred_gnp_d2
+    - log_gdp_d1
+    - log_gdp_d2
+    - log_price_div_d1
+    - log_price_div_d2
+    - log_price_gdp_d1
+    - log_price_gdp_d2
+    - log_price_gdp2_d1
+    - log_price_gdp2_d2
+    - log_price_gnp2_d1
+    - log_price_gnp2_d2
+    - log_real_gdp_d1
+    - log_real_gdp_d2
+    - log_real_price2_d1
+    - log_real_price2_d2
+    - log_real_price3_d1
+    - log_real_price3_d2
+    - log_real_price_gdp2_d1
+    - log_real_price_gdp2_d2
+    - log_sp500_d1
+    - log_sp500_d2
+    - log_sp500_d3
+    - log_sp500_adj_d1
+    - log_sp500_adj_d2
+    - log_sp500_adj_d3
+    - real_gdp_growth
+    - real_gdp_growth_d1
+    - real_gdp_per_cap_d1
+    - real_gdp_per_cap_d2
+    - sp500_pe
+    - sp500_pe_d1
+    - us_infl
+    - us_infl_d1
+
+  derivative_window: 5  # rolling mean window applied before/after np.gradient
+
+# ── Clustering ────────────────────────────────────────────────────────────────
 clustering:
-  pca_variance_threshold: 0.90        # keep components explaining ≥90% variance
-  n_clusters: 6
-  size_constrained: true              # attempt equal-size clusters
-  min_cluster_size: 8                 # quarters per cluster minimum
-  random_state: 42
+  n_pca_components:  5   # fixed — ties to the 5-regime Grok baseline
+  n_clusters_search: 12  # upper bound for k-sweep silhouette evaluation
+  k_cap:             5   # maximum k to accept from silhouette search
+  balanced_k:        5   # k for size-constrained KMeans
+  random_state:      42
 
-# Supervised prediction
+# ── Supervised prediction ─────────────────────────────────────────────────────
 prediction:
-  test_size: 0.20                     # fraction held out for evaluation
-  random_state: 42
-  n_estimators: 200                   # RandomForest trees
-  forward_horizons_quarters: [1, 2, 4, 8]  # horizons for transition predictions
+  test_size:                 0.20
+  random_state:              42
+  n_estimators:              200
+  forward_horizons_quarters: [1, 2, 4, 8]
 
-# Asset classes to track (tickers or descriptors — data source TBD)
+# ── Asset classes ─────────────────────────────────────────────────────────────
 assets:
   etfs:
-    - SPY    # S&P 500
-    - GLD    # Gold
-    - TLT    # Long-term Treasuries
-    - USO    # Oil
-    - QQQ    # Nasdaq / Tech
-    - IWM    # Small-cap
-    - VNQ    # Real estate
-    - AGG    # Aggregate bonds
-    - DXY    # USD index (proxy)
+    - SPY   # S&P 500
+    - GLD   # Gold
+    - TLT   # Long-term Treasuries
+    - USO   # Oil
+    - QQQ   # Nasdaq / Tech
+    - IWM   # Small-cap
+    - VNQ   # Real estate
+    - AGG   # Aggregate bonds
