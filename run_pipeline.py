@@ -43,6 +43,33 @@ from market_regime.runtime import RunConfig
 log = logging.getLogger(__name__)
 
 
+# ── I/O helpers ───────────────────────────────────────────────────────────────
+
+def _load_parquet(canonical_path: Path, checkpoint_name: str) -> "pd.DataFrame":
+    """
+    Load a DataFrame from its canonical inter-step path, falling back to the
+    CheckpointManager when the file doesn't exist.
+
+    This lets steps 3-7 work even when the upstream step was run on a different
+    machine and only its checkpoint was committed to the repo.
+    """
+    import pandas as pd
+    from market_regime.io.checkpoints import CheckpointManager
+
+    if canonical_path.exists():
+        return pd.read_parquet(canonical_path)
+
+    log.info(
+        "%s not found — loading from checkpoint '%s'",
+        canonical_path.name, checkpoint_name,
+    )
+    df = CheckpointManager().load(checkpoint_name)
+    # Backfill the canonical file so subsequent reads are fast
+    canonical_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(canonical_path)
+    return df
+
+
 # ── market_code helpers ───────────────────────────────────────────────────────
 
 def _load_market_code(
@@ -184,12 +211,7 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
         log.info("Step 2: using cached features checkpoint")
         return
 
-    raw_path = DATA_DIR / "raw" / "macro_raw.parquet"
-    if not raw_path.exists():
-        raise FileNotFoundError(
-            f"macro_raw.parquet not found — run step 1 first: {raw_path}"
-        )
-    raw = pd.read_parquet(raw_path)
+    raw = _load_parquet(DATA_DIR / "raw" / "macro_raw.parquet", "macro_raw")
 
     log.info("Step 2: engineering features from %d × %d raw data …",
              len(raw), len(raw.columns))
@@ -227,7 +249,7 @@ def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False)
         log.info("Step 3: using cached cluster_labels checkpoint")
         return
 
-    features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
+    features = _load_parquet(DATA_DIR / "processed" / "features.parquet", "features")
     X = features.drop(columns=["market_code"], errors="ignore").dropna()
     n_dropped = len(features) - len(X)
     if n_dropped:
@@ -308,8 +330,8 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
 
     cm = CheckpointManager()
 
-    features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
-    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
+    features = _load_parquet(DATA_DIR / "processed" / "features.parquet", "features")
+    labels = _load_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
     features = features.loc[common]
@@ -357,8 +379,8 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     import pandas as pd
     import pickle
 
-    features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
-    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
+    features = _load_parquet(DATA_DIR / "processed" / "features.parquet", "features")
+    labels = _load_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
     X = features.loc[common].drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
@@ -421,7 +443,7 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 
     cm = CheckpointManager()
 
-    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
+    labels = _load_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels")["balanced_cluster"]
 
     # Try yfinance first; fall back to cached parquet if present
     prices: pd.DataFrame | None = None
@@ -492,11 +514,16 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
     with open(current_model_path, "rb") as f:
         current_model = pickle.load(f)
 
-    features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
-    X = features.drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
+    features = _load_parquet(DATA_DIR / "processed" / "features.parquet", "features")
+    X = features.drop(columns=["market_code"], errors="ignore")
+    # Align to the exact feature set the model was trained on
+    if hasattr(current_model, "feature_names_in_"):
+        X = X[current_model.feature_names_in_]
+    else:
+        X = X.dropna(axis=1, how="any")
     prediction = predict_current(current_model, X)
 
-    tm = pd.read_parquet(DATA_DIR / "regimes" / "transition_matrix.parquet")
+    tm = _load_parquet(DATA_DIR / "regimes" / "transition_matrix.parquet", "transition_matrix")
 
     # Load regime names (pinned overrides take precedence over auto-suggested)
     override_path = CONFIG_DIR / "regime_labels.yaml"

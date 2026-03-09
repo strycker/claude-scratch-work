@@ -1,0 +1,12 @@
+{
+  "name": "market_code_predicted",
+  "created": "2026-03-09T17:20:17.615263",
+  "config_hash": "d5c0c224",
+  "rows": 304,
+  "columns": 1,
+  "col_names": [
+    "market_code"
+  ],
+  "index_start": "1950-03-31 00:00:00",
+  "index_end": "2025-12-31 00:00:00"
+}
