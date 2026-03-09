@@ -263,3 +263,10 @@ assets:
     - IWM   # Small-cap
     - VNQ   # Real estate
     - AGG   # Aggregate bonds
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+dashboard:
+  signal_thresholds:
+    green:  0.05   # median quarterly return > +5% → GREEN
+    yellow: 0.00   # median quarterly return > 0%  → YELLOW
+    # below 0% → RED

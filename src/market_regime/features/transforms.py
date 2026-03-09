@@ -109,8 +109,15 @@ def _fill_column(df: pd.DataFrame, col: str, window: int) -> pd.Series:
     For each contiguous NaN block bounded by valid data on both sides, a
     Bernstein polynomial is fitted through the boundary values and their
     smoothed derivatives.  Leading/trailing gaps use a Taylor expansion.
+
+    market_code is optional: when present, valid rows are those where both
+    the feature column and market_code are non-NaN.  When absent, valid rows
+    are those where the feature column itself is non-NaN.
     """
-    valid = df[[col, "market_code"]].dropna()
+    if "market_code" in df.columns:
+        valid = df[[col, "market_code"]].dropna()
+    else:
+        valid = df[[col]].dropna()
     if valid.empty:
         return df[col]
 
@@ -181,7 +188,10 @@ def apply_derivatives(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     df = df.copy()
     feature_cols = [c for c in df.columns if c != "market_code"]
     for col in feature_cols:
-        valid = df[[col, "market_code"]].dropna()
+        if "market_code" in df.columns:
+            valid = df[[col, "market_code"]].dropna()
+        else:
+            valid = df[[col]].dropna()
         if valid.empty:
             continue
         d1, d2, d3 = _compute_derivatives(valid[col], window=window)

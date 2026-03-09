@@ -45,13 +45,8 @@ def main() -> None:
     profile = build_profiles(features, labels)
     profile.to_parquet(DATA_DIR / "regimes" / "profiles.parquet")
 
-    # Use median stat for naming heuristics
-    median_df = features.copy()
-    median_df["cluster"] = labels
-    median_per_cluster = median_df.groupby("cluster").median()
-
-    # Auto-suggest names, then check for manual overrides
-    auto_names = suggest_names(profile, median_per_cluster)
+    # Auto-suggest names from raw features + labels, then apply manual overrides
+    auto_names = suggest_names(features, labels)
     overrides = load_name_overrides(CONFIG_DIR)
     regime_names = {**auto_names, **overrides}
 

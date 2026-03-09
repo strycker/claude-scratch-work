@@ -98,15 +98,15 @@ def evaluate_kmeans(
         model = KMeans(n_clusters=k, n_init=n_init, random_state=random_state)
         labels = model.fit_predict(X)
         results.append({
-            "k":              k,
-            "inertia":        model.inertia_,
-            "silhouette":     silhouette_score(X, labels),
-            "calinski":       calinski_harabasz_score(X, labels),
-            "davies_bouldin": davies_bouldin_score(X, labels),
+            "k":                 k,
+            "inertia":           model.inertia_,
+            "silhouette":        silhouette_score(X, labels),
+            "calinski_harabasz": calinski_harabasz_score(X, labels),
+            "davies_bouldin":    davies_bouldin_score(X, labels),
         })
         log.debug("k=%d  sil=%.4f  CH=%.1f  DB=%.4f",
                   k, results[-1]["silhouette"],
-                  results[-1]["calinski"],
+                  results[-1]["calinski_harabasz"],
                   results[-1]["davies_bouldin"])
 
     scores = pd.DataFrame(results)
@@ -131,6 +131,7 @@ def fit_clusters(
     best_k: int,
     balanced_k: int,
     random_state: int = 42,
+    use_constrained: bool = True,
 ) -> pd.DataFrame:
     """
     Fit two clusterings on the PCA-reduced data:
@@ -138,10 +139,12 @@ def fit_clusters(
       - "balanced_cluster" — size-constrained KMeans at balanced_k
 
     Args:
-        pca_df      — output of reduce_pca()
-        best_k      — k chosen by silhouette search (via pick_best_k)
-        balanced_k  — k for equal-size clustering (from config)
+        pca_df           — output of reduce_pca()
+        best_k           — k chosen by silhouette search (via pick_best_k)
+        balanced_k       — k for equal-size clustering (from config)
         random_state
+        use_constrained  — if False, fall back to plain KMeans for balanced_cluster
+                           (use when k-means-constrained is not installed)
 
     Returns:
         pca_df with two new columns: cluster, balanced_cluster.
@@ -157,7 +160,7 @@ def fit_clusters(
     log.info("Standard KMeans (k=%d): %s", best_k, _size_summary(result["cluster"]))
 
     # Size-constrained KMeans
-    KMC = _load_constrained_kmeans()
+    KMC = _load_constrained_kmeans() if use_constrained else None
     if KMC is not None:
         n = len(X)
         bucket = n // balanced_k
