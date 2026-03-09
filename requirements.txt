@@ -1,50 +1,38 @@
-# Runtime dependencies — pinned for reproducibility.
-# Generated from pyproject.toml via: pip-compile pyproject.toml --output-file requirements.txt
+# Runtime dependencies — minimum version bounds for direct dependencies.
 #
-# To upgrade all packages:
-#   pip install pip-tools && pip-compile pyproject.toml --upgrade --output-file requirements.txt
+# These bounds match pyproject.toml and are compatible with Python 3.10+.
+# pip will resolve the correct transitive versions for your Python version.
 #
-# To install (prefer using scripts/setup.sh instead):
+# To install:
 #   pip install -r requirements.txt
+#
+# If you need a fully-pinned lockfile for exact reproducibility (Python 3.11+):
+#   pip install pip-tools
+#   pip-compile pyproject.toml --output-file requirements-lock.txt
 
-beautifulsoup4==4.14.3
-certifi==2026.2.25
-cffi==2.0.0
-charset-normalizer==3.4.5
-contourpy==1.3.3
-curl-cffi==0.13.0
-cycler==0.12.1
-fonttools==4.62.0
-fredapi==0.5.2
-frozendict==2.4.7
-idna==3.11
-joblib==1.5.3
-kiwisolver==1.5.0
-lxml==6.0.2
-matplotlib==3.10.8
-multitasking==0.0.12
-numpy==2.4.3
-packaging==26.0
-pandas==3.0.1
-peewee==4.0.1
-pillow==12.1.1
-platformdirs==4.9.4
-protobuf==7.34.0
-pyarrow==23.0.1
-pycparser==3.0
-pyparsing==3.3.2
-python-dateutil==2.9.0.post0
-python-dotenv==1.2.2
-pytz==2026.1.post1
-pyyaml==6.0.3
-requests==2.32.5
-scikit-learn==1.8.0
-scipy==1.17.1
-seaborn==0.13.2
-six==1.17.0
-soupsieve==2.8.3
-threadpoolctl==3.6.0
-typing-extensions==4.15.0
-urllib3==2.6.3
-websockets==16.0
-yfinance==1.2.0
+# Data
+pandas>=2.0
+numpy>=1.25
+pyarrow>=14.0
+
+# Data ingestion
+fredapi>=0.5
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=4.9
+yfinance>=0.2
+
+# Feature engineering / ML
+scikit-learn>=1.4
+scipy>=1.11
+
+# Config / env
+pyyaml>=6.0
+python-dotenv>=1.0
+
+# Visualization
+matplotlib>=3.8
+seaborn>=0.13
+
+# SSL — certifi ensures yfinance / curl_cffi can verify certificates on all platforms
+certifi>=2024.0
