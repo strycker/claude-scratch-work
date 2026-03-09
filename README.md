@@ -31,6 +31,118 @@ Predict market conditions, optimal portfolios, and stock picks by:
   - Given a portfolio of X assets at Y percentages, the market condition regime, the recommended portfolio mix, the projected performance of each asset (which indicators have recently turned on warning lights), should you buy, sell, or hold that asset?
   - Send a weekly email (can use AI for this part!) with the final recommendations on portfolio changes &mdash; what assets need traded, bought, or sold THIS WEEK?
 
+## Installation
+
+### Prerequisites
+
+- **Python 3.10+** — check with `python3 --version`
+- **Git** — to clone the repo
+- **FRED API key** — free at [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html)
+
+### Quick Start (automated)
+
+```bash
+# 1. Clone the repo
+git clone <repo-url>
+cd claude-scratch-work
+
+# 2. Run the setup script (creates .venv, installs deps, scaffolds directories)
+bash scripts/setup.sh
+
+# For testing + JupyterLab support:
+bash scripts/setup.sh --dev
+
+# 3. Activate the virtual environment
+source .venv/bin/activate
+
+# 4. Add your FRED API key
+#    Edit .env and replace the placeholder:
+#    FRED_API_KEY=your_key_here
+
+# 5. Run the pipeline
+python run_pipeline.py --refresh --recompute --plots --market-code grok --save-market-code
+```
+
+### Manual Installation
+
+If you prefer to manage your own environment:
+
+```bash
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# Install runtime dependencies (pinned)
+pip install -r requirements.txt
+
+# OR install dev extras (adds pytest + JupyterLab)
+pip install -r requirements-dev.txt
+
+# Optional but recommended — enables balanced-size clustering
+pip install k-means-constrained
+
+# Set up .env
+cp .env.example .env
+# Edit .env and set: FRED_API_KEY=your_key_here
+
+# Create runtime directories
+mkdir -p data/{raw,processed,regimes,checkpoints}
+mkdir -p outputs/{plots,models,reports}
+```
+
+### Common Commands (via Makefile)
+
+```bash
+make setup          # Automated setup (runs scripts/setup.sh)
+make setup-dev      # Setup with testing + notebook extras
+make run            # Steps 3-7 from cached checkpoints (fast)
+make run-full       # Full pipeline — re-scrape + recompute + plots
+make test           # Run the test suite
+make dashboard      # Print current regime dashboard
+make notebooks      # Launch JupyterLab
+make help           # Show all available targets
+```
+
+### Running the Pipeline
+
+```bash
+# Full run from scratch (slow — scrapes ~46 URLs + FRED API)
+python run_pipeline.py --refresh --recompute --plots --market-code grok --save-market-code
+
+# Fast run using cached checkpoints (no re-scraping)
+python run_pipeline.py --steps 3,4,5,6,7 --plots --market-code grok
+
+# Individual pipeline steps
+python pipelines/01_ingest.py
+python pipelines/02_features.py
+python pipelines/03_cluster.py
+python pipelines/04_regime_label.py
+python pipelines/05_predict.py
+python pipelines/06_asset_returns.py
+python pipelines/07_dashboard.py
+
+# Launch the exploration notebooks
+jupyter lab notebooks/
+```
+
+### Dependency Notes
+
+| Package | Required? | Purpose |
+|---|---|---|
+| All in `requirements.txt` | Yes | Core pipeline |
+| `k-means-constrained` | Recommended | Balanced-size clustering; falls back to plain KMeans if absent |
+| `requirements-dev.txt` extras | Dev only | pytest, JupyterLab, IPython kernel |
+
+To upgrade all pinned dependencies to their latest compatible versions:
+
+```bash
+pip install pip-tools
+pip-compile pyproject.toml --upgrade --output-file requirements.txt
+pip-compile pyproject.toml --extra dev --upgrade --output-file requirements-dev.txt
+```
+
+---
+
 ## To Do:
 - Add historic Gold, Oil, TLT, etc. to datasets &mdash; see https://www.macrotrends.net/
 - Standardize the time range (1950-2025), infer missing data, throw away or fix anything looking odd
