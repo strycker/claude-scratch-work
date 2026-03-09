@@ -34,7 +34,7 @@ def main() -> None:
     cfg = load()
 
     features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
-    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["cluster"]
+    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
     X = features.loc[common].dropna(axis=1, how="any")  # drop cols still NaN after gap fill

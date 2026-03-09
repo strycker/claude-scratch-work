@@ -27,6 +27,7 @@ dependencies = [
     "seaborn>=0.13",
     # Reporting (optional — add API key later)
     "python-dotenv>=1.0",
+    "yfinance>=0.2",              # ETF price history for step 06
 ]
 
 [project.optional-dependencies]

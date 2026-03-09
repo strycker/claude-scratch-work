@@ -133,6 +133,9 @@ python pipelines/07_dashboard.py
 | `--verbose` | Set logging level to DEBUG |
 | `--steps 1,3,5` | Run only the listed step numbers |
 | `--no-constrained` | Skip k-means-constrained (if not installed) |
+| `--market-code NAME` | Load market_code from `grok`, `clustered`, `predicted`, or any saved checkpoint |
+| `--save-market-code` | After step 3, save `balanced_cluster` as `market_code_clustered` checkpoint |
+| `--show-plots` | Call `plt.show()` in addition to saving (avoid in headless/CI) |
 
 ### Jupyter notebooks (exploration / plotting)
 ```bash
@@ -364,22 +367,25 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 ## Current Status (as of March 2026)
 
 ### Complete ✓
-- Steps 01–03: ingestion, feature engineering, PCA + clustering
-- Step 04: regime profiling (profiles + transition matrix)
-- Step 05: supervised classifiers (current regime + forward horizons)
-- Step 06: asset returns stub (needs asset_prices.csv / yfinance)
-- Step 07: dashboard stub (text output + CSV)
+- Steps 01–07: ingestion, feature engineering, PCA + clustering, regime profiling,
+  supervised classifiers, asset returns, dashboard (text output + CSV)
+- `CheckpointManager` — fully implemented (`io/checkpoints.py`)
+- `RunConfig` — fully implemented (`runtime.py`), including `from_args()` factory
+- `run_pipeline.py` — master runner with full CLI (all flags implemented)
+- `ingestion/assets.py` — yfinance ETF price fetcher (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG)
+- `plotting.py` — 17 visualization helpers covering all 7 pipeline steps
+- `notebooks/01–08` — all notebooks present (01–06 per step, 07 pairplot, 08 raw series QC)
+- `ingestion/grok.py` — Grok baseline label loader
 
-### In Progress / Planned
-- `CheckpointManager` — save/load/is_fresh per step
-- `RunConfig` — global verbose/plots/refresh flags
-- `run_pipeline.py` — master runner with CLI
-- `ingestion/assets.py` — yfinance ETF price fetcher
-- `plotting.py` — shared visualization helpers
-- `notebooks/01–06` — one plotting notebook per pipeline step
-- Fix `profiler.py` naming heuristics (currently references wrong column names)
+### Planned / Not Yet Started
 - Macrotrends historical price data (gold, oil pre-1993)
 - Weekly email / alert system
+
+### Known Limitations
+- `profiler.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
+  `fred_tb3ms`, `div_minus_baa`) because only their derivatives are in `clustering_features`.
+  Graceful fallback is intentional — heuristics degrade without error.
+- No automated test suite yet (`tests/` directory is empty)
 
 ---
 

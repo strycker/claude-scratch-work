@@ -41,7 +41,7 @@ def main() -> None:
         return
 
     prices = pd.read_csv(prices_path, index_col="date", parse_dates=True)
-    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["cluster"]
+    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
 
     returns = compute_quarterly_returns(prices)
 
