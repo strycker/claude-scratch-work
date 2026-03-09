@@ -228,7 +228,14 @@ def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False)
         return
 
     features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
-    X = features.drop(columns=["market_code"], errors="ignore")
+    X = features.drop(columns=["market_code"], errors="ignore").dropna()
+    n_dropped = len(features) - len(X)
+    if n_dropped:
+        log.info(
+            "Step 3: dropped %d quarter(s) with NaN features before PCA "
+            "(expected when market_code source doesn't cover all dates)",
+            n_dropped,
+        )
 
     pca_df, pca_model, scaler = reduce_pca(
         X,
