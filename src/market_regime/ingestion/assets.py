@@ -15,11 +15,24 @@ Usage:
 """
 
 import logging
+import os
 from datetime import date
 
 import pandas as pd
 
 log = logging.getLogger(__name__)
+
+# curl_cffi (yfinance's HTTP backend) maintains its own certificate store and
+# does not automatically use Python's certifi bundle on macOS or in corporate
+# proxy environments.  Setting these env vars (only when not already set by the
+# user) fixes the "SSL certificate problem: self signed certificate in
+# certificate chain" error without disabling certificate verification.
+try:
+    import certifi as _certifi
+    os.environ.setdefault("CURL_CA_BUNDLE", _certifi.where())
+    os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
+except ImportError:
+    pass
 
 
 def _fetch_ticker(ticker: str, start: str, end: str) -> pd.Series:
