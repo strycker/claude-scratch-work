@@ -10,6 +10,8 @@ Produces a simple textual/CSV summary of:
 Extend this module to render HTML or push to a web dashboard later.
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 

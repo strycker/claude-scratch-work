@@ -7,6 +7,13 @@ name = "market-regime"
 version = "0.1.0"
 description = "Market regime classification and prediction pipeline"
 requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     # Data
     "pandas>=2.0",
@@ -28,6 +35,7 @@ dependencies = [
     # Reporting (optional — add API key later)
     "python-dotenv>=1.0",
     "yfinance>=0.2",              # ETF price history for step 06
+    "certifi>=2024.0",            # SSL CA bundle used by curl_cffi / yfinance
 ]
 
 [project.optional-dependencies]
