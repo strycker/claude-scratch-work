@@ -11,13 +11,19 @@ Usage:
     python run_pipeline.py  # load checkpoints, run all, no plots
 
 CLI flags:
-    --refresh       Re-scrape multpl.com + re-hit FRED API (~10 min)
-    --recompute     Recompute features from cached raw data
-    --plots         Generate matplotlib figures → outputs/plots/
-    --verbose       Set logging level to DEBUG
-    --steps 1,3,5   Run only these step numbers (comma-separated)
-    --no-constrained Skip k-means-constrained (if package not installed)
-    --show-plots    Call plt.show() after each figure (off by default)
+    --refresh            Re-scrape multpl.com + re-hit FRED API (~10 min)
+    --recompute          Recompute features from cached raw data
+    --plots              Generate matplotlib figures → outputs/plots/
+    --show-plots         Call plt.show() after each figure (off by default)
+    --verbose            Set logging to DEBUG
+    --steps 1,3,5        Run only these step numbers (comma-separated)
+    --no-constrained     Skip k-means-constrained (if package not installed)
+    --market-code NAME   Load market_code from this source.
+                         "grok"  → find and load data/grok_*.pickle
+                         other   → load checkpoint "market_code_{NAME}"
+                         omit    → run without market_code (fully data-driven)
+    --save-market-code   After step 3, save balanced_cluster as
+                         market_code_clustered checkpoint for future use
 """
 
 from __future__ import annotations
@@ -37,19 +43,92 @@ from market_regime.runtime import RunConfig
 log = logging.getLogger(__name__)
 
 
+# ── market_code helpers ───────────────────────────────────────────────────────
+
+def _load_market_code(
+    source: str,
+    cfg: dict,
+) -> "pd.Series | None":
+    """
+    Load a market_code Series from the specified source.
+
+    Args:
+        source: "grok" to load from the grok pickle, or any other string to
+                load checkpoint "market_code_{source}".
+
+    Returns:
+        pd.Series of integer codes indexed by quarter-end dates, or None on failure.
+    """
+    import pandas as pd
+    from market_regime.io.checkpoints import CheckpointManager
+
+    cm = CheckpointManager()
+
+    if source == "grok":
+        from market_regime.ingestion.grok import load_grok_labels
+        mc = load_grok_labels(DATA_DIR)
+        if mc is not None:
+            # Cache so subsequent runs don't need to reload the pickle
+            cm.save(mc.to_frame(), "market_code_grok")
+        return mc
+
+    # Load from checkpoint
+    ckpt_name = f"market_code_{source}"
+    try:
+        df = cm.load(ckpt_name)
+        mc = df.iloc[:, 0]  # single-column DataFrame → Series
+        mc.name = "market_code"
+        log.info("Loaded market_code from checkpoint: %s (%d rows)", ckpt_name, len(mc))
+        return mc
+    except FileNotFoundError:
+        log.error(
+            "market_code checkpoint '%s' not found. "
+            "Available checkpoints: %s",
+            ckpt_name,
+            [e["name"] for e in cm.list() if e["name"].startswith("market_code_")],
+        )
+        return None
+
+
+def _save_market_code(labels: "pd.Series", name: str) -> None:
+    """Persist a market_code variant (any integer-coded label Series) to a checkpoint."""
+    from market_regime.io.checkpoints import CheckpointManager
+    import pandas as pd
+
+    cm = CheckpointManager()
+    ckpt_name = f"market_code_{name}"
+    df = labels.rename("market_code").to_frame()
+    cm.save(df, ckpt_name)
+    log.info("Saved market_code checkpoint: %s (%d rows)", ckpt_name, len(labels))
+
+
 # ── Step registry ──────────────────────────────────────────────────────────────
 
 def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
-    """Scrape multpl.com + FRED → data/raw/macro_raw.parquet"""
+    """Scrape multpl.com + FRED → data/raw/macro_raw.parquet.
+    Optionally attaches a market_code column from the configured source."""
     from market_regime.ingestion import fred as fred_module
     from market_regime.ingestion import multpl as multpl_module
     from market_regime.io.checkpoints import CheckpointManager
+    from market_regime import plotting
     import pandas as pd
 
     cm = CheckpointManager()
 
     if not run_cfg.refresh_source_datasets and cm.is_fresh("macro_raw", max_age_days=7):
         log.info("Step 1: using cached macro_raw checkpoint")
+        # Still need to re-attach market_code if source changed
+        if run_cfg.market_code_source:
+            raw_path = DATA_DIR / "raw" / "macro_raw.parquet"
+            if raw_path.exists():
+                combined = pd.read_parquet(raw_path)
+                mc = _load_market_code(run_cfg.market_code_source, cfg)
+                if mc is not None:
+                    combined["market_code"] = mc.reindex(combined.index)
+                    combined.to_parquet(raw_path)
+                    cm.save(combined, "macro_raw")
+                    log.info("Step 1: refreshed market_code=%s in cached macro_raw",
+                             run_cfg.market_code_source)
         return
 
     log.info("Step 1: fetching FRED data …")
@@ -63,10 +142,31 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
     start = cfg["data"]["start_date"]
     combined = combined[combined.index >= start]
 
+    # Optionally attach market_code
+    if run_cfg.market_code_source:
+        mc = _load_market_code(run_cfg.market_code_source, cfg)
+        if mc is not None:
+            combined["market_code"] = mc.reindex(combined.index)
+            log.info(
+                "Step 1: attached market_code (%s), %d/%d rows have labels",
+                run_cfg.market_code_source,
+                combined["market_code"].notna().sum(),
+                len(combined),
+            )
+
     raw_dir = DATA_DIR / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     combined.to_parquet(raw_dir / "macro_raw.parquet")
     cm.save(combined, "macro_raw")
+
+    if run_cfg.generate_plots:
+        plotting.plot_raw_series_coverage(combined, run_cfg)
+        # Sample a handful of economically meaningful raw series for a quick QC chart
+        sample_series = [c for c in [
+            "sp500", "fred_gdp", "us_infl", "10yr_ustreas", "div_yield", "fred_baa",
+        ] if c in combined.columns]
+        if sample_series:
+            plotting.plot_raw_series_sample(combined, sample_series, run_cfg)
 
     log.info("Step 1 done: %d rows × %d cols", len(combined), len(combined.columns))
 
@@ -75,6 +175,7 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
     """Engineer features from macro_raw → data/processed/features.parquet"""
     from market_regime.features.transforms import engineer_all
     from market_regime.io.checkpoints import CheckpointManager
+    from market_regime import plotting
     import pandas as pd
 
     cm = CheckpointManager()
@@ -99,11 +200,17 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
     features.to_parquet(out_dir / "features.parquet")
     cm.save(features, "features")
 
+    if run_cfg.generate_plots:
+        feat_only = features.drop(columns=["market_code"], errors="ignore")
+        plotting.plot_feature_distributions(feat_only, run_cfg)
+        plotting.plot_feature_correlations(feat_only, run_cfg)
+
     log.info("Step 2 done: %d rows × %d feature cols", len(features), len(features.columns))
 
 
-def step3_cluster(cfg: dict, run_cfg: RunConfig) -> None:
-    """PCA + KMeans clustering → data/regimes/cluster_labels.parquet"""
+def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False) -> None:
+    """PCA + KMeans clustering → data/regimes/cluster_labels.parquet.
+    When save_market_code=True, also checkpoints balanced_cluster as market_code_clustered."""
     from market_regime.clustering.kmeans import (
         reduce_pca, evaluate_kmeans, pick_best_k, fit_clusters,
     )
@@ -165,10 +272,19 @@ def step3_cluster(cfg: dict, run_cfg: RunConfig) -> None:
     cm.save(clustered[label_cols], "cluster_labels")
     cm.save(pca_df, "pca_components")
 
+    # Optionally save balanced_cluster as a market_code checkpoint
+    if save_market_code:
+        _save_market_code(clustered["balanced_cluster"], "clustered")
+        log.info(
+            "Step 3: saved balanced_cluster as market_code_clustered checkpoint "
+            "(use --market-code clustered on future runs)"
+        )
+
     if run_cfg.generate_plots:
         regime_names: dict[int, str] = {}  # populated in step 4; use IDs for now
         plotting.plot_pca_scatter(pca_df, clustered["balanced_cluster"], regime_names, run_cfg)
         plotting.plot_elbow_curve(scores, best_k, run_cfg)
+        plotting.plot_cluster_sizes(clustered["balanced_cluster"], regime_names, run_cfg)
 
     log.info("Step 3 done: balanced_k=%d", clust_cfg["balanced_k"])
 
@@ -209,6 +325,14 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
     if run_cfg.generate_plots:
         plotting.plot_transition_matrix(tm, regime_names, run_cfg)
         plotting.plot_regime_timeline(labels, regime_names, run_cfg)
+        key_cols = [
+            c for c in [
+                "us_infl", "gdp_growth", "credit_spread", "sp500_pe",
+                "log_cpi_d1", "10yr_ustreas_d1", "log_earn_d1",
+            ] if c in features.columns
+        ]
+        if key_cols:
+            plotting.plot_regime_profiles(features, labels, regime_names, key_cols, run_cfg)
 
     for rid, name in sorted(regime_names.items()):
         n = (labels == rid).sum()
@@ -230,7 +354,7 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
-    X = features.loc[common].dropna(axis=1, how="any")
+    X = features.loc[common].drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
     y = labels.loc[common]
 
     current_model = train_current_regime(X, y, cfg)
@@ -250,6 +374,16 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     with open(model_dir / "forward_classifiers.pkl", "wb") as f:
         pickle.dump(forward_models, f)
 
+    # Optionally save predicted labels as a market_code checkpoint
+    predicted_labels = pd.Series(
+        current_model.predict(X), index=X.index, name="market_code"
+    ).astype(int)
+    _save_market_code(predicted_labels, "predicted")
+    log.info(
+        "Step 5: saved predicted regime labels as market_code_predicted checkpoint "
+        "(use --market-code predicted on future runs)"
+    )
+
     if run_cfg.generate_plots:
         try:
             regime_names_path = DATA_DIR / "regimes" / "regime_names_suggested.yaml"
@@ -261,6 +395,7 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
                 regime_names = {int(k): v for k, v in regime_names.items()}
             plotting.plot_feature_importance(current_model, X.columns.tolist(), run_cfg)
             plotting.plot_forward_probabilities(latest, regime_names, run_cfg)
+            plotting.plot_predicted_vs_actual(X, y, current_model, regime_names, run_cfg)
         except Exception as exc:
             log.warning("Could not generate prediction plots: %s", exc)
 
@@ -270,8 +405,9 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
     """Fetch ETF prices via yfinance → data/regimes/asset_return_profile.parquet"""
     from market_regime.ingestion.assets import fetch_all as fetch_prices
-    from market_regime.ingestion.assets import compute_quarterly_returns
-    from market_regime.assets.returns import returns_by_regime, rank_assets_by_regime
+    from market_regime.assets.returns import (
+        compute_quarterly_returns, returns_by_regime, rank_assets_by_regime,
+    )
     from market_regime.io.checkpoints import CheckpointManager
     from market_regime import plotting
     import pandas as pd
@@ -280,10 +416,9 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 
     labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
 
-    # Try yfinance first; fall back to cached CSV if present
+    # Try yfinance first; fall back to cached parquet if present
     prices: pd.DataFrame | None = None
     cache_path = DATA_DIR / "raw" / "asset_prices.parquet"
-    csv_path = DATA_DIR / "raw" / "asset_prices.csv"
 
     if run_cfg.refresh_source_datasets or not cache_path.exists():
         try:
@@ -298,8 +433,6 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 
     if (prices is None or prices.empty) and cache_path.exists():
         prices = pd.read_parquet(cache_path)
-    elif (prices is None or prices.empty) and csv_path.exists():
-        prices = pd.read_csv(csv_path, index_col="date", parse_dates=True)
 
     if prices is None or prices.empty:
         log.warning("Step 6: no asset price data — skipping")
@@ -307,8 +440,9 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 
     returns = compute_quarterly_returns(prices)
     common = returns.index.intersection(labels.index)
+
+    # profile: regime × ticker DataFrame of median returns
     profile = returns_by_regime(returns.loc[common], labels.loc[common])
-    ranked = rank_assets_by_regime(profile)
 
     out_dir = DATA_DIR / "regimes"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -352,12 +486,12 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
         current_model = pickle.load(f)
 
     features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
-    X = features.dropna(axis=1, how="any")
+    X = features.drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
     prediction = predict_current(current_model, X)
 
     tm = pd.read_parquet(DATA_DIR / "regimes" / "transition_matrix.parquet")
 
-    # Load regime names
+    # Load regime names (pinned overrides take precedence over auto-suggested)
     override_path = CONFIG_DIR / "regime_labels.yaml"
     suggested_path = DATA_DIR / "regimes" / "regime_names_suggested.yaml"
     regime_names: dict[int, str] = {}
@@ -370,12 +504,16 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
                 regime_names = names
                 break
 
+    # Load signal thresholds from config
+    thresholds = cfg.get("dashboard", {}).get("signal_thresholds", None)
+
     asset_signals_df = pd.DataFrame()
     profile_path = DATA_DIR / "regimes" / "asset_return_profile.parquet"
     if profile_path.exists():
+        # profile is regime × ticker; rank_assets_by_regime produces the flat form
         profile = pd.read_parquet(profile_path)
-        ranked = rank_assets_by_regime(profile.reset_index())
-        asset_signals_df = asset_signals(ranked, prediction["regime"])
+        ranked = rank_assets_by_regime(profile)
+        asset_signals_df = asset_signals(ranked, prediction["regime"], thresholds=thresholds)
 
     print_dashboard(prediction, regime_names, asset_signals_df, tm)
 
@@ -414,14 +552,24 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Generate and save matplotlib figures")
     p.add_argument("--show-plots", action="store_true",
                    help="Call plt.show() after each figure")
-    p.add_argument("--pairplot", action="store_true",
-                   help="Generate seaborn pairplot (slow)")
     p.add_argument("--verbose", action="store_true",
                    help="Set logging to DEBUG")
     p.add_argument("--steps", type=str, default=None,
                    help="Comma-separated step numbers to run, e.g. 1,3,5")
     p.add_argument("--no-constrained", action="store_true",
                    help="Skip k-means-constrained (if package not installed)")
+    p.add_argument("--market-code", type=str, default=None, metavar="NAME",
+                   help=(
+                       "Load market_code from this source. "
+                       "'grok' loads the grok pickle; any other value loads "
+                       "checkpoint 'market_code_{NAME}'. Omit to run without market_code."
+                   ))
+    p.add_argument("--save-market-code", action="store_true",
+                   help=(
+                       "After step 3, save balanced_cluster labels as the "
+                       "'market_code_clustered' checkpoint for future use with "
+                       "--market-code clustered."
+                   ))
     return p
 
 
@@ -448,8 +596,12 @@ def main() -> None:
     if invalid:
         parser.error(f"Unknown step numbers: {invalid}. Valid: {sorted(STEPS.keys())}")
 
+    save_market_code = getattr(args, "save_market_code", False)
+
     print(f"\nTrading-Crab pipeline  [{run_cfg}]")
     print(f"Steps to run: {sorted(requested)}")
+    if run_cfg.market_code_source:
+        print(f"market_code source: {run_cfg.market_code_source}")
     print()
 
     # Ensure output dirs exist
@@ -461,7 +613,11 @@ def main() -> None:
         label, fn = STEPS[step_num]
         print(f"── Step {step_num}: {label} ──")
         try:
-            fn(cfg, run_cfg)
+            # step3 needs the save_market_code flag
+            if step_num == 3:
+                fn(cfg, run_cfg, save_market_code=save_market_code)
+            else:
+                fn(cfg, run_cfg)
             print(f"   ✓ done\n")
         except Exception as exc:
             log.exception("Step %d failed: %s", step_num, exc)

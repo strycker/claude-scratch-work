@@ -39,6 +39,13 @@ class RunConfig:
     # ── misc ──────────────────────────────────────────────────────────────
     use_constrained_kmeans: bool = True     # attempt k-means-constrained
 
+    # ── market_code ───────────────────────────────────────────────────────
+    # Which market_code source to load, or None to run without market_code.
+    # Special value "grok"       → load from grok pickle via ingestion/grok.py
+    # Any other string "foo"     → load checkpoint named "market_code_foo"
+    # None                       → no market_code (fully data-driven)
+    market_code_source: str | None = None
+
     @classmethod
     def from_args(cls, args) -> "RunConfig":
         """
@@ -57,6 +64,7 @@ class RunConfig:
             refresh_source_datasets=getattr(args, "refresh", False),
             recompute_derived_datasets=getattr(args, "recompute", False),
             use_constrained_kmeans=not getattr(args, "no_constrained", False),
+            market_code_source=getattr(args, "market_code", None),
         )
 
     def apply_logging(self) -> None:
@@ -76,4 +84,6 @@ class RunConfig:
             flags.append("refresh")
         if self.recompute_derived_datasets:
             flags.append("recompute")
+        if self.market_code_source:
+            flags.append(f"market_code={self.market_code_source}")
         return f"RunConfig({', '.join(flags) or 'defaults'})"

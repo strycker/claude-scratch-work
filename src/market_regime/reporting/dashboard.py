@@ -17,7 +17,9 @@ import pandas as pd
 
 log = logging.getLogger(__name__)
 
-SIGNAL_THRESHOLDS = {
+# Default thresholds — overridden at call time by values from settings.yaml.
+# Do not tune these constants here; edit config/settings.yaml instead.
+_DEFAULT_SIGNAL_THRESHOLDS = {
     "green":  0.05,   # median return > +5%/quarter
     "yellow": 0.00,   # median return > 0%
     # below 0% → red
@@ -27,6 +29,7 @@ SIGNAL_THRESHOLDS = {
 def asset_signals(
     ranked_returns: pd.DataFrame,
     current_regime: int,
+    thresholds: dict[str, float] | None = None,
 ) -> pd.DataFrame:
     """
     For the current regime, assign stoplight signal to each asset.
@@ -34,12 +37,13 @@ def asset_signals(
     Returns:
         DataFrame with columns: asset, median_quarterly_return, signal
     """
+    t = thresholds if thresholds is not None else _DEFAULT_SIGNAL_THRESHOLDS
     subset = ranked_returns[ranked_returns["regime"] == current_regime].copy()
 
     def _signal(ret: float) -> str:
-        if ret >= SIGNAL_THRESHOLDS["green"]:
+        if ret >= t["green"]:
             return "GREEN"
-        elif ret >= SIGNAL_THRESHOLDS["yellow"]:
+        elif ret >= t["yellow"]:
             return "YELLOW"
         return "RED"
 
