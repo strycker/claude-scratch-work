@@ -3,6 +3,8 @@ Central config loader — call load() once at pipeline entry points.
 Uses python-dotenv for secrets, PyYAML for settings.
 """
 
+from __future__ import annotations
+
 import os
 import logging
 from pathlib import Path

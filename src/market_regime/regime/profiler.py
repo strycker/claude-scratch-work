@@ -11,6 +11,8 @@ Naming heuristics use ACTUAL column names from the feature schema
 heuristic rather than crashing.
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 

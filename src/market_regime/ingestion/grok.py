@@ -20,6 +20,8 @@ Usage:
     mc = load_grok_labels(data_dir)   # pd.Series or None
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 
