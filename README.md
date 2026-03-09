@@ -143,13 +143,88 @@ pip-compile pyproject.toml --extra dev --upgrade --output-file requirements-dev.
 
 ---
 
-## To Do:
-- Add historic Gold, Oil, TLT, etc. to datasets &mdash; see https://www.macrotrends.net/
-- Standardize the time range (1950-2025), infer missing data, throw away or fix anything looking odd
-- Change all variables that are exponential-looking into something normalized and predictive of regime, like taking a logrithm and/or using the 1st, 2nd, and 3rd derivative... likely CHANGE in a variable, or change RELATIVE to another variable is what will be predictive.  For example, the S&P500 itself is not a good signal of regime, but the S&P priced in gold or oil might be.
-  - Consider using smoothed variables / polynomial fits / or other kinds of parameterized versions of the variable features as needed, as some might be too volatile over even quarterly time series
-- For the initial unsupervised clustering phase of the project, can consider using adjusted / revised since I'm only trying to get regimes, so backward-looking features MIGHT be ok
-- Once we have all quarters CLASSIFIED according to k-means or whatever, NOW we can look into
-  - For each regime, find what assets CONSISTENTLY grew, e.g., for every quarter labeled for class X, asset Y always grew each quarter, no negative quarters.  There will likely be noise, but see if you can relax the criteria or find a cleaner signal, then find the right ETFs for the right asset classes or sectors (e.g., stagflation might mean gold is best, growth might mean tech and small caps best, etc.).
-  - SUPERVISED predictive modeling using other features.  At this point you CANNOT use any variable that was revised or otherwise had forward-knowledge of the current or future state.  All features must be values known at the moment we would have been choosing a portfolio.
-- During the supervised learning phase, good to first find feature importance, then reduce the number of features, then try running a single Decision Tree just to get most of the explanatory power before running a Random Forest / XGBoost or whatever is the best final model
+## To Do
+
+The items below are ordered by priority.  Items marked ✓ are done; open items are
+the next suggested steps.  See `CLAUDE.md` "Legacy Alignment Gaps" for deeper
+technical notes on each open item.
+
+### Priority 1 — Complete the core pipeline (code alignment)
+
+- [ ] **`TimeSeriesSplit` CV in classifier** (`src/market_regime/prediction/classifier.py`) —
+  Replace the single `train_test_split(shuffle=False)` with 5-fold rolling walk-forward
+  cross-validation.  This is the methodologically correct approach for financial time series
+  and matches the legacy design in `legacy/supervised.py`.
+
+- [ ] **Decision Tree classifier** (`src/market_regime/prediction/classifier.py`) —
+  Add `train_decision_tree()` alongside the existing RandomForest.  A shallow DT
+  (`max_depth=8`) gives interpretable rules and fast feature importance before the RF.
+  Legacy design principle: "run a single Decision Tree just to get most of the
+  explanatory power before running a Random Forest / XGBoost."
+
+- [ ] **Portfolio construction module** (`src/market_regime/reporting/portfolio.py`) —
+  Implement `simple_regime_portfolio()` (top-N assets, equal weight) and
+  `blended_regime_portfolio()` (probability-weighted across all regimes), plus
+  `generate_recommendation()` that compares current portfolio weights to targets and
+  outputs BUY / SELL / HOLD signals.  Wire into `pipelines/07_dashboard.py`.
+  Reference: `legacy/portfolio.py`.
+
+- [ ] **Macro-data proxy fallback for step 6** (`src/market_regime/assets/returns.py`) —
+  When yfinance ETF data is unavailable (network/SSL failure), fall back to quarterly
+  returns derived from macro columns already in the features DataFrame (sp500, sp500_adj,
+  10yr_ustreas, gdp_growth, us_infl, credit_spread).  This keeps the dashboard useful
+  even without network access.  Reference: `legacy/asset_returns.py` `ASSET_PROXIES`.
+
+### Priority 2 — Data coverage and model improvements
+
+- [ ] **Macrotrends historical price data** — Backfill gold, oil, and long-bond price
+  history pre-1993 from https://www.macrotrends.net/ so that ETF-era proxies (GLD,
+  USO, TLT) have full 1950–present coverage for per-regime statistics.
+
+- [ ] **`settings.yaml` `end_date` → null** — The date is currently hardcoded as
+  `"2025-09-30"`.  Changing to `null` makes every fresh run fetch through today.
+  Note: changing this invalidates existing checkpoints and triggers a re-scrape.
+
+- [ ] **XGBoost / model comparison in step 5** — Benchmark XGBoost against the
+  RandomForest and Decision Tree.  Keep the best model(s) for production use.
+  Add a `train_xgboost()` function if XGBoost wins.
+
+- [ ] **Expand test suite** — `tests/unit/` currently covers checkpoints, clustering,
+  transforms, and basic asset returns (68 tests).  Add tests for:
+  step 5 classifiers (mock sklearn), step 7 dashboard signals, step 6 proxy fallback,
+  and portfolio construction functions.
+
+### Priority 3 — "Putting it all together" (full end-to-end product)
+
+These items realize the full vision described in the Overview above.
+
+- [ ] **Individual asset-return predictors** — For each ETF (SPY, GLD, TLT, …) and
+  each regime, train a binary classifier: "will this asset be +X% at Y quarters?"
+  Use regime predictions + macro features as inputs.  Output: probability distribution
+  over future performance for each asset, displayed as a stoplight dashboard.
+
+- [ ] **Regime-conditional portfolio optimizer** — Given asset-return probability
+  distributions and the blended regime portfolio weights, optimize allocation (e.g.
+  mean-variance, risk-parity) subject to user-specified constraints.
+
+- [ ] **Weekly automated report** — Schedule the pipeline to run weekly, generate a
+  dashboard CSV + HTML, and send an AI-written narrative email summarizing the current
+  regime, asset signals, and recommended portfolio changes.
+
+### Completed ✓
+
+- ✓ Data ingestion (multpl.com scraper, FRED API, yfinance ETF prices)
+- ✓ Feature engineering (log transforms, Bernstein gap fill, smoothed derivatives)
+- ✓ PCA + KMeans clustering (standard + size-constrained)
+- ✓ Regime profiling, naming heuristics, transition matrix
+- ✓ RandomForest regime classifier + forward binary classifiers
+- ✓ Asset returns by regime (yfinance: SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG)
+  — **Note:** all 8 tickers are valid; earlier "possibly delisted" errors were SSL
+  cascade failures now resolved via `certifi` CA bundle fix in `assets.py`
+- ✓ Text + CSV dashboard with GREEN/YELLOW/RED asset signals
+- ✓ CheckpointManager (parquet + manifest; avoids re-scraping)
+- ✓ Full CLI (`run_pipeline.py --steps --refresh --recompute --plots …`)
+- ✓ Exploration notebooks (01–08)
+- ✓ Installation setup (`requirements.txt`, `setup.sh`, `Makefile`)
+- ✓ Python 3.10+ compatibility (`from __future__ import annotations`, `certifi` dep,
+  loose version bounds in requirements files)
