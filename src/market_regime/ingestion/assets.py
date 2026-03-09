@@ -98,17 +98,3 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     return df
 
 
-def compute_quarterly_returns(prices: pd.DataFrame) -> pd.DataFrame:
-    """
-    Convert price levels to quarterly percentage returns.
-
-    Returns:
-        DataFrame of the same shape as prices, shifted one quarter
-        (the first row will be NaN for every ticker).
-    """
-    returns = prices.pct_change()
-    log.info(
-        "Quarterly returns computed: %d quarters, %d tickers",
-        len(returns), len(returns.columns),
-    )
-    return returns

@@ -34,7 +34,7 @@ def main() -> None:
     cfg = load()
 
     features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
-    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["cluster"]
+    labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
 
     # Align index (features may have more rows if gap-filled beyond label dates)
     common = features.index.intersection(labels.index)
