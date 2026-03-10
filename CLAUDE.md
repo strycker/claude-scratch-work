@@ -262,16 +262,19 @@ Scraped via lxml cssselect from `#datatable`. All URLs and `value_type` metadata
 are in `config/settings.yaml` under `multpl.datasets`. Do not hardcode URLs in Python.
 Rate-limited to 2 seconds per request (`RATE_LIMIT_SECONDS`).
 
-### FRED API (7 series)
-- GDP (nominal, quarterly, shifted +1Q)
-- GNP (nominal, shifted +1Q)
-- BAA corporate bond yield
-- AAA corporate bond yield
-- CPI (CPIAUCSL)
-- 10-year Treasury (GS10)
-- 3-month Treasury (TB3MS)
+### FRED API (7 series, more planned)
+Current: GDP (shifted +1Q), GNP (shifted +1Q), BAA, AAA, CPI (CPIAUCSL), GS10, TB3MS.
+
+Planned additions (see `ROADMAP.md` Tier 1):
+- VIXCLS (VIX, 1990+), UNRATE (unemployment, 1948+), M2NS (money supply, 1959+)
+- T10Y2Y (10Y-2Y spread), GS2 (2Y Treasury), HOUST (housing starts), UMCSENT
 
 Requires `FRED_API_KEY` in `.env`. Free registration at fred.stlouisfed.org.
+
+### macrotrends.net (planned — not yet implemented)
+Gold spot price back to 1915, WTI crude oil back to 1946, silver, copper.
+See `ROADMAP.md` Tier 1 item 1.5 and `src/market_regime/ingestion/macrotrends.py` (to be created).
+Scraping approach: extract embedded JSON from `<script>var rawData={...}</script>` tags.
 
 ### ETF price history (yfinance)
 SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG — monthly adjusted close, resampled to
@@ -302,6 +305,9 @@ All tuneable parameters are in `config/settings.yaml`. Key sections:
 | `clustering.k_cap` | max k accepted from silhouette (default 5) |
 | `clustering.balanced_k` | k for size-constrained KMeans (default 5) |
 | `prediction.forward_horizons_quarters` | [1, 2, 4, 8] |
+| `prediction.cv_splits` | 5 (TimeSeriesSplit folds) |
+| `prediction.dt_max_depth` | 8 (DecisionTree depth) |
+| `prediction.rf_max_depth` | 12 (RandomForest max depth) |
 
 ---
 
@@ -342,12 +348,12 @@ ground truth.  Items marked ✓ are verified as matching in `src/`.  Items marke
 
 ### Features in legacy NOT yet in src/ (see Legacy Alignment Gaps section)
 
-- ✗ `DecisionTreeClassifier` training for interpretability (`legacy/supervised.py`)
-- ✗ `TimeSeriesSplit` cross-validation in classifier (legacy uses 5-fold rolling CV;
-  current uses single `train_test_split(shuffle=False)`)
-- ✗ Portfolio construction: `simple_regime_portfolio()`, `blended_regime_portfolio()`,
-  `generate_recommendation()` BUY/SELL/HOLD signals (`legacy/portfolio.py`)
-- ✗ Macro-data fallback for asset returns when ETF data unavailable (`legacy/asset_returns.py`)
+- ✓ `DecisionTreeClassifier` training for interpretability — implemented in `classifier.py`
+- ✓ `TimeSeriesSplit` cross-validation — implemented via `_tscv_scores()` helper
+- ✓ Portfolio construction — `src/market_regime/reporting/portfolio.py` (new file)
+- ✓ Macro-data fallback for asset returns — `compute_proxy_returns()` in `assets/returns.py`
+- ✗ Empirical forward probabilities — `compute_forward_probabilities()` from `legacy/regime_analysis.py`
+- ✗ Confusion matrix in classification report — `generate_classification_report()` from `legacy/supervised.py`
 
 ### Things src/ does better than legacy (do not regress)
 
@@ -398,99 +404,75 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 
 ## Current Status (as of March 2026)
 
+See `STATE.md` for a full breakdown of what runs, what's tested, and what output
+files are produced.  See `ROADMAP.md` for prioritized feature backlog.
+See `ARCHITECTURE.md` for design decisions.  See `PITFALLS.md` for known gotchas.
+
 ### Complete ✓
-- Steps 01–07 run end-to-end; pipeline has been executed successfully on real data
-- `CheckpointManager` — fully implemented (`io/checkpoints.py`); parquet + manifest
-- `RunConfig` — fully implemented (`runtime.py`), including `from_args()` factory
+- Steps 01–07 run end-to-end; pipeline verified on real data (all 7 steps)
+- `CheckpointManager` — fully implemented; parquet + manifest
+- `RunConfig` — fully implemented, including `from_args()` factory
 - `run_pipeline.py` — master runner with full CLI (all flags implemented)
-- `ingestion/assets.py` — yfinance ETF price fetcher (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG)
-  — **tickers are valid**; any "possibly delisted" errors are SSL cascade failures, not bad tickers
-- `ingestion/assets.py` — SSL fix: `CURL_CA_BUNDLE` / `SSL_CERT_FILE` set to `certifi.where()`
-  at module load; resolves macOS + corporate-proxy SSL certificate errors
+- `ingestion/assets.py` — yfinance ETF price fetcher; SSL fix via certifi env vars
 - `plotting.py` — 17 visualization helpers covering all 7 pipeline steps
-- `notebooks/01–08` — all notebooks present (01–06 per step, 07 pairplot, 08 raw series QC)
-- `ingestion/grok.py` — Grok baseline label loader
-- Requirements (`requirements.txt`, `requirements-dev.txt`) — minimum-bound strategy,
-  Python 3.10+ compatible; no exact-pin cross-version incompatibilities
+- `notebooks/01–08` — all notebooks present
+- Requirements — minimum-bound strategy, Python 3.10+ compatible
 - `from __future__ import annotations` — present in all source files using `X | Y` syntax
-- `pyproject.toml` — classifiers for Python 3.10–3.13; `certifi` listed as direct dep
-- Unit tests — `tests/unit/` has 68 passing tests covering checkpoints, clustering,
-  transforms, and asset returns
+- Unit tests — 68 passing tests covering checkpoints, clustering, transforms, asset returns
+- **Gap 1** — `TimeSeriesSplit` CV in `classifier.py` (5-fold walk-forward)
+- **Gap 2** — `DecisionTreeClassifier` in `classifier.py` (max_depth=8)
+- **Gap 3** — `reporting/portfolio.py` — simple + blended portfolio + BUY/SELL/HOLD
+- **Gap 4** — `compute_proxy_returns()` fallback in `assets/returns.py`
+- **Causal smoothing** — `engineer_all(causal=True/False)` + dual parquet outputs from step 2
 
-### In Progress / Partially Done
-- **Step 5 — classifier** — RandomForest works; `TimeSeriesSplit` CV and
-  `DecisionTreeClassifier` (for interpretability) not yet implemented
-- **Step 7 — dashboard** — GREEN/YELLOW/RED signals per asset work; portfolio-weight
-  construction and BUY/SELL/HOLD trade recommendation signals not yet implemented
-
-### Planned / Not Yet Started (priority order)
-1. `TimeSeriesSplit` CV in `classifier.py` — replace `train_test_split(shuffle=False)`
-   with 5-fold rolling walk-forward validation (matches `legacy/supervised.py`)
-2. `DecisionTreeClassifier` in `classifier.py` — interpretable model alongside RF
-3. Portfolio module — `simple_regime_portfolio()`, `blended_regime_portfolio()`,
-   `generate_recommendation()` BUY/SELL/HOLD (see `legacy/portfolio.py`)
-4. Macro-data proxy fallback in step 6 — use sp500, 10yr_ustreas, gdp_growth, us_infl,
-   credit_spread for asset signals when yfinance is unavailable
-5. Macrotrends historical price data — gold, oil pre-1993 backfill
-6. XGBoost / other model comparison in step 5
-7. Expand test suite — step 6 asset returns, step 5 classifiers, step 7 dashboard
-8. `settings.yaml` `end_date` — change from hardcoded "2025-09-30" to null (use today)
-9. Individual asset-return predictors — per-ETF probability models per regime
-   (see README "Putting it all together — Part I")
-10. Weekly email / alert system with AI-written narrative
+### Next Priority (implement in upcoming sessions)
+1. **Additional FRED series** — VIX (VIXCLS), unemployment (UNRATE), M2 (M2NS),
+   yield spreads (T10Y2Y, T10Y3M, GS2), housing starts (HOUST), consumer sentiment (UMCSENT)
+2. **Yield curve derived features** — 10Y-2Y, 10Y-3M spread computed in `transforms.py`
+3. **Empirical forward probabilities** — `compute_forward_probabilities()` from legacy
+4. **Confusion matrix plot** — `plot_confusion_matrix()` in `plotting.py`
+5. **macrotrends.net scraper** — gold/oil spot prices back to 1915/1946
+6. **XGBoost/LightGBM classifiers** — alongside RF + DT in `classifier.py`
+7. **Expand test suite** — classifier, portfolio, dashboard, profiler
+8. **`end_date: null`** in settings.yaml → use today's date at runtime
+9. **Per-asset regime probability models** ("Putting it all together — Part I")
+10. **Weekly automated report** with AI-written narrative via Claude API
 
 ### Known Limitations
 - `profiler.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
   `fred_tb3ms`, `div_minus_baa`) because only their derivatives are in `clustering_features`.
-  Graceful fallback is intentional — heuristics degrade without error.
-- Dashboard shows empty "Asset Signals" section when step 6 ETF data is unavailable
-  (network/SSL failure). No macro-data fallback yet.
-- Classifier uses a single train/test split, not TimeSeriesSplit — CV accuracy
-  estimates are less reliable than the rolling-window approach in legacy code.
+  Graceful fallback is intentional.
+- Only 7 FRED series currently ingested; many high-value series (VIX, unemployment,
+  M2, yield curve) are not yet fetched.
+- ETF data starts 1993-2006; pre-1993 gold and oil regime analysis uses proxy columns only.
+  macrotrends.net backfill would extend coverage to 1915+ for gold.
+- Clustering uses KMeans which treats each quarter independently; HMM would model
+  temporal autocorrelation natively (Tier 2 roadmap item).
 
 ---
 
 ## Legacy Alignment Gaps
 
 Full comparison of `legacy/*.py` vs `src/market_regime/` completed March 2026.
-The following items exist in legacy but are not yet in src/:
 
-### 1. TimeSeriesSplit cross-validation (`legacy/supervised.py` → `src/market_regime/prediction/classifier.py`)
-Legacy trains both models using `TimeSeriesSplit(n_splits=5)` for proper rolling
-walk-forward CV.  Current code uses `train_test_split(shuffle=False)`, which gives
-only one train/test evaluation window.  Action: replace `train_test_split` with
-`TimeSeriesSplit` in `train_current_regime()` and `train_forward_classifiers()`.
+### Closed Gaps (all implemented)
+- ✓ **Gap 1** — TimeSeriesSplit CV (`legacy/supervised.py` → `classifier.py`)
+- ✓ **Gap 2** — DecisionTreeClassifier (`legacy/supervised.py` → `classifier.py`)
+- ✓ **Gap 3** — Portfolio construction (`legacy/portfolio.py` → `reporting/portfolio.py`)
+- ✓ **Gap 4** — Macro-data proxy returns fallback (`legacy/asset_returns.py` → `assets/returns.py`)
+- ✓ **Gap 5** — Causal/backward rolling windows for supervised learning (`transforms.py`)
 
-### 2. DecisionTreeClassifier (`legacy/supervised.py` → `src/market_regime/prediction/classifier.py`)
-Legacy trains a `DecisionTreeClassifier(max_depth=8)` alongside the RandomForest for
-human-interpretable feature-importance inspection.  Current code only trains RF.
-Action: add `train_decision_tree()` function to `classifier.py` and call it from
-`pipelines/05_predict.py`.  The README "To Do" explicitly calls this out as a design
-decision ("run a single Decision Tree just to get most of the explanatory power").
+### Remaining Gaps
 
-### 3. Portfolio construction (`legacy/portfolio.py` → missing from src/)
-Legacy has a full portfolio module:
-- `simple_regime_portfolio()` — equal-weight top-N assets per current regime
-- `blended_regime_portfolio()` — probability-weighted allocation across all regimes
-- `generate_recommendation()` — BUY/SELL/HOLD given current vs target weights
-Current `reporting/dashboard.py` has GREEN/YELLOW/RED per asset but no weight
-construction or trade-signal generation.  Action: add `src/market_regime/reporting/portfolio.py`
-and wire it into `pipelines/07_dashboard.py` and `run_pipeline.py` step 7.
+#### Empirical forward probabilities (`legacy/regime_analysis.py` → `regime/profiler.py`)
+`compute_forward_probabilities()` computes count-based empirical P(reach regime j
+within N quarters | currently in regime i).  Useful as a sanity check alongside the
+model-based binary RF forward classifiers.  Low effort.  Status: not implemented.
 
-### 4. Macro-data asset-returns fallback (`legacy/asset_returns.py` → `src/market_regime/assets/returns.py`)
-Legacy uses quarterly returns derived from existing macro columns (sp500, sp500_adj,
-10yr_ustreas, gdp_growth, us_infl, credit_spread) when ETF price data is unavailable.
-Current code skips step 6 entirely if yfinance returns no data.  Action: add a
-`compute_proxy_returns()` function as a fallback; ensures dashboard always shows
-regime-conditional asset signals even without network access.
-
-### 5. Empirical forward probabilities (`legacy/regime_analysis.py`)
-Legacy computes count-based empirical forward probabilities at multiple horizons
-(1, 4, 8 quarters) directly from the transition matrix.  Current code computes
-forward predictions via binary RF classifiers (which is a model-based approach —
-arguably better).  The empirical method is still useful as a baseline/sanity check
-alongside the model-based forecasts.  Low priority — model-based approach is kept
-as primary; empirical can be added as an optional diagnostic.
+#### Confusion matrix report (`legacy/supervised.py` → `plotting.py`)
+`generate_classification_report()` prints a per-class confusion matrix.  Currently
+we only log the in-sample `classification_report()` string but do not visualize
+the confusion matrix.  Status: not implemented.
 
 ---
 
