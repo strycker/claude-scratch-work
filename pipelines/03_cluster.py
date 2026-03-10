@@ -40,18 +40,19 @@ def main() -> None:
 
     features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
     X = features.drop(columns=["market_code"], errors="ignore")
-    print(f"Loaded features: {X.shape}")
+    print(f"\nLoaded features: {X.shape}")
 
-    # 1. PCA
+    # ── 1. PCA ─────────────────────────────────────────────────────────────
+    # Library logs: "Running PCA... done." + variance ratios
     pca_df, pca_model, scaler = reduce_pca(
         X,
         n_components=clust_cfg["n_pca_components"],
         random_state=clust_cfg["random_state"],
     )
 
-    # 2. Evaluate k values
+    # ── 2. Evaluate k values ────────────────────────────────────────────────
+    # Library logs: "Evaluating cluster counts... done." + full sorted table
     from sklearn.preprocessing import StandardScaler
-    import numpy as np
     X_scaled = StandardScaler().fit_transform(pca_df.values)
     scores = evaluate_kmeans(
         X_scaled,
@@ -59,11 +60,10 @@ def main() -> None:
         random_state=clust_cfg["random_state"],
     )
     best_k = pick_best_k(scores, k_cap=clust_cfg["k_cap"])
-    print(f"\nK-sweep results (sorted by silhouette):")
-    print(scores.sort_values("silhouette", ascending=False).to_string(index=False))
-    print(f"\nChosen k={best_k}  (cap={clust_cfg['k_cap']})")
+    print(f"\nChosen k={best_k}  (silhouette winner capped at k_cap={clust_cfg['k_cap']})")
 
-    # 3 & 4. Fit both clusterings
+    # ── 3 & 4. Fit both clusterings ─────────────────────────────────────────
+    # Library logs: "N quarters clustered into K regimes (balanced into K)."
     clustered = fit_clusters(
         pca_df,
         best_k=best_k,
@@ -75,7 +75,7 @@ def main() -> None:
     if "market_code" in features.columns:
         clustered["market_code"] = features["market_code"]
 
-    # Persist
+    # ── Persist ─────────────────────────────────────────────────────────────
     out_dir = DATA_DIR / "regimes"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -88,8 +88,11 @@ def main() -> None:
 
     print(f"\nStandard clusters (k={best_k}):")
     print(clustered["cluster"].value_counts().sort_index().to_string())
+
     print(f"\nBalanced clusters (k={clust_cfg['balanced_k']}):")
     print(clustered["balanced_cluster"].value_counts().sort_index().to_string())
+
+    print(f"\nOutputs written to {out_dir}")
 
 
 if __name__ == "__main__":

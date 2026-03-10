@@ -58,13 +58,15 @@ def reduce_pca(
     pca = PCA(n_components=n_components, random_state=random_state)
     X_reduced = pca.fit_transform(X_scaled)
 
+    ratios = np.round(pca.explained_variance_ratio_, 3)
     cumvar = np.cumsum(pca.explained_variance_ratio_)
     log.info(
-        "PCA: %d components explain %.1f%% of variance  "
-        "(ratios: %s)",
+        "\nRunning PCA... done.\n"
+        "PCA: %d components explain %.1f%% of variance\n"
+        "PCA explained variance ratios: %s\n",
         n_components,
         cumvar[-1] * 100,
-        np.round(pca.explained_variance_ratio_, 3),
+        ratios,
     )
 
     col_names = [f"PC{i + 1}" for i in range(n_components)]
@@ -82,7 +84,7 @@ def evaluate_kmeans(
 ) -> pd.DataFrame:
     """
     Run KMeans for each k in k_range and return a DataFrame of quality scores:
-      inertia, silhouette, calinski_harabasz, davies_bouldin.
+      inertia, silhouette, calinski, davies_bouldin.
 
     Args:
         X            — scaled feature matrix (output of StandardScaler)
@@ -91,28 +93,36 @@ def evaluate_kmeans(
         random_state
 
     Returns:
-        DataFrame with one row per k, sorted by silhouette descending.
+        DataFrame with one row per k, columns: k, inertia, silhouette,
+        calinski, davies_bouldin.  Rows are in k order (not sorted).
     """
     results = []
     for k in k_range:
         model = KMeans(n_clusters=k, n_init=n_init, random_state=random_state)
         labels = model.fit_predict(X)
         results.append({
-            "k":                 k,
-            "inertia":           model.inertia_,
-            "silhouette":        silhouette_score(X, labels),
-            "calinski_harabasz": calinski_harabasz_score(X, labels),
-            "davies_bouldin":    davies_bouldin_score(X, labels),
+            "k":              k,
+            "inertia":        model.inertia_,
+            "silhouette":     silhouette_score(X, labels),
+            "calinski":       calinski_harabasz_score(X, labels),
+            "davies_bouldin": davies_bouldin_score(X, labels),
         })
         log.debug("k=%d  sil=%.4f  CH=%.1f  DB=%.4f",
                   k, results[-1]["silhouette"],
-                  results[-1]["calinski_harabasz"],
+                  results[-1]["calinski"],
                   results[-1]["davies_bouldin"])
 
     scores = pd.DataFrame(results)
+
+    sorted_scores = scores.sort_values("silhouette", ascending=False)
+    table = sorted_scores.to_string(float_format=lambda x: f"{x:.6f}")
+    best_k = int(scores.loc[scores["silhouette"].idxmax(), "k"])
     log.info(
-        "Best k by silhouette: %d (score=%.4f)",
-        int(scores.loc[scores["silhouette"].idxmax(), "k"]),
+        "\nEvaluating cluster counts... done.\n"
+        "Silhouette scores:\n%s\n"
+        "\nBest k by silhouette: %d  (score=%.4f)\n",
+        table,
+        best_k,
         scores["silhouette"].max(),
     )
     return scores
@@ -182,6 +192,12 @@ def fit_clusters(
         ).fit_predict(X)
         log.warning("balanced_cluster uses plain KMeans (k-means-constrained unavailable)")
 
+    log.info(
+        "\n%d quarters clustered into %d regimes (balanced into %d).\n",
+        len(result),
+        best_k,
+        balanced_k,
+    )
     return result
 
 

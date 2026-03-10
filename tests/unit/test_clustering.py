@@ -63,7 +63,7 @@ class TestEvaluateKmeans:
     def test_returns_dataframe_with_expected_cols(self, feature_df):
         pca_df, _, _ = reduce_pca(feature_df, n_components=3)
         scores = evaluate_kmeans(pca_df.values, k_range=range(2, 5), n_init=5)
-        assert set(scores.columns) >= {"k", "silhouette", "calinski_harabasz", "davies_bouldin", "inertia"}
+        assert set(scores.columns) >= {"k", "silhouette", "calinski", "davies_bouldin", "inertia"}
 
     def test_one_row_per_k(self, feature_df):
         pca_df, _, _ = reduce_pca(feature_df, n_components=3)
