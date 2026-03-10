@@ -21,13 +21,78 @@ Two public functions:
 
 This module is deliberately data-source agnostic — prices can come from
 yfinance, macrotrends, or a parquet file.  The caller provides a prices DataFrame.
+
+compute_proxy_returns() provides a macro-data fallback when ETF price data is
+unavailable (e.g. network/SSL failure in step 6).  It derives asset-class proxy
+returns from columns already present in the raw macro DataFrame (sp500, sp500_adj,
+10yr_ustreas, gdp_growth, us_infl, credit_spread).  Coverage goes back to ~1950,
+so every historical regime is represented even without ETF data.
 """
+
+from __future__ import annotations
 
 import logging
 
 import pandas as pd
 
 log = logging.getLogger(__name__)
+
+
+# Macro columns available in data/raw/macro_raw.parquet that serve as
+# asset-class proxies when yfinance ETF data is unavailable.
+# Each entry: (display_name, column, kind)
+#   kind "price"  → compute quarterly pct_change
+#   kind "rate"   → use level value directly (already a rate/spread/growth figure)
+_PROXY_COLUMNS: list[tuple[str, str, str]] = [
+    ("S&P 500",        "sp500",         "price"),
+    ("S&P 500 Real",   "sp500_adj",     "price"),
+    ("10Y Treasury",   "10yr_ustreas",  "rate"),
+    ("GDP Growth",     "gdp_growth",    "rate"),
+    ("Inflation",      "us_infl",       "rate"),
+    ("Credit Spread",  "credit_spread", "rate"),
+]
+
+
+def compute_proxy_returns(macro_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Derive asset-class proxy returns from macro columns in the raw data.
+
+    Used as a fallback when yfinance ETF price data is unavailable.
+    Price-like columns (sp500, sp500_adj) → quarterly pct_change.
+    Rate/spread/growth columns           → quarterly level value.
+
+    Args:
+        macro_df: DataFrame from data/raw/macro_raw.parquet.  Must contain
+                  at least one of the columns in _PROXY_COLUMNS.
+
+    Returns:
+        DataFrame indexed by quarter-end date, one column per proxy asset.
+        Drops the first row (NaN from pct_change on price columns).
+    """
+    result = pd.DataFrame(index=macro_df.index)
+    found: list[str] = []
+
+    for display_name, col, kind in _PROXY_COLUMNS:
+        if col not in macro_df.columns:
+            continue
+        series = pd.to_numeric(macro_df[col], errors="coerce")
+        if kind == "price":
+            result[display_name] = series.pct_change()
+        else:
+            result[display_name] = series
+        found.append(display_name)
+
+    if not found:
+        log.warning("compute_proxy_returns: none of the expected macro columns found")
+        return pd.DataFrame()
+
+    # Drop rows that are entirely NaN (typically the first row after pct_change)
+    result = result.dropna(how="all").iloc[1:]
+    log.info(
+        "Proxy returns computed: %d quarters × %d assets (%s)",
+        len(result), len(found), ", ".join(found),
+    )
+    return result
 
 
 def compute_quarterly_returns(prices: pd.DataFrame) -> pd.DataFrame:

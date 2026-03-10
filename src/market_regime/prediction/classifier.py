@@ -1,27 +1,71 @@
 """
 Supervised regime classifier.
 
-Trains a RandomForestClassifier to predict the current quarter's regime
-from features available at that moment (no look-ahead).
+Trains two model types per pipeline run:
 
-Also trains forward-looking binary classifiers for each horizon defined in
-cfg["prediction"]["forward_horizons_quarters"].
+1. RandomForestClassifier  — high accuracy, ensemble; used for production predictions.
+2. DecisionTreeClassifier  — shallow (max_depth=8), single tree; human-readable rules
+   and fast feature-importance inspection before committing to the forest.
 
-Design note: feature importance is printed after each fit — use this to guide
-manual feature selection before adding more complex models.
+Both models use TimeSeriesSplit cross-validation so CV accuracy estimates reflect
+genuine walk-forward performance — no data from the future leaks into any fold.
+
+Also trains forward-looking binary classifiers for each (horizon, regime) pair:
+    "Will we be in regime R exactly H quarters from now?"
+
+Design note: ALL features fed to these classifiers must come from
+data/processed/features_supervised.parquet, which is built with causal
+(backward/right-aligned) rolling windows.  This guarantees that no future
+information is present in any feature value used for training or scoring.
 """
+
+from __future__ import annotations
 
 import logging
 
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
-from sklearn.inspection import permutation_importance
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.tree import DecisionTreeClassifier
 
 log = logging.getLogger(__name__)
 
+
+# ── helpers ────────────────────────────────────────────────────────────────────
+
+def _log_feature_importance(model, feature_names, top_n: int = 15) -> None:
+    importances = pd.Series(model.feature_importances_, index=feature_names)
+    top = importances.sort_values(ascending=False).head(top_n)
+    lines = "\n".join(f"  {f:<40s} {v:.4f}" for f, v in top.items())
+    log.info("Top-%d feature importances:\n%s", top_n, lines)
+
+
+def _tscv_scores(
+    model_factory,
+    X: pd.DataFrame,
+    y: pd.Series,
+    n_splits: int,
+    label: str,
+) -> list[float]:
+    """Run TimeSeriesSplit CV and return per-fold accuracy scores."""
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    scores = []
+    for fold, (train_idx, test_idx) in enumerate(tscv.split(X), start=1):
+        m = model_factory()
+        m.fit(X.iloc[train_idx], y.iloc[train_idx])
+        acc = m.score(X.iloc[test_idx], y.iloc[test_idx])
+        scores.append(acc)
+        log.debug("%s fold %d/%d: accuracy=%.3f", label, fold, n_splits, acc)
+    log.info(
+        "%s CV accuracy: %.3f ± %.3f  (n_splits=%d)",
+        label, np.mean(scores), np.std(scores), n_splits,
+    )
+    return scores
+
+
+# ── public training functions ──────────────────────────────────────────────────
 
 def train_current_regime(
     X: pd.DataFrame,
@@ -29,38 +73,91 @@ def train_current_regime(
     cfg: dict,
 ) -> RandomForestClassifier:
     """
-    Train a classifier to predict today's regime label.
+    Train a RandomForest to predict today's regime label.
+
+    Uses TimeSeriesSplit for CV so every evaluation fold only looks at data
+    that was available at that point in time.  The final model is re-fitted
+    on ALL available data for maximum accuracy in production.
 
     Args:
-        X   — feature matrix (rows = quarters, no future data)
+        X   — feature matrix (rows = quarters, causal features only)
         y   — integer cluster labels aligned to X
         cfg — pipeline config dict
 
     Returns:
-        Fitted RandomForestClassifier.
+        Fitted RandomForestClassifier (trained on all data).
     """
     pcfg = cfg["prediction"]
-    X_tr, X_te, y_tr, y_te = train_test_split(
-        X, y,
-        test_size=pcfg["test_size"],
-        shuffle=False,          # preserve time order — no leakage
-        random_state=pcfg["random_state"],
+    n_splits = pcfg.get("cv_splits", 5)
+    n_estimators = pcfg.get("n_estimators", 200)
+    max_depth = pcfg.get("rf_max_depth", 12)
+    rs = pcfg.get("random_state", 42)
+
+    def _factory():
+        return RandomForestClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            random_state=rs,
+            n_jobs=-1,
+            class_weight="balanced",
+        )
+
+    _tscv_scores(_factory, X, y, n_splits, "RF current-regime")
+
+    # Final model on all data
+    final = _factory()
+    final.fit(X, y)
+
+    y_pred = final.predict(X)
+    log.info(
+        "RF current-regime — in-sample report:\n%s",
+        classification_report(y, y_pred, zero_division=0),
     )
+    _log_feature_importance(final, X.columns)
+    return final
 
-    model = RandomForestClassifier(
-        n_estimators=pcfg["n_estimators"],
-        random_state=pcfg["random_state"],
-        n_jobs=-1,
-        class_weight="balanced",
+
+def train_decision_tree(
+    X: pd.DataFrame,
+    y: pd.Series,
+    cfg: dict,
+) -> DecisionTreeClassifier:
+    """
+    Train a shallow DecisionTree to predict today's regime label.
+
+    The decision tree is intentionally kept shallow (max_depth=8) so it
+    remains human-readable: you can export it with sklearn.tree.export_text()
+    and inspect which features drive each split.  Use this to understand
+    which macro signals dominate regime transitions before tuning the forest.
+
+    Args:
+        X   — feature matrix (causal features only)
+        y   — integer cluster labels aligned to X
+        cfg — pipeline config dict
+
+    Returns:
+        Fitted DecisionTreeClassifier (trained on all data).
+    """
+    pcfg = cfg["prediction"]
+    n_splits = pcfg.get("cv_splits", 5)
+    max_depth = pcfg.get("dt_max_depth", 8)
+    rs = pcfg.get("random_state", 42)
+
+    def _factory():
+        return DecisionTreeClassifier(max_depth=max_depth, random_state=rs)
+
+    _tscv_scores(_factory, X, y, n_splits, "DT current-regime")
+
+    final = DecisionTreeClassifier(max_depth=max_depth, random_state=rs)
+    final.fit(X, y)
+
+    y_pred = final.predict(X)
+    log.info(
+        "DT current-regime — in-sample report:\n%s",
+        classification_report(y, y_pred, zero_division=0),
     )
-    model.fit(X_tr, y_tr)
-
-    y_pred = model.predict(X_te)
-    log.info("Current-regime classifier — test set report:\n%s",
-             classification_report(y_te, y_pred))
-
-    _log_feature_importance(model, X.columns)
-    return model
+    _log_feature_importance(final, X.columns)
+    return final
 
 
 def train_forward_classifiers(
@@ -69,43 +166,56 @@ def train_forward_classifiers(
     cfg: dict,
 ) -> dict[int, dict[int, RandomForestClassifier]]:
     """
-    For each (horizon, target_regime) pair, train a binary classifier:
-    "Will we be in regime R exactly H quarters from now?"
+    For each (horizon, target_regime) pair, train a binary RandomForest:
+        "Will we be in regime R exactly H quarters from now?"
+
+    Uses TimeSeriesSplit CV for evaluation; final model is fitted on all data.
 
     Returns:
         {horizon: {regime_id: fitted_model}}
     """
     pcfg = cfg["prediction"]
-    horizons = pcfg.get("forward_horizons_quarters", [1, 2, 4, 8])
-    results: dict[int, dict] = {}
+    horizons: list[int] = pcfg.get("forward_horizons_quarters", [1, 2, 4, 8])
+    n_splits = pcfg.get("cv_splits", 5)
+    n_estimators = pcfg.get("n_estimators", 200)
+    rs = pcfg.get("random_state", 42)
+
+    results: dict[int, dict[int, RandomForestClassifier]] = {}
 
     for h in horizons:
         results[h] = {}
-        # Shift labels back by h so that X[t] predicts y[t+h]
+        # Shift labels back by h so X[t] predicts y[t+h]
         y_future = y.shift(-h).dropna().astype(int)
         X_aligned = X.loc[y_future.index]
 
         for regime in sorted(y.unique()):
             y_binary = (y_future == regime).astype(int)
-            X_tr, X_te, y_tr, y_te = train_test_split(
-                X_aligned, y_binary,
-                test_size=pcfg["test_size"],
-                shuffle=False,
-                random_state=pcfg["random_state"],
+
+            def _factory():
+                return RandomForestClassifier(
+                    n_estimators=n_estimators,
+                    random_state=rs,
+                    n_jobs=-1,
+                    class_weight="balanced",
+                )
+
+            scores = _tscv_scores(
+                _factory, X_aligned, y_binary, n_splits,
+                f"RF h={h}Q regime={regime}",
             )
-            model = RandomForestClassifier(
-                n_estimators=pcfg["n_estimators"],
-                random_state=pcfg["random_state"],
-                n_jobs=-1,
-                class_weight="balanced",
+            log.info(
+                "Forward h=%dQ regime=%d — mean CV accuracy=%.3f",
+                h, regime, np.mean(scores),
             )
-            model.fit(X_tr, y_tr)
-            acc = model.score(X_te, y_te)
-            log.info("Forward classifier h=%dQ regime=%d  accuracy=%.3f", h, regime, acc)
-            results[h][regime] = model
+
+            final = _factory()
+            final.fit(X_aligned, y_binary)
+            results[h][regime] = final
 
     return results
 
+
+# ── inference ──────────────────────────────────────────────────────────────────
 
 def predict_current(model: RandomForestClassifier, X_now: pd.DataFrame) -> dict:
     """
@@ -120,10 +230,3 @@ def predict_current(model: RandomForestClassifier, X_now: pd.DataFrame) -> dict:
         "regime": regime,
         "probabilities": dict(zip(model.classes_.tolist(), proba.tolist())),
     }
-
-
-def _log_feature_importance(model: RandomForestClassifier, feature_names) -> None:
-    importances = pd.Series(model.feature_importances_, index=feature_names)
-    top = importances.sort_values(ascending=False).head(15)
-    lines = "\n".join(f"  {f:<40s} {v:.4f}" for f, v in top.items())
-    log.info("Top-15 feature importances:\n%s", lines)
