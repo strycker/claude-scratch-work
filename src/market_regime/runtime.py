@@ -35,6 +35,7 @@ class RunConfig:
     # ── data refresh ──────────────────────────────────────────────────────
     refresh_source_datasets: bool = False   # re-scrape multpl + re-hit FRED
     recompute_derived_datasets: bool = False  # recompute features from cached raw
+    refresh_asset_prices: bool = False      # re-fetch yfinance ETF prices (step 6)
 
     # ── misc ──────────────────────────────────────────────────────────────
     use_constrained_kmeans: bool = True     # attempt k-means-constrained
@@ -63,6 +64,7 @@ class RunConfig:
             show_plots=getattr(args, "show_plots", False),
             refresh_source_datasets=getattr(args, "refresh", False),
             recompute_derived_datasets=getattr(args, "recompute", False),
+            refresh_asset_prices=getattr(args, "refresh_assets", False),
             use_constrained_kmeans=not getattr(args, "no_constrained", False),
             market_code_source=getattr(args, "market_code", None),
         )
@@ -84,6 +86,8 @@ class RunConfig:
             flags.append("refresh")
         if self.recompute_derived_datasets:
             flags.append("recompute")
+        if self.refresh_asset_prices:
+            flags.append("refresh-assets")
         if self.market_code_source:
             flags.append(f"market_code={self.market_code_source}")
         return f"RunConfig({', '.join(flags) or 'defaults'})"

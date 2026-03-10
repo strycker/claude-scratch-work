@@ -475,7 +475,7 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
     prices: pd.DataFrame | None = None
     cache_path = DATA_DIR / "raw" / "asset_prices.parquet"
 
-    if run_cfg.refresh_source_datasets or not cache_path.exists():
+    if run_cfg.refresh_asset_prices or not cache_path.exists():
         try:
             prices = fetch_prices(cfg)
             if not prices.empty:
@@ -667,6 +667,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Re-scrape multpl.com + re-hit FRED API")
     p.add_argument("--recompute", action="store_true",
                    help="Recompute features from cached raw data")
+    p.add_argument("--refresh-assets", action="store_true",
+                   help=(
+                       "Re-fetch ETF prices from yfinance (step 6). "
+                       "Without this flag, step 6 loads from the cached "
+                       "data/raw/asset_prices.parquet if it exists. "
+                       "Useful behind firewalls: omit this flag to reuse "
+                       "previously fetched prices without hitting the network."
+                   ))
     p.add_argument("--plots", action="store_true",
                    help="Generate and save matplotlib figures")
     p.add_argument("--show-plots", action="store_true",
