@@ -22,7 +22,21 @@ import logging
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")   # must be set before importing pyplot to work headless
+
+# Only force the Agg (headless) backend when NOT running inside Jupyter/IPython.
+# In Jupyter, %matplotlib inline has already configured the inline backend and
+# calling matplotlib.use("Agg") after that would break inline display and cause
+# "FigureCanvasAgg is non-interactive" warnings when plt.show() is called.
+def _in_jupyter() -> bool:
+    try:
+        from IPython import get_ipython  # type: ignore[import]
+        return get_ipython() is not None
+    except ImportError:
+        return False
+
+if not _in_jupyter():
+    matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.ticker as mticker
@@ -437,7 +451,8 @@ def plot_regime_profiles(
     if not key_cols:
         return
 
-    unique_clusters = sorted(labels.dropna().astype(int).unique())
+    valid = labels.dropna()
+    unique_clusters = sorted(valid.astype(int).unique())
     n = len(key_cols)
     ncols_grid = 3
     nrows_grid = (n + ncols_grid - 1) // ncols_grid
@@ -446,7 +461,7 @@ def plot_regime_profiles(
 
     for ax, col in zip(axes_flat, key_cols):
         data_by_regime = [
-            features.loc[labels.astype(int) == cid, col].dropna().values
+            features.loc[valid.astype(int) == cid, col].dropna().values
             for cid in unique_clusters
         ]
         bp = ax.boxplot(

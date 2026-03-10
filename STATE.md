@@ -66,6 +66,7 @@ Total: 68 tests — ✅ all passing (Python 3.11)
 - ✅ Best-k selection with `k_cap=5`
 - ✅ KMeansConstrained balanced clustering with `balanced_k=5`
 - ✅ Optional `--no-constrained` fallback for environments without the package
+- ✅ Deterministic cluster label canonicalization (`_canonicalize_cluster_col`): cluster IDs sorted by ascending mean PC1 value, so label 0 always maps to the lowest-PC1 regime regardless of random seed
 
 ### Regime Profiling
 - ✅ `build_profiles()`: mean/std of features per regime
@@ -95,6 +96,15 @@ Total: 68 tests — ✅ all passing (Python 3.11)
 - ✅ `print_dashboard()`: terminal output with regime + signals + transitions
 - ✅ `save_dashboard_csv()`: timestamped CSV to `outputs/reports/`
 - ✅ `portfolio_simple.csv`, `portfolio_blended.csv`, `trade_recommendations.csv`
+
+### Notebooks (01–07)
+- ✅ `%matplotlib inline` added to all notebooks (plots display inline; no FigureCanvasAgg warning)
+- ✅ `show_plots=False` in RunConfig (Jupyter inline handles display; no double-show)
+- ✅ In-cell pipeline execution: each notebook auto-runs its prerequisite step if data files are missing
+- ✅ `04_regimes`: fixed `KEY_INDICATORS` to use columns that exist in `clustering_features` (removed `10yr_ustreas` and `us_pop_growth`; added `10yr_ustreas_d1` and `real_gdp_growth`)
+- ✅ `04_regimes`: fixed `IntCastingNaNError` in `plot_regime_profiles` when labels contain NaN after reindex
+- ✅ `05_prediction`: model loading tries both `current_regime.pkl` and `current_regime_classifier.pkl`
+- ✅ `07_pairplot`: triple-colored pairplots — unsupervised (balanced_cluster), Grok market_code, supervised (RF predicted)
 
 ### Infrastructure
 - ✅ `CheckpointManager`: parquet + manifest, freshness check, list/clear
