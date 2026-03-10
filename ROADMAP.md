@@ -14,13 +14,31 @@ Items within a tier are roughly priority-ordered top → bottom.
 
 ## Tier 1 — High Impact, Achievable Soon
 
-### 1.1  XGBoost / LightGBM supervised classifiers  `M`
-Add gradient-boosted classifiers alongside RF + DT in `classifier.py`.
-- Use `xgboost` or `lightgbm` with `early_stopping_rounds` on the last TSCV fold
-- Requires class-weight handling (use `scale_pos_weight` per class)
-- Compare CV accuracy: DT → RF → XGB; report all three in step 5 log
-- `pyproject.toml`: add `xgboost>=2.0` and `lightgbm>=4.0` as optional extras
-- **Files**: `src/market_regime/prediction/classifier.py`, `pipelines/05_predict.py`
+### 1.1  LightGBM supervised classifier  `M`
+Add gradient-boosted classifier alongside RF + DT in `classifier.py`.
+**Prefer LightGBM over XGBoost** for this dataset: at ~300 observations, LightGBM
+is faster, more memory-efficient, and performs comparably.
+
+Recommended hyperparameters for small-sample regime classification:
+```python
+lgb_params = {
+    "num_leaves": 15,         # restrict to prevent overfitting
+    "max_depth": 5,           # shallow trees = lower variance at N~300
+    "min_child_samples": 5,   # higher leaf occupancy
+    "learning_rate": 0.05,    # conservative; pair with more rounds
+    "num_boost_round": 300,
+    "feature_fraction": 0.8,  # column subsampling
+    "bagging_fraction": 0.8,  # row subsampling
+    "lambda_l2": 1.0,         # L2 regularization
+    "class_weight": "balanced",
+}
+```
+- New file: `src/market_regime/prediction/gradient_boosting.py`
+- Functions: `train_lightgbm_current_regime()`, `train_lightgbm_forward()`
+- Use same `_tscv_scores()` helper as RF + DT
+- Do NOT over-tune hyperparameters with 300 obs (fixed grid, max 50 combos)
+- Add `lightgbm>=4.0` as optional extra in `pyproject.toml`
+- **Files**: `src/market_regime/prediction/gradient_boosting.py` (new), `pipelines/05_predict.py`
 
 ### 1.2  Additional FRED macro series  `S`
 Several high-signal FRED series are free and require no new scraping infrastructure:
@@ -65,10 +83,13 @@ Extends commodity and asset data before 1993 (ETF inception dates):
 - **WTI Crude Oil**: monthly back to 1946
 - **Silver**: back to 1960
 - **10Y Treasury yield**: back to 1962 (to cross-check FRED)
-- **S&P 500**: back to 1871 (Shiller data already on multpl.com)
-- macrotrends uses JS-rendered tables; the underlying JSON is embedded in `<script>` tags as `var rawData = {...}`
-- Parse approach: `requests` + `re.search(r'var rawData = ({.*?});', html, re.DOTALL)`
-- Rate-limit to 3s between requests (stricter than multpl.com)
+- macrotrends uses **static HTML tables** (NOT JavaScript-rendered) — confirmed via research.
+- Parse approach: `pandas.read_html()` with CSS selector `table.historical_data_table`,
+  OR `requests` + `BeautifulSoup` with `.select("table.historical_data_table")`.
+  No Selenium or Playwright needed.
+- Rate-limit to 2-3s between requests
+- After resampling to quarterly, resample with `.mean()` (price) or `.last()` (rate)
+- Merge into `macro_raw.parquet` alongside FRED + multpl series
 - **Files**: `src/market_regime/ingestion/macrotrends.py` (new), `config/settings.yaml`
 
 ### 1.6  Confusion matrix and classification report in plots  `S`
