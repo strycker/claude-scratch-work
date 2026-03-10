@@ -568,7 +568,13 @@ def plot_predicted_vs_actual(
     """
     Side-by-side timeline of actual vs model-predicted regimes.
     """
-    X = features.dropna(axis=1, how="any")
+    # Use the model's own training columns; forward-fill the trailing edge NaN
+    # that centered np.gradient leaves on the last row of derivative columns.
+    if hasattr(model, "feature_names_in_"):
+        train_cols = [c for c in model.feature_names_in_ if c in features.columns]
+        X = features[train_cols].ffill()
+    else:
+        X = features.dropna(axis=1, how="any")
     common = X.index.intersection(labels.index)
     X = X.loc[common]
     y_true = labels.loc[common]
