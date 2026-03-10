@@ -45,6 +45,7 @@ import pandas as pd
 
 from market_regime import OUTPUT_DIR
 from market_regime.runtime import RunConfig
+from market_regime.transforms import trim_incomplete_tail
 
 log = logging.getLogger(__name__)
 
@@ -568,13 +569,13 @@ def plot_predicted_vs_actual(
     """
     Side-by-side timeline of actual vs model-predicted regimes.
     """
-    # Use the model's own training columns; forward-fill the trailing edge NaN
-    # that centered np.gradient leaves on the last row of derivative columns.
+    # Select the exact columns the model was trained on, then drop the trailing
+    # incomplete quarter(s) where centered np.gradient leaves NaN (edge effect).
     if hasattr(model, "feature_names_in_"):
         train_cols = [c for c in model.feature_names_in_ if c in features.columns]
-        X = features[train_cols].ffill()
+        X = trim_incomplete_tail(features[train_cols]).dropna(how="any")
     else:
-        X = features.dropna(axis=1, how="any")
+        X = trim_incomplete_tail(features).dropna(how="any")
     common = X.index.intersection(labels.index)
     X = X.loc[common]
     y_true = labels.loc[common]

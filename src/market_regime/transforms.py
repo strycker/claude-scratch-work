@@ -271,3 +271,76 @@ def engineer_all(df: pd.DataFrame, cfg: dict, causal: bool = False) -> pd.DataFr
         mode, len(df), len(df.columns), nan_count,
     )
     return df
+
+
+# ── Incomplete-tail trimming ───────────────────────────────────────────────────
+
+def trim_incomplete_tail(
+    df: pd.DataFrame,
+    cols: list[str] | None = None,
+    enabled: bool = True,
+) -> pd.DataFrame:
+    """
+    Remove trailing rows where any column in *cols* is NaN.
+
+    Only trims the tail — interior NaN rows (handled by Bernstein gap fill
+    during feature engineering) are left untouched.
+
+    The typical scenario: the most-recent quarter has NaN in every derivative
+    column because centered ``np.gradient`` cannot compute edge values (there
+    is no following row to difference against).  Removing that row rather than
+    forward-filling it avoids propagating stale derivative signals into
+    current-quarter predictions.
+
+    Parameters
+    ----------
+    df :
+        Time-indexed DataFrame (features or any quarterly DataFrame).
+    cols :
+        Columns to inspect for NaN.  If *None*, all columns are checked
+        (excluding any column named ``market_code``).
+    enabled :
+        Pass ``False`` to skip trimming entirely (e.g. ``enabled=cfg["data"]["drop_incomplete_tail"]``).
+
+    Returns
+    -------
+    DataFrame with trailing incomplete rows removed, or *df* unchanged when
+    ``enabled=False`` or no incomplete tail exists.
+    """
+    if not enabled or df.empty:
+        return df
+
+    if cols is None:
+        check_cols = [c for c in df.columns if c != "market_code"]
+    else:
+        check_cols = [c for c in cols if c in df.columns]
+
+    if not check_cols:
+        return df
+
+    complete_mask = df[check_cols].notna().all(axis=1)
+    if complete_mask.all():
+        return df  # fast path — no incomplete tail
+
+    if not complete_mask.any():
+        log.warning("trim_incomplete_tail: no fully-complete row found — returning df unchanged")
+        return df
+
+    last_complete_idx = df[complete_mask].index[-1]
+    n_dropped = int((df.index > last_complete_idx).sum())
+
+    if n_dropped > 0:
+        label = (
+            last_complete_idx.strftime("%Y-%m-%d")
+            if hasattr(last_complete_idx, "strftime")
+            else str(last_complete_idx)
+        )
+        log.info(
+            "trim_incomplete_tail: dropped %d trailing incomplete row(s); "
+            "last complete quarter: %s",
+            n_dropped,
+            label,
+        )
+        return df.loc[:last_complete_idx]
+
+    return df

@@ -33,6 +33,7 @@ from market_regime.prediction import (
     train_forward_classifiers,
     predict_current,
 )
+from market_regime.transforms import trim_incomplete_tail
 
 import pandas as pd
 
@@ -53,8 +54,13 @@ def main() -> None:
     labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
-    X = features.loc[common].drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
-    y = labels.loc[common]
+    drop_tail: bool = cfg.get("data", {}).get("drop_incomplete_tail", True)
+    X_raw = features.loc[common].drop(columns=["market_code"], errors="ignore")
+    # trim_incomplete_tail removes the trailing quarter(s) where centered
+    # np.gradient leaves NaN in derivative columns (edge effect).
+    # dropna(axis=0) removes any remaining rows with interior NaN.
+    X = trim_incomplete_tail(X_raw, enabled=drop_tail).dropna(axis=0, how="any")
+    y = labels.loc[X.index]
 
     # ── Current-regime classifiers ─────────────────────────────────────────
     current_model = train_current_regime(X, y, cfg)

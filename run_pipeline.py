@@ -685,6 +685,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Comma-separated step numbers to run, e.g. 1,3,5")
     p.add_argument("--no-constrained", action="store_true",
                    help="Skip k-means-constrained (if package not installed)")
+    p.add_argument("--no-drop-tail", action="store_true",
+                   help=(
+                       "Include the most-recent (potentially incomplete) quarter "
+                       "in training and prediction rather than trimming it. "
+                       "By default the trailing row is dropped when it contains "
+                       "NaN in any feature column (centered np.gradient edge effect)."
+                   ))
     p.add_argument("--market-code", type=str, default=None, metavar="NAME",
                    help=(
                        "Load market_code from this source. "

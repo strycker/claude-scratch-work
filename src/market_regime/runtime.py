@@ -40,6 +40,13 @@ class RunConfig:
     # ── misc ──────────────────────────────────────────────────────────────
     use_constrained_kmeans: bool = True     # attempt k-means-constrained
 
+    # Drop trailing quarters with NaN features before training / predicting.
+    # Mirrors config setting data.drop_incomplete_tail (CLI: --no-drop-tail).
+    # The most-recent quarter typically has NaN in derivative columns because
+    # centered np.gradient cannot compute edge values; removing it is safer
+    # than forward-filling or column-dropping.
+    drop_incomplete_tail: bool = True
+
     # ── market_code ───────────────────────────────────────────────────────
     # Which market_code source to load, or None to run without market_code.
     # Special value "grok"       → load from grok pickle via ingestion/grok.py
@@ -67,6 +74,7 @@ class RunConfig:
             refresh_asset_prices=getattr(args, "refresh_assets", False),
             use_constrained_kmeans=not getattr(args, "no_constrained", False),
             market_code_source=getattr(args, "market_code", None),
+            drop_incomplete_tail=not getattr(args, "no_drop_tail", False),
         )
 
     def apply_logging(self) -> None:

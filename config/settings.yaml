@@ -8,6 +8,15 @@ data:
   end_date:   "2025-09-30"    # set to null to use today
   frequency:  "Q"             # quarterly resampling target
 
+  # Remove the most-recent quarter from consideration for prediction/training
+  # when it contains NaN in any feature column.  This happens naturally at
+  # quarter-end because centered np.gradient cannot compute derivatives for
+  # the last row (no following row exists yet).  Keeping it would require
+  # either dropping 65 derivative columns (dropna axis=1) or fabricating
+  # derivative values by forward-filling, both of which distort results.
+  # Set to false to disable and include the incomplete tail as-is.
+  drop_incomplete_tail: true
+
 # ── FRED series ───────────────────────────────────────────────────────────────
 # shift: true → series is lagged one quarter to account for publication delay.
 # GDP and GNP are released after the quarter ends — shifting prevents look-ahead.
