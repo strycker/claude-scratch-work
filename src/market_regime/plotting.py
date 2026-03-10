@@ -45,6 +45,7 @@ import pandas as pd
 
 from market_regime import OUTPUT_DIR
 from market_regime.runtime import RunConfig
+from market_regime.transforms import trim_incomplete_tail
 
 log = logging.getLogger(__name__)
 
@@ -56,13 +57,18 @@ PLOT_DIR = OUTPUT_DIR / "plots"
 
 
 def _save_or_show(fig: plt.Figure, filename: str, run_cfg: RunConfig) -> None:
-    """Finalize a figure: save to disk and/or display according to run_cfg."""
+    """Finalize a figure: save to disk and/or display according to run_cfg.
+
+    In Jupyter notebooks, plt.show() is always called so the figure appears
+    inline — regardless of show_plots — because the inline backend handles
+    display cleanly and plt.close() would otherwise prevent any inline output.
+    """
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
     if run_cfg.save_plots:
         out = PLOT_DIR / filename
         fig.savefig(out, dpi=150, bbox_inches="tight")
         log.info("Saved plot: %s", out)
-    if run_cfg.show_plots:
+    if run_cfg.show_plots or _in_jupyter():
         plt.show()
     plt.close(fig)
 
@@ -563,7 +569,13 @@ def plot_predicted_vs_actual(
     """
     Side-by-side timeline of actual vs model-predicted regimes.
     """
-    X = features.dropna(axis=1, how="any")
+    # Select the exact columns the model was trained on, then drop the trailing
+    # incomplete quarter(s) where centered np.gradient leaves NaN (edge effect).
+    if hasattr(model, "feature_names_in_"):
+        train_cols = [c for c in model.feature_names_in_ if c in features.columns]
+        X = trim_incomplete_tail(features[train_cols]).dropna(how="any")
+    else:
+        X = trim_incomplete_tail(features).dropna(how="any")
     common = X.index.intersection(labels.index)
     X = X.loc[common]
     y_true = labels.loc[common]
