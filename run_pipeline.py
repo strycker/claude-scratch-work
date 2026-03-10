@@ -54,7 +54,7 @@ def _load_parquet(canonical_path: Path, checkpoint_name: str) -> "pd.DataFrame":
     machine and only its checkpoint was committed to the repo.
     """
     import pandas as pd
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
 
     if canonical_path.exists():
         return pd.read_parquet(canonical_path)
@@ -87,7 +87,7 @@ def _load_market_code(
         pd.Series of integer codes indexed by quarter-end dates, or None on failure.
     """
     import pandas as pd
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
 
     cm = CheckpointManager()
 
@@ -119,7 +119,7 @@ def _load_market_code(
 
 def _save_market_code(labels: "pd.Series", name: str) -> None:
     """Persist a market_code variant (any integer-coded label Series) to a checkpoint."""
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
     import pandas as pd
 
     cm = CheckpointManager()
@@ -136,7 +136,7 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
     Optionally attaches a market_code column from the configured source."""
     from market_regime.ingestion import fred as fred_module
     from market_regime.ingestion import multpl as multpl_module
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
     from market_regime import plotting
     import pandas as pd
 
@@ -200,8 +200,8 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
 
 def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
     """Engineer features from macro_raw → data/processed/features.parquet"""
-    from market_regime.features.transforms import engineer_all
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.transforms import engineer_all
+    from market_regime.checkpoints import CheckpointManager
     from market_regime import plotting
     import pandas as pd
 
@@ -243,10 +243,10 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
 def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False) -> None:
     """PCA + KMeans clustering → data/regimes/cluster_labels.parquet.
     When save_market_code=True, also checkpoints balanced_cluster as market_code_clustered."""
-    from market_regime.clustering.kmeans import (
+    from market_regime.clustering import (
         reduce_pca, evaluate_kmeans, pick_best_k, fit_clusters,
     )
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
     from market_regime import plotting
     from sklearn.preprocessing import StandardScaler
     import pandas as pd
@@ -330,10 +330,10 @@ def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False)
 
 def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
     """Profile clusters → data/regimes/profiles.parquet + transition_matrix.parquet"""
-    from market_regime.regime.profiler import (
+    from market_regime.regime import (
         build_profiles, suggest_names, build_transition_matrix, load_name_overrides,
     )
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
     from market_regime import plotting
     import pandas as pd
     import yaml
@@ -382,7 +382,7 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
 
 def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     """Train supervised classifiers → outputs/models/"""
-    from market_regime.prediction.classifier import (
+    from market_regime.prediction import (
         train_current_regime, train_decision_tree, train_forward_classifiers, predict_current,
     )
     from market_regime import plotting
@@ -459,11 +459,11 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
     """Fetch ETF prices via yfinance → data/regimes/asset_return_profile.parquet.
     Falls back to macro-data proxy returns when yfinance is unavailable."""
     from market_regime.ingestion.assets import fetch_all as fetch_prices
-    from market_regime.assets.returns import (
+    from market_regime.asset_returns import (
         compute_quarterly_returns, compute_proxy_returns,
         returns_by_regime, rank_assets_by_regime,
     )
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
     from market_regime import plotting
     import pandas as pd
 
@@ -542,12 +542,10 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
     """Print + save stoplight dashboard → outputs/reports/dashboard.csv
     Also computes portfolio weights and BUY/SELL/HOLD trade recommendations."""
-    from market_regime.prediction.classifier import predict_current
-    from market_regime.assets.returns import rank_assets_by_regime
-    from market_regime.reporting.dashboard import (
+    from market_regime.prediction import predict_current
+    from market_regime.asset_returns import rank_assets_by_regime
+    from market_regime.reporting import (
         asset_signals, print_dashboard, save_dashboard_csv,
-    )
-    from market_regime.reporting.portfolio import (
         simple_regime_portfolio, blended_regime_portfolio, generate_recommendation,
     )
     import pandas as pd

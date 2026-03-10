@@ -29,14 +29,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from market_regime import DATA_DIR, CONFIG_DIR, OUTPUT_DIR
 from market_regime.config import load, setup_logging
-from market_regime.prediction.classifier import predict_current
-from market_regime.assets.returns import rank_assets_by_regime
-from market_regime.reporting.dashboard import (
+from market_regime.prediction import predict_current
+from market_regime.asset_returns import rank_assets_by_regime
+from market_regime.reporting import (
     asset_signals,
     print_dashboard,
     save_dashboard_csv,
-)
-from market_regime.reporting.portfolio import (
     simple_regime_portfolio,
     blended_regime_portfolio,
     generate_recommendation,

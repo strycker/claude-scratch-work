@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from market_regime import DATA_DIR, CONFIG_DIR
 from market_regime.config import load, setup_logging
-from market_regime.regime.profiler import (
+from market_regime.regime import (
     build_profiles,
     suggest_names,
     build_transition_matrix,

@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from market_regime.features.transforms import (
+from market_regime.transforms import (
     add_cross_ratios,
     apply_log_transforms,
     apply_gap_fill,

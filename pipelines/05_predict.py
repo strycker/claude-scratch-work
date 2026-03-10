@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from market_regime import DATA_DIR, OUTPUT_DIR
 from market_regime.config import load, setup_logging
-from market_regime.prediction.classifier import (
+from market_regime.prediction import (
     train_current_regime,
     train_decision_tree,
     train_forward_classifiers,

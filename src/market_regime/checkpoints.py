@@ -16,7 +16,7 @@ Models (sklearn objects) are stored as pickle alongside, since they have
 no parquet-compatible serialization.
 
 Usage:
-    from market_regime.io.checkpoints import CheckpointManager
+    from market_regime.checkpoints import CheckpointManager
     cm = CheckpointManager()
 
     # Save
