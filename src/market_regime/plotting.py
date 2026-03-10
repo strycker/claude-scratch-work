@@ -251,7 +251,7 @@ def plot_elbow_curve(
 
     metrics = [
         ("silhouette", "Silhouette Score", "higher = better"),
-        ("calinski_harabasz", "Calinski-Harabasz", "higher = better"),
+        ("calinski", "Calinski-Harabasz", "higher = better"),
         ("davies_bouldin", "Davies-Bouldin", "lower = better"),
     ]
 
