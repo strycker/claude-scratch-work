@@ -56,13 +56,18 @@ PLOT_DIR = OUTPUT_DIR / "plots"
 
 
 def _save_or_show(fig: plt.Figure, filename: str, run_cfg: RunConfig) -> None:
-    """Finalize a figure: save to disk and/or display according to run_cfg."""
+    """Finalize a figure: save to disk and/or display according to run_cfg.
+
+    In Jupyter notebooks, plt.show() is always called so the figure appears
+    inline — regardless of show_plots — because the inline backend handles
+    display cleanly and plt.close() would otherwise prevent any inline output.
+    """
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
     if run_cfg.save_plots:
         out = PLOT_DIR / filename
         fig.savefig(out, dpi=150, bbox_inches="tight")
         log.info("Saved plot: %s", out)
-    if run_cfg.show_plots:
+    if run_cfg.show_plots or _in_jupyter():
         plt.show()
     plt.close(fig)
 
