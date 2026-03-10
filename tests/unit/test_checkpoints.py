@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from market_regime.io.checkpoints import CheckpointManager
+from market_regime.checkpoints import CheckpointManager
 
 
 @pytest.fixture

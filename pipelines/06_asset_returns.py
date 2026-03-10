@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from market_regime import DATA_DIR
 from market_regime.config import load, setup_logging
-from market_regime.assets.returns import (
+from market_regime.asset_returns import (
     compute_quarterly_returns,
     compute_proxy_returns,
     returns_by_regime,

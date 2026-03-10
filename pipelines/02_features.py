@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from market_regime import DATA_DIR
 from market_regime.config import load, setup_logging
-from market_regime.features.transforms import engineer_all
+from market_regime.transforms import engineer_all
 
 import pandas as pd
 

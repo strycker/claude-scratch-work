@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from market_regime.clustering.kmeans import (
+from market_regime.clustering import (
     reduce_pca,
     evaluate_kmeans,
     pick_best_k,

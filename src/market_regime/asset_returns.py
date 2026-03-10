@@ -123,35 +123,7 @@ def returns_by_regime(
           - plotting.plot_asset_heatmap()
           - rank_assets_by_regime()
     """
-    joined = returns.copy()
-    joined["regime"] = cluster_labels
-
-    records = []
-    for regime, group in joined.groupby("regime"):
-        asset_data = group.drop(columns=["regime"])
-        for ticker in asset_data.columns:
-            col = asset_data[ticker].dropna()
-            if col.empty:
-                continue
-            records.append({
-                "regime": regime,
-                "asset":  ticker,
-                "median_return": col.median(),
-            })
-
-    if not records:
-        return pd.DataFrame()
-
-    flat = pd.DataFrame(records)
-    pivot = flat.pivot(index="regime", columns="asset", values="median_return")
-    pivot.index.name = "regime"
-    pivot.columns.name = None  # drop the "asset" label from columns axis
-
-    log.info(
-        "Asset return profile: %d regimes × %d tickers",
-        len(pivot), len(pivot.columns),
-    )
-    return pivot
+    return returns_full_stats(returns, cluster_labels)["median_return"]
 
 
 def returns_full_stats(

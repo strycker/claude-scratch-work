@@ -67,97 +67,74 @@ def _tscv_scores(
 
 # ── public training functions ──────────────────────────────────────────────────
 
-def train_current_regime(
+def train_classifier(
     X: pd.DataFrame,
     y: pd.Series,
     cfg: dict,
-) -> RandomForestClassifier:
+    kind: str = "rf",
+) -> RandomForestClassifier | DecisionTreeClassifier:
     """
-    Train a RandomForest to predict today's regime label.
+    Train a classifier to predict today's regime label.
+
+    Args:
+        X    — feature matrix (rows = quarters, causal features only)
+        y    — integer cluster labels aligned to X
+        cfg  — pipeline config dict
+        kind — "rf" for RandomForestClassifier, "dt" for DecisionTreeClassifier
+
+    Returns:
+        Fitted classifier (trained on all data).
 
     Uses TimeSeriesSplit for CV so every evaluation fold only looks at data
     that was available at that point in time.  The final model is re-fitted
     on ALL available data for maximum accuracy in production.
-
-    Args:
-        X   — feature matrix (rows = quarters, causal features only)
-        y   — integer cluster labels aligned to X
-        cfg — pipeline config dict
-
-    Returns:
-        Fitted RandomForestClassifier (trained on all data).
     """
     pcfg = cfg["prediction"]
     n_splits = pcfg.get("cv_splits", 5)
-    n_estimators = pcfg.get("n_estimators", 200)
-    max_depth = pcfg.get("rf_max_depth", 12)
     rs = pcfg.get("random_state", 42)
 
-    def _factory():
-        return RandomForestClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            random_state=rs,
-            n_jobs=-1,
-            class_weight="balanced",
-        )
+    if kind == "rf":
+        def _factory():
+            return RandomForestClassifier(
+                n_estimators=pcfg.get("n_estimators", 200),
+                max_depth=pcfg.get("rf_max_depth", 12),
+                random_state=rs,
+                n_jobs=-1,
+                class_weight="balanced",
+            )
+        label = "RF current-regime"
+    elif kind == "dt":
+        def _factory():
+            return DecisionTreeClassifier(
+                max_depth=pcfg.get("dt_max_depth", 8),
+                random_state=rs,
+            )
+        label = "DT current-regime"
+    else:
+        raise ValueError(f"kind must be 'rf' or 'dt', got {kind!r}")
 
-    _tscv_scores(_factory, X, y, n_splits, "RF current-regime")
+    _tscv_scores(_factory, X, y, n_splits, label)
 
-    # Final model on all data
     final = _factory()
     final.fit(X, y)
 
-    y_pred = final.predict(X)
     log.info(
-        "RF current-regime — in-sample report:\n%s",
-        classification_report(y, y_pred, zero_division=0),
+        "%s — in-sample report:\n%s",
+        label, classification_report(y, final.predict(X), zero_division=0),
     )
     _log_feature_importance(final, X.columns)
     return final
 
 
-def train_decision_tree(
-    X: pd.DataFrame,
-    y: pd.Series,
-    cfg: dict,
-) -> DecisionTreeClassifier:
-    """
-    Train a shallow DecisionTree to predict today's regime label.
+# Convenience aliases kept for call-site readability
+def train_current_regime(X: pd.DataFrame, y: pd.Series, cfg: dict) -> RandomForestClassifier:
+    """Train a RandomForest to predict today's regime. See train_classifier()."""
+    return train_classifier(X, y, cfg, kind="rf")
 
-    The decision tree is intentionally kept shallow (max_depth=8) so it
-    remains human-readable: you can export it with sklearn.tree.export_text()
-    and inspect which features drive each split.  Use this to understand
-    which macro signals dominate regime transitions before tuning the forest.
 
-    Args:
-        X   — feature matrix (causal features only)
-        y   — integer cluster labels aligned to X
-        cfg — pipeline config dict
-
-    Returns:
-        Fitted DecisionTreeClassifier (trained on all data).
-    """
-    pcfg = cfg["prediction"]
-    n_splits = pcfg.get("cv_splits", 5)
-    max_depth = pcfg.get("dt_max_depth", 8)
-    rs = pcfg.get("random_state", 42)
-
-    def _factory():
-        return DecisionTreeClassifier(max_depth=max_depth, random_state=rs)
-
-    _tscv_scores(_factory, X, y, n_splits, "DT current-regime")
-
-    final = DecisionTreeClassifier(max_depth=max_depth, random_state=rs)
-    final.fit(X, y)
-
-    y_pred = final.predict(X)
-    log.info(
-        "DT current-regime — in-sample report:\n%s",
-        classification_report(y, y_pred, zero_division=0),
-    )
-    _log_feature_importance(final, X.columns)
-    return final
+def train_decision_tree(X: pd.DataFrame, y: pd.Series, cfg: dict) -> DecisionTreeClassifier:
+    """Train a shallow DecisionTree to predict today's regime. See train_classifier()."""
+    return train_classifier(X, y, cfg, kind="dt")
 
 
 def train_forward_classifiers(
