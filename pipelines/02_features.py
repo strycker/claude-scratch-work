@@ -3,7 +3,13 @@ Pipeline step 2 — Feature Engineering
 
 Reads data/raw/macro_raw.parquet, applies log transforms, smoothed
 derivatives, cross-ratios, and Bernstein gap filling.
-Writes data/processed/features.parquet.
+
+Writes two feature files:
+  data/processed/features.parquet            — centered rolling windows
+                                               (for clustering in step 3-4)
+  data/processed/features_supervised.parquet — causal/backward rolling windows
+                                               (for supervised learning in step 5-7;
+                                               no look-ahead bias)
 
 Run:
     python pipelines/02_features.py
@@ -28,12 +34,20 @@ def main() -> None:
     raw = pd.read_parquet(DATA_DIR / "raw" / "macro_raw.parquet")
     print(f"Loaded raw data: {raw.shape}")
 
-    features = engineer_all(raw, cfg)
+    out_dir = DATA_DIR / "processed"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = DATA_DIR / "processed" / "features.parquet"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # Centered features — for clustering (steps 3-4)
+    features = engineer_all(raw, cfg, causal=False)
+    out_path = out_dir / "features.parquet"
     features.to_parquet(out_path)
-    print(f"Wrote {features.shape} → {out_path}")
+    print(f"Wrote {features.shape} → {out_path}  (centered)")
+
+    # Causal features — for supervised learning and live scoring (steps 5-7)
+    features_sup = engineer_all(raw, cfg, causal=True)
+    out_path_sup = out_dir / "features_supervised.parquet"
+    features_sup.to_parquet(out_path_sup)
+    print(f"Wrote {features_sup.shape} → {out_path_sup}  (causal/backward)")
 
 
 if __name__ == "__main__":

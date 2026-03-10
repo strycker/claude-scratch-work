@@ -251,6 +251,9 @@ prediction:
   random_state:              42
   n_estimators:              200
   forward_horizons_quarters: [1, 2, 4, 8]
+  cv_splits:                 5     # TimeSeriesSplit folds for walk-forward CV
+  dt_max_depth:              8     # DecisionTree depth (shallow = human-readable)
+  rf_max_depth:              12    # RandomForest max_depth (null = unlimited)
 
 # ── Asset classes ─────────────────────────────────────────────────────────────
 assets:

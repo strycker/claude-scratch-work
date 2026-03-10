@@ -215,12 +215,22 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
 
     log.info("Step 2: engineering features from %d × %d raw data …",
              len(raw), len(raw.columns))
-    features = engineer_all(raw, cfg)
 
+    # Centered features (forward + backward window) — used for clustering (steps 3-4)
+    features = engineer_all(raw, cfg, causal=False)
     out_dir = DATA_DIR / "processed"
     out_dir.mkdir(parents=True, exist_ok=True)
     features.to_parquet(out_dir / "features.parquet")
     cm.save(features, "features")
+
+    # Causal features (backward-only window) — used for supervised learning (steps 5-7).
+    # Identical column names to features.parquet but no look-ahead in any derivative.
+    features_sup = engineer_all(raw, cfg, causal=True)
+    features_sup.to_parquet(out_dir / "features_supervised.parquet")
+    cm.save(features_sup, "features_supervised")
+    log.info(
+        "Step 2: wrote features.parquet (centered) and features_supervised.parquet (causal)"
+    )
 
     if run_cfg.generate_plots:
         feat_only = features.drop(columns=["market_code"], errors="ignore")
@@ -373,13 +383,23 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
 def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     """Train supervised classifiers → outputs/models/"""
     from market_regime.prediction.classifier import (
-        train_current_regime, train_forward_classifiers, predict_current,
+        train_current_regime, train_decision_tree, train_forward_classifiers, predict_current,
     )
     from market_regime import plotting
     import pandas as pd
     import pickle
 
-    features = _load_parquet(DATA_DIR / "processed" / "features.parquet", "features")
+    # Step 5 uses causal (backward-window) features so no future data leaks into
+    # training.  Falls back to centered features.parquet if supervised file absent
+    # (e.g. after a partial run that pre-dates this change).
+    sup_path = DATA_DIR / "processed" / "features_supervised.parquet"
+    feat_path = sup_path if sup_path.exists() else DATA_DIR / "processed" / "features.parquet"
+    if not sup_path.exists():
+        log.warning(
+            "Step 5: features_supervised.parquet not found — falling back to features.parquet. "
+            "Re-run step 2 to generate causal features."
+        )
+    features = _load_parquet(feat_path, "features_supervised")
     labels = _load_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
@@ -393,6 +413,8 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     for r, p in sorted(latest["probabilities"].items(), key=lambda x: -x[1]):
         log.info("  Regime %d: %.1f%%", r, p * 100)
 
+    dt_model = train_decision_tree(X, y, cfg)
+
     forward_models = train_forward_classifiers(X, y, cfg)
 
     model_dir = OUTPUT_DIR / "models"
@@ -400,6 +422,8 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 
     with open(model_dir / "current_regime.pkl", "wb") as f:
         pickle.dump(current_model, f)
+    with open(model_dir / "decision_tree.pkl", "wb") as f:
+        pickle.dump(dt_model, f)
     with open(model_dir / "forward_classifiers.pkl", "wb") as f:
         pickle.dump(forward_models, f)
 
@@ -432,10 +456,12 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 
 
 def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
-    """Fetch ETF prices via yfinance → data/regimes/asset_return_profile.parquet"""
+    """Fetch ETF prices via yfinance → data/regimes/asset_return_profile.parquet.
+    Falls back to macro-data proxy returns when yfinance is unavailable."""
     from market_regime.ingestion.assets import fetch_all as fetch_prices
     from market_regime.assets.returns import (
-        compute_quarterly_returns, returns_by_regime, rank_assets_by_regime,
+        compute_quarterly_returns, compute_proxy_returns,
+        returns_by_regime, rank_assets_by_regime,
     )
     from market_regime.io.checkpoints import CheckpointManager
     from market_regime import plotting
@@ -463,11 +489,30 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
     if (prices is None or prices.empty) and cache_path.exists():
         prices = pd.read_parquet(cache_path)
 
-    if prices is None or prices.empty:
-        log.warning("Step 6: no asset price data — skipping")
-        return
+    # Compute returns: use real ETF prices when available, macro proxies otherwise
+    returns: pd.DataFrame | None = None
+    if prices is not None and not prices.empty:
+        returns = compute_quarterly_returns(prices)
+        log.info("Step 6: using ETF price data (%d tickers)", len(returns.columns))
+    else:
+        log.warning(
+            "Step 6: no ETF price data available — computing proxy returns from macro data"
+        )
+        macro_path = DATA_DIR / "raw" / "macro_raw.parquet"
+        if macro_path.exists():
+            macro_df = pd.read_parquet(macro_path)
+            returns = compute_proxy_returns(macro_df)
+            if returns.empty:
+                log.warning("Step 6: proxy returns also empty — skipping")
+                return
+            log.info(
+                "Step 6: proxy returns computed (%d quarters × %d assets)",
+                len(returns), len(returns.columns),
+            )
+        else:
+            log.warning("Step 6: macro_raw.parquet not found — skipping")
+            return
 
-    returns = compute_quarterly_returns(prices)
     common = returns.index.intersection(labels.index)
 
     # profile: regime × ticker DataFrame of median returns
@@ -495,11 +540,15 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 
 
 def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
-    """Print + save stoplight dashboard → outputs/reports/dashboard.csv"""
+    """Print + save stoplight dashboard → outputs/reports/dashboard.csv
+    Also computes portfolio weights and BUY/SELL/HOLD trade recommendations."""
     from market_regime.prediction.classifier import predict_current
     from market_regime.assets.returns import rank_assets_by_regime
     from market_regime.reporting.dashboard import (
         asset_signals, print_dashboard, save_dashboard_csv,
+    )
+    from market_regime.reporting.portfolio import (
+        simple_regime_portfolio, blended_regime_portfolio, generate_recommendation,
     )
     import pandas as pd
     import pickle
@@ -514,7 +563,16 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
     with open(current_model_path, "rb") as f:
         current_model = pickle.load(f)
 
-    features = _load_parquet(DATA_DIR / "processed" / "features.parquet", "features")
+    # Step 7 uses causal features for live scoring — same as step 5 training data.
+    # Falls back to centered features.parquet when supervised file is absent.
+    sup_path = DATA_DIR / "processed" / "features_supervised.parquet"
+    feat_path = sup_path if sup_path.exists() else DATA_DIR / "processed" / "features.parquet"
+    if not sup_path.exists():
+        log.warning(
+            "Step 7: features_supervised.parquet not found — falling back to features.parquet. "
+            "Re-run step 2 to generate causal features."
+        )
+    features = _load_parquet(feat_path, "features_supervised")
     X = features.drop(columns=["market_code"], errors="ignore")
     # Align to the exact feature set the model was trained on
     if hasattr(current_model, "feature_names_in_"):
@@ -553,6 +611,35 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
 
     if not asset_signals_df.empty:
         save_dashboard_csv(asset_signals_df, OUTPUT_DIR / "reports")
+
+    # ── Portfolio construction and trade recommendations ─────────────────────
+    if profile_path.exists():
+        profile = pd.read_parquet(profile_path)
+        current_regime = prediction["regime"]
+        probs = prediction["probabilities"]
+
+        log.info("── Simple portfolio (top-3, regime %d) ──", current_regime)
+        simple_weights = simple_regime_portfolio(profile, current_regime, top_n=3)
+
+        log.info("── Blended portfolio (probability-weighted) ──")
+        blended_weights = blended_regime_portfolio(profile, probs, top_n=3)
+
+        log.info("── Trade recommendations (blended target vs all-cash) ──")
+        recommendations = generate_recommendation(blended_weights)
+
+        report_dir = OUTPUT_DIR / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+
+        if not simple_weights.empty:
+            simple_weights.to_frame("weight").to_csv(report_dir / "portfolio_simple.csv")
+        if not blended_weights.empty:
+            blended_weights.to_frame("weight").to_csv(report_dir / "portfolio_blended.csv")
+        if not recommendations.empty:
+            recommendations.to_csv(report_dir / "trade_recommendations.csv")
+            log.info(
+                "Trade recommendations saved to %s",
+                report_dir / "trade_recommendations.csv",
+            )
 
     log.info("Step 7 done")
 

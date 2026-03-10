@@ -79,25 +79,34 @@ def _dates_to_daynum(index) -> np.ndarray:
 
 
 def _compute_derivatives(
-    series: pd.Series, window: int
+    series: pd.Series, window: int, causal: bool = False
 ) -> tuple[pd.Series, pd.Series, pd.Series]:
     """
-    Smoothed 1st, 2nd, 3rd derivatives using centered rolling mean + np.gradient.
+    Smoothed 1st, 2nd, 3rd derivatives using rolling mean + np.gradient.
 
     The time axis is in actual matplotlib day-numbers so magnitudes are
     physically meaningful (units = value/day, value/day², value/day³).
+
+    causal=False (default): centered rolling window — uses both past and future
+        neighbours for smoothing.  Appropriate for historical regime labeling and
+        clustering where look-ahead is acceptable.
+
+    causal=True: backward (right-aligned) rolling window — only past observations
+        contribute to smoothing at each point.  Required for supervised-learning
+        features and live scoring so no future information leaks into the model.
     """
-    smoothed = series.rolling(window=window, min_periods=1, center=True).mean()
+    center = not causal
+    smoothed = series.rolling(window=window, min_periods=1, center=center).mean()
     x = _dates_to_daynum(series.index) - _dates_to_daynum(series.index).min()
 
     d1 = pd.Series(np.gradient(smoothed, x), index=series.index).rolling(
-        window=window, min_periods=1, center=True
+        window=window, min_periods=1, center=center
     ).mean()
     d2 = pd.Series(np.gradient(d1, x), index=series.index).rolling(
-        window=window, min_periods=1, center=True
+        window=window, min_periods=1, center=center
     ).mean()
     d3 = pd.Series(np.gradient(d2, x), index=series.index).rolling(
-        window=window, min_periods=1, center=True
+        window=window, min_periods=1, center=center
     ).mean()
     return d1, d2, d3
 
@@ -180,10 +189,15 @@ def apply_gap_fill(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
 
 # ── 5. Smoothed derivatives ────────────────────────────────────────────────
 
-def apply_derivatives(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
+def apply_derivatives(
+    df: pd.DataFrame, window: int = 5, causal: bool = False
+) -> pd.DataFrame:
     """
     For every feature column (excluding market_code), compute d1, d2, d3
     and append as {col}_d1, {col}_d2, {col}_d3.
+
+    causal=False (default): centered rolling window — for clustering.
+    causal=True: backward rolling window — for supervised learning / live scoring.
     """
     df = df.copy()
     feature_cols = [c for c in df.columns if c != "market_code"]
@@ -194,7 +208,7 @@ def apply_derivatives(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
             valid = df[[col]].dropna()
         if valid.empty:
             continue
-        d1, d2, d3 = _compute_derivatives(valid[col], window=window)
+        d1, d2, d3 = _compute_derivatives(valid[col], window=window, causal=causal)
         df[f"{col}_d1"] = d1.reindex(df.index)
         df[f"{col}_d2"] = d2.reindex(df.index)
         df[f"{col}_d3"] = d3.reindex(df.index)
@@ -204,7 +218,7 @@ def apply_derivatives(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
 
 # ── Master wrapper ─────────────────────────────────────────────────────────
 
-def engineer_all(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+def engineer_all(df: pd.DataFrame, cfg: dict, causal: bool = False) -> pd.DataFrame:
     """
     Run the full feature engineering pipeline in order.
 
@@ -212,14 +226,26 @@ def engineer_all(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
       1. Cross-asset ratios
       2. Log transforms
       3. Narrow to initial_features
-      4. Gap fill (Bernstein + Taylor)
+      4. Gap fill (Bernstein + Taylor)  — always uses centered derivatives
+         internally for gap-fill boundary conditions; this is correct because
+         gap fill recovers genuinely missing historical data, not real-time values.
       5. Smoothed derivatives (d1, d2, d3)
       6. Narrow to clustering_features
+
+    causal=False (default): step 5 uses centered rolling windows.
+        Use this for clustering and regime labeling (steps 3-4).
+        Output saved as data/processed/features.parquet.
+
+    causal=True: step 5 uses backward (right-aligned) rolling windows so
+        that no future data contributes to any feature value.
+        Use this for supervised learning and live scoring (steps 5-7).
+        Output saved as data/processed/features_supervised.parquet.
 
     Returns the ML-ready DataFrame (no NaNs, clustering_features + market_code).
     """
     feat_cfg = cfg["features"]
     window = feat_cfg.get("derivative_window", 5)
+    mode = "causal/backward" if causal else "centered"
 
     log.info("Step 1/6 — cross-asset ratios")
     df = add_cross_ratios(df)
@@ -230,18 +256,18 @@ def engineer_all(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     log.info("Step 3/6 — initial feature selection (%d features)", len(feat_cfg["initial_features"]))
     df = select_features(df, feat_cfg["initial_features"])
 
-    log.info("Step 4/6 — Bernstein gap filling")
+    log.info("Step 4/6 — Bernstein gap filling (always centered for boundary conditions)")
     df = apply_gap_fill(df, window=window)
 
-    log.info("Step 5/6 — smoothed derivatives (window=%d)", window)
-    df = apply_derivatives(df, window=window)
+    log.info("Step 5/6 — smoothed derivatives (window=%d, mode=%s)", window, mode)
+    df = apply_derivatives(df, window=window, causal=causal)
 
     log.info("Step 6/6 — clustering feature selection (%d features)", len(feat_cfg["clustering_features"]))
     df = select_features(df, feat_cfg["clustering_features"])
 
     nan_count = df.drop(columns=["market_code"], errors="ignore").isna().sum().sum()
     log.info(
-        "Feature engineering complete: %d rows × %d features, %d NaNs remaining",
-        len(df), len(df.columns), nan_count,
+        "Feature engineering complete [%s]: %d rows × %d features, %d NaNs remaining",
+        mode, len(df), len(df.columns), nan_count,
     )
     return df

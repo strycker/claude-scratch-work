@@ -2,10 +2,17 @@
 Pipeline step 5 — Supervised Regime Prediction
 
 Trains:
-  1. Current-regime classifier (predict today's regime from real-time features)
-  2. Forward-looking binary classifiers for each regime × horizon pair
+  1. RandomForestClassifier  — high accuracy; used for production predictions.
+  2. DecisionTreeClassifier  — shallow (max_depth=8); human-readable rules and
+                               fast feature-importance inspection.
+  3. Forward-looking binary classifiers for each regime × horizon pair.
 
-Prints feature importances and test-set accuracy.
+All models use TimeSeriesSplit walk-forward cross-validation so CV accuracy
+estimates reflect genuine out-of-sample performance.
+
+Features are read from features_supervised.parquet (causal/backward rolling
+windows — no future data leaks into any feature value).
+
 Saves fitted models to outputs/models/.
 
 Run:
@@ -22,6 +29,7 @@ from market_regime import DATA_DIR, OUTPUT_DIR
 from market_regime.config import load, setup_logging
 from market_regime.prediction.classifier import (
     train_current_regime,
+    train_decision_tree,
     train_forward_classifiers,
     predict_current,
 )
@@ -33,15 +41,24 @@ def main() -> None:
     setup_logging()
     cfg = load()
 
-    features = pd.read_parquet(DATA_DIR / "processed" / "features.parquet")
+    # Use causal features — no look-ahead bias for supervised learning
+    sup_path = DATA_DIR / "processed" / "features_supervised.parquet"
+    feat_path = sup_path if sup_path.exists() else DATA_DIR / "processed" / "features.parquet"
+    if not sup_path.exists():
+        print(
+            "WARNING: features_supervised.parquet not found — falling back to features.parquet.\n"
+            "Re-run step 2 to generate causal features."
+        )
+    features = pd.read_parquet(feat_path)
     labels = pd.read_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
-    X = features.loc[common].dropna(axis=1, how="any")  # drop cols still NaN after gap fill
+    X = features.loc[common].drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
     y = labels.loc[common]
 
-    # ── Current-regime classifier ──────────────────────────────────────────
+    # ── Current-regime classifiers ─────────────────────────────────────────
     current_model = train_current_regime(X, y, cfg)
+    dt_model = train_decision_tree(X, y, cfg)
 
     # Score on the most recent available quarter
     latest = predict_current(current_model, X)
@@ -58,6 +75,8 @@ def main() -> None:
 
     with open(model_dir / "current_regime.pkl", "wb") as f:
         pickle.dump(current_model, f)
+    with open(model_dir / "decision_tree.pkl", "wb") as f:
+        pickle.dump(dt_model, f)
     with open(model_dir / "forward_classifiers.pkl", "wb") as f:
         pickle.dump(forward_models, f)
 
