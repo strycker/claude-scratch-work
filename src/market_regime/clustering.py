@@ -192,6 +192,12 @@ def fit_clusters(
         ).fit_predict(X)
         log.warning("balanced_cluster uses plain KMeans (k-means-constrained unavailable)")
 
+    # Canonicalize label IDs so cluster 0 always has the smallest mean PC1 value.
+    # This makes label assignments deterministic across different k-means random seeds
+    # or sklearn versions, as long as the PCA projection is the same.
+    result = _canonicalize_cluster_col(result, "cluster")
+    result = _canonicalize_cluster_col(result, "balanced_cluster")
+
     log.info(
         "\n%d quarters clustered into %d regimes (balanced into %d).\n",
         len(result),
@@ -199,6 +205,24 @@ def fit_clusters(
         balanced_k,
     )
     return result
+
+
+def _canonicalize_cluster_col(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    """
+    Relabel cluster IDs so they are ordered by ascending mean PC1 value of the cluster.
+    Cluster 0 → lowest mean PC1, cluster 1 → next, etc.
+
+    This removes the arbitrary label permutation that k-means produces, making
+    regime IDs stable across runs with different random seeds.
+    """
+    pc1_col = next((c for c in df.columns if c.startswith("PC")), None)
+    if pc1_col is None or col not in df.columns:
+        return df
+    mean_pc1 = df.groupby(df[col])[pc1_col].mean().sort_values()
+    label_map = {old: new for new, old in enumerate(mean_pc1.index)}
+    df = df.copy()
+    df[col] = df[col].map(label_map)
+    return df
 
 
 def _size_summary(labels: pd.Series) -> str:
