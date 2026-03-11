@@ -1,29 +1,140 @@
 """
-run_pipeline.py — Master entry point for the Trading-Crab pipeline.
+run_pipeline.py — Master entry point for the Trading-Crab market regime pipeline.
 
-Runs all 7 pipeline steps in order (or a selected subset) with consistent
-runtime flags passed through to every module via RunConfig.
+Runs all 7 pipeline steps in order, or any selected subset, with a consistent
+RunConfig passed through every module.
 
-Usage:
-    python run_pipeline.py --refresh --recompute --plots
-    python run_pipeline.py --steps 3,4,5 --plots --verbose
-    python run_pipeline.py --steps 1,2 --refresh
-    python run_pipeline.py  # load checkpoints, run all, no plots
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ PIPELINE STEPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1  ingest         Scrape multpl.com (46 series) + FRED API → macro_raw.parquet
+  2  features       Log transforms, derivatives, gap-fill → features.parquet
+  3  cluster        PCA + KMeans → cluster_labels.parquet
+  4  regime_label   Statistical profiling + human-readable names → profiles.parquet
+  5  predict        Supervised classifiers (current + forward horizons)
+  6  asset_returns  ETF returns by regime via yfinance
+  7  dashboard      Print dashboard + save outputs/reports/dashboard.csv
 
-CLI flags:
-    --refresh            Re-scrape multpl.com + re-hit FRED API (~10 min)
-    --recompute          Recompute features from cached raw data
-    --plots              Generate matplotlib figures → outputs/plots/
-    --show-plots         Call plt.show() after each figure (off by default)
-    --verbose            Set logging to DEBUG
-    --steps 1,3,5        Run only these step numbers (comma-separated)
-    --no-constrained     Skip k-means-constrained (if package not installed)
-    --market-code NAME   Load market_code from this source.
-                         "grok"  → find and load data/grok_*.pickle
-                         other   → load checkpoint "market_code_{NAME}"
-                         omit    → run without market_code (fully data-driven)
-    --save-market-code   After step 3, save balanced_cluster as
-                         market_code_clustered checkpoint for future use
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ ALL CLI FLAGS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  --refresh            Re-scrape multpl.com + re-hit FRED API (~10 min).
+                       Without this flag, steps 1-2 load from cached checkpoints
+                       if they are less than 7 days old.
+
+  --recompute          Recompute derived features (step 2) from cached raw data.
+                       Use after editing config/settings.yaml feature lists or
+                       transforms.py without wanting to re-scrape.
+
+  --refresh-assets     Re-fetch ETF prices from yfinance (step 6 only).
+                       Without this flag, step 6 reuses data/raw/asset_prices.parquet
+                       if it already exists. Useful when behind a firewall or when
+                       ETF data hasn't changed since the last run.
+
+  --plots              Generate and save matplotlib figures to outputs/plots/.
+                       Each step produces its own set of charts.
+
+  --show-plots         Also call plt.show() after each figure.
+                       Off by default; do NOT use in CI or headless environments.
+
+  --verbose            Set logging level to DEBUG (very chatty).
+
+  --steps 1,3,5        Run only the listed step numbers (comma-separated integers).
+                       Example: --steps 3,4,5,6,7 skips ingestion and features.
+                       Valid values: 1 2 3 4 5 6 7
+
+  --no-constrained     Skip the k-means-constrained package even if installed.
+                       Falls back to plain KMeans for balanced clustering.
+                       Use if you haven't run: pip install k-means-constrained
+
+  --no-drop-tail       Include the most-recent (potentially incomplete) quarter.
+                       By default the trailing row is dropped when it contains NaN
+                       in any feature column — a side effect of the centered
+                       np.gradient edge window in step 2.
+
+  --market-code NAME   Inject a market_code label column into macro_raw so that
+                       downstream models and notebooks can overlay regime labels.
+                       NAME must be one of:
+                         grok        Load the original Grok AI-generated labels
+                                     from data/grok_*.pickle (cached automatically
+                                     to market_code_grok checkpoint on first use)
+                         clustered   Load labels saved by a prior --save-market-code
+                                     run (checkpoint: market_code_clustered)
+                         predicted   Load labels auto-saved by step 5 on its last
+                                     run (checkpoint: market_code_predicted)
+                         <any name>  Load checkpoint "market_code_<NAME>"
+                       Omit entirely for a fully data-driven run with no label seed.
+
+  --save-market-code   After step 3 completes, save the balanced_cluster column as
+                       the "market_code_clustered" checkpoint.  Use this so future
+                       runs can reference these cluster assignments with
+                       --market-code clustered.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ AUTO-SAVED CHECKPOINTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Step 5 automatically saves the predicted current-regime labels as the
+  "market_code_predicted" checkpoint every time it runs.  No flag needed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ COMMON WORKFLOWS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ ① FRESH START — scrape everything, seed with Grok labels (recommended first run):
+     python run_pipeline.py --refresh --recompute --plots \\
+         --market-code grok --save-market-code
+
+ ② FULLY DATA-DRIVEN — no label seed, cluster from data only:
+     python run_pipeline.py --refresh --recompute --plots --save-market-code
+
+ ③ FAST RE-RUN — skip scraping, use cached checkpoints, regenerate plots:
+     python run_pipeline.py --steps 3,4,5,6,7 --plots
+
+ ④ RE-CLUSTER ONLY — update cluster assignments, save for downstream:
+     python run_pipeline.py --steps 3 --save-market-code --plots
+
+ ⑤ DOWNSTREAM WITH NEW CLUSTER LABELS — use labels saved in ④:
+     python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
+
+ ⑥ DOWNSTREAM WITH GROK SEED — overlay original AI labels:
+     python run_pipeline.py --steps 4,5,6,7 --market-code grok --plots
+
+ ⑦ DOWNSTREAM WITH PREDICTED LABELS — use last step-5 predictions:
+     python run_pipeline.py --steps 4,5,6,7 --market-code predicted --plots
+
+ ⑧ RECOMPUTE FEATURES WITHOUT RE-SCRAPING (e.g., after editing settings.yaml):
+     python run_pipeline.py --recompute --steps 2,3,4,5,6,7 --plots
+
+ ⑨ ETF DATA REFRESH ONLY (no macro re-scrape):
+     python run_pipeline.py --steps 6,7 --refresh-assets --plots
+
+ ⑩ DEBUG A SINGLE STEP:
+     python run_pipeline.py --steps 3 --verbose --plots --show-plots
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ MARKET CODE EXPLAINED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  The "market_code" is a per-quarter integer label (0-4) that serves as the
+  reference regime assignment.  It is attached to macro_raw in step 1 and
+  propagated through all downstream steps as an overlay/reference column.
+
+  Four sources are available:
+    grok        Original AI-assisted labels (circa 2026-02-16).  Useful as a
+                stable reference baseline — these never change.
+    clustered   Labels from the most recent --save-market-code run.  Updated
+                every time you run step 3 with --save-market-code.
+    predicted   Labels from the most recent step 5 run.  Reflects the current
+                trained classifier's best guess for historical quarters.
+    (omitted)   Run without a market_code column.  Clustering is fully
+                data-driven; no external label is injected.
+
+  To list all available market_code checkpoints:
+    python -c "
+    from market_regime.io.checkpoints import CheckpointManager
+    cm = CheckpointManager()
+    mc = [e for e in cm.list() if e['name'].startswith('market_code_')]
+    for e in mc: print(e['name'], '—', e.get('rows', '?'), 'rows')
+    "
 """
 
 from __future__ import annotations
