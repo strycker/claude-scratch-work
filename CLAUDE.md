@@ -95,8 +95,14 @@ trading-crab/
     │   └── assets.py              ← yfinance ETF price fetcher
     ├── features/
     │   └── transforms.py          ← ratios, log, select, gap-fill, derivatives, engineer_all
-    ├── clustering/
-    │   └── kmeans.py              ← reduce_pca, evaluate_kmeans, pick_best_k, fit_clusters
+    ├── clustering.py              ← reduce_pca, evaluate_kmeans, pick_best_k, fit_clusters
+    │                                 + optimize_n_components, compare_svd_pca,
+    │                                 + compute_gap_statistic, find_knee_k
+    ├── gmm.py                     ← fit_gmm (returns scaler), select_gmm_k, gmm_labels, gmm_probabilities
+    ├── density.py                 ← knn_distances, fit_dbscan_sweep, fit_dbscan, fit_hdbscan_sweep, hdbscan_labels
+    ├── spectral.py                ← fit_spectral_sweep (affinity cached), spectral_labels
+    ├── cluster_comparison.py      ← compare_all_methods, pairwise_rand_index,
+    │                                 extract_rf_feature_importances, recommend_clustering_features
     ├── regime/
     │   └── profiler.py            ← build_profiles, suggest_names, build_transition_matrix
     ├── prediction/
@@ -413,17 +419,21 @@ See `ARCHITECTURE.md` for design decisions.  See `PITFALLS.md` for known gotchas
 - `CheckpointManager` — fully implemented; parquet + manifest
 - `RunConfig` — fully implemented, including `from_args()` factory
 - `run_pipeline.py` — master runner with full CLI (all flags implemented)
-- `ingestion/assets.py` — yfinance ETF price fetcher; SSL fix via certifi env vars
+- `ingestion/assets.py` — yfinance ETF price fetcher + 3-phase fallback chain (stooq → OpenBB → macro proxy)
 - `plotting.py` — 17 visualization helpers covering all 7 pipeline steps
-- `notebooks/01–08` — all notebooks present
+- `notebooks/01–08` — all notebooks present; 03_clustering expanded with 28 investigation cells
 - Requirements — minimum-bound strategy, Python 3.10+ compatible
 - `from __future__ import annotations` — present in all source files using `X | Y` syntax
-- Unit tests — 68 passing tests covering checkpoints, clustering, transforms, asset returns
+- Unit tests — **213 passing tests** (8 skipped: HDBSCAN) covering all modules including clustering investigation suite
 - **Gap 1** — `TimeSeriesSplit` CV in `classifier.py` (5-fold walk-forward)
 - **Gap 2** — `DecisionTreeClassifier` in `classifier.py` (max_depth=8)
 - **Gap 3** — `reporting/portfolio.py` — simple + blended portfolio + BUY/SELL/HOLD
 - **Gap 4** — `compute_proxy_returns()` fallback in `assets/returns.py`
 - **Causal smoothing** — `engineer_all(causal=True/False)` + dual parquet outputs from step 2
+- **Clustering investigation suite** — GMM (`gmm.py`), DBSCAN/HDBSCAN (`density.py`), Spectral (`spectral.py`), multi-method comparison (`cluster_comparison.py`), gap statistic + SVD + PCA sweep in `clustering.py`
+- **Config-driven var lists** — `plotting.sample_series`, `plotting.key_indicators`, `assets.etfs` all in `settings.yaml`
+- **16 ETFs** — expanded from 8 to 16 (added HYG, XLK, XLP, XLE, GDX, TIP, BIL, EDV)
+- **`pythonpath = ["src"]`** in `pyproject.toml` pytest config — tests run without `pip install -e .`
 
 ### Next Priority (implement in upcoming sessions)
 1. **Additional FRED series** — VIX (VIXCLS), unemployment (UNRATE), M2 (M2NS),
@@ -432,7 +442,7 @@ See `ARCHITECTURE.md` for design decisions.  See `PITFALLS.md` for known gotchas
 3. **Empirical forward probabilities** — `compute_forward_probabilities()` from legacy
 4. **Confusion matrix plot** — `plot_confusion_matrix()` in `plotting.py`
 5. **macrotrends.net scraper** — gold/oil spot prices back to 1915/1946
-6. **XGBoost/LightGBM classifiers** — alongside RF + DT in `classifier.py`
+6. **LightGBM classifier** — alongside RF + DT in `classifier.py`
 7. **Expand test suite** — classifier, portfolio, dashboard, profiler
 8. **`end_date: null`** in settings.yaml → use today's date at runtime
 9. **Per-asset regime probability models** ("Putting it all together — Part I")

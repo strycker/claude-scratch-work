@@ -92,7 +92,25 @@ Extends commodity and asset data before 1993 (ETF inception dates):
 - Merge into `macro_raw.parquet` alongside FRED + multpl series
 - **Files**: `src/market_regime/ingestion/macrotrends.py` (new), `config/settings.yaml`
 
-### 1.6  Confusion matrix and classification report in plots  `S`
+### 1.6  Expand asset universe and move ticker lists to config  `S`
+Add ETFs that cover a wider range of regime-relevant categories:
+- `HYG` — high-yield / junk bonds (credit risk / spread regime signal)
+- `XLK` — Technology sector (growth-regime outperformer)
+- `XLP` — Consumer staples (defensive / low-growth regime)
+- `XLE` — Energy sector (stagflation / commodity regime)
+- `GDX` — Gold miners (amplified gold / inflation hedge)
+- `TIP` — TIPS / inflation-linked bonds (real yield signal)
+- `BIL` — T-bills / cash equivalent (rising-rate / defensive)
+- `EDV` — Extended-duration Treasuries 25+ yr (duration risk)
+
+All ticker lists now live in `config/settings.yaml` under `assets.etfs`.
+Notebooks read from `cfg["assets"]["etfs"]` — no hardcoded lists in notebook code.
+`plotting.sample_series` and `plotting.key_indicators` also moved to config.
+- **Files**: `config/settings.yaml`, `notebooks/01_ingestion.ipynb`, `notebooks/04_regimes.ipynb`,
+  `notebooks/06_assets.ipynb`, `src/market_regime/plotting.py`
+- **Status**: ✓ Done (settings.yaml + notebooks updated; ETF data fetched on next step 1 run)
+
+### 1.7  Confusion matrix and classification report in plots  `S`
 `legacy/supervised.py` has `generate_classification_report()` that produces a
 confusion matrix; this is not exposed in `src/` plotting or logs.
 - Add `plot_confusion_matrix(model, X, y, regime_names, run_cfg)` to `plotting.py`
@@ -103,7 +121,56 @@ confusion matrix; this is not exposed in `src/` plotting or logs.
 
 ## Tier 2 — High Value, More Effort
 
-### 2.1  Finviz Elite integration for sector/stock signals  `M`
+### 2.1  Optimal k investigation — beyond silhouette  `S`  ✓ **DONE**
+Multi-metric k-selection panel implemented in `notebooks/03_clustering.ipynb`:
+- Gap statistic (Tibshirani 2001): `compute_gap_statistic()` in `clustering.py`
+- BIC via GMM: `fit_gmm()` + `select_gmm_k()` in `gmm.py`
+- Elbow detection: `find_knee_k()` with `kneed` or gradient fallback
+- Davies-Bouldin + Calinski-Harabasz + silhouette all compared side-by-side
+
+### 2.2  Gaussian Mixture Models (GMM) as KMeans alternative  `M`  ✓ **DONE**
+Implemented in `src/market_regime/gmm.py`:
+- `fit_gmm()`: sweeps (k, covariance_type) pairs, returns bic_df + models + fitted scaler
+- `select_gmm_k()`: picks minimum-BIC model; raises on all-NaN BIC
+- `gmm_labels()`: hard labels with PC1 canonicalization; scaler param for consistency
+- `gmm_probabilities()`: soft probability matrix (rows sum to 1)
+- Convergence detection: warns when EM fails to converge within max_iter
+- 27 unit tests in `tests/unit/test_gmm.py`
+
+### 2.3  DBSCAN / HDBSCAN density-based clustering  `M`  ✓ **DONE**
+Implemented in `src/market_regime/density.py`:
+- `knn_distances()`: k-NN distance plot for eps selection
+- `fit_dbscan_sweep()`: eps sweep with noise/cluster summary
+- `fit_dbscan()`: single fit with noise handling; warns on 0 or 1 cluster
+- `fit_hdbscan_sweep()` + `hdbscan_labels()`: optional (`pip install hdbscan`)
+- All functions warn explicitly on all-noise or single-cluster results
+- 27 unit tests in `tests/unit/test_density.py` (8 skipped when hdbscan absent)
+
+### 2.4  Spectral Clustering  `M`  ✓ **DONE**
+Implemented in `src/market_regime/spectral.py`:
+- `fit_spectral_sweep()`: pre-computes affinity matrix once then reuses across all k (~k-fold speedup)
+- `spectral_labels()`: single fit with PC1 canonicalization
+- 16 unit tests in `tests/unit/test_spectral.py`
+
+### 2.5  SVD as complement / alternative to PCA  `S`  ✓ **DONE**
+Implemented as `compare_svd_pca()` in `clustering.py`:
+- Returns `(pca_df, svd_df, loadings_df)` — side-by-side absolute component loadings
+- Docstring corrected: on StandardScaler-centred data SVD ≈ PCA (same zero-mean matrix)
+- Verified by test: PC1 / SV1 correlation > 0.95 on synthetic data
+
+### 2.6  Feature selection for clustering using RF importances  `M`  ✓ **DONE**
+Implemented in `src/market_regime/cluster_comparison.py`:
+- `extract_rf_feature_importances()`: loads pickled RF, validates feature_names length
+- `recommend_clustering_features()`: ranks clustering_features by RF importance, warns on truncation
+
+### 2.7  Multi-clustering model selection strategy  `S`  ✓ **DONE**
+Implemented in `src/market_regime/cluster_comparison.py` + notebook 03:
+- `compare_all_methods()`: silhouette/DB/CH for all methods; guards empty inputs and noise-only results
+- `pairwise_rand_index()`: N×N ARI matrix; raises if < 2 methods
+- 36 unit tests in `tests/unit/test_cluster_comparison.py`
+- 40 unit tests for exploration functions in `tests/unit/test_clustering_exploration.py`
+
+### 2.8  Finviz Elite integration for sector/stock signals  `M`
 With a Finviz Elite subscription:
 - Use `finvizfinance` Python library (`pip install finvizfinance`)
 - Screener API: pull all S&P 500 stocks filtered by sector, market cap, momentum
@@ -113,7 +180,7 @@ With a Finviz Elite subscription:
 - Separate from regime detection (which is macro-driven); feeds into a "stock signal" layer
 - **Files**: `src/market_regime/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
 
-### 2.2  Hidden Markov Model regime detection (alternative to KMeans)  `M`
+### 2.9  Hidden Markov Model regime detection (alternative to KMeans)  `M`
 `hmmlearn.hmm.GaussianHMM` is a principled alternative to KMeans for regime detection:
 - Handles temporal autocorrelation natively (KMeans treats each quarter independently)
 - Produces soft probabilities rather than hard cluster assignments
@@ -123,7 +190,7 @@ With a Finviz Elite subscription:
 - Use identical PCA features as input for fair comparison with KMeans
 - **Files**: `src/market_regime/clustering/hmm.py` (new), `pipelines/03_cluster.py`
 
-### 2.3  SMOTE / class-weight tuning for imbalanced regimes  `S`
+### 2.10  SMOTE / class-weight tuning for imbalanced regimes  `S`
 With 5 balanced clusters, sizes should be equal, but temporal distribution may still
 cause class imbalance in train/test splits of the TSCV folds.
 - RF already uses `class_weight="balanced"` — log per-fold class counts to verify
@@ -131,7 +198,7 @@ cause class imbalance in train/test splits of the TSCV folds.
 - Add to `pyproject.toml` as optional extra: `imbalanced-learn>=0.11`
 - **Files**: `src/market_regime/prediction/classifier.py`
 
-### 2.4  Per-asset regime probability models  `L`
+### 2.11  Per-asset regime probability models  `L`
 For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 - Binary: "Will this ETF be +X% in Y quarters?" for X in [5, 10, 20] and Y in [1, 2, 4, 8]
 - Features: regime probabilities + causal macro features + asset momentum
@@ -139,7 +206,7 @@ For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 - This is "Putting it all together — Part I" from the original design doc
 - **Files**: `src/market_regime/prediction/asset_classifier.py` (new), `pipelines/05b_asset_predict.py` (new)
 
-### 2.5  Momentum and cross-asset ratio features  `M`
+### 2.12  Momentum and cross-asset ratio features  `M`
 Additional derived features for clustering and supervised models:
 - 6M and 12M momentum (trailing return) for each major series
 - Relative strength: S&P priced in Gold, S&P priced in Oil, Gold priced in Oil
@@ -148,7 +215,7 @@ Additional derived features for clustering and supervised models:
 - PMI-equivalent proxy from FRED INDPRO momentum
 - **Files**: `src/market_regime/features/transforms.py`, `config/settings.yaml`
 
-### 2.6  Markov regime-switching model (statsmodels)  `M`
+### 2.13  Markov regime-switching model (statsmodels)  `M`
 `statsmodels.tsa.regime_switching.markov_regression.MarkovRegression` fits a model
 where parameters switch between discrete states via a Markov chain:
 - Interprets GDP growth as a switching-mean process (growth vs recession states)
@@ -157,7 +224,7 @@ where parameters switch between discrete states via a Markov chain:
 - Not a replacement for KMeans; more of a diagnostic and feature generator
 - **Files**: `src/market_regime/clustering/markov.py` (new)
 
-### 2.7  Conference Board LEI proxy from FRED  `S`
+### 2.14  Conference Board LEI proxy from FRED  `S`
 The Conference Board LEI is the gold standard for recession prediction but is not
 freely available. Construct a proxy from FRED components:
 - `PERMIT` (building permits) + `AWHMAN` (avg weekly hours) + `AMDMNO` (new orders)
@@ -195,14 +262,7 @@ Additional macrotrends series for pre-1970 data:
 - Dow Jones (pre-S&P 500 era)
 - Fed Funds Rate historical (FRED already has back to 1954; macrotrends back to 1800s)
 
-### 3.4  Alternative clustering: HDBSCAN / Gaussian Mixture Models  `M`
-Compare KMeans with density-based and probabilistic clustering:
-- `HDBSCAN`: no need to specify k; finds natural clusters; handles noise
-- `GaussianMixture`: soft assignments; Bayesian IC for model selection
-- Compare regime quality (silhouette, inter-regime variance) vs KMeans k=5
-- **Risk**: regime labels change → `regime_labels.yaml` overrides become invalid
-
-### 3.5  Factor model for asset returns within regimes  `L`
+### 3.4  Factor model for asset returns within regimes  `L`
 LASSO regression / Ridge regression per regime:
 - Dependent variable: next-quarter ETF return
 - Independent variables: causal macro features for that regime
@@ -210,7 +270,7 @@ LASSO regression / Ridge regression per regime:
   are the dominant predictors of GLD outperformance"
 - **Files**: `src/market_regime/prediction/factor_model.py` (new)
 
-### 3.6  Backtest framework  `XL`
+### 3.5  Backtest framework  `XL`
 Walk-forward backtest of the full pipeline:
 - At each quarter T, train on [T-N, T], predict regime and portfolio for T+1
 - Compare strategy vs S&P 500 benchmark: returns, Sharpe, max drawdown
@@ -218,13 +278,39 @@ Walk-forward backtest of the full pipeline:
 - Requires ~50 walk-forward steps (1975–2025 at quarterly resolution)
 - **Files**: `src/market_regime/backtest/` (new module)
 
-### 3.7  StockCharts.com integration  `M`
-StockCharts.com has rich technical analysis charts but no public API.
-Possible approaches:
-- Screen-scrape PDF/image chart exports (fragile, may violate ToS)
-- Use their hosted indicator data (RSI, MACD, Ichimoku) as supplementary signals
-- Better alternative: implement same indicators directly from Yahoo Finance OHLCV via `ta` library
-- **Recommendation**: skip StockCharts API, use `ta` or `pandas-ta` on yfinance data instead
+### 3.6  StockCharts.com — historical data scraping  `M`
+StockCharts.com (subscription already active) has historical OHLCV chart data
+but no public JSON/CSV export API.  Potential approaches:
+- **Symbol lookup + CSV export**: StockCharts renders chart data as an embedded
+  JavaScript array in its `SharpCharts` pages.  Scraping with `requests` +
+  regex/json extraction may work for daily close data.
+- **`/def/` page scraping**: the `stockcharts.com/h-sc/ui?s={SYMBOL}&type=BAR`
+  endpoint returns chart HTML; inspect for embedded `chartData` JSON objects.
+- **Use case**: primary value is as a yfinance fallback for historical close prices
+  (Phase 5 before macro proxy), and for technical indicators (RSI, MACD, etc.)
+  that are rendered on the charts.
+- **Risk**: ToS review required; rate-limit to ≥3s/request; no guaranteed format stability.
+- **Alternative**: compute the same technical indicators from yfinance/stooq OHLCV
+  using the `ta` or `pandas-ta` library — avoids scraping entirely.
+- **Files**: `src/market_regime/ingestion/stockcharts.py` (new)
+
+### 3.7  Finviz Elite — sector/fundamental overlays  `M`
+Finviz Elite (subscription already active) is a **stock screener**, not a
+historical price data source.  It is NOT suitable as a yfinance price fallback.
+
+What Finviz IS good for:
+- Current fundamental data (P/E, EPS, sector, market cap) per ticker
+- Sector-level performance views (1W, 1M, 3M, YTD heatmaps)
+- Screener for within-regime stock picking (which stocks in XLK outperform in growth regimes?)
+- News sentiment per ticker
+
+Implementation approach (when ready):
+- Use `finvizfinance` Python library: `pip install finvizfinance`
+- `finvizfinance.main.finvizfinance('SPY').ticker_fundament()` → current fundamentals
+- `finvizfinance.group.performance.Performance().screener_view(...)` → sector perf
+- **Files**: `src/market_regime/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
+- **Note**: historical screener data requires Finviz Elite API; current data is available
+  via the `finvizfinance` library without authentication for many fields
 
 ---
 
@@ -242,12 +328,18 @@ Possible approaches:
 | FRED — housing | `fredapi` | HOUST, PERMIT | 1959 | ✗ | **Tier 1** |
 | FRED — consumer | `fredapi` | UMCSENT, DPCERA3Q086SBEA | 1952 | ✗ | **Tier 1** |
 | macrotrends.net | custom scraper | Gold, oil, silver prices | 1915+ | ✗ | **Tier 1** |
-| Finviz Elite | `finvizfinance` | Sector/stock screener | recent | ✗ | Tier 2 |
-| hmmlearn | Python lib | HMM regime states | n/a | ✗ | Tier 2 |
-| statsmodels | Python lib | Markov regime-switching | n/a | ✗ | Tier 2 |
+| stooq.pl | `pandas-datareader` | Free ETF/stock OHLCV (Phase 3 yfinance fallback) | ~1993 | ✓ Phase 3 | Done (optional install) |
+| OpenBB | `openbb` | Multi-provider ETF prices (Phase 4 yfinance fallback) | varies | ✓ Phase 4 | Done (optional install) |
+| Finviz Elite | `finvizfinance` | Sector screener + fundamentals (NOT historical prices) | recent | ✗ | Tier 3 (3.7) |
+| StockCharts.com | custom scraper | Chart data + technical indicators | varies | ✗ | Tier 3 (3.6) |
+| hmmlearn | Python lib | HMM regime states | n/a | ✗ | Tier 2 (2.9) |
+| statsmodels | Python lib | Markov regime-switching | n/a | ✗ | Tier 2 (2.13) |
+| sklearn GMM | Python lib | Gaussian Mixture Models (soft clusters) | n/a | ✗ | Tier 2 (2.2) |
+| sklearn SpectralClustering | Python lib | Spectral / graph clustering | n/a | ✗ | Tier 2 (2.4) |
+| hdbscan | Python lib | Density-based clustering (HDBSCAN) | n/a | ✗ | Tier 2 (2.3) |
 | Streamlit | Python lib | Interactive dashboard | n/a | ✗ | Tier 3 |
 | Claude API | `anthropic` | AI weekly narrative | n/a | ✗ | Tier 3 |
-| StockCharts | scrape/skip | Technical charts | n/a | ✗ | Low/Skip |
+| StockCharts | scrape | Historical OHLCV + technical indicators | varies | ✗ | Tier 3 (3.6) |
 
 ---
 
