@@ -29,27 +29,15 @@ Notes on sources that are NOT suitable for historical ETF prices
 Pre-1993 ETF data does not exist in any source above; for that era the code
 falls back gracefully (partial NaN rows) rather than raising an error.
 
-SSL / certificate errors
-------------------------
-yfinance uses curl_cffi internally.  curl_cffi bundles its own libcurl with
-its own CA store.  It does NOT use the macOS Keychain, system trust store,
-or Python's certifi bundle.  Pointing CURL_CA_BUNDLE at certifi (or any
-other path) actively breaks things if that bundle does not contain every
-certificate in the chain.
+SSL certificate verification
+----------------------------
+SSL verification is permanently disabled for all yfinance calls.
 
-This module therefore does NOT set CURL_CA_BUNDLE at import time.
-
-When tickers are missing after Phase 1, Phase 2 automatically retries them
-using a curl_cffi Session(verify=False, impersonate="chrome").  This is the
-only reliable bypass because it operates at the libcurl handle level rather
-than relying on env-var parsing.
-
-To skip the automatic retry and have Phase 2 active from the start, set in
-your .env (loaded by python-dotenv before this module is imported):
-
-    YFINANCE_VERIFY_SSL=false
-
-This triggers verify=False for all yfinance calls rather than just the retry.
+curl_cffi (yfinance's HTTP backend) uses its own bundled libcurl with its own
+CA store.  It does NOT check the macOS Keychain, system trust store, certifi,
+or any CURL_CA_BUNDLE env var.  There is no reliable runtime way to inject a
+custom CA into curl_cffi's store, so verification is always skipped via
+curl_cffi.requests.Session(verify=False).
 
 Rate limiting
 -------------
@@ -65,7 +53,6 @@ Usage:
 from __future__ import annotations
 
 import logging
-import os
 from datetime import date
 
 import pandas as pd
@@ -91,48 +78,19 @@ _RATE_LIMIT_SIGNATURES = (
     "429",
 )
 
-_SSL_HELP_MESSAGE = """\
-
-╔══════════════════════════════════════════════════════════════════════════╗
-║   SSL Certificate Error — yfinance / curl_cffi                          ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║                                                                          ║
-║  curl_cffi uses its OWN bundled CA store and does NOT check the macOS   ║
-║  Keychain or system trust store.  Adding a cert to Keychain has no      ║
-║  effect on curl_cffi.                                                    ║
-║                                                                          ║
-║  ▶ Retrying automatically with SSL verification disabled ...             ║
-║                                                                          ║
-║  To skip this retry delay on every run, add to your .env file:          ║
-║    YFINANCE_VERIFY_SSL=false                                             ║
-║                                                                          ║
-║  To skip yfinance entirely and load from a saved checkpoint:             ║
-║    python run_pipeline.py --steps 6   (without --refresh-assets)        ║
-╚══════════════════════════════════════════════════════════════════════════╝
-"""
-
-
-class _SSLErrorDetector(logging.Handler):
-    """Temporary log handler on the yfinance logger to detect SSL messages."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.ssl_detected = False
-
-    def emit(self, record: logging.LogRecord) -> None:
-        msg = record.getMessage()
-        if any(sig in msg for sig in _SSL_ERROR_SIGNATURES):
-            self.ssl_detected = True
-
 
 def _ssl_bypass_curl_session():
     """
-    Create a curl_cffi.requests.Session with SSL verification disabled.
+    Create a curl_cffi.requests.Session with SSL verification completely disabled.
 
-    curl_cffi is a required yfinance ≥ 0.2 dependency so import should
-    always succeed.  verify=False disables cert checking at the libcurl
-    handle level — the only approach that reliably works.
-    impersonate="chrome" is required for Yahoo Finance's anti-bot check.
+    SSL is disabled unconditionally — this is intentional.  curl_cffi uses its
+    own bundled CA store and ignores the macOS Keychain, system trust store, and
+    certifi.  There is no reliable way to inject a custom CA at runtime; disabling
+    verification is the only approach that works in all network environments.
+
+    We try impersonate="chrome" first (needed for Yahoo Finance anti-bot detection).
+    If that raises (unsupported in the installed curl_cffi version), we fall back to
+    no impersonation with verify=False.
     """
     try:
         from curl_cffi import requests as curl_requests
@@ -149,7 +107,14 @@ def _ssl_bypass_curl_session():
     except ImportError:
         pass
 
-    return curl_requests.Session(verify=False, impersonate="chrome")
+    # Try with browser impersonation first (avoids Yahoo anti-bot 401).
+    # Some older curl_cffi builds don't accept impersonate= on Session();
+    # fall back to a plain verify=False session in that case.
+    try:
+        return curl_requests.Session(verify=False, impersonate="chrome")
+    except TypeError:
+        log.debug("curl_cffi Session does not support impersonate= — using plain verify=False")
+        return curl_requests.Session(verify=False)
 
 
 # ── Phase 1: batch yfinance download ──────────────────────────────────────────
@@ -408,12 +373,16 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     """
     Fetch quarterly adjusted-close prices for all tickers in cfg["assets"]["etfs"].
 
-    Phase 1  — batch yf.download() (one HTTP request, fastest, least rate-limiting)
-    Phase 2  — per-ticker curl_cffi Session(verify=False) for any missing tickers.
-               Triggered unconditionally for missing tickers: curl_cffi SSL errors
-               often bypass Python logging/exceptions and go straight to stderr, so
-               waiting for explicit error detection is unreliable.
-    Phase 3  — stooq (pandas-datareader)
+    SSL certificate verification is disabled for all yfinance calls.  curl_cffi
+    (yfinance's HTTP backend) uses its own bundled CA store and does not check the
+    macOS Keychain or system trust store; there is no reliable runtime way to inject
+    a custom CA, so verification is always skipped.
+
+    Phase 1  — batch yf.download() with verify=False curl_cffi session
+               (one HTTP request for all tickers — avoids rate limiting)
+    Phase 2  — per-ticker yf.Ticker(session=...).history() with same session,
+               for any tickers missing from the batch result
+    Phase 3  — stooq via pandas-datareader
     Phase 4  — OpenBB
     Phase 5  — empty DataFrame → caller uses macro-proxy returns
 
@@ -430,50 +399,24 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     start = cfg["data"]["start_date"]
     end = cfg["data"]["end_date"] or str(date.today())
 
-    # Opt-in to verify=False for ALL calls (skips Phase 2 retry delay)
-    force_no_verify = os.environ.get("YFINANCE_VERIFY_SSL", "true").lower() == "false"
+    # Always use verify=False — see module docstring for rationale.
+    session = _ssl_bypass_curl_session()
 
     # ── Phase 1: batch download ────────────────────────────────────────────────
-    if force_no_verify:
-        log.info("YFINANCE_VERIFY_SSL=false — using SSL bypass session from the start")
-        session = _ssl_bypass_curl_session()
-    else:
-        session = None
+    results, _ = _batch_yfinance(tickers, start, end, session=session)
 
-    # Also monitor the yfinance logger for SSL messages (belt-and-suspenders)
-    detector = _SSLErrorDetector()
-    yf_logger = logging.getLogger("yfinance")
-    yf_logger.addHandler(detector)
-    try:
-        results, ssl_from_exc = _batch_yfinance(tickers, start, end, session=session)
-    finally:
-        yf_logger.removeHandler(detector)
-
-    # ── Phase 2: SSL bypass retry for any missing tickers ─────────────────────
-    # Fire unconditionally when tickers are missing and we didn't already use
-    # the bypass in Phase 1.  curl_cffi SSL errors often go to stderr without
-    # raising Python exceptions or hitting the logging system, so ssl_from_exc
-    # and detector.ssl_detected are unreliable triggers.
+    # ── Phase 2: per-ticker retry for any missing tickers ─────────────────────
     missing = [t for t in tickers if t not in results]
-    if missing and not force_no_verify:
-        ssl_flagged = detector.ssl_detected or ssl_from_exc
-        if ssl_flagged:
-            log.warning(_SSL_HELP_MESSAGE)
+    if missing:
         log.info(
-            "Phase 2 SSL bypass: retrying %d/%d missing ticker(s) with verify=False ...",
+            "Phase 2: fetching %d/%d missing ticker(s) individually ...",
             len(missing), len(tickers),
         )
         recovered = _fetch_missing_with_ssl_bypass(missing, start, end)
         results.update(recovered)
         still_missing = [t for t in missing if t not in recovered]
-        if recovered:
-            log.warning(
-                "SSL bypass recovered %d/%d ticker(s).  "
-                "Set YFINANCE_VERIFY_SSL=false in your .env to skip this retry delay.",
-                len(recovered), len(missing),
-            )
         if still_missing:
-            log.warning("SSL bypass also failed for: %s", still_missing)
+            log.warning("Could not fetch: %s", still_missing)
 
     series_list = list(results.values())
 
