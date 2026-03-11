@@ -1,0 +1,27 @@
+{
+  "name": "asset_prices",
+  "created": "2026-03-11T14:19:58.036783",
+  "config_hash": "06587e3d",
+  "rows": 107,
+  "columns": 16,
+  "col_names": [
+    "SPY",
+    "GLD",
+    "TLT",
+    "USO",
+    "QQQ",
+    "IWM",
+    "VNQ",
+    "AGG",
+    "HYG",
+    "XLK",
+    "XLP",
+    "XLE",
+    "GDX",
+    "TIP",
+    "BIL",
+    "EDV"
+  ],
+  "index_start": "1999-03-31 00:00:00",
+  "index_end": "2025-09-30 00:00:00"
+}
