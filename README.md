@@ -9,7 +9,7 @@ Predict market conditions, optimal portfolios, and stock picks by:
 
 1. **Data Ingestion** — Scrapes macro financial data from multpl.com and the FRED API (quarterly resolution, ~1950–present).
 2. **Feature Engineering** — Log transforms, smoothed derivatives (1st–3rd order), cross-asset ratios, Bernstein-polynomial gap filling.
-3. **Clustering** — PCA dimensionality reduction, KMeans + size-constrained KMeans to label each quarter with a market regime.
+3. **Clustering** — PCA dimensionality reduction, KMeans + size-constrained KMeans to label each quarter with a market regime. Investigation suite compares GMM, DBSCAN, Spectral, and gap-statistic optimal-k selection.
 4. **Regime Interpretation** — Statistical profiling of each cluster to assign human-readable names (e.g. "Stagflation", "Growth Boom").
 5. **Supervised Prediction** — Classifiers to predict today's regime from currently-available features (no look-ahead).
 6. **Transition Probabilities** — Empirical regime transition matrices and forward-looking probability models.
@@ -165,12 +165,48 @@ python run_pipeline.py --recompute --steps 3,4,5,6,7 --save-market-code --plots
 4. Re-run downstream steps (`--steps 4,5,6,7 --market-code clustered`)
 5. Inspect `notebooks/04_regimes.ipynb` through `notebooks/06_assets.ipynb`
 
+### Clustering Investigation Extras
+
+`notebooks/03_clustering.ipynb` contains a full investigation suite — gap statistic,
+GMM, DBSCAN/HDBSCAN, Spectral, SVD, and multi-method comparison. Most of it works
+with just the core dependencies, but two optional extras unlock additional features:
+
+```bash
+# Automated elbow/knee detection for KMeans inertia curve
+pip install kneed
+
+# Hierarchical DBSCAN — more robust than DBSCAN for varying cluster densities
+pip install hdbscan
+
+# Or install both at once via the pyproject.toml extra:
+pip install -e ".[clustering-extras]"
+```
+
+### Alternative ETF Data Sources
+
+When yfinance is unavailable, the pipeline falls back automatically through:
+1. **yfinance** (primary) — standard ETF OHLCV data
+2. **stooq** via `pandas-datareader` — free, daily data, no API key needed
+3. **OpenBB** — multi-provider fallback (cboe free; others need API keys)
+4. **Macro proxy** — synthetic returns computed from macro_raw.parquet
+
+Install the data extras to enable stooq + OpenBB phases:
+```bash
+pip install -e ".[data-extras]"
+# or individually:
+pip install pandas-datareader openbb
+```
+
 ### Dependency Notes
 
 | Package | Required? | Purpose |
 |---|---|---|
 | All in `requirements.txt` | Yes | Core pipeline |
 | `k-means-constrained` | Recommended | Balanced-size clustering; falls back to plain KMeans if absent |
+| `kneed` | Optional | Automated elbow detection for KMeans (via `[clustering-extras]`) |
+| `hdbscan` | Optional | Hierarchical DBSCAN (via `[clustering-extras]`) |
+| `pandas-datareader` | Optional | Stooq ETF fallback (via `[data-extras]`) |
+| `openbb` | Optional | Multi-provider ETF fallback (via `[data-extras]`) |
 | `requirements-dev.txt` extras | Dev only | pytest, JupyterLab, IPython kernel |
 
 To upgrade all pinned dependencies to their latest compatible versions:
@@ -204,7 +240,7 @@ Short summary:
 - [ ] Add FRED series: VIX, unemployment, M2, yield spreads (10Y-2Y, 10Y-3M), housing starts
 - [ ] Add yield curve derived features in `transforms.py`
 - [ ] macrotrends.net scraper for gold (1915+) and oil (1946+) price backfill
-- [ ] XGBoost/LightGBM classifiers alongside RandomForest + Decision Tree
+- [ ] LightGBM classifier alongside RandomForest + Decision Tree
 - [ ] Empirical forward probabilities in `profiler.py` (small remaining legacy gap)
 - [ ] Confusion matrix visualization in `plotting.py`
 - [ ] `end_date: null` → use today in `settings.yaml`
@@ -225,7 +261,7 @@ Short summary:
 ### Completed ✓
 
 - ✓ Full 7-step pipeline runs end-to-end on real data
-- ✓ Data ingestion: multpl.com (46 series), FRED (7 series), yfinance (8 ETFs)
+- ✓ Data ingestion: multpl.com (46 series), FRED (7 series), yfinance (16 ETFs)
 - ✓ Feature engineering: log transforms, Bernstein gap fill, smoothed derivatives
 - ✓ Causal + centered smoothing — two separate feature files prevent look-ahead bias
 - ✓ PCA + KMeans clustering (standard + size-constrained)
@@ -240,3 +276,7 @@ Short summary:
 - ✓ Exploration notebooks (01–08)
 - ✓ Installation setup (`requirements.txt`, `setup.sh`, `Makefile`)
 - ✓ Python 3.10+ compatibility; SSL fix for yfinance curl_cffi
+- ✓ **Clustering investigation suite** — gap statistic, GMM, DBSCAN/HDBSCAN, Spectral,
+  SVD vs PCA, PCA component sweep, multi-method comparison + ARI heatmap, RF feature selection
+- ✓ **yfinance fallback chain** — stooq → OpenBB → macro proxy
+- ✓ **213 unit tests** covering all core modules and new clustering investigation suite

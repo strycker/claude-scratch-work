@@ -157,12 +157,12 @@ class TestGmmLabels:
         # cluster 0 should have smallest mean
         assert mean_pc1.idxmin() == 0
 
-    def test_no_scaler_warns(self, pca_df):
-        _, models, scaler = fit_gmm(pca_df, k_range=range(2, 3), covariance_types=("diag",), n_init=3)
+    def test_no_scaler_still_returns_labels(self, pca_df):
+        """gmm_labels without scaler should still function (logs a warning, does not raise)."""
+        _, models, _ = fit_gmm(pca_df, k_range=range(2, 3), covariance_types=("diag",), n_init=3)
         model = models[(2, "diag")]
-        with pytest.warns(None):  # expect a logging warning not a Python UserWarning
-            # Function should still return without error
-            labels = gmm_labels(pca_df, model, scaler=None)
+        # Should not raise even without a scaler (logs a warning internally)
+        labels = gmm_labels(pca_df, model, scaler=None)
         assert len(labels) == len(pca_df)
 
     def test_name_is_gmm_cluster(self, pca_df):

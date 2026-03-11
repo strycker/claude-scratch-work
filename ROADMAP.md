@@ -121,96 +121,54 @@ confusion matrix; this is not exposed in `src/` plotting or logs.
 
 ## Tier 2 — High Value, More Effort
 
-### 2.1  Optimal k investigation — beyond silhouette  `S`
-Silhouette score alone is insufficient to determine optimal k for regime detection.
-Add a multi-metric k-selection panel to `notebooks/03_clustering.ipynb`:
-- **Gap statistic** (Tibshirani et al.) — compares within-cluster dispersion to a
-  null reference distribution; often picks a higher k than silhouette
-- **BIC via GMM** — fit a `GaussianMixture(n_components=k)` for k in [2, 12];
-  select k minimizing BIC; directly comparable to KMeans as a model-selection criterion
-- **Elbow on within-cluster variance (inertia)** — classic, but use the "knee" heuristic
-  (`kneed` library: `KneeLocator`) for automated detection
-- **Davies-Bouldin + Calinski-Harabasz** — already computed; include in combined panel
+### 2.1  Optimal k investigation — beyond silhouette  `S`  ✓ **DONE**
+Multi-metric k-selection panel implemented in `notebooks/03_clustering.ipynb`:
+- Gap statistic (Tibshirani 2001): `compute_gap_statistic()` in `clustering.py`
+- BIC via GMM: `fit_gmm()` + `select_gmm_k()` in `gmm.py`
+- Elbow detection: `find_knee_k()` with `kneed` or gradient fallback
+- Davies-Bouldin + Calinski-Harabasz + silhouette all compared side-by-side
 
-Display all four metrics side-by-side; let user compare before committing to `balanced_k`.
-- **Files**: `notebooks/03_clustering.ipynb`, `src/market_regime/clustering/kmeans.py`
+### 2.2  Gaussian Mixture Models (GMM) as KMeans alternative  `M`  ✓ **DONE**
+Implemented in `src/market_regime/gmm.py`:
+- `fit_gmm()`: sweeps (k, covariance_type) pairs, returns bic_df + models + fitted scaler
+- `select_gmm_k()`: picks minimum-BIC model; raises on all-NaN BIC
+- `gmm_labels()`: hard labels with PC1 canonicalization; scaler param for consistency
+- `gmm_probabilities()`: soft probability matrix (rows sum to 1)
+- Convergence detection: warns when EM fails to converge within max_iter
+- 27 unit tests in `tests/unit/test_gmm.py`
 
-### 2.2  Gaussian Mixture Models (GMM) as KMeans alternative  `M`
-`sklearn.mixture.GaussianMixture` is a principled Bayesian alternative to KMeans:
-- Soft cluster assignments (regime probabilities, not hard labels)
-- BIC/AIC for model selection → no need to pre-specify k
-- Can model elliptical (non-spherical) clusters — KMeans assumes equal-radius spheres
-- Covariance types: try `"full"`, `"tied"`, `"diag"` — `"diag"` best for small N
-- Risk: with N≈300 quarters and 69 features, GMM can overfit — use PCA components as input
+### 2.3  DBSCAN / HDBSCAN density-based clustering  `M`  ✓ **DONE**
+Implemented in `src/market_regime/density.py`:
+- `knn_distances()`: k-NN distance plot for eps selection
+- `fit_dbscan_sweep()`: eps sweep with noise/cluster summary
+- `fit_dbscan()`: single fit with noise handling; warns on 0 or 1 cluster
+- `fit_hdbscan_sweep()` + `hdbscan_labels()`: optional (`pip install hdbscan`)
+- All functions warn explicitly on all-noise or single-cluster results
+- 27 unit tests in `tests/unit/test_density.py` (8 skipped when hdbscan absent)
 
-Implementation:
-- Add `fit_gmm(pca_df, k_range, covariance_type, random_state)` to `clustering/kmeans.py`
-  (or new `clustering/gmm.py`)
-- Returns both hard labels (argmax of responsibilities) and soft probabilities
-- Compare silhouette and BIC vs KMeans; present in notebook 03
-- Downstream: soft probabilities can replace hard labels as supervised model input
-- **Files**: `src/market_regime/clustering/gmm.py` (new), `pipelines/03_cluster.py`,
-  `notebooks/03_clustering.ipynb`
+### 2.4  Spectral Clustering  `M`  ✓ **DONE**
+Implemented in `src/market_regime/spectral.py`:
+- `fit_spectral_sweep()`: pre-computes affinity matrix once then reuses across all k (~k-fold speedup)
+- `spectral_labels()`: single fit with PC1 canonicalization
+- 16 unit tests in `tests/unit/test_spectral.py`
 
-### 2.3  DBSCAN / HDBSCAN density-based clustering  `M`
-Density-based clustering does not require specifying k; finds clusters of arbitrary shape
-and treats outlier quarters as noise (label = -1):
-- `sklearn.cluster.DBSCAN(eps, min_samples)` — requires tuning `eps` (distance threshold)
-  Use k-distance plot to select `eps` (elbow in sorted k-NN distances)
-- `hdbscan.HDBSCAN(min_cluster_size)` — hierarchical, more robust to `eps` choice;
-  `pip install hdbscan` (optional extra)
-- Key question: are some quarters genuinely outliers (not belonging to any regime)?
-  DBSCAN answers this; KMeans forces every point into a cluster
-- Limitation: noise-labeled quarters break downstream supervised training — need a strategy
-  (e.g., assign noise to nearest cluster centroid, or drop from supervised training)
-- **Files**: `src/market_regime/clustering/density.py` (new), `notebooks/03_clustering.ipynb`
+### 2.5  SVD as complement / alternative to PCA  `S`  ✓ **DONE**
+Implemented as `compare_svd_pca()` in `clustering.py`:
+- Returns `(pca_df, svd_df, loadings_df)` — side-by-side absolute component loadings
+- Docstring corrected: on StandardScaler-centred data SVD ≈ PCA (same zero-mean matrix)
+- Verified by test: PC1 / SV1 correlation > 0.95 on synthetic data
 
-### 2.4  Spectral Clustering  `M`
-Graph-based clustering; constructs a similarity graph and clusters its eigenvectors:
-- `sklearn.cluster.SpectralClustering(n_clusters, affinity)`
-- Better than KMeans for non-convex cluster shapes (e.g., crescent or ring shapes in PCA space)
-- More expensive: O(N³) eigendecomposition — feasible at N≈300
-- Must specify k (same as KMeans), so use optimal-k from 2.1 as input
-- Compare resulting labels to KMeans via adjusted Rand index and NMI
-- **Files**: `src/market_regime/clustering/spectral.py` (new), `notebooks/03_clustering.ipynb`
+### 2.6  Feature selection for clustering using RF importances  `M`  ✓ **DONE**
+Implemented in `src/market_regime/cluster_comparison.py`:
+- `extract_rf_feature_importances()`: loads pickled RF, validates feature_names length
+- `recommend_clustering_features()`: ranks clustering_features by RF importance, warns on truncation
 
-### 2.5  SVD as complement / alternative to PCA  `S`
-`sklearn.decomposition.TruncatedSVD` is mathematically equivalent to PCA on centered data
-but worth examining explicitly:
-- Compute SVD of the feature matrix directly; compare singular values to PCA explained variance
-- Interpretability: SVD right singular vectors (components) have the same meaning as PCA loadings;
-  visualize which raw features load most heavily on each component
-- Use case: if features contain many near-zero rows (pre-1970 NaN-filled quarters), SVD on
-  the non-centered matrix may give more stable components than centered PCA
-- Add a comparison cell in `notebooks/03_clustering.ipynb`: PCA vs TruncatedSVD component
-  loadings, variance explained, and resulting cluster quality
-- **Files**: `notebooks/03_clustering.ipynb`, `src/market_regime/clustering/kmeans.py`
-
-### 2.6  Feature selection for clustering using RF importances  `M`
-The current `clustering_features` list (69 columns) was manually curated from the legacy
-analysis. RF importances from step 5 provide a data-driven alternative:
-- After step 5 runs, extract `feature_importances_` from the current-regime RF classifier
-- Rank features by importance; identify which of the 69 clustering features are most
-  predictive of the regime labels
-- Re-run PCA + clustering using only the top-K features (try K in [20, 35, 50])
-- Compare silhouette score, regime separation, and step-5 CV accuracy vs the full 69-feature set
-- Key question: does a leaner feature set produce more stable, more predictable regimes?
-- **Important**: any change to `clustering_features` invalidates `regime_labels.yaml` — re-pin
-  regime names after re-clustering
-- **Files**: `notebooks/03_clustering.ipynb`, `config/settings.yaml`
-
-### 2.7  Multi-clustering model selection strategy  `S`
-When running multiple clustering methods (KMeans, GMM, DBSCAN, Spectral), a principled
-selection strategy is needed:
-- **Quantitative**: compare silhouette, Davies-Bouldin, and (for GMM) BIC across methods;
-  compute adjusted Rand index between pairs to measure label agreement
-- **Economic**: for each candidate clustering, run step 5 (regime classifier) and compare
-  5-fold TSCV accuracy — the "best" clustering should be the most predictive
-- **Visual**: overlay each method's labels on the PCA scatter (notebook 07 pairplot);
-  prefer methods where regimes form compact, well-separated clouds
-- **CLI workflow**: after selecting a preferred clustering, save its labels as a named
-  checkpoint (see README "Using new cluster labels" section) and propagate through steps 4–7
-- **Files**: `notebooks/03_clustering.ipynb`, `run_pipeline.py`
+### 2.7  Multi-clustering model selection strategy  `S`  ✓ **DONE**
+Implemented in `src/market_regime/cluster_comparison.py` + notebook 03:
+- `compare_all_methods()`: silhouette/DB/CH for all methods; guards empty inputs and noise-only results
+- `pairwise_rand_index()`: N×N ARI matrix; raises if < 2 methods
+- 36 unit tests in `tests/unit/test_cluster_comparison.py`
+- 40 unit tests for exploration functions in `tests/unit/test_clustering_exploration.py`
 
 ### 2.8  Finviz Elite integration for sector/stock signals  `M`
 With a Finviz Elite subscription:

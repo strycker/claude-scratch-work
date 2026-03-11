@@ -23,12 +23,17 @@ Updated: March 2026.
 ## Unit Tests
 
 ```
-tests/unit/test_checkpoints.py    18 tests — ✅ all passing
-tests/unit/test_clustering.py     15 tests — ✅ all passing
-tests/unit/test_returns.py        14 tests — ✅ all passing
-tests/unit/test_transforms.py     21 tests — ✅ all passing
-─────────────────────────────────────────────────────────
-Total: 68 tests — ✅ all passing (Python 3.11)
+tests/unit/test_checkpoints.py           18 tests — ✅ all passing
+tests/unit/test_clustering.py            15 tests — ✅ all passing
+tests/unit/test_clustering_exploration.py 40 tests — ✅ all passing
+tests/unit/test_cluster_comparison.py    36 tests — ✅ all passing
+tests/unit/test_density.py               27 tests — ✅ all passing (8 skipped: HDBSCAN)
+tests/unit/test_gmm.py                   27 tests — ✅ all passing
+tests/unit/test_returns.py               14 tests — ✅ all passing
+tests/unit/test_spectral.py              16 tests — ✅ all passing
+tests/unit/test_transforms.py            21 tests — ✅ all passing
+─────────────────────────────────────────────────────────────────────
+Total: 213 passed, 8 skipped (HDBSCAN optional) — ✅ all passing (Python 3.11)
 ```
 
 **Coverage gaps** (no tests for):
@@ -67,6 +72,18 @@ Total: 68 tests — ✅ all passing (Python 3.11)
 - ✅ KMeansConstrained balanced clustering with `balanced_k=5`
 - ✅ Optional `--no-constrained` fallback for environments without the package
 - ✅ Deterministic cluster label canonicalization (`_canonicalize_cluster_col`): cluster IDs sorted by ascending mean PC1 value, so label 0 always maps to the lowest-PC1 regime regardless of random seed
+
+### Clustering Investigation Suite (`notebooks/03_clustering.ipynb`)
+- ✅ **PCA component sweep**: `optimize_n_components()` — sweep n=3..10, score with KMeans(5)
+- ✅ **SVD vs PCA comparison**: `compare_svd_pca()` — side-by-side component loadings
+- ✅ **Gap statistic**: `compute_gap_statistic()` — Tibshirani 2001 criterion; correctly separates `gap_std` (raw sd) from `gap_sk` (simulation error = std×√(1+1/B))
+- ✅ **Elbow detection**: `find_knee_k()` — kneed library or gradient fallback
+- ✅ **Gaussian Mixture Models** (`src/market_regime/gmm.py`): BIC sweep, soft probabilities, convergence detection; `fit_gmm()` returns fitted scaler for consistent predictions
+- ✅ **DBSCAN** (`src/market_regime/density.py`): eps sweep, k-NN distance plot, noise handling with warnings
+- ✅ **HDBSCAN** (`src/market_regime/density.py`): optional (`pip install hdbscan`), `min_cluster_size` sweep
+- ✅ **Spectral Clustering** (`src/market_regime/spectral.py`): affinity matrix pre-computed once per sweep (~k-fold speedup), k sweep
+- ✅ **Multi-method comparison** (`src/market_regime/cluster_comparison.py`): silhouette/DB/CH for all methods, pairwise ARI matrix
+- ✅ **RF feature selection**: `extract_rf_feature_importances()` + `recommend_clustering_features()` — rank and filter the 69 clustering features by step-5 RF importance
 
 ### Regime Profiling
 - ✅ `build_profiles()`: mean/std of features per regime
@@ -110,7 +127,9 @@ Total: 68 tests — ✅ all passing (Python 3.11)
 - ✅ `CheckpointManager`: parquet + manifest, freshness check, list/clear
 - ✅ `RunConfig`: dataclass with `from_args()` factory
 - ✅ Full CLI: `--refresh`, `--recompute`, `--plots`, `--steps`, `--market-code`, etc.
-- ✅ `config/settings.yaml`: all tunable parameters
+- ✅ `config/settings.yaml`: all tunable parameters, including `gmm`, `dbscan`, `hdbscan`, `spectral` sub-sections
+- ✅ `pyproject.toml`: `clustering-extras = [hdbscan, kneed]`, `data-extras = [pandas-datareader, openbb]`
+- ✅ `pythonpath = ["src"]` added to pytest config (fixes test discovery without `pip install -e .`)
 
 ---
 
@@ -224,7 +243,9 @@ outputs/plots/               — PNG figures from --plots flag
 - Date: March 2026
 - Python: 3.11
 - All 7 steps ran successfully
-- 68 unit tests pass
+- **213 unit tests pass** (8 skipped: HDBSCAN not installed in CI)
 - Regime labels saved in `data/regimes/`; models in `outputs/models/`
 - All 4 legacy alignment gaps (TSCV, DT, portfolio, proxy returns) closed
 - Causal vs centered smoothing split implemented
+- Clustering investigation suite fully implemented and tested (GMM, DBSCAN, Spectral, gap statistic, SVD, feature selection)
+- All critical bugs fixed: GMM scaler consistency, gap_std vs gap_sk separation, spectral affinity caching, cluster comparison index alignment
