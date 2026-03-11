@@ -16,22 +16,32 @@ Covariance types (sklearn convention)
 - "full"   — each component has its own full covariance (overfit risk at small N)
 - "spherical" — each component has a scalar variance (most restrictive)
 
+Scaler consistency
+-------------------
+fit_gmm() returns the fitted StandardScaler alongside the models dict.
+Always pass this scaler to gmm_labels() and gmm_probabilities() to ensure
+the data is transformed identically to how it was during training.
+Omitting the scaler causes a new scaler to be fit on whatever data is passed,
+which will produce wrong assignments if the data distribution differs at all.
+
 Usage
 ------
     from market_regime.gmm import fit_gmm, select_gmm_k, gmm_labels, gmm_probabilities
 
-    bic_df, models = fit_gmm(pca_df, k_range=range(2, 10))
+    bic_df, models, scaler = fit_gmm(pca_df, k_range=range(2, 10))
     best_k, best_cov = select_gmm_k(bic_df)
-    labels = gmm_labels(pca_df, models[(best_k, best_cov)])
-    probs  = gmm_probabilities(pca_df, models[(best_k, best_cov)])
+    labels = gmm_labels(pca_df, models[(best_k, best_cov)], scaler=scaler)
+    probs  = gmm_probabilities(pca_df, models[(best_k, best_cov)], scaler=scaler)
 """
 
 from __future__ import annotations
 
 import logging
+import warnings
 
 import numpy as np
 import pandas as pd
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
 
@@ -47,7 +57,7 @@ def fit_gmm(
     n_init: int = 10,
     max_iter: int = 300,
     random_state: int = 42,
-) -> tuple[pd.DataFrame, dict[tuple[int, str], GaussianMixture]]:
+) -> tuple[pd.DataFrame, dict[tuple[int, str], GaussianMixture], StandardScaler]:
     """
     Fit GaussianMixture for all (k, covariance_type) combinations.
 
@@ -62,11 +72,17 @@ def fit_gmm(
     Returns:
         bic_df  — DataFrame with columns: k, covariance_type, bic, aic, log_likelihood
         models  — dict mapping (k, covariance_type) → fitted GaussianMixture
+        scaler  — the fitted StandardScaler used to transform pca_df.
+                  Pass this to gmm_labels() and gmm_probabilities() to guarantee
+                  consistent scaling.
     """
+    if pca_df.empty:
+        raise ValueError("pca_df is empty — cannot fit GMM on zero rows")
     if k_range is None:
         k_range = range(2, 10)
 
-    X = StandardScaler().fit_transform(pca_df.values)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(pca_df.values)
     rows: list[dict] = []
     models: dict[tuple[int, str], GaussianMixture] = {}
 
@@ -80,7 +96,17 @@ def fit_gmm(
                     max_iter=max_iter,
                     random_state=random_state,
                 )
-                gm.fit(X)
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always", ConvergenceWarning)
+                    gm.fit(X)
+
+                if any(issubclass(w.category, ConvergenceWarning) for w in caught):
+                    log.warning(
+                        "GMM k=%d cov=%s did not converge after %d iterations "
+                        "— BIC may be unreliable; increase max_iter or n_init",
+                        k, cov_type, max_iter,
+                    )
+
                 bic = float(gm.bic(X))
                 aic = float(gm.aic(X))
                 ll  = float(gm.score(X))  # mean log-likelihood per sample
@@ -90,7 +116,7 @@ def fit_gmm(
             except Exception as exc:
                 log.warning("GMM k=%d cov=%s failed: %s", k, cov_type, exc)
 
-    return pd.DataFrame(rows), models
+    return pd.DataFrame(rows), models, scaler
 
 
 def select_gmm_k(bic_df: pd.DataFrame) -> tuple[int, str]:
@@ -99,9 +125,14 @@ def select_gmm_k(bic_df: pd.DataFrame) -> tuple[int, str]:
 
     BIC balances log-likelihood against model complexity (penalises more parameters),
     making it suitable for small N where AIC would overfit.
+
+    Raises:
+        ValueError if bic_df is empty or all BIC values are NaN/missing.
     """
     if bic_df.empty:
         raise ValueError("bic_df is empty — no GMM fits succeeded")
+    if bic_df["bic"].isna().all():
+        raise ValueError("bic_df has no valid BIC values — all GMM fits failed or produced NaN")
     best_row = bic_df.loc[bic_df["bic"].idxmin()]
     best_k = int(best_row["k"])
     best_cov = str(best_row["covariance_type"])
@@ -109,32 +140,68 @@ def select_gmm_k(bic_df: pd.DataFrame) -> tuple[int, str]:
     return best_k, best_cov
 
 
-def gmm_labels(pca_df: pd.DataFrame, model: GaussianMixture) -> pd.Series:
+def gmm_labels(
+    pca_df: pd.DataFrame,
+    model: GaussianMixture,
+    scaler: StandardScaler | None = None,
+) -> pd.Series:
     """
     Return hard cluster labels (argmax of component responsibilities).
 
     Labels are sorted so that cluster 0 has the smallest mean PC1 value
     (consistent with the KMeans canonicalization in clustering.py).
+
+    Args:
+        pca_df  — PCA-reduced feature matrix (same as used for fit_gmm)
+        model   — fitted GaussianMixture (from fit_gmm models dict)
+        scaler  — fitted StandardScaler returned by fit_gmm.  If None, a new
+                  scaler is fitted on pca_df which may produce inconsistent
+                  label assignments if the distribution differs from training.
+
+    Returns:
+        Series indexed by quarter, name="gmm_cluster".
     """
-    X = StandardScaler().fit_transform(pca_df.values)
+    if scaler is None:
+        log.warning(
+            "gmm_labels called without a fitted scaler — fitting a new scaler on "
+            "pca_df.  For correct assignments pass the scaler returned by fit_gmm()."
+        )
+        scaler = StandardScaler().fit(pca_df.values)
+    X = scaler.transform(pca_df.values)
     raw_labels = pd.Series(model.predict(X), index=pca_df.index, name="gmm_cluster")
 
-    # Canonicalize: sort by mean PC1
+    # Canonicalize: cluster 0 = smallest mean PC1 (consistent with KMeans canonicalization)
     pc1 = pca_df.iloc[:, 0]
-    mean_pc1 = raw_labels.groupby(raw_labels).apply(lambda grp: pc1.loc[grp.index].mean())
+    mean_pc1 = pc1.groupby(raw_labels).mean()
     label_map = {old: new for new, old in enumerate(mean_pc1.sort_values().index)}
     return raw_labels.map(label_map).rename("gmm_cluster")
 
 
-def gmm_probabilities(pca_df: pd.DataFrame, model: GaussianMixture) -> pd.DataFrame:
+def gmm_probabilities(
+    pca_df: pd.DataFrame,
+    model: GaussianMixture,
+    scaler: StandardScaler | None = None,
+) -> pd.DataFrame:
     """
     Return soft cluster probability matrix (responsibilities).
+
+    Args:
+        pca_df  — PCA-reduced feature matrix (same as used for fit_gmm)
+        model   — fitted GaussianMixture (from fit_gmm models dict)
+        scaler  — fitted StandardScaler returned by fit_gmm.  If None, a new
+                  scaler is fitted on pca_df (see gmm_labels warning).
 
     Returns:
         DataFrame indexed by quarter, columns = gmm_prob_0 … gmm_prob_{k-1},
         where each row sums to 1.
     """
-    X = StandardScaler().fit_transform(pca_df.values)
+    if scaler is None:
+        log.warning(
+            "gmm_probabilities called without a fitted scaler — fitting a new scaler on "
+            "pca_df.  For correct probabilities pass the scaler returned by fit_gmm()."
+        )
+        scaler = StandardScaler().fit(pca_df.values)
+    X = scaler.transform(pca_df.values)
     probs = model.predict_proba(X)
     k = probs.shape[1]
     cols = [f"gmm_prob_{i}" for i in range(k)]

@@ -251,18 +251,46 @@ def optimize_n_components(
     For each n, fits PCA(n) → StandardScaler → KMeans(balanced_k) and records
     silhouette, Davies-Bouldin, Calinski-Harabasz, and cumulative explained variance.
 
+    Args:
+        df         — feature matrix (before PCA; all numeric, no NaNs)
+        n_range    — n_components values to sweep (default range(3, 11))
+        balanced_k — k for KMeans at each n
+        n_init     — KMeans restarts per n
+        random_state
+
     Returns:
         DataFrame with one row per n, columns:
         n_components, explained_variance_pct, silhouette, davies_bouldin, calinski
+
+    Raises:
+        ValueError if df is empty, n_range is empty, or balanced_k < 2.
     """
+    if df.empty:
+        raise ValueError("df is empty — cannot optimize PCA components")
+    if balanced_k < 2:
+        raise ValueError(f"balanced_k must be >= 2, got {balanced_k}")
+
+    max_components = min(df.shape)
     if n_range is None:
-        n_range = range(3, 11)
+        n_range = range(3, min(11, max_components))
+
+    valid_n = [n for n in n_range if n < max_components]
+    skipped = [n for n in n_range if n >= max_components]
+    if skipped:
+        log.warning(
+            "optimize_n_components: skipping n=%s — exceeds min(n_samples, n_features)=%d",
+            skipped, max_components,
+        )
+    if not valid_n:
+        raise ValueError(
+            f"No valid n values in n_range after applying min(n_samples, n_features)={max_components} limit"
+        )
 
     scaler_outer = StandardScaler()
     X_raw = scaler_outer.fit_transform(df.values)
 
     rows = []
-    for n in n_range:
+    for n in valid_n:
         pca = PCA(n_components=n, random_state=random_state)
         X_pca = pca.fit_transform(X_raw)
         cumvar = float(np.sum(pca.explained_variance_ratio_))
@@ -293,15 +321,29 @@ def compare_svd_pca(
     """
     Run PCA and TruncatedSVD on the same StandardScaled data and compare.
 
-    PCA centres the data before SVD; TruncatedSVD operates on the raw scaled matrix.
-    For well-centred data (StandardScaler), results are nearly identical; differences
-    indicate structure in the mean.
+    Since StandardScaler (with_mean=True, the default) already zero-centres the data,
+    TruncatedSVD and PCA are mathematically equivalent here — both decompose the
+    same zero-mean matrix.  Any differences in loadings are sign flips or numerical
+    rounding, not substantive structure.  The comparison is useful for sanity-checking
+    that both decompositions agree, and for building intuition about SVD for cases
+    where centering is intentionally disabled (e.g. sparse data contexts).
 
     Returns:
         pca_df      — PC1…PCn components (same index as df)
         svd_df      — SV1…SVn components (same index as df)
-        loadings_df — feature × component loadings for both methods side-by-side
+        loadings_df — feature × component absolute loadings for both methods side-by-side
+
+    Raises:
+        ValueError if n_components >= min(n_samples, n_features).
     """
+    if df.empty:
+        raise ValueError("df is empty — cannot run SVD/PCA comparison")
+    max_components = min(df.shape)
+    if n_components >= max_components:
+        raise ValueError(
+            f"n_components={n_components} must be < min(n_samples, n_features)={max_components}"
+        )
+
     feature_names = list(df.columns)
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(df.values)
@@ -348,7 +390,7 @@ def compute_gap_statistic(
 
     The optimal k is the smallest k such that:
         Gap(k) >= Gap(k+1) - s_{k+1}
-    where s_k is the simulation error (std * sqrt(1 + 1/B)).
+    where s_k = sd_k * sqrt(1 + 1/B) is the simulation error.
 
     Args:
         X        — scaled feature matrix (rows = samples, cols = features)
@@ -357,52 +399,76 @@ def compute_gap_statistic(
         n_init   — KMeans restarts per k
 
     Returns:
-        DataFrame with columns: k, gap, gap_std, gap_sk, optimal (bool)
+        DataFrame with columns:
+          k        — number of clusters
+          gap      — Gap(k) = E*[log W_k^ref] - log W_k
+          gap_std  — raw bootstrap standard deviation sd_k = std(log W_k^ref)
+          gap_sk   — simulation error s_k = sd_k * sqrt(1 + 1/B)
+          optimal  — True for the first k satisfying the Tibshirani criterion
+
+    Raises:
+        ValueError if X has fewer than 2 samples or k_range is empty.
     """
+    if len(X) < 2:
+        raise ValueError(f"X must have at least 2 samples, got {len(X)}")
     if k_range is None:
         k_range = range(2, 12)
+
+    ks = list(k_range)
+    if not ks:
+        raise ValueError("k_range is empty — provide at least one k value")
+
     rng = np.random.default_rng(random_state)
 
     # Bounding box for uniform reference sampling
     mins = X.min(axis=0)
     maxs = X.max(axis=0)
 
-    def _log_wk(X_data: np.ndarray, k: int) -> float:
-        model = KMeans(n_clusters=k, n_init=n_init, random_state=random_state)
+    def _log_wk(X_data: np.ndarray, k: int, seed: int) -> float:
+        model = KMeans(n_clusters=k, n_init=n_init, random_state=seed)
         model.fit(X_data)
         return float(np.log(model.inertia_ + 1e-12))
 
     log_wks: list[float] = []
     boot_log_wks: list[list[float]] = []
 
-    ks = list(k_range)
     for k in ks:
         log.info("Gap statistic: k=%d ...", k)
-        log_wks.append(_log_wk(X, k))
+        log_wks.append(_log_wk(X, k, seed=random_state))
 
         boot_vals = []
         for _ in range(n_boots):
             X_ref = rng.uniform(mins, maxs, size=X.shape)
-            boot_vals.append(_log_wk(X_ref, k))
+            # Use independent seeds for each bootstrap fit to avoid correlated KMeans init
+            boot_seed = int(rng.integers(0, 2**31))
+            boot_vals.append(_log_wk(X_ref, k, seed=boot_seed))
         boot_log_wks.append(boot_vals)
 
-    gaps = [np.mean(boot) - obs for boot, obs in zip(boot_log_wks, log_wks)]
-    sds  = [np.std(boot, ddof=1) * np.sqrt(1 + 1 / n_boots) for boot in boot_log_wks]
+    gaps = [float(np.mean(boot)) - obs for boot, obs in zip(boot_log_wks, log_wks)]
+    # gap_std: raw bootstrap standard deviation sd_k
+    raw_sds = [float(np.std(boot, ddof=1)) if len(boot) > 1 else 0.0 for boot in boot_log_wks]
+    # gap_sk: Tibshirani simulation error = sd_k * sqrt(1 + 1/B)
+    gap_sks = [s * float(np.sqrt(1 + 1 / n_boots)) for s in raw_sds]
 
     # Optimal k: smallest k where gap(k) >= gap(k+1) - s(k+1)
     optimal = [False] * len(ks)
     for i in range(len(ks) - 1):
-        if gaps[i] >= gaps[i + 1] - sds[i + 1]:
+        if gaps[i] >= gaps[i + 1] - gap_sks[i + 1]:
             optimal[i] = True
             break
     if not any(optimal):
         optimal[-1] = True  # fallback to last k
+        log.warning(
+            "Gap statistic: Tibshirani criterion not satisfied for any k in %s — "
+            "defaulting to last k=%d",
+            list(k_range), ks[-1],
+        )
 
     return pd.DataFrame({
         "k":       ks,
         "gap":     gaps,
-        "gap_std": sds,
-        "gap_sk":  sds,
+        "gap_std": raw_sds,
+        "gap_sk":  gap_sks,
         "optimal": optimal,
     })
 
@@ -416,10 +482,26 @@ def find_knee_k(scores: pd.DataFrame) -> int:
 
     Args:
         scores — DataFrame from evaluate_kmeans() with 'k' and 'inertia' columns.
+                 Must have at least 3 rows for meaningful elbow detection.
 
     Returns:
         k value at the elbow.
+
+    Raises:
+        ValueError if required columns are missing or DataFrame has fewer than 2 rows.
     """
+    missing_cols = [c for c in ("k", "inertia") if c not in scores.columns]
+    if missing_cols:
+        raise ValueError(
+            f"find_knee_k: scores DataFrame is missing required columns: {missing_cols}. "
+            "Pass the output of evaluate_kmeans()."
+        )
+    if len(scores) < 2:
+        raise ValueError(
+            f"find_knee_k: scores DataFrame has only {len(scores)} row(s) — "
+            "need at least 2 k values for elbow detection"
+        )
+
     ks = scores["k"].values
     inertia = scores["inertia"].values
 

@@ -29,7 +29,7 @@ Once you identify the best method in the notebook:
 Usage
 ------
     from market_regime.cluster_comparison import (
-        compare_all_methods, plot_comparison, plot_rand_heatmap,
+        compare_all_methods, pairwise_rand_index,
         extract_rf_feature_importances, recommend_clustering_features,
     )
 
@@ -78,19 +78,35 @@ def compare_all_methods(
         DataFrame with one row per method, columns:
         method, n_clusters, n_noise, silhouette, davies_bouldin, calinski
         Sorted by silhouette descending.
+
+    Raises:
+        ValueError if pca_df is empty or labels_dict is empty.
     """
+    if pca_df.empty:
+        raise ValueError("pca_df is empty — cannot compute clustering metrics")
+    if not labels_dict:
+        raise ValueError("labels_dict is empty — no methods to compare")
+
     X = StandardScaler().fit_transform(pca_df.values)
     rows: list[dict] = []
 
     for name, labels in labels_dict.items():
-        # Align index to pca_df
-        aligned = labels.reindex(pca_df.index).dropna().astype(int)
+        # Build a positional boolean mask over pca_df.index:
+        # valid = not NaN and not noise (-1)
+        aligned = labels.reindex(pca_df.index)
+        valid = aligned.notna() & (aligned != -1)
         n_noise = int((aligned == -1).sum())
-        mask = aligned != -1
-        X_clean = X[pca_df.index.isin(aligned[mask].index)]
-        labels_clean = aligned[mask].values
+        n_missing = int(aligned.isna().sum())
 
-        n_clusters = len(set(labels_clean))
+        if n_missing > 0:
+            log.warning(
+                "%s: %d quarters have no label (NaN) after reindex — excluded from metrics",
+                name, n_missing,
+            )
+
+        X_clean = X[valid.values]
+        labels_clean = aligned[valid].astype(int).values
+        n_clusters = len(set(labels_clean)) if len(labels_clean) > 0 else 0
 
         sil = db = ch = float("nan")
         if n_clusters >= 2 and len(labels_clean) >= n_clusters:
@@ -100,14 +116,20 @@ def compare_all_methods(
                 ch  = calinski_harabasz_score(X_clean, labels_clean)
             except Exception as exc:
                 log.warning("%s: metric computation failed — %s", name, exc)
+        elif n_clusters < 2:
+            log.warning(
+                "%s: only %d cluster(s) found after excluding noise — "
+                "metrics require at least 2 clusters",
+                name, n_clusters,
+            )
 
         rows.append({
-            "method":        name,
-            "n_clusters":    n_clusters,
-            "n_noise":       n_noise,
-            "silhouette":    sil,
+            "method":         name,
+            "n_clusters":     n_clusters,
+            "n_noise":        n_noise,
+            "silhouette":     sil,
             "davies_bouldin": db,
-            "calinski":      ch,
+            "calinski":       ch,
         })
         log.info(
             "%-30s  k=%d  noise=%d  sil=%.4f  DB=%.4f  CH=%.1f",
@@ -125,12 +147,26 @@ def pairwise_rand_index(labels_dict: dict[str, pd.Series]) -> pd.DataFrame:
     """
     Compute adjusted Rand index for every pair of clustering methods.
 
+    Args:
+        labels_dict — {method_name: pd.Series of integer labels}.
+                      Must have at least 2 entries.
+
     Returns:
         Square DataFrame with method names as index and columns.
         Diagonal = 1.0; off-diagonal = ARI(method_i, method_j).
+        Noise points (label = -1) are excluded from ARI computation.
+
+    Raises:
+        ValueError if fewer than 2 methods are provided.
     """
     names = list(labels_dict.keys())
     n = len(names)
+    if n < 2:
+        raise ValueError(
+            f"pairwise_rand_index requires at least 2 methods, got {n}. "
+            "Add more clustering results to labels_dict."
+        )
+
     matrix = np.eye(n)
 
     for i in range(n):
@@ -143,6 +179,10 @@ def pairwise_rand_index(labels_dict: dict[str, pd.Series]) -> pd.DataFrame:
             b = s2.loc[common]
             valid = (a >= 0) & (b >= 0)
             if valid.sum() < 2:
+                log.warning(
+                    "ARI(%s, %s): fewer than 2 valid (non-noise) common points — setting NaN",
+                    names[i], names[j],
+                )
                 ari = float("nan")
             else:
                 ari = adjusted_rand_score(a[valid].values, b[valid].values)
@@ -165,10 +205,16 @@ def extract_rf_feature_importances(
 
     Args:
         model_path    — path to pickled model file
-        feature_names — optional list of feature names (overrides model's own)
+        feature_names — optional list of feature names (overrides model's own).
+                        Must have the same length as model.feature_importances_.
 
     Returns:
         Series indexed by feature name, values = importance, sorted descending.
+
+    Raises:
+        FileNotFoundError if model_path does not exist.
+        AttributeError if the model has no feature_importances_.
+        ValueError if feature_names length doesn't match model's feature count.
     """
     model_path = Path(model_path)
     if not model_path.exists():
@@ -178,13 +224,23 @@ def extract_rf_feature_importances(
         model = pickle.load(f)
 
     if not hasattr(model, "feature_importances_"):
-        raise AttributeError(f"{model_path.name} does not have feature_importances_ (not a tree-based model)")
+        raise AttributeError(
+            f"{model_path.name} does not have feature_importances_ (not a tree-based model)"
+        )
+
+    n_features = len(model.feature_importances_)
 
     if feature_names is None:
         if hasattr(model, "feature_names_in_"):
             feature_names = list(model.feature_names_in_)
         else:
-            feature_names = [f"feature_{i}" for i in range(len(model.feature_importances_))]
+            feature_names = [f"feature_{i}" for i in range(n_features)]
+    elif len(feature_names) != n_features:
+        raise ValueError(
+            f"feature_names length ({len(feature_names)}) does not match "
+            f"model.feature_importances_ length ({n_features}). "
+            "Ensure you are passing the correct feature list for this model."
+        )
 
     importances = pd.Series(
         model.feature_importances_,
@@ -218,7 +274,17 @@ def recommend_clustering_features(
         comparison_df        — DataFrame showing all clustering features with
                                their RF importance rank and whether they are
                                in the recommended set
+
+    Note:
+        If the intersection of RF features and clustering_features has fewer
+        than top_k entries, all intersection features are recommended and a
+        warning is logged.
     """
+    if importances.empty:
+        raise ValueError("importances Series is empty — check model loading")
+    if not current_clustering_features:
+        raise ValueError("current_clustering_features is empty")
+
     # Features that are in both the RF model and the clustering_features list
     in_both = [f for f in current_clustering_features if f in importances.index]
     not_in_rf = [f for f in current_clustering_features if f not in importances.index]
@@ -234,14 +300,24 @@ def recommend_clustering_features(
     ranked = importances.loc[in_both].sort_values(ascending=False)
     recommended = list(ranked.head(top_k).index)
 
+    if len(recommended) < top_k:
+        log.warning(
+            "recommend_clustering_features: intersection has only %d features "
+            "(< top_k=%d) — returning all %d available",
+            len(recommended), top_k, len(recommended),
+        )
+
+    # Use a set for O(1) membership test in the loop
+    recommended_set = set(recommended)
+
     # Build comparison table
     rows = []
     for rank, (feat, imp) in enumerate(ranked.items(), start=1):
         rows.append({
-            "feature":          feat,
-            "rf_importance":    round(float(imp), 6),
-            "rank":             rank,
-            "in_recommended":   feat in recommended,
+            "feature":         feat,
+            "rf_importance":   round(float(imp), 6),
+            "rank":            rank,
+            "in_recommended":  feat in recommended_set,
         })
     for feat in not_in_rf:
         rows.append({
