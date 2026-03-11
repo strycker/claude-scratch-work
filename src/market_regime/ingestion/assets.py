@@ -53,9 +53,11 @@ root CA certificate bundle and point to it instead of using an empty string:
 
     export CURL_CA_BUNDLE=/path/to/corp-ca-bundle.pem
 
-Note: yfinance ≥ 0.2 uses curl_cffi internally and does NOT accept a
-requests.Session.  Passing one raises "Yahoo API requires curl_cffi session".
-Always let yfinance manage its own session; only env vars control SSL here.
+Note on SSL bypass: yfinance ≥ 0.2 uses curl_cffi internally and does NOT
+accept a requests.Session.  The SSL bypass path creates a curl_cffi session
+with verify=False and impersonate="chrome", which yfinance accepts.  Env vars
+(CURL_CA_BUNDLE="") are also cleared as a belt-and-suspenders measure, but
+the curl_cffi session is the primary bypass mechanism.
 
 Usage:
     from market_regime.ingestion.assets import fetch_all
@@ -135,22 +137,41 @@ class _SSLErrorDetector(logging.Handler):
             self.ssl_detected = True
 
 
-def _apply_ssl_bypass() -> dict[str, str | None]:
+def _ssl_bypass_curl_session():
     """
-    Clear SSL certificate env vars so curl_cffi (yfinance's HTTP backend)
-    skips certificate verification.  Returns the previous values so the
-    caller can restore them with _restore_ssl_env().
+    Create a curl_cffi.requests.Session with SSL verification disabled.
 
-    This is the correct approach for yfinance ≥ 0.2 which uses curl_cffi
-    internally and rejects a requests.Session with:
-      "Yahoo API requires curl_cffi session not <class 'requests.sessions.Session'>"
+    This is the correct SSL bypass for yfinance ≥ 0.2, which requires a
+    curl_cffi session (not a requests.Session).  curl_cffi is a required
+    yfinance dependency so it should always be importable.
+
+    Returns None only if curl_cffi is somehow absent (yfinance < 0.2).
     """
+    try:
+        from curl_cffi import requests as curl_requests
+    except ImportError:
+        log.warning(
+            "curl_cffi not importable — cannot create SSL-bypass session. "
+            "Try: pip install curl_cffi"
+        )
+        return None
+
     try:
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     except ImportError:
         pass
 
+    # impersonate="chrome" is required by yfinance to pass its browser-check;
+    # verify=False disables certificate validation for the self-signed cert.
+    return curl_requests.Session(verify=False, impersonate="chrome")
+
+
+def _apply_ssl_env_bypass() -> dict[str, str | None]:
+    """
+    Clear SSL certificate env vars as a belt-and-suspenders measure alongside
+    the curl_cffi session bypass.  Returns saved values for restoration.
+    """
     saved: dict[str, str | None] = {}
     for var in ("CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
         saved[var] = os.environ.get(var)
@@ -159,7 +180,7 @@ def _apply_ssl_bypass() -> dict[str, str | None]:
 
 
 def _restore_ssl_env(saved: dict[str, str | None]) -> None:
-    """Restore env vars previously saved by _apply_ssl_bypass()."""
+    """Restore env vars previously saved by _apply_ssl_env_bypass()."""
     for var, val in saved.items():
         if val is None:
             os.environ.pop(var, None)
@@ -169,13 +190,17 @@ def _restore_ssl_env(saved: dict[str, str | None]) -> None:
 
 # ── per-ticker fetch ───────────────────────────────────────────────────────────
 
-def _fetch_ticker(ticker: str, start: str, end: str) -> pd.Series:
+def _fetch_ticker(ticker: str, start: str, end: str, session=None) -> pd.Series:
     """
     Download monthly adjusted close for one ticker and resample to quarterly.
 
-    Always uses yf.download() (curl_cffi path).  SSL behaviour is controlled
-    via CURL_CA_BUNDLE / REQUESTS_CA_BUNDLE env vars — never via a session
-    object, which yfinance ≥ 0.2 no longer accepts.
+    When session is None (default), uses yf.download() with curl_cffi's default
+    SSL settings.
+
+    When session is a curl_cffi.requests.Session (SSL-bypass path), uses
+    yf.Ticker(session=session).history() which honours session.verify=False.
+    A curl_cffi session is required — passing a requests.Session raises
+    "Yahoo API requires curl_cffi session" in yfinance ≥ 0.2.
     """
     try:
         import yfinance as yf
@@ -184,14 +209,20 @@ def _fetch_ticker(ticker: str, start: str, end: str) -> pd.Series:
 
     log.info("Fetching %s from yfinance ...", ticker)
 
-    raw = yf.download(
-        ticker,
-        start=start,
-        end=end,
-        interval="1mo",
-        auto_adjust=True,
-        progress=False,
-    )
+    if session is not None:
+        # curl_cffi session path — used for SSL bypass; verify=False set on session
+        raw = yf.Ticker(ticker, session=session).history(
+            start=start, end=end, interval="1mo", auto_adjust=True
+        )
+    else:
+        raw = yf.download(
+            ticker,
+            start=start,
+            end=end,
+            interval="1mo",
+            auto_adjust=True,
+            progress=False,
+        )
 
     if raw.empty:
         log.warning("No data returned for %s", ticker)
@@ -214,7 +245,9 @@ def _fetch_ticker(ticker: str, start: str, end: str) -> pd.Series:
     return close.resample("QE").last()
 
 
-def _fetch_tickers(tickers: list[str], start: str, end: str) -> tuple[list[pd.Series], bool]:
+def _fetch_tickers(
+    tickers: list[str], start: str, end: str, session=None
+) -> tuple[list[pd.Series], bool]:
     """
     Fetch all tickers via yfinance.
 
@@ -226,7 +259,7 @@ def _fetch_tickers(tickers: list[str], start: str, end: str) -> tuple[list[pd.Se
     ssl_seen = False
     for ticker in tickers:
         try:
-            s = _fetch_ticker(ticker, start, end)
+            s = _fetch_ticker(ticker, start, end, session=session)
             if not s.empty:
                 results.append(s)
         except Exception as exc:
@@ -415,12 +448,13 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
         log.warning(_SSL_HELP_MESSAGE)
         log.info(
             "SSL bypass active — retrying %d/%d missing tickers "
-            "(clearing CURL_CA_BUNDLE for curl_cffi)",
+            "with curl_cffi session (verify=False)",
             len(missing), len(tickers),
         )
-        saved_env = _apply_ssl_bypass()
+        curl_session = _ssl_bypass_curl_session()
+        saved_env = _apply_ssl_env_bypass()  # belt-and-suspenders: also clear env vars
         try:
-            retry_list, _ = _fetch_tickers(missing, start, end)
+            retry_list, _ = _fetch_tickers(missing, start, end, session=curl_session)
         finally:
             _restore_ssl_env(saved_env)
         series_list.extend(retry_list)
