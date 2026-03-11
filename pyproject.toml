@@ -45,6 +45,13 @@ dev = [
     "ipykernel",
     "jupyterlab",
 ]
+# Alternative / fallback ETF price data sources (used when yfinance fails).
+# Phase 3 — stooq via pandas-datareader: free, no API key, daily data back to ~1993.
+# Phase 4 — OpenBB: wraps multiple providers (cboe free; fmp/tiingo need API keys).
+data-extras = [
+    "pandas-datareader>=0.10",
+    "openbb>=4.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

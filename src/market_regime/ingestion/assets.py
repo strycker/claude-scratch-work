@@ -1,13 +1,38 @@
 """
-ETF / equity price ingestion via yfinance.
+ETF / equity price ingestion — yfinance with multi-source fallback chain.
 
 Downloads monthly adjusted-close prices for the configured asset tickers,
 resamples to quarterly (period-end), and returns a wide DataFrame indexed
 by quarter-end dates — ready to join against cluster labels.
 
-Pre-1993 ETF data does not exist in Yahoo Finance; for that era the code
+Fallback chain (tried in order, stopping at first success)
+----------------------------------------------------------
+1. yfinance (curl_cffi path)          — fast, default
+2. yfinance (requests SSL-bypass)     — corporate proxy workaround
+3. stooq via pandas-datareader        — free, no API key, same data
+4. OpenBB (cboe provider, then default) — optional install, multiple backends
+5. Empty DataFrame                    — triggers macro-proxy fallback in
+                                        asset_returns.compute_proxy_returns()
+
+Install optional fallback libraries
+-------------------------------------
+    pip install pandas-datareader     # enables Phase 3 (stooq)
+    pip install openbb                # enables Phase 4 (OpenBB)
+    # or together:
+    pip install "market-regime[data-extras]"
+
+Notes on sources that are NOT suitable for historical ETF prices
+----------------------------------------------------------------
+- Finviz / Finviz Elite: stock screener only — no historical OHLCV data.
+  Good for current fundamental/technical signals; use for notebook QA overlays
+  once the regime pipeline has already run (see ROADMAP 2.8).
+- StockCharts.com: chart-rendering service, no data export API.
+  Scraping is possible but complex and subject to ToS review.
+  Tracked in ROADMAP 3.4 as a potential raw-data source for technical indicators.
+
+Pre-1993 ETF data does not exist in any source above; for that era the code
 falls back gracefully (partial NaN rows) rather than raising an error.
-A future Macrotrends scraper can backfill gold, oil, and bond history.
+A future macrotrends.net scraper can backfill gold, oil, and bond history.
 
 SSL / corporate-firewall note
 ------------------------------
@@ -22,18 +47,10 @@ variables in your shell *before* starting Python:
     export CURL_CA_BUNDLE=""
     export REQUESTS_CA_BUNDLE=""
 
-⚠  NOTE: "export NODE_EXTRA_CA_CERTS=0" affects Node.js only — it has
-   NO effect on Python or libcurl. Do not rely on it here.
-
 For a more secure permanent fix, ask your IT department for the corporate
 root CA certificate bundle and point to it instead of using an empty string:
 
     export CURL_CA_BUNDLE=/path/to/corp-ca-bundle.pem
-
-To skip the yfinance fetch entirely and reuse a previously saved checkpoint,
-run step 6 without --refresh-assets:
-
-    python run_pipeline.py --steps 6   # uses data/raw/asset_prices.parquet
 
 Usage:
     from market_regime.ingestion.assets import fetch_all
@@ -186,7 +203,7 @@ def _fetch_ticker(ticker: str, start: str, end: str, session=None) -> pd.Series:
 def _fetch_tickers(
     tickers: list[str], start: str, end: str, session=None
 ) -> list[pd.Series]:
-    """Fetch all tickers; return list of non-empty Series."""
+    """Fetch all tickers via yfinance; return list of non-empty Series."""
     results = []
     for ticker in tickers:
         try:
@@ -195,6 +212,124 @@ def _fetch_tickers(
                 results.append(s)
         except Exception as exc:
             log.warning("Failed to fetch %s: %s", ticker, exc)
+    return results
+
+
+# ── Phase 3: stooq fallback (pandas-datareader) ────────────────────────────────
+
+def _fetch_ticker_stooq(ticker: str, start: str, end: str) -> pd.Series:
+    """
+    Fetch one ticker from stooq.pl via pandas-datareader.
+
+    Stooq provides free daily OHLCV data for major US ETFs going back to
+    their inception.  No API key required.  Install: pip install pandas-datareader
+
+    Raises ImportError if pandas-datareader is not installed (caller breaks loop).
+    """
+    from pandas_datareader import data as pdr  # ImportError propagates to caller
+
+    log.info("Fetching %s from stooq (fallback) ...", ticker)
+    symbol = f"{ticker}.US"  # stooq convention for US-listed securities
+    try:
+        raw = pdr.get_data_stooq(symbol, start=start, end=end)
+    except Exception as exc:
+        log.warning("stooq returned error for %s (%s): %s", ticker, symbol, exc)
+        return pd.Series(name=ticker, dtype=float)
+
+    if raw is None or raw.empty:
+        log.warning("No stooq data for %s", ticker)
+        return pd.Series(name=ticker, dtype=float)
+
+    close = raw["Close"].rename(ticker)
+    close.index = pd.to_datetime(close.index)
+    # stooq returns descending order — sort before resample
+    return close.sort_index().resample("QE").last()
+
+
+def _fetch_tickers_stooq(tickers: list[str], start: str, end: str) -> list[pd.Series]:
+    """Fetch all tickers via stooq; return list of non-empty Series."""
+    results: list[pd.Series] = []
+    for ticker in tickers:
+        try:
+            s = _fetch_ticker_stooq(ticker, start, end)
+            if not s.empty:
+                results.append(s)
+        except ImportError:
+            log.warning(
+                "pandas-datareader not installed — stooq fallback unavailable.  "
+                "Run: pip install pandas-datareader"
+            )
+            break  # no point trying more tickers
+        except Exception as exc:
+            log.warning("stooq failed for %s: %s", ticker, exc)
+    return results
+
+
+# ── Phase 4: OpenBB fallback ───────────────────────────────────────────────────
+
+def _fetch_ticker_openbb(ticker: str, start: str, end: str) -> pd.Series:
+    """
+    Fetch one ticker via OpenBB.
+
+    Tries the 'cboe' provider first (free, no API key).  Falls back to the
+    OpenBB default provider if cboe does not have the ticker.
+
+    Install: pip install openbb
+    Raises ImportError if openbb is not installed (caller breaks loop).
+    """
+    from openbb import obb  # ImportError propagates to caller
+
+    log.info("Fetching %s via OpenBB (fallback) ...", ticker)
+
+    df: pd.DataFrame | None = None
+    for provider in ("cboe", None):  # None → OpenBB picks default
+        try:
+            kwargs: dict = dict(symbol=ticker, start_date=start, end_date=end)
+            if provider is not None:
+                kwargs["provider"] = provider
+            result = obb.equity.price.historical(**kwargs)
+            df = result.to_df()
+            if not df.empty:
+                break
+        except Exception as exc:
+            log.debug("OpenBB provider=%s failed for %s: %s", provider, ticker, exc)
+
+    if df is None or df.empty:
+        log.warning("OpenBB returned no data for %s", ticker)
+        return pd.Series(name=ticker, dtype=float)
+
+    # OpenBB column names vary by provider — find the close column
+    close_col = next(
+        (c for c in df.columns if c.lower() in ("close", "adj_close", "adjusted_close")),
+        None,
+    )
+    if close_col is None:
+        log.warning("OpenBB: could not find close column for %s (columns: %s)", ticker, list(df.columns))
+        return pd.Series(name=ticker, dtype=float)
+
+    close = df[close_col].rename(ticker)
+    close.index = pd.to_datetime(close.index)
+    if hasattr(close.index, "tz") and close.index.tz is not None:
+        close.index = close.index.tz_localize(None)
+    return close.sort_index().resample("QE").last()
+
+
+def _fetch_tickers_openbb(tickers: list[str], start: str, end: str) -> list[pd.Series]:
+    """Fetch all tickers via OpenBB; return list of non-empty Series."""
+    results: list[pd.Series] = []
+    for ticker in tickers:
+        try:
+            s = _fetch_ticker_openbb(ticker, start, end)
+            if not s.empty:
+                results.append(s)
+        except ImportError:
+            log.warning(
+                "openbb not installed — OpenBB fallback unavailable.  "
+                "Run: pip install openbb"
+            )
+            break  # no point trying more tickers
+        except Exception as exc:
+            log.warning("OpenBB failed for %s: %s", ticker, exc)
     return results
 
 
@@ -261,9 +396,39 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
                     "to load from a saved checkpoint."
                 )
 
+    # ── Phase 3: stooq via pandas-datareader ─────────────────────────────────
     if not series_list:
-        if not detector.ssl_detected:
-            log.error("No asset price data retrieved")
+        log.info("Trying stooq fallback (free, no API key) ...")
+        series_list = _fetch_tickers_stooq(tickers, start, end)
+        if series_list:
+            log.info("stooq fallback succeeded (%d/%d tickers)", len(series_list), len(tickers))
+        else:
+            log.warning(
+                "stooq returned no data.  "
+                "Install pandas-datareader to enable this fallback: pip install pandas-datareader"
+            )
+
+    # ── Phase 4: OpenBB ───────────────────────────────────────────────────────
+    if not series_list:
+        log.info("Trying OpenBB fallback ...")
+        series_list = _fetch_tickers_openbb(tickers, start, end)
+        if series_list:
+            log.info("OpenBB fallback succeeded (%d/%d tickers)", len(series_list), len(tickers))
+        else:
+            log.warning(
+                "OpenBB returned no data.  "
+                "Install openbb to enable this fallback: pip install openbb\n"
+                "Falling back to macro-data proxy returns (see asset_returns.compute_proxy_returns)."
+            )
+
+    # ── Phase 5: empty → macro proxy returns computed by caller ──────────────
+    if not series_list:
+        log.error(
+            "All price data sources failed.  "
+            "The pipeline will use macro-data proxy returns (compute_proxy_returns) instead.  "
+            "To reuse a previously fetched checkpoint, run without --refresh-assets:\n"
+            "  python run_pipeline.py --steps 6"
+        )
         return pd.DataFrame()
 
     df = pd.concat(series_list, axis=1)

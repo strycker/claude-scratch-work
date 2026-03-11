@@ -320,13 +320,39 @@ Walk-forward backtest of the full pipeline:
 - Requires ~50 walk-forward steps (1975–2025 at quarterly resolution)
 - **Files**: `src/market_regime/backtest/` (new module)
 
-### 3.6  StockCharts.com integration  `M`
-StockCharts.com has rich technical analysis charts but no public API.
-Possible approaches:
-- Screen-scrape PDF/image chart exports (fragile, may violate ToS)
-- Use their hosted indicator data (RSI, MACD, Ichimoku) as supplementary signals
-- Better alternative: implement same indicators directly from Yahoo Finance OHLCV via `ta` library
-- **Recommendation**: skip StockCharts API, use `ta` or `pandas-ta` on yfinance data instead
+### 3.6  StockCharts.com — historical data scraping  `M`
+StockCharts.com (subscription already active) has historical OHLCV chart data
+but no public JSON/CSV export API.  Potential approaches:
+- **Symbol lookup + CSV export**: StockCharts renders chart data as an embedded
+  JavaScript array in its `SharpCharts` pages.  Scraping with `requests` +
+  regex/json extraction may work for daily close data.
+- **`/def/` page scraping**: the `stockcharts.com/h-sc/ui?s={SYMBOL}&type=BAR`
+  endpoint returns chart HTML; inspect for embedded `chartData` JSON objects.
+- **Use case**: primary value is as a yfinance fallback for historical close prices
+  (Phase 5 before macro proxy), and for technical indicators (RSI, MACD, etc.)
+  that are rendered on the charts.
+- **Risk**: ToS review required; rate-limit to ≥3s/request; no guaranteed format stability.
+- **Alternative**: compute the same technical indicators from yfinance/stooq OHLCV
+  using the `ta` or `pandas-ta` library — avoids scraping entirely.
+- **Files**: `src/market_regime/ingestion/stockcharts.py` (new)
+
+### 3.7  Finviz Elite — sector/fundamental overlays  `M`
+Finviz Elite (subscription already active) is a **stock screener**, not a
+historical price data source.  It is NOT suitable as a yfinance price fallback.
+
+What Finviz IS good for:
+- Current fundamental data (P/E, EPS, sector, market cap) per ticker
+- Sector-level performance views (1W, 1M, 3M, YTD heatmaps)
+- Screener for within-regime stock picking (which stocks in XLK outperform in growth regimes?)
+- News sentiment per ticker
+
+Implementation approach (when ready):
+- Use `finvizfinance` Python library: `pip install finvizfinance`
+- `finvizfinance.main.finvizfinance('SPY').ticker_fundament()` → current fundamentals
+- `finvizfinance.group.performance.Performance().screener_view(...)` → sector perf
+- **Files**: `src/market_regime/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
+- **Note**: historical screener data requires Finviz Elite API; current data is available
+  via the `finvizfinance` library without authentication for many fields
 
 ---
 
@@ -344,7 +370,10 @@ Possible approaches:
 | FRED — housing | `fredapi` | HOUST, PERMIT | 1959 | ✗ | **Tier 1** |
 | FRED — consumer | `fredapi` | UMCSENT, DPCERA3Q086SBEA | 1952 | ✗ | **Tier 1** |
 | macrotrends.net | custom scraper | Gold, oil, silver prices | 1915+ | ✗ | **Tier 1** |
-| Finviz Elite | `finvizfinance` | Sector/stock screener | recent | ✗ | Tier 2 |
+| stooq.pl | `pandas-datareader` | Free ETF/stock OHLCV (Phase 3 yfinance fallback) | ~1993 | ✓ Phase 3 | Done (optional install) |
+| OpenBB | `openbb` | Multi-provider ETF prices (Phase 4 yfinance fallback) | varies | ✓ Phase 4 | Done (optional install) |
+| Finviz Elite | `finvizfinance` | Sector screener + fundamentals (NOT historical prices) | recent | ✗ | Tier 3 (3.7) |
+| StockCharts.com | custom scraper | Chart data + technical indicators | varies | ✗ | Tier 3 (3.6) |
 | hmmlearn | Python lib | HMM regime states | n/a | ✗ | Tier 2 (2.9) |
 | statsmodels | Python lib | Markov regime-switching | n/a | ✗ | Tier 2 (2.13) |
 | sklearn GMM | Python lib | Gaussian Mixture Models (soft clusters) | n/a | ✗ | Tier 2 (2.2) |
@@ -352,7 +381,7 @@ Possible approaches:
 | hdbscan | Python lib | Density-based clustering (HDBSCAN) | n/a | ✗ | Tier 2 (2.3) |
 | Streamlit | Python lib | Interactive dashboard | n/a | ✗ | Tier 3 |
 | Claude API | `anthropic` | AI weekly narrative | n/a | ✗ | Tier 3 |
-| StockCharts | scrape/skip | Technical charts | n/a | ✗ | Low/Skip |
+| StockCharts | scrape | Historical OHLCV + technical indicators | varies | ✗ | Tier 3 (3.6) |
 
 ---
 
