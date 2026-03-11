@@ -4,6 +4,9 @@ FRED API ingestion.
 Fetches each series defined in cfg["fred"]["series"], resamples to
 quarterly frequency (period-end), and returns a single wide DataFrame.
 
+Series are fetched in parallel (ThreadPoolExecutor) to cut wall-clock
+time from ~N×latency down to roughly one round-trip latency.
+
 Publication-lag shift:
   GDP and GNP figures are released after the quarter closes.  Series marked
   shift:true are shifted forward by one quarter so the value aligns with
@@ -12,12 +15,17 @@ Publication-lag shift:
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
 import pandas as pd
 from fredapi import Fred
 
 log = logging.getLogger(__name__)
+
+# FRED is generally tolerant of small parallel bursts; keep a modest cap so
+# we don't get rate-limited or trigger any undocumented throttle.
+_MAX_WORKERS = 8
 
 
 def _fetch_one(fred: Fred, series_id: str, start: str, end: str, shift: bool) -> pd.Series:
@@ -32,6 +40,9 @@ def _fetch_one(fred: Fred, series_id: str, start: str, end: str, shift: bool) ->
 def fetch_all(cfg: dict) -> pd.DataFrame:
     """
     Fetch every series in cfg["fred"]["series"] and join into one DataFrame.
+
+    All series are fetched concurrently (up to _MAX_WORKERS threads) so the
+    wall-clock time is roughly one network round-trip instead of N×latency.
 
     Config shape expected:
         fred:
@@ -56,21 +67,33 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     end = cfg["data"]["end_date"] or str(date.today())
 
     series_cfg: dict = cfg["fred"]["series"]
-    frames: dict[str, pd.Series] = {}
 
-    for series_id, meta in series_cfg.items():
+    def _fetch_task(series_id: str, meta: dict) -> tuple[str, pd.Series | None]:
         friendly_name = meta["name"]
         shift = meta.get("shift", False)
-        lag_note = " (shifted +1Q for publication lag)" if shift else ""
+        lag_note = " (shifted +1Q)" if shift else ""
         log.info("Fetching FRED %-10s → %s%s", series_id, friendly_name, lag_note)
         try:
             s = _fetch_one(fred, series_id, start, end, shift)
             s.name = friendly_name
-            frames[friendly_name] = s
+            return friendly_name, s
         except Exception as exc:
             log.warning("Failed to fetch %s (%s): %s", friendly_name, series_id, exc)
+            return friendly_name, None
+
+    frames: dict[str, pd.Series] = {}
+    with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(series_cfg))) as pool:
+        futures = {
+            pool.submit(_fetch_task, sid, meta): sid
+            for sid, meta in series_cfg.items()
+        }
+        for future in as_completed(futures):
+            friendly_name, series = future.result()
+            if series is not None:
+                frames[friendly_name] = series
 
     df = pd.DataFrame(frames)
     df.index.name = "date"
     log.info("FRED fetch complete: %d quarters, %d series", len(df), len(df.columns))
     return df
+

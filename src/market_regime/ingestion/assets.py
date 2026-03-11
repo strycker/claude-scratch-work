@@ -7,8 +7,8 @@ by quarter-end dates — ready to join against cluster labels.
 
 Fallback chain (tried in order, stopping at first success)
 ----------------------------------------------------------
-1. yfinance (curl_cffi path)          — fast, default
-2. yfinance (env-var SSL bypass)      — clears CURL_CA_BUNDLE for corp proxies
+1. yfinance batch (curl_cffi)         — one HTTP request for all tickers
+2. yfinance per-ticker, SSL bypass    — curl_cffi Session(verify=False)
 3. stooq via pandas-datareader        — free, no API key, same data
 4. OpenBB (cboe provider, then default) — optional install, multiple backends
 5. Empty DataFrame                    — triggers macro-proxy fallback in
@@ -24,40 +24,38 @@ Install optional fallback libraries
 Notes on sources that are NOT suitable for historical ETF prices
 ----------------------------------------------------------------
 - Finviz / Finviz Elite: stock screener only — no historical OHLCV data.
-  Good for current fundamental/technical signals; use for notebook QA overlays
-  once the regime pipeline has already run (see ROADMAP 2.8).
 - StockCharts.com: chart-rendering service, no data export API.
-  Scraping is possible but complex and subject to ToS review.
-  Tracked in ROADMAP 3.4 as a potential raw-data source for technical indicators.
 
 Pre-1993 ETF data does not exist in any source above; for that era the code
 falls back gracefully (partial NaN rows) rather than raising an error.
-A future macrotrends.net scraper can backfill gold, oil, and bond history.
 
-SSL / corporate-firewall note
-------------------------------
-If you are behind a corporate proxy that inspects HTTPS traffic (self-signed
-cert in the chain), yfinance will log SSL errors and return empty data.
-This module detects that situation automatically and retries by temporarily
-clearing CURL_CA_BUNDLE / REQUESTS_CA_BUNDLE so that curl_cffi (yfinance's
-HTTP backend) skips certificate verification.
+SSL / certificate errors
+------------------------
+yfinance uses curl_cffi internally.  curl_cffi bundles its own libcurl with
+its own CA store.  It does NOT use the macOS Keychain, system trust store,
+or Python's certifi bundle.  Pointing CURL_CA_BUNDLE at certifi (or any
+other path) actively breaks things if that bundle does not contain every
+certificate in the chain.
 
-To avoid the automatic retry delay on every run, set these environment
-variables in your shell *before* starting Python:
+This module therefore does NOT set CURL_CA_BUNDLE at import time.
 
-    export CURL_CA_BUNDLE=""
-    export REQUESTS_CA_BUNDLE=""
+When tickers are missing after Phase 1, Phase 2 automatically retries them
+using a curl_cffi Session(verify=False, impersonate="chrome").  This is the
+only reliable bypass because it operates at the libcurl handle level rather
+than relying on env-var parsing.
 
-For a more secure permanent fix, ask your IT department for the corporate
-root CA certificate bundle and point to it instead of using an empty string:
+To skip the automatic retry and have Phase 2 active from the start, set in
+your .env (loaded by python-dotenv before this module is imported):
 
-    export CURL_CA_BUNDLE=/path/to/corp-ca-bundle.pem
+    YFINANCE_VERIFY_SSL=false
 
-Note on SSL bypass: yfinance ≥ 0.2 uses curl_cffi internally and does NOT
-accept a requests.Session.  The SSL bypass path creates a curl_cffi session
-with verify=False and impersonate="chrome", which yfinance accepts.  Env vars
-(CURL_CA_BUNDLE="") are also cleared as a belt-and-suspenders measure, but
-the curl_cffi session is the primary bypass mechanism.
+This triggers verify=False for all yfinance calls rather than just the retry.
+
+Rate limiting
+-------------
+Phase 1 fetches all tickers in a single yf.download() batch call, which
+makes one HTTP request instead of one per ticker.  This dramatically reduces
+the chance of hitting Yahoo Finance's "Too Many Requests" rate limit.
 
 Usage:
     from market_regime.ingestion.assets import fetch_all
@@ -74,19 +72,7 @@ import pandas as pd
 
 log = logging.getLogger(__name__)
 
-# curl_cffi (yfinance's HTTP backend) maintains its own certificate store and
-# does not automatically use Python's certifi bundle on macOS or in corporate
-# proxy environments.  Setting these env vars (only when not already set by the
-# user) is the first-line fix for non-MITM SSL environments.
-try:
-    import certifi as _certifi
-    os.environ.setdefault("CURL_CA_BUNDLE", _certifi.where())
-    os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
-except ImportError:
-    pass
-
-
-# ── SSL error detection ────────────────────────────────────────────────────────
+# ── Error signature detection ──────────────────────────────────────────────────
 
 _SSL_ERROR_SIGNATURES = (
     "SSL",
@@ -95,37 +81,39 @@ _SSL_ERROR_SIGNATURES = (
     "CertificateVerify",
     "CERTIFICATE_VERIFY",
     "self signed",
+    "CERTIFICATE_VERIFY_FAILED",
+)
+
+_RATE_LIMIT_SIGNATURES = (
+    "Too Many Requests",
+    "Rate limit",
+    "rate limited",
+    "429",
 )
 
 _SSL_HELP_MESSAGE = """\
 
 ╔══════════════════════════════════════════════════════════════════════════╗
-║   SSL Certificate Error — yfinance blocked by firewall/proxy            ║
+║   SSL Certificate Error — yfinance / curl_cffi                          ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║                                                                          ║
-║  Cause: A corporate proxy or VPN is doing HTTPS inspection using a       ║
-║  self-signed certificate that is NOT trusted by Python or libcurl.       ║
+║  curl_cffi uses its OWN bundled CA store and does NOT check the macOS   ║
+║  Keychain or system trust store.  Adding a cert to Keychain has no      ║
+║  effect on curl_cffi.                                                    ║
 ║                                                                          ║
 ║  ▶ Retrying automatically with SSL verification disabled ...             ║
 ║                                                                          ║
-║  To avoid this retry delay on future runs, set before starting:          ║
-║    export CURL_CA_BUNDLE=""                                              ║
-║    export REQUESTS_CA_BUNDLE=""                                          ║
+║  To skip this retry delay on every run, add to your .env file:          ║
+║    YFINANCE_VERIFY_SSL=false                                             ║
 ║                                                                          ║
-║  ⚠  "export NODE_EXTRA_CA_CERTS=0" only affects Node.js — it does       ║
-║     NOTHING for Python. Do not rely on it here.                          ║
-║                                                                          ║
-║  For a more secure fix, point to your corporate CA bundle instead:       ║
-║    export CURL_CA_BUNDLE=/path/to/corp-ca-bundle.pem                    ║
-║                                                                          ║
-║  To skip yfinance and use a previously saved checkpoint:                 ║
+║  To skip yfinance entirely and load from a saved checkpoint:             ║
 ║    python run_pipeline.py --steps 6   (without --refresh-assets)        ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 """
 
 
 class _SSLErrorDetector(logging.Handler):
-    """Temporary log handler attached to the yfinance logger to sniff SSL errors."""
+    """Temporary log handler on the yfinance logger to detect SSL messages."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -141,11 +129,10 @@ def _ssl_bypass_curl_session():
     """
     Create a curl_cffi.requests.Session with SSL verification disabled.
 
-    This is the correct SSL bypass for yfinance ≥ 0.2, which requires a
-    curl_cffi session (not a requests.Session).  curl_cffi is a required
-    yfinance dependency so it should always be importable.
-
-    Returns None only if curl_cffi is somehow absent (yfinance < 0.2).
+    curl_cffi is a required yfinance ≥ 0.2 dependency so import should
+    always succeed.  verify=False disables cert checking at the libcurl
+    handle level — the only approach that reliably works.
+    impersonate="chrome" is required for Yahoo Finance's anti-bot check.
     """
     try:
         from curl_cffi import requests as curl_requests
@@ -162,116 +149,139 @@ def _ssl_bypass_curl_session():
     except ImportError:
         pass
 
-    # impersonate="chrome" is required by yfinance to pass its browser-check;
-    # verify=False disables certificate validation for the self-signed cert.
     return curl_requests.Session(verify=False, impersonate="chrome")
 
 
-def _apply_ssl_env_bypass() -> dict[str, str | None]:
+# ── Phase 1: batch yfinance download ──────────────────────────────────────────
+
+def _batch_yfinance(
+    tickers: list[str], start: str, end: str, session=None
+) -> tuple[dict[str, pd.Series], bool]:
     """
-    Clear SSL certificate env vars as a belt-and-suspenders measure alongside
-    the curl_cffi session bypass.  Returns saved values for restoration.
-    """
-    saved: dict[str, str | None] = {}
-    for var in ("CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
-        saved[var] = os.environ.get(var)
-        os.environ[var] = ""
-    return saved
+    Fetch all tickers in ONE yf.download() call.
 
+    Returns (results, ssl_error_seen).
+    results maps ticker → quarterly Close Series (only successfully fetched tickers).
+    ssl_error_seen is True when an exception message contained an SSL keyword.
 
-def _restore_ssl_env(saved: dict[str, str | None]) -> None:
-    """Restore env vars previously saved by _apply_ssl_env_bypass()."""
-    for var, val in saved.items():
-        if val is None:
-            os.environ.pop(var, None)
-        else:
-            os.environ[var] = val
-
-
-# ── per-ticker fetch ───────────────────────────────────────────────────────────
-
-def _fetch_ticker(ticker: str, start: str, end: str, session=None) -> pd.Series:
-    """
-    Download monthly adjusted close for one ticker and resample to quarterly.
-
-    When session is None (default), uses yf.download() with curl_cffi's default
-    SSL settings.
-
-    When session is a curl_cffi.requests.Session (SSL-bypass path), uses
-    yf.Ticker(session=session).history() which honours session.verify=False.
-    A curl_cffi session is required — passing a requests.Session raises
-    "Yahoo API requires curl_cffi session" in yfinance ≥ 0.2.
+    Passing session=None uses yfinance's default curl_cffi behaviour.
+    Passing a curl_cffi Session overrides SSL settings for that session.
     """
     try:
         import yfinance as yf
     except ImportError:
-        raise ImportError("yfinance is not installed. Run: pip install yfinance")
+        raise ImportError("yfinance is not installed.  Run: pip install yfinance")
 
-    log.info("Fetching %s from yfinance ...", ticker)
+    log.info("Batch-fetching %d tickers from yfinance ...", len(tickers))
 
+    kwargs: dict = dict(
+        tickers=tickers,
+        start=start,
+        end=end,
+        interval="1mo",
+        auto_adjust=True,
+        progress=False,
+    )
     if session is not None:
-        # curl_cffi session path — used for SSL bypass; verify=False set on session
-        raw = yf.Ticker(ticker, session=session).history(
-            start=start, end=end, interval="1mo", auto_adjust=True
-        )
-    else:
-        raw = yf.download(
-            ticker,
-            start=start,
-            end=end,
-            interval="1mo",
-            auto_adjust=True,
-            progress=False,
-        )
+        kwargs["session"] = session
 
+    ssl_seen = False
+    try:
+        raw = yf.download(**kwargs)
+    except Exception as exc:
+        msg = str(exc)
+        if any(sig in msg for sig in _SSL_ERROR_SIGNATURES):
+            ssl_seen = True
+            log.warning("SSL error in batch yfinance download: %s", exc)
+        elif any(sig in msg for sig in _RATE_LIMIT_SIGNATURES):
+            log.warning("Rate limit hit in batch yfinance download: %s", exc)
+        else:
+            log.warning("Batch yfinance download failed: %s", exc)
+        return {}, ssl_seen
+
+    if raw is None or raw.empty:
+        return {}, ssl_seen
+
+    # Extract Close column(s).
+    # Multiple tickers → MultiIndex columns: level-0 = metric, level-1 = ticker.
+    # Single ticker   → flat columns: ['Open', 'High', 'Low', 'Close', 'Volume'].
+    if isinstance(raw.columns, pd.MultiIndex):
+        levels = raw.columns.get_level_values(0)
+        if "Close" not in levels:
+            log.warning("'Close' missing from batch download MultiIndex: %s", levels[:6].tolist())
+            return {}, ssl_seen
+        close_df = raw["Close"]  # DataFrame: index=date, columns=tickers
+    else:
+        if "Close" not in raw.columns:
+            log.warning("'Close' missing from single-ticker download columns: %s", list(raw.columns))
+            return {}, ssl_seen
+        t = tickers[0] if len(tickers) == 1 else "Close"
+        close_df = raw[["Close"]].rename(columns={"Close": t})
+
+    results: dict[str, pd.Series] = {}
+    for ticker in tickers:
+        if ticker not in close_df.columns:
+            log.debug("Ticker %s absent from batch results", ticker)
+            continue
+        s = close_df[ticker].dropna()
+        if s.empty:
+            log.warning("All-NaN Close data for %s in batch download", ticker)
+            continue
+        s = s.copy()
+        s.name = ticker
+        s.index = pd.to_datetime(s.index)
+        if hasattr(s.index, "tz") and s.index.tz is not None:
+            s.index = s.index.tz_localize(None)
+        results[ticker] = s.resample("QE").last()
+
+    return results, ssl_seen
+
+
+# ── Phase 2: per-ticker SSL bypass ────────────────────────────────────────────
+
+def _fetch_ticker_with_session(ticker: str, start: str, end: str, session) -> pd.Series:
+    """
+    Fetch one ticker via yf.Ticker(session=session).history().
+
+    session must be a curl_cffi.requests.Session — yfinance ≥ 0.2 rejects
+    a plain requests.Session with "Yahoo API requires curl_cffi session".
+    """
+    import yfinance as yf
+    log.info("Fetching %s via curl_cffi session (SSL bypass) ...", ticker)
+    raw = yf.Ticker(ticker, session=session).history(
+        start=start, end=end, interval="1mo", auto_adjust=True
+    )
     if raw.empty:
         log.warning("No data returned for %s", ticker)
         return pd.Series(name=ticker, dtype=float)
-
-    # yf.download() can return MultiIndex columns for a single ticker
-    if isinstance(raw.columns, pd.MultiIndex):
-        close = raw["Close"][ticker]
-    else:
-        close = raw["Close"]
-
-    close = close.copy()
+    close = raw["Close"].copy()
     close.name = ticker
     close.index = pd.to_datetime(close.index)
-
-    # yf.Ticker.history() returns a timezone-aware index; strip tz for consistency
     if hasattr(close.index, "tz") and close.index.tz is not None:
         close.index = close.index.tz_localize(None)
-
     return close.resample("QE").last()
 
 
-def _fetch_tickers(
-    tickers: list[str], start: str, end: str, session=None
-) -> tuple[list[pd.Series], bool]:
+def _fetch_missing_with_ssl_bypass(
+    missing: list[str], start: str, end: str
+) -> dict[str, pd.Series]:
     """
-    Fetch all tickers via yfinance.
+    Retry each missing ticker using a curl_cffi Session(verify=False).
+    Returns dict of successfully fetched tickers.
+    """
+    session = _ssl_bypass_curl_session()
+    if session is None:
+        return {}
 
-    Returns:
-        (series_list, ssl_error_seen) — series_list contains non-empty results;
-        ssl_error_seen is True if any exception message matched an SSL signature.
-    """
-    results: list[pd.Series] = []
-    ssl_seen = False
-    for ticker in tickers:
+    results: dict[str, pd.Series] = {}
+    for ticker in missing:
         try:
-            s = _fetch_ticker(ticker, start, end, session=session)
+            s = _fetch_ticker_with_session(ticker, start, end, session)
             if not s.empty:
-                results.append(s)
+                results[ticker] = s
         except Exception as exc:
-            if any(sig in str(exc) for sig in _SSL_ERROR_SIGNATURES):
-                ssl_seen = True
-                log.warning(
-                    "SSL error fetching %s (will retry with SSL bypass): %s",
-                    ticker, exc,
-                )
-            else:
-                log.warning("Failed to fetch %s: %s", ticker, exc)
-    return results, ssl_seen
+            log.warning("SSL bypass also failed for %s: %s", ticker, exc)
+    return results
 
 
 # ── Phase 3: stooq fallback (pandas-datareader) ────────────────────────────────
@@ -398,20 +408,19 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     """
     Fetch quarterly adjusted-close prices for all tickers in cfg["assets"]["etfs"].
 
-    Automatic SSL recovery
-    ----------------------
-    If the first fetch attempt returns no data and the yfinance logger emitted
-    SSL-related errors, this function logs a diagnostic help message and retries
-    by temporarily clearing CURL_CA_BUNDLE / REQUESTS_CA_BUNDLE so that
-    curl_cffi (yfinance's HTTP backend) skips certificate verification.
-    This handles corporate proxies with self-signed certificates.
-    (A requests.Session is NOT used — yfinance ≥ 0.2 rejects it.)
+    Phase 1  — batch yf.download() (one HTTP request, fastest, least rate-limiting)
+    Phase 2  — per-ticker curl_cffi Session(verify=False) for any missing tickers.
+               Triggered unconditionally for missing tickers: curl_cffi SSL errors
+               often bypass Python logging/exceptions and go straight to stderr, so
+               waiting for explicit error detection is unreliable.
+    Phase 3  — stooq (pandas-datareader)
+    Phase 4  — OpenBB
+    Phase 5  — empty DataFrame → caller uses macro-proxy returns
 
     Returns:
         DataFrame indexed by quarter-end dates, one column per ticker.
         Columns contain NaN where data is unavailable (pre-ETF-launch dates).
-        Returns an empty DataFrame if all fetches fail (proxy returns from macro
-        data are computed by the caller as a fallback).
+        Returns an empty DataFrame if all fetches fail.
     """
     tickers: list[str] = cfg.get("assets", {}).get("etfs", [])
     if not tickers:
@@ -421,59 +430,54 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     start = cfg["data"]["start_date"]
     end = cfg["data"]["end_date"] or str(date.today())
 
-    # ── Phase 1: normal fetch ──────────────────────────────────────────────────
-    # Attach a temporary handler to the yfinance logger so we can detect SSL
-    # errors that yfinance swallows internally (it logs them but doesn't raise).
+    # Opt-in to verify=False for ALL calls (skips Phase 2 retry delay)
+    force_no_verify = os.environ.get("YFINANCE_VERIFY_SSL", "true").lower() == "false"
+
+    # ── Phase 1: batch download ────────────────────────────────────────────────
+    if force_no_verify:
+        log.info("YFINANCE_VERIFY_SSL=false — using SSL bypass session from the start")
+        session = _ssl_bypass_curl_session()
+    else:
+        session = None
+
+    # Also monitor the yfinance logger for SSL messages (belt-and-suspenders)
     detector = _SSLErrorDetector()
     yf_logger = logging.getLogger("yfinance")
     yf_logger.addHandler(detector)
-
     try:
-        series_list, ssl_from_exc = _fetch_tickers(tickers, start, end)
+        results, ssl_from_exc = _batch_yfinance(tickers, start, end, session=session)
     finally:
         yf_logger.removeHandler(detector)
 
-    # ── Phase 2: SSL bypass retry ──────────────────────────────────────────────
-    # Trigger when ANY SSL error was detected — either from the yfinance logger
-    # (detector.ssl_detected) or from exception messages (ssl_from_exc).
-    # Only retry tickers that are still missing so we don't re-fetch successes.
-    # Clears CURL_CA_BUNDLE / REQUESTS_CA_BUNDLE so curl_cffi skips cert
-    # verification.  Does NOT pass a requests.Session — yfinance ≥ 0.2 rejects
-    # that with "Yahoo API requires curl_cffi session".
-    ssl_detected = detector.ssl_detected or ssl_from_exc
-    fetched_names = {s.name for s in series_list}
-    missing = [t for t in tickers if t not in fetched_names]
-
-    if missing and ssl_detected:
-        log.warning(_SSL_HELP_MESSAGE)
+    # ── Phase 2: SSL bypass retry for any missing tickers ─────────────────────
+    # Fire unconditionally when tickers are missing and we didn't already use
+    # the bypass in Phase 1.  curl_cffi SSL errors often go to stderr without
+    # raising Python exceptions or hitting the logging system, so ssl_from_exc
+    # and detector.ssl_detected are unreliable triggers.
+    missing = [t for t in tickers if t not in results]
+    if missing and not force_no_verify:
+        ssl_flagged = detector.ssl_detected or ssl_from_exc
+        if ssl_flagged:
+            log.warning(_SSL_HELP_MESSAGE)
         log.info(
-            "SSL bypass active — retrying %d/%d missing tickers "
-            "with curl_cffi session (verify=False)",
+            "Phase 2 SSL bypass: retrying %d/%d missing ticker(s) with verify=False ...",
             len(missing), len(tickers),
         )
-        curl_session = _ssl_bypass_curl_session()
-        saved_env = _apply_ssl_env_bypass()  # belt-and-suspenders: also clear env vars
-        try:
-            retry_list, _ = _fetch_tickers(missing, start, end, session=curl_session)
-        finally:
-            _restore_ssl_env(saved_env)
-        series_list.extend(retry_list)
-
-        if retry_list:
+        recovered = _fetch_missing_with_ssl_bypass(missing, start, end)
+        results.update(recovered)
+        still_missing = [t for t in missing if t not in recovered]
+        if recovered:
             log.warning(
-                "SSL bypass recovered %d/%d tickers.  "
-                "Add 'export CURL_CA_BUNDLE=\"\"' to your shell profile to "
-                "skip the retry delay on future runs.",
-                len(retry_list), len(missing),
+                "SSL bypass recovered %d/%d ticker(s).  "
+                "Set YFINANCE_VERIFY_SSL=false in your .env to skip this retry delay.",
+                len(recovered), len(missing),
             )
-        else:
-            log.error(
-                "SSL bypass also returned no data.  "
-                "Check your network connection or run without --refresh-assets "
-                "to load from a saved checkpoint."
-            )
+        if still_missing:
+            log.warning("SSL bypass also failed for: %s", still_missing)
 
-    # ── Phase 3: stooq via pandas-datareader ─────────────────────────────────
+    series_list = list(results.values())
+
+    # ── Phase 3: stooq via pandas-datareader ──────────────────────────────────
     if not series_list:
         log.info("Trying stooq fallback (free, no API key) ...")
         series_list = _fetch_tickers_stooq(tickers, start, end)
@@ -498,7 +502,7 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
                 "Falling back to macro-data proxy returns (see asset_returns.compute_proxy_returns)."
             )
 
-    # ── Phase 5: empty → macro proxy returns computed by caller ──────────────
+    # ── Phase 5: empty → macro proxy returns computed by caller ───────────────
     if not series_list:
         log.error(
             "All price data sources failed.  "
@@ -512,9 +516,10 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     df.index.name = "date"
 
     log.info(
-        "Asset prices fetched: %d quarters, %d tickers, %.1f%% coverage",
+        "Asset prices fetched: %d quarters, %d/%d tickers, %.1f%% coverage",
         len(df),
         len(df.columns),
+        len(tickers),
         100 * df.notna().mean().mean(),
     )
     return df
