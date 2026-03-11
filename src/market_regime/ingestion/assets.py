@@ -214,17 +214,31 @@ def _fetch_ticker(ticker: str, start: str, end: str) -> pd.Series:
     return close.resample("QE").last()
 
 
-def _fetch_tickers(tickers: list[str], start: str, end: str) -> list[pd.Series]:
-    """Fetch all tickers via yfinance; return list of non-empty Series."""
-    results = []
+def _fetch_tickers(tickers: list[str], start: str, end: str) -> tuple[list[pd.Series], bool]:
+    """
+    Fetch all tickers via yfinance.
+
+    Returns:
+        (series_list, ssl_error_seen) — series_list contains non-empty results;
+        ssl_error_seen is True if any exception message matched an SSL signature.
+    """
+    results: list[pd.Series] = []
+    ssl_seen = False
     for ticker in tickers:
         try:
             s = _fetch_ticker(ticker, start, end)
             if not s.empty:
                 results.append(s)
         except Exception as exc:
-            log.warning("Failed to fetch %s: %s", ticker, exc)
-    return results
+            if any(sig in str(exc) for sig in _SSL_ERROR_SIGNATURES):
+                ssl_seen = True
+                log.warning(
+                    "SSL error fetching %s (will retry with SSL bypass): %s",
+                    ticker, exc,
+                )
+            else:
+                log.warning("Failed to fetch %s: %s", ticker, exc)
+    return results, ssl_seen
 
 
 # ── Phase 3: stooq fallback (pandas-datareader) ────────────────────────────────
@@ -382,32 +396,41 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     yf_logger.addHandler(detector)
 
     try:
-        series_list = _fetch_tickers(tickers, start, end)
+        series_list, ssl_from_exc = _fetch_tickers(tickers, start, end)
     finally:
         yf_logger.removeHandler(detector)
 
     # ── Phase 2: SSL bypass retry ──────────────────────────────────────────────
+    # Trigger when ANY SSL error was detected — either from the yfinance logger
+    # (detector.ssl_detected) or from exception messages (ssl_from_exc).
+    # Only retry tickers that are still missing so we don't re-fetch successes.
     # Clears CURL_CA_BUNDLE / REQUESTS_CA_BUNDLE so curl_cffi skips cert
     # verification.  Does NOT pass a requests.Session — yfinance ≥ 0.2 rejects
     # that with "Yahoo API requires curl_cffi session".
-    if not series_list and detector.ssl_detected:
+    ssl_detected = detector.ssl_detected or ssl_from_exc
+    fetched_names = {s.name for s in series_list}
+    missing = [t for t in tickers if t not in fetched_names]
+
+    if missing and ssl_detected:
         log.warning(_SSL_HELP_MESSAGE)
         log.info(
-            "SSL bypass active — clearing CURL_CA_BUNDLE for curl_cffi (%d tickers)",
-            len(tickers),
+            "SSL bypass active — retrying %d/%d missing tickers "
+            "(clearing CURL_CA_BUNDLE for curl_cffi)",
+            len(missing), len(tickers),
         )
         saved_env = _apply_ssl_bypass()
         try:
-            series_list = _fetch_tickers(tickers, start, end)
+            retry_list, _ = _fetch_tickers(missing, start, end)
         finally:
             _restore_ssl_env(saved_env)
+        series_list.extend(retry_list)
 
-        if series_list:
+        if retry_list:
             log.warning(
-                "SSL bypass succeeded (%d tickers fetched).  "
+                "SSL bypass recovered %d/%d tickers.  "
                 "Add 'export CURL_CA_BUNDLE=\"\"' to your shell profile to "
                 "skip the retry delay on future runs.",
-                len(series_list),
+                len(retry_list), len(missing),
             )
         else:
             log.error(
