@@ -92,7 +92,25 @@ Extends commodity and asset data before 1993 (ETF inception dates):
 - Merge into `macro_raw.parquet` alongside FRED + multpl series
 - **Files**: `src/market_regime/ingestion/macrotrends.py` (new), `config/settings.yaml`
 
-### 1.6  Confusion matrix and classification report in plots  `S`
+### 1.6  Expand asset universe and move ticker lists to config  `S`
+Add ETFs that cover a wider range of regime-relevant categories:
+- `HYG` — high-yield / junk bonds (credit risk / spread regime signal)
+- `XLK` — Technology sector (growth-regime outperformer)
+- `XLP` — Consumer staples (defensive / low-growth regime)
+- `XLE` — Energy sector (stagflation / commodity regime)
+- `GDX` — Gold miners (amplified gold / inflation hedge)
+- `TIP` — TIPS / inflation-linked bonds (real yield signal)
+- `BIL` — T-bills / cash equivalent (rising-rate / defensive)
+- `EDV` — Extended-duration Treasuries 25+ yr (duration risk)
+
+All ticker lists now live in `config/settings.yaml` under `assets.etfs`.
+Notebooks read from `cfg["assets"]["etfs"]` — no hardcoded lists in notebook code.
+`plotting.sample_series` and `plotting.key_indicators` also moved to config.
+- **Files**: `config/settings.yaml`, `notebooks/01_ingestion.ipynb`, `notebooks/04_regimes.ipynb`,
+  `notebooks/06_assets.ipynb`, `src/market_regime/plotting.py`
+- **Status**: ✓ Done (settings.yaml + notebooks updated; ETF data fetched on next step 1 run)
+
+### 1.7  Confusion matrix and classification report in plots  `S`
 `legacy/supervised.py` has `generate_classification_report()` that produces a
 confusion matrix; this is not exposed in `src/` plotting or logs.
 - Add `plot_confusion_matrix(model, X, y, regime_names, run_cfg)` to `plotting.py`
@@ -103,7 +121,98 @@ confusion matrix; this is not exposed in `src/` plotting or logs.
 
 ## Tier 2 — High Value, More Effort
 
-### 2.1  Finviz Elite integration for sector/stock signals  `M`
+### 2.1  Optimal k investigation — beyond silhouette  `S`
+Silhouette score alone is insufficient to determine optimal k for regime detection.
+Add a multi-metric k-selection panel to `notebooks/03_clustering.ipynb`:
+- **Gap statistic** (Tibshirani et al.) — compares within-cluster dispersion to a
+  null reference distribution; often picks a higher k than silhouette
+- **BIC via GMM** — fit a `GaussianMixture(n_components=k)` for k in [2, 12];
+  select k minimizing BIC; directly comparable to KMeans as a model-selection criterion
+- **Elbow on within-cluster variance (inertia)** — classic, but use the "knee" heuristic
+  (`kneed` library: `KneeLocator`) for automated detection
+- **Davies-Bouldin + Calinski-Harabasz** — already computed; include in combined panel
+
+Display all four metrics side-by-side; let user compare before committing to `balanced_k`.
+- **Files**: `notebooks/03_clustering.ipynb`, `src/market_regime/clustering/kmeans.py`
+
+### 2.2  Gaussian Mixture Models (GMM) as KMeans alternative  `M`
+`sklearn.mixture.GaussianMixture` is a principled Bayesian alternative to KMeans:
+- Soft cluster assignments (regime probabilities, not hard labels)
+- BIC/AIC for model selection → no need to pre-specify k
+- Can model elliptical (non-spherical) clusters — KMeans assumes equal-radius spheres
+- Covariance types: try `"full"`, `"tied"`, `"diag"` — `"diag"` best for small N
+- Risk: with N≈300 quarters and 69 features, GMM can overfit — use PCA components as input
+
+Implementation:
+- Add `fit_gmm(pca_df, k_range, covariance_type, random_state)` to `clustering/kmeans.py`
+  (or new `clustering/gmm.py`)
+- Returns both hard labels (argmax of responsibilities) and soft probabilities
+- Compare silhouette and BIC vs KMeans; present in notebook 03
+- Downstream: soft probabilities can replace hard labels as supervised model input
+- **Files**: `src/market_regime/clustering/gmm.py` (new), `pipelines/03_cluster.py`,
+  `notebooks/03_clustering.ipynb`
+
+### 2.3  DBSCAN / HDBSCAN density-based clustering  `M`
+Density-based clustering does not require specifying k; finds clusters of arbitrary shape
+and treats outlier quarters as noise (label = -1):
+- `sklearn.cluster.DBSCAN(eps, min_samples)` — requires tuning `eps` (distance threshold)
+  Use k-distance plot to select `eps` (elbow in sorted k-NN distances)
+- `hdbscan.HDBSCAN(min_cluster_size)` — hierarchical, more robust to `eps` choice;
+  `pip install hdbscan` (optional extra)
+- Key question: are some quarters genuinely outliers (not belonging to any regime)?
+  DBSCAN answers this; KMeans forces every point into a cluster
+- Limitation: noise-labeled quarters break downstream supervised training — need a strategy
+  (e.g., assign noise to nearest cluster centroid, or drop from supervised training)
+- **Files**: `src/market_regime/clustering/density.py` (new), `notebooks/03_clustering.ipynb`
+
+### 2.4  Spectral Clustering  `M`
+Graph-based clustering; constructs a similarity graph and clusters its eigenvectors:
+- `sklearn.cluster.SpectralClustering(n_clusters, affinity)`
+- Better than KMeans for non-convex cluster shapes (e.g., crescent or ring shapes in PCA space)
+- More expensive: O(N³) eigendecomposition — feasible at N≈300
+- Must specify k (same as KMeans), so use optimal-k from 2.1 as input
+- Compare resulting labels to KMeans via adjusted Rand index and NMI
+- **Files**: `src/market_regime/clustering/spectral.py` (new), `notebooks/03_clustering.ipynb`
+
+### 2.5  SVD as complement / alternative to PCA  `S`
+`sklearn.decomposition.TruncatedSVD` is mathematically equivalent to PCA on centered data
+but worth examining explicitly:
+- Compute SVD of the feature matrix directly; compare singular values to PCA explained variance
+- Interpretability: SVD right singular vectors (components) have the same meaning as PCA loadings;
+  visualize which raw features load most heavily on each component
+- Use case: if features contain many near-zero rows (pre-1970 NaN-filled quarters), SVD on
+  the non-centered matrix may give more stable components than centered PCA
+- Add a comparison cell in `notebooks/03_clustering.ipynb`: PCA vs TruncatedSVD component
+  loadings, variance explained, and resulting cluster quality
+- **Files**: `notebooks/03_clustering.ipynb`, `src/market_regime/clustering/kmeans.py`
+
+### 2.6  Feature selection for clustering using RF importances  `M`
+The current `clustering_features` list (69 columns) was manually curated from the legacy
+analysis. RF importances from step 5 provide a data-driven alternative:
+- After step 5 runs, extract `feature_importances_` from the current-regime RF classifier
+- Rank features by importance; identify which of the 69 clustering features are most
+  predictive of the regime labels
+- Re-run PCA + clustering using only the top-K features (try K in [20, 35, 50])
+- Compare silhouette score, regime separation, and step-5 CV accuracy vs the full 69-feature set
+- Key question: does a leaner feature set produce more stable, more predictable regimes?
+- **Important**: any change to `clustering_features` invalidates `regime_labels.yaml` — re-pin
+  regime names after re-clustering
+- **Files**: `notebooks/03_clustering.ipynb`, `config/settings.yaml`
+
+### 2.7  Multi-clustering model selection strategy  `S`
+When running multiple clustering methods (KMeans, GMM, DBSCAN, Spectral), a principled
+selection strategy is needed:
+- **Quantitative**: compare silhouette, Davies-Bouldin, and (for GMM) BIC across methods;
+  compute adjusted Rand index between pairs to measure label agreement
+- **Economic**: for each candidate clustering, run step 5 (regime classifier) and compare
+  5-fold TSCV accuracy — the "best" clustering should be the most predictive
+- **Visual**: overlay each method's labels on the PCA scatter (notebook 07 pairplot);
+  prefer methods where regimes form compact, well-separated clouds
+- **CLI workflow**: after selecting a preferred clustering, save its labels as a named
+  checkpoint (see README "Using new cluster labels" section) and propagate through steps 4–7
+- **Files**: `notebooks/03_clustering.ipynb`, `run_pipeline.py`
+
+### 2.8  Finviz Elite integration for sector/stock signals  `M`
 With a Finviz Elite subscription:
 - Use `finvizfinance` Python library (`pip install finvizfinance`)
 - Screener API: pull all S&P 500 stocks filtered by sector, market cap, momentum
@@ -113,7 +222,7 @@ With a Finviz Elite subscription:
 - Separate from regime detection (which is macro-driven); feeds into a "stock signal" layer
 - **Files**: `src/market_regime/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
 
-### 2.2  Hidden Markov Model regime detection (alternative to KMeans)  `M`
+### 2.9  Hidden Markov Model regime detection (alternative to KMeans)  `M`
 `hmmlearn.hmm.GaussianHMM` is a principled alternative to KMeans for regime detection:
 - Handles temporal autocorrelation natively (KMeans treats each quarter independently)
 - Produces soft probabilities rather than hard cluster assignments
@@ -123,7 +232,7 @@ With a Finviz Elite subscription:
 - Use identical PCA features as input for fair comparison with KMeans
 - **Files**: `src/market_regime/clustering/hmm.py` (new), `pipelines/03_cluster.py`
 
-### 2.3  SMOTE / class-weight tuning for imbalanced regimes  `S`
+### 2.10  SMOTE / class-weight tuning for imbalanced regimes  `S`
 With 5 balanced clusters, sizes should be equal, but temporal distribution may still
 cause class imbalance in train/test splits of the TSCV folds.
 - RF already uses `class_weight="balanced"` — log per-fold class counts to verify
@@ -131,7 +240,7 @@ cause class imbalance in train/test splits of the TSCV folds.
 - Add to `pyproject.toml` as optional extra: `imbalanced-learn>=0.11`
 - **Files**: `src/market_regime/prediction/classifier.py`
 
-### 2.4  Per-asset regime probability models  `L`
+### 2.11  Per-asset regime probability models  `L`
 For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 - Binary: "Will this ETF be +X% in Y quarters?" for X in [5, 10, 20] and Y in [1, 2, 4, 8]
 - Features: regime probabilities + causal macro features + asset momentum
@@ -139,7 +248,7 @@ For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 - This is "Putting it all together — Part I" from the original design doc
 - **Files**: `src/market_regime/prediction/asset_classifier.py` (new), `pipelines/05b_asset_predict.py` (new)
 
-### 2.5  Momentum and cross-asset ratio features  `M`
+### 2.12  Momentum and cross-asset ratio features  `M`
 Additional derived features for clustering and supervised models:
 - 6M and 12M momentum (trailing return) for each major series
 - Relative strength: S&P priced in Gold, S&P priced in Oil, Gold priced in Oil
@@ -148,7 +257,7 @@ Additional derived features for clustering and supervised models:
 - PMI-equivalent proxy from FRED INDPRO momentum
 - **Files**: `src/market_regime/features/transforms.py`, `config/settings.yaml`
 
-### 2.6  Markov regime-switching model (statsmodels)  `M`
+### 2.13  Markov regime-switching model (statsmodels)  `M`
 `statsmodels.tsa.regime_switching.markov_regression.MarkovRegression` fits a model
 where parameters switch between discrete states via a Markov chain:
 - Interprets GDP growth as a switching-mean process (growth vs recession states)
@@ -157,7 +266,7 @@ where parameters switch between discrete states via a Markov chain:
 - Not a replacement for KMeans; more of a diagnostic and feature generator
 - **Files**: `src/market_regime/clustering/markov.py` (new)
 
-### 2.7  Conference Board LEI proxy from FRED  `S`
+### 2.14  Conference Board LEI proxy from FRED  `S`
 The Conference Board LEI is the gold standard for recession prediction but is not
 freely available. Construct a proxy from FRED components:
 - `PERMIT` (building permits) + `AWHMAN` (avg weekly hours) + `AMDMNO` (new orders)
@@ -195,14 +304,7 @@ Additional macrotrends series for pre-1970 data:
 - Dow Jones (pre-S&P 500 era)
 - Fed Funds Rate historical (FRED already has back to 1954; macrotrends back to 1800s)
 
-### 3.4  Alternative clustering: HDBSCAN / Gaussian Mixture Models  `M`
-Compare KMeans with density-based and probabilistic clustering:
-- `HDBSCAN`: no need to specify k; finds natural clusters; handles noise
-- `GaussianMixture`: soft assignments; Bayesian IC for model selection
-- Compare regime quality (silhouette, inter-regime variance) vs KMeans k=5
-- **Risk**: regime labels change → `regime_labels.yaml` overrides become invalid
-
-### 3.5  Factor model for asset returns within regimes  `L`
+### 3.4  Factor model for asset returns within regimes  `L`
 LASSO regression / Ridge regression per regime:
 - Dependent variable: next-quarter ETF return
 - Independent variables: causal macro features for that regime
@@ -210,7 +312,7 @@ LASSO regression / Ridge regression per regime:
   are the dominant predictors of GLD outperformance"
 - **Files**: `src/market_regime/prediction/factor_model.py` (new)
 
-### 3.6  Backtest framework  `XL`
+### 3.5  Backtest framework  `XL`
 Walk-forward backtest of the full pipeline:
 - At each quarter T, train on [T-N, T], predict regime and portfolio for T+1
 - Compare strategy vs S&P 500 benchmark: returns, Sharpe, max drawdown
@@ -218,7 +320,7 @@ Walk-forward backtest of the full pipeline:
 - Requires ~50 walk-forward steps (1975–2025 at quarterly resolution)
 - **Files**: `src/market_regime/backtest/` (new module)
 
-### 3.7  StockCharts.com integration  `M`
+### 3.6  StockCharts.com integration  `M`
 StockCharts.com has rich technical analysis charts but no public API.
 Possible approaches:
 - Screen-scrape PDF/image chart exports (fragile, may violate ToS)
@@ -243,8 +345,11 @@ Possible approaches:
 | FRED — consumer | `fredapi` | UMCSENT, DPCERA3Q086SBEA | 1952 | ✗ | **Tier 1** |
 | macrotrends.net | custom scraper | Gold, oil, silver prices | 1915+ | ✗ | **Tier 1** |
 | Finviz Elite | `finvizfinance` | Sector/stock screener | recent | ✗ | Tier 2 |
-| hmmlearn | Python lib | HMM regime states | n/a | ✗ | Tier 2 |
-| statsmodels | Python lib | Markov regime-switching | n/a | ✗ | Tier 2 |
+| hmmlearn | Python lib | HMM regime states | n/a | ✗ | Tier 2 (2.9) |
+| statsmodels | Python lib | Markov regime-switching | n/a | ✗ | Tier 2 (2.13) |
+| sklearn GMM | Python lib | Gaussian Mixture Models (soft clusters) | n/a | ✗ | Tier 2 (2.2) |
+| sklearn SpectralClustering | Python lib | Spectral / graph clustering | n/a | ✗ | Tier 2 (2.4) |
+| hdbscan | Python lib | Density-based clustering (HDBSCAN) | n/a | ✗ | Tier 2 (2.3) |
 | Streamlit | Python lib | Interactive dashboard | n/a | ✗ | Tier 3 |
 | Claude API | `anthropic` | AI weekly narrative | n/a | ✗ | Tier 3 |
 | StockCharts | scrape/skip | Technical charts | n/a | ✗ | Low/Skip |

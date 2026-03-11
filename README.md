@@ -125,6 +125,46 @@ python pipelines/07_dashboard.py
 jupyter lab notebooks/
 ```
 
+### Using New Cluster Labels as a Pipeline Starting Point
+
+After experimenting with a different clustering method (GMM, DBSCAN, Spectral, or a
+different `balanced_k`), you can save the new cluster labels as a named checkpoint
+and use them as the starting point for all downstream steps instead of the Grok seed labels.
+
+```bash
+# 1. Run clustering and save the balanced_cluster column as a named checkpoint
+python run_pipeline.py --steps 3 --save-market-code
+#    This saves 'balanced_cluster' to data/checkpoints/market_code_clustered.parquet
+
+# 2. Run downstream steps (regime labeling → supervised → assets → dashboard)
+#    using the newly-saved clustered labels as the market_code source
+python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
+
+# 3. Optional: if you've manually pinned regime names in config/regime_labels.yaml
+#    after inspecting the new clusters, reload from there:
+python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
+#    (regime_labels.yaml is loaded automatically in step 4)
+
+# To compare multiple clustering runs side-by-side, save each to a custom checkpoint:
+python -c "
+from market_regime.io.checkpoints import CheckpointManager
+import pandas as pd
+cm = CheckpointManager()
+# List available checkpoints
+print(cm.list())
+"
+
+# To start a fresh end-to-end run with the new labels (no re-scraping):
+python run_pipeline.py --recompute --steps 3,4,5,6,7 --save-market-code --plots
+```
+
+**Workflow summary:**
+1. Re-cluster (`--steps 3 --save-market-code`)
+2. Inspect `notebooks/03_clustering.ipynb` and `notebooks/07_pairplot.ipynb`
+3. Edit `config/regime_labels.yaml` to pin human-readable names to the new cluster IDs
+4. Re-run downstream steps (`--steps 4,5,6,7 --market-code clustered`)
+5. Inspect `notebooks/04_regimes.ipynb` through `notebooks/06_assets.ipynb`
+
 ### Dependency Notes
 
 | Package | Required? | Purpose |

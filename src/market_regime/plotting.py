@@ -121,6 +121,8 @@ def plot_raw_series_sample(
     raw: pd.DataFrame,
     series: list[str],
     run_cfg: RunConfig,
+    filename: str = "01_raw_series_sample.png",
+    title: str = "Raw Series Sample",
 ) -> None:
     """Line chart for a subset of raw series (for quick visual QC)."""
     series = [s for s in series if s in raw.columns]
@@ -138,9 +140,9 @@ def plot_raw_series_sample(
         ax.grid(alpha=0.3)
 
     axes[-1].set_xlabel("Quarter")
-    fig.suptitle("Raw Series Sample", fontsize=13, y=1.01)
+    fig.suptitle(title, fontsize=13, y=1.01)
     fig.tight_layout()
-    _save_or_show(fig, "01_raw_series_sample.png", run_cfg)
+    _save_or_show(fig, filename, run_cfg)
 
 
 # ── Step 02: Features ──────────────────────────────────────────────────────────

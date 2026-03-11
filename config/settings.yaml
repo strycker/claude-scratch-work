@@ -267,14 +267,22 @@ prediction:
 # ── Asset classes ─────────────────────────────────────────────────────────────
 assets:
   etfs:
-    - SPY   # S&P 500
+    - SPY   # S&P 500 (broad US equity)
     - GLD   # Gold
-    - TLT   # Long-term Treasuries
-    - USO   # Oil
-    - QQQ   # Nasdaq / Tech
-    - IWM   # Small-cap
-    - VNQ   # Real estate
-    - AGG   # Aggregate bonds
+    - TLT   # 20+ year Treasuries (long duration)
+    - USO   # Oil (WTI crude)
+    - QQQ   # Nasdaq-100 / Tech
+    - IWM   # Russell 2000 small-cap
+    - VNQ   # Real estate (REIT)
+    - AGG   # Aggregate bonds (investment-grade)
+    - HYG   # High-yield / junk bonds (credit risk signal)
+    - XLK   # Technology sector
+    - XLP   # Consumer staples (defensive)
+    - XLE   # Energy sector
+    - GDX   # Gold miners (amplified gold signal)
+    - TIP   # TIPS / inflation-linked bonds
+    - BIL   # T-bills / cash equivalent (defensive)
+    - EDV   # Extended-duration Treasuries (25+ yr)
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 dashboard:
@@ -282,3 +290,34 @@ dashboard:
     green:  0.05   # median quarterly return > +5% → GREEN
     yellow: 0.00   # median quarterly return > 0%  → YELLOW
     # below 0% → RED
+
+# ── Plotting ──────────────────────────────────────────────────────────────────
+# These lists control what is shown in notebooks; they are NOT used by models.
+# Config-driven so you can adjust QA views without touching notebook code.
+plotting:
+  # Focused "key series" subset shown in notebook 01 after the full all-columns view.
+  # Good for a quick sanity-check of the most important raw inputs.
+  sample_series:
+    - sp500
+    - us_infl
+    - 10yr_ustreas
+    - fred_gdp
+    - div_yield
+    - cape_shiller
+    - fred_baa
+    - fred_aaa
+
+  # Macro indicators profiled per regime in notebook 04.
+  # Use raw (non-derivative) series where available for interpretability.
+  # Note: 10yr_ustreas only has derivatives in clustering_features — use _d1 as proxy.
+  key_indicators:
+    - us_infl
+    - credit_spread
+    - gdp_growth
+    - real_gdp_growth
+    - sp500_pe
+    - 10yr_ustreas_d1
+    - log_cape_shiller
+    - log_earn_yld
+    - log_div_yield
+    - real_gdp_per_cap_d1
