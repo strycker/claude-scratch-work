@@ -254,6 +254,37 @@ clustering:
   balanced_k:        5   # k for size-constrained KMeans
   random_state:      42
 
+  # PCA optimization (used by clustering.optimize_n_components in notebook 03)
+  # Set optimize_pca: true in the pipeline to auto-select n_components.
+  # The pipeline default remains n_pca_components above; this sweep is notebook-only.
+  optimize_pca:          false
+  pca_n_range_min:       3    # lower bound for PCA n sweep
+  pca_n_range_max:       10   # upper bound for PCA n sweep
+
+  # Gap statistic (clustering.compute_gap_statistic)
+  gap_statistic_boots:   10   # bootstrap samples; 10 is fast, 50 for publication
+
+  # GMM (market_regime.gmm)
+  gmm:
+    covariance_types:    [diag, tied, full]
+    n_init:              10
+    k_range_max:         10   # sweep k from 2 to this value
+
+  # DBSCAN (market_regime.density)
+  dbscan:
+    eps_values:          [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+    min_samples:         5
+
+  # HDBSCAN (market_regime.density — requires: pip install hdbscan)
+  hdbscan:
+    min_cluster_sizes:   [10, 15, 20, 25]
+
+  # Spectral Clustering (market_regime.spectral)
+  spectral:
+    affinity:            nearest_neighbors
+    n_neighbors:         10
+    k_range_max:         8   # sweep k from 2 to this value (expensive O(N³))
+
 # ── Supervised prediction ─────────────────────────────────────────────────────
 prediction:
   test_size:                 0.20

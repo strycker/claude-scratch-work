@@ -1,20 +1,26 @@
 """
 PCA dimensionality reduction, KMeans cluster evaluation, and clustering.
 
-Three public functions intended to be called in sequence from pipeline step 03:
+Core pipeline functions (called by pipelines/03_cluster.py):
+  1. reduce_pca()          — StandardScale + PCA to N fixed components
+  2. evaluate_kmeans()     — sweep k, score with silhouette/CH/DB, pick best k
+  3. fit_clusters()        — standard KMeans + size-constrained KMeans
 
-  1. reduce_pca()       — StandardScale + PCA to N fixed components
-  2. evaluate_kmeans()  — sweep k, score with silhouette/CH/DB, pick best k
-  3. fit_clusters()     — standard KMeans at best_k + size-constrained KMeans
-                          at balanced_k, both stored as columns on the output df
+Exploration / investigation functions (used by notebooks/03_clustering.ipynb):
+  4. optimize_n_components() — sweep PCA n to find optimal dimensionality
+  5. compare_svd_pca()      — TruncatedSVD vs PCA component loadings comparison
+  6. compute_gap_statistic() — gap statistic for k selection (Tibshirani 2001)
+  7. find_knee_k()          — elbow detection on inertia curve
 """
+
+from __future__ import annotations
 
 import logging
 
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.metrics import (
     calinski_harabasz_score,
     davies_bouldin_score,
@@ -228,3 +234,208 @@ def _canonicalize_cluster_col(df: pd.DataFrame, col: str) -> pd.DataFrame:
 def _size_summary(labels: pd.Series) -> str:
     counts = labels.value_counts().sort_index()
     return ", ".join(f"{k}:{v}" for k, v in counts.items())
+
+
+# ── Exploration / investigation helpers ────────────────────────────────────────
+
+def optimize_n_components(
+    df: pd.DataFrame,
+    n_range: range | None = None,
+    balanced_k: int = 5,
+    n_init: int = 50,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """
+    Sweep PCA n_components over n_range and score each with balanced KMeans.
+
+    For each n, fits PCA(n) → StandardScaler → KMeans(balanced_k) and records
+    silhouette, Davies-Bouldin, Calinski-Harabasz, and cumulative explained variance.
+
+    Returns:
+        DataFrame with one row per n, columns:
+        n_components, explained_variance_pct, silhouette, davies_bouldin, calinski
+    """
+    if n_range is None:
+        n_range = range(3, 11)
+
+    scaler_outer = StandardScaler()
+    X_raw = scaler_outer.fit_transform(df.values)
+
+    rows = []
+    for n in n_range:
+        pca = PCA(n_components=n, random_state=random_state)
+        X_pca = pca.fit_transform(X_raw)
+        cumvar = float(np.sum(pca.explained_variance_ratio_))
+
+        X_scaled = StandardScaler().fit_transform(X_pca)
+        labels = KMeans(n_clusters=balanced_k, n_init=n_init, random_state=random_state).fit_predict(X_scaled)
+
+        rows.append({
+            "n_components": n,
+            "explained_variance_pct": round(cumvar * 100, 2),
+            "silhouette": silhouette_score(X_scaled, labels),
+            "davies_bouldin": davies_bouldin_score(X_scaled, labels),
+            "calinski": calinski_harabasz_score(X_scaled, labels),
+        })
+        log.info(
+            "PCA n=%d  var=%.1f%%  sil=%.4f  DB=%.4f  CH=%.1f",
+            n, cumvar * 100, rows[-1]["silhouette"], rows[-1]["davies_bouldin"], rows[-1]["calinski"],
+        )
+
+    return pd.DataFrame(rows)
+
+
+def compare_svd_pca(
+    df: pd.DataFrame,
+    n_components: int = 5,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Run PCA and TruncatedSVD on the same StandardScaled data and compare.
+
+    PCA centres the data before SVD; TruncatedSVD operates on the raw scaled matrix.
+    For well-centred data (StandardScaler), results are nearly identical; differences
+    indicate structure in the mean.
+
+    Returns:
+        pca_df      — PC1…PCn components (same index as df)
+        svd_df      — SV1…SVn components (same index as df)
+        loadings_df — feature × component loadings for both methods side-by-side
+    """
+    feature_names = list(df.columns)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df.values)
+
+    # PCA
+    pca = PCA(n_components=n_components, random_state=random_state)
+    X_pca = pca.fit_transform(X_scaled)
+    pca_cols = [f"PC{i+1}" for i in range(n_components)]
+    pca_df = pd.DataFrame(X_pca, index=df.index, columns=pca_cols)
+
+    # TruncatedSVD (no additional centering — operates on X_scaled directly)
+    svd = TruncatedSVD(n_components=n_components, random_state=random_state)
+    X_svd = svd.fit_transform(X_scaled)
+    svd_cols = [f"SV{i+1}" for i in range(n_components)]
+    svd_df = pd.DataFrame(X_svd, index=df.index, columns=svd_cols)
+
+    # Loadings comparison: absolute value of component weights per feature
+    pca_loadings = pd.DataFrame(
+        np.abs(pca.components_).T, index=feature_names, columns=[f"PCA_{c}" for c in pca_cols]
+    )
+    svd_loadings = pd.DataFrame(
+        np.abs(svd.components_).T, index=feature_names, columns=[f"SVD_{c}" for c in svd_cols]
+    )
+    loadings_df = pd.concat([pca_loadings, svd_loadings], axis=1)
+
+    pca_var = float(np.sum(pca.explained_variance_ratio_))
+    svd_var = float(np.sum(svd.explained_variance_ratio_))
+    log.info(
+        "PCA: %d components, %.1f%% variance.  SVD: %d components, %.1f%% variance.",
+        n_components, pca_var * 100, n_components, svd_var * 100,
+    )
+    return pca_df, svd_df, loadings_df
+
+
+def compute_gap_statistic(
+    X: np.ndarray,
+    k_range: range | None = None,
+    n_boots: int = 10,
+    n_init: int = 20,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """
+    Compute the gap statistic (Tibshirani, Walther & Hastie, 2001) for each k.
+
+    The optimal k is the smallest k such that:
+        Gap(k) >= Gap(k+1) - s_{k+1}
+    where s_k is the simulation error (std * sqrt(1 + 1/B)).
+
+    Args:
+        X        — scaled feature matrix (rows = samples, cols = features)
+        k_range  — k values to evaluate (default range(2, 12))
+        n_boots  — bootstrap reference datasets (higher = more accurate, slower)
+        n_init   — KMeans restarts per k
+
+    Returns:
+        DataFrame with columns: k, gap, gap_std, gap_sk, optimal (bool)
+    """
+    if k_range is None:
+        k_range = range(2, 12)
+    rng = np.random.default_rng(random_state)
+
+    # Bounding box for uniform reference sampling
+    mins = X.min(axis=0)
+    maxs = X.max(axis=0)
+
+    def _log_wk(X_data: np.ndarray, k: int) -> float:
+        model = KMeans(n_clusters=k, n_init=n_init, random_state=random_state)
+        model.fit(X_data)
+        return float(np.log(model.inertia_ + 1e-12))
+
+    log_wks: list[float] = []
+    boot_log_wks: list[list[float]] = []
+
+    ks = list(k_range)
+    for k in ks:
+        log.info("Gap statistic: k=%d ...", k)
+        log_wks.append(_log_wk(X, k))
+
+        boot_vals = []
+        for _ in range(n_boots):
+            X_ref = rng.uniform(mins, maxs, size=X.shape)
+            boot_vals.append(_log_wk(X_ref, k))
+        boot_log_wks.append(boot_vals)
+
+    gaps = [np.mean(boot) - obs for boot, obs in zip(boot_log_wks, log_wks)]
+    sds  = [np.std(boot, ddof=1) * np.sqrt(1 + 1 / n_boots) for boot in boot_log_wks]
+
+    # Optimal k: smallest k where gap(k) >= gap(k+1) - s(k+1)
+    optimal = [False] * len(ks)
+    for i in range(len(ks) - 1):
+        if gaps[i] >= gaps[i + 1] - sds[i + 1]:
+            optimal[i] = True
+            break
+    if not any(optimal):
+        optimal[-1] = True  # fallback to last k
+
+    return pd.DataFrame({
+        "k":       ks,
+        "gap":     gaps,
+        "gap_std": sds,
+        "gap_sk":  sds,
+        "optimal": optimal,
+    })
+
+
+def find_knee_k(scores: pd.DataFrame) -> int:
+    """
+    Find the elbow/knee in the inertia curve via second-derivative (gradient of gradient).
+
+    Uses the `kneed` library if available for a more robust estimate;
+    falls back to the gradient-of-gradient method.
+
+    Args:
+        scores — DataFrame from evaluate_kmeans() with 'k' and 'inertia' columns.
+
+    Returns:
+        k value at the elbow.
+    """
+    ks = scores["k"].values
+    inertia = scores["inertia"].values
+
+    # Attempt kneed first
+    try:
+        from kneed import KneeLocator  # type: ignore[import]
+        kl = KneeLocator(ks, inertia, curve="convex", direction="decreasing")
+        if kl.knee is not None:
+            log.info("kneed: knee at k=%d", kl.knee)
+            return int(kl.knee)
+    except ImportError:
+        log.debug("kneed not installed — using gradient method for elbow detection")
+
+    # Gradient-of-gradient method
+    d2 = np.gradient(np.gradient(inertia))
+    knee_idx = int(np.argmax(d2))
+    knee_k = int(ks[knee_idx])
+    log.info("Elbow (gradient method): k=%d", knee_k)
+    return knee_k

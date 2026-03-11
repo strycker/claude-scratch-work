@@ -52,6 +52,13 @@ data-extras = [
     "pandas-datareader>=0.10",
     "openbb>=4.1",
 ]
+# Optional clustering backends and elbow detection utilities.
+# hdbscan — hierarchical DBSCAN; more robust than DBSCAN for varying densities.
+# kneed   — KneeLocator for automated elbow/knee detection on inertia curves.
+clustering-extras = [
+    "hdbscan>=0.8",
+    "kneed>=0.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
