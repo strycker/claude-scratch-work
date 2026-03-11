@@ -105,14 +105,63 @@ make help           # Show all available targets
 
 ### Running the Pipeline
 
+#### All CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--refresh` | Re-scrape multpl.com + re-hit FRED API (~10 min). Without this flag, steps 1-2 load from cached checkpoints if less than 7 days old. |
+| `--recompute` | Recompute derived features (step 2) from cached raw data. Use after editing `settings.yaml` or `transforms.py` without wanting to re-scrape. |
+| `--refresh-assets` | Re-fetch ETF prices via yfinance (step 6 only). Without this flag, step 6 reuses `data/raw/asset_prices.parquet` if it exists. |
+| `--plots` | Generate and save matplotlib figures to `outputs/plots/`. |
+| `--show-plots` | Also call `plt.show()` after each figure. Off by default; do **not** use in CI or headless environments. |
+| `--verbose` | Set logging to DEBUG. |
+| `--steps 1,3,5` | Run only the listed step numbers (comma-separated). Valid: `1 2 3 4 5 6 7`. |
+| `--no-constrained` | Skip the `k-means-constrained` package even if installed. Falls back to plain KMeans. |
+| `--no-drop-tail` | Include the most-recent (potentially incomplete) quarter. By default the trailing row is dropped when it contains NaN in any feature column. |
+| `--market-code NAME` | Inject a market_code label column. `NAME` = `grok` \| `clustered` \| `predicted` \| any checkpoint name. Omit for a fully data-driven run. |
+| `--save-market-code` | After step 3, save `balanced_cluster` labels as the `market_code_clustered` checkpoint for use with `--market-code clustered`. |
+
+> **Auto-saved checkpoint:** Step 5 automatically saves predicted current-regime labels as
+> `market_code_predicted` every time it runs. No flag needed — use with `--market-code predicted`.
+
+#### Common Workflows
+
 ```bash
-# Full run from scratch (slow — scrapes ~46 URLs + FRED API)
-python run_pipeline.py --refresh --recompute --plots --market-code grok --save-market-code
+# ① FRESH START — scrape everything, seed with Grok labels (recommended first run)
+python run_pipeline.py --refresh --recompute --plots \
+    --market-code grok --save-market-code
 
-# Fast run using cached checkpoints (no re-scraping)
-python run_pipeline.py --steps 3,4,5,6,7 --plots --market-code grok
+# ② FULLY DATA-DRIVEN — no label seed, cluster purely from data
+python run_pipeline.py --refresh --recompute --plots --save-market-code
 
-# Individual pipeline steps
+# ③ FAST RE-RUN — skip scraping, use cached checkpoints, regenerate plots
+python run_pipeline.py --steps 3,4,5,6,7 --plots
+
+# ④ RE-CLUSTER ONLY — update cluster assignments and save for downstream
+python run_pipeline.py --steps 3 --save-market-code --plots
+
+# ⑤ DOWNSTREAM WITH NEW CLUSTER LABELS — use labels saved in ④
+python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
+
+# ⑥ DOWNSTREAM WITH GROK SEED — overlay original AI labels
+python run_pipeline.py --steps 4,5,6,7 --market-code grok --plots
+
+# ⑦ DOWNSTREAM WITH PREDICTED LABELS — use last step-5 predictions as seed
+python run_pipeline.py --steps 4,5,6,7 --market-code predicted --plots
+
+# ⑧ RECOMPUTE FEATURES WITHOUT RE-SCRAPING (e.g. after editing settings.yaml)
+python run_pipeline.py --recompute --steps 2,3,4,5,6,7 --plots
+
+# ⑨ ETF DATA REFRESH ONLY (no macro re-scrape)
+python run_pipeline.py --steps 6,7 --refresh-assets --plots
+
+# ⑩ DEBUG A SINGLE STEP
+python run_pipeline.py --steps 3 --verbose --plots --show-plots
+```
+
+#### Individual Step Scripts
+
+```bash
 python pipelines/01_ingest.py
 python pipelines/02_features.py
 python pipelines/03_cluster.py
@@ -120,50 +169,59 @@ python pipelines/04_regime_label.py
 python pipelines/05_predict.py
 python pipelines/06_asset_returns.py
 python pipelines/07_dashboard.py
+```
 
+```bash
 # Launch the exploration notebooks
 jupyter lab notebooks/
 ```
 
-### Using New Cluster Labels as a Pipeline Starting Point
+### Market Code — Label Seeding Workflows
 
-After experimenting with a different clustering method (GMM, DBSCAN, Spectral, or a
-different `balanced_k`), you can save the new cluster labels as a named checkpoint
-and use them as the starting point for all downstream steps instead of the Grok seed labels.
+The `market_code` is a per-quarter integer label (0–4) that serves as the reference
+regime assignment, attached to `macro_raw` in step 1 and propagated through all
+downstream steps as an overlay/reference column.
 
+| Source (`--market-code NAME`) | Description |
+|-------------------------------|-------------|
+| `grok` | Original AI-assisted labels (stable reference, never changes). Loaded from `data/grok_*.pickle`; cached automatically on first use. |
+| `clustered` | Labels from the most recent `--save-market-code` run. Updated every time you run step 3 with `--save-market-code`. |
+| `predicted` | Labels from the most recent step 5 run. Reflects the trained classifier's best guess for historical quarters. Saved automatically. |
+| *(omitted)* | Fully data-driven run — no market_code column is injected. |
+| *`<custom>`* | Load checkpoint `market_code_<custom>` — any name you previously saved. |
+
+**Typical label-seeding workflow:**
+1. **First run** — establish a stable baseline from Grok labels:
+   ```bash
+   python run_pipeline.py --refresh --recompute --plots \
+       --market-code grok --save-market-code
+   ```
+2. **Re-cluster** — explore a different `balanced_k` or clustering algorithm in the
+   notebook, then persist the preferred assignments:
+   ```bash
+   python run_pipeline.py --steps 3 --save-market-code --plots
+   ```
+3. **Pin regime names** — inspect `notebooks/03_clustering.ipynb`, then edit
+   `config/regime_labels.yaml` to assign human-readable names to each cluster ID.
+4. **Re-run downstream** with the new labels:
+   ```bash
+   python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
+   ```
+5. **Use predicted labels** for subsequent runs once the classifier is trained:
+   ```bash
+   python run_pipeline.py --steps 4,5,6,7 --market-code predicted --plots
+   ```
+
+To list all available `market_code` checkpoints:
 ```bash
-# 1. Run clustering and save the balanced_cluster column as a named checkpoint
-python run_pipeline.py --steps 3 --save-market-code
-#    This saves 'balanced_cluster' to data/checkpoints/market_code_clustered.parquet
-
-# 2. Run downstream steps (regime labeling → supervised → assets → dashboard)
-#    using the newly-saved clustered labels as the market_code source
-python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
-
-# 3. Optional: if you've manually pinned regime names in config/regime_labels.yaml
-#    after inspecting the new clusters, reload from there:
-python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
-#    (regime_labels.yaml is loaded automatically in step 4)
-
-# To compare multiple clustering runs side-by-side, save each to a custom checkpoint:
 python -c "
 from market_regime.io.checkpoints import CheckpointManager
-import pandas as pd
 cm = CheckpointManager()
-# List available checkpoints
-print(cm.list())
+mc = [e for e in cm.list() if e['name'].startswith('market_code_')]
+for e in mc:
+    print(e['name'], '—', e.get('rows', '?'), 'rows')
 "
-
-# To start a fresh end-to-end run with the new labels (no re-scraping):
-python run_pipeline.py --recompute --steps 3,4,5,6,7 --save-market-code --plots
 ```
-
-**Workflow summary:**
-1. Re-cluster (`--steps 3 --save-market-code`)
-2. Inspect `notebooks/03_clustering.ipynb` and `notebooks/07_pairplot.ipynb`
-3. Edit `config/regime_labels.yaml` to pin human-readable names to the new cluster IDs
-4. Re-run downstream steps (`--steps 4,5,6,7 --market-code clustered`)
-5. Inspect `notebooks/04_regimes.ipynb` through `notebooks/06_assets.ipynb`
 
 ### Clustering Investigation Extras
 
