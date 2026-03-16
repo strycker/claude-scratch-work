@@ -207,3 +207,195 @@ def predict_current(model: RandomForestClassifier, X_now: pd.DataFrame) -> dict:
         "regime": regime,
         "probabilities": dict(zip(model.classes_.tolist(), proba.tolist())),
     }
+
+
+# ── behavior models (ETF / portfolio up-flat-down) ─────────────────────────────
+
+
+def make_behavior_labels(
+    returns: pd.Series | pd.DataFrame,
+    horizon: int,
+    up_threshold: float,
+    down_threshold: float,
+) -> pd.Series | dict[str, pd.Series]:
+    """
+    Construct forward-looking up/flat/down labels from quarterly returns.
+
+    Labels are aligned to features at time t by shifting returns by -horizon so
+    that the label at index t corresponds to the return realised at t + horizon.
+    The last `horizon` periods are dropped because their future returns are
+    unknown at prediction time.
+    """
+    if horizon <= 0:
+        raise ValueError(f"horizon must be positive, got {horizon}")
+
+    if isinstance(returns, pd.DataFrame):
+        out: dict[str, pd.Series] = {}
+        for col in returns.columns:
+            out[col] = make_behavior_labels(
+                returns[col],
+                horizon=horizon,
+                up_threshold=up_threshold,
+                down_threshold=down_threshold,
+            )
+        return out
+
+    shifted = returns.shift(-horizon)
+
+    def _label(r: float) -> str | float:
+        if pd.isna(r):
+            return np.nan
+        if r >= up_threshold:
+            return "up"
+        if r <= down_threshold:
+            return "down"
+        return "flat"
+
+    labels = shifted.map(_label)
+    # Drop periods where we do not have a fully realised forward return.
+    labels = labels.dropna()
+    return labels.astype("category")
+
+
+def train_forward_behavior_models(
+    features: pd.DataFrame,
+    regimes: pd.Series,
+    returns: pd.DataFrame,
+    horizons: list[int],
+) -> dict:
+    """
+    Train directional behavior models (up/flat/down) for ETFs or portfolios.
+
+    For each asset column in `returns` and each horizon in `horizons`, this
+    helper:
+      * builds forward-looking behavior labels via `make_behavior_labels`
+      * aligns labels with causal features and regimes at time t
+      * trains a RandomForestClassifier with TimeSeriesSplit CV
+
+    Returns a nested results dict:
+
+        {
+          "models": {
+            asset_name: {horizon: fitted_estimator, ...},
+            ...
+          },
+          "cv_reports": {
+            asset_name: {
+              horizon: {
+                "scores": [...],          # per-fold accuracies
+                "mean_accuracy": float,
+                "n_splits": int,
+                "classes": [...],        # model.classes_
+              },
+              ...
+            },
+            ...
+          },
+          "label_mapping": {"up": "up", "flat": "flat", "down": "down"},
+        }
+    """
+    if not isinstance(returns, pd.DataFrame):
+        raise TypeError("returns must be a DataFrame with one column per asset")
+
+    results: dict = {
+        "models": {},
+        "cv_reports": {},
+        "label_mapping": {"up": "up", "flat": "flat", "down": "down"},
+    }
+
+    n_splits = 3
+
+    for asset in returns.columns:
+        asset_series = returns[asset]
+        results["models"][asset] = {}
+        results["cv_reports"][asset] = {}
+
+        for horizon in horizons:
+            labels = make_behavior_labels(
+                asset_series,
+                horizon=horizon,
+                up_threshold=0.0,
+                down_threshold=0.0,
+            )
+            if isinstance(labels, dict):
+                # Should not happen for a Series input, guard defensively.
+                labels = labels.get(asset)
+            if labels is None or len(labels) == 0:
+                continue
+
+            # Align labels with features and regimes on the intersection index.
+            idx = labels.index.intersection(features.index).intersection(regimes.index)
+            if len(idx) < n_splits + 1:
+                # Not enough data to run TimeSeriesSplit reliably.
+                continue
+
+            y = labels.loc[idx]
+            if y.nunique() < 2:
+                # Need at least two behavior classes to train a classifier.
+                continue
+
+            X_joint = features.loc[idx].copy()
+            # Include regime at time t as an additional feature.
+            X_joint["regime"] = regimes.loc[idx].astype(int)
+
+            def _factory() -> RandomForestClassifier:
+                return RandomForestClassifier(
+                    n_estimators=100,
+                    max_depth=8,
+                    random_state=42,
+                    n_jobs=-1,
+                    class_weight="balanced",
+                )
+
+            scores = _tscv_scores(
+                _factory,
+                X_joint,
+                y,
+                n_splits=n_splits,
+                label=f"behavior asset={asset} h={horizon}",
+            )
+
+            final = _factory()
+            final.fit(X_joint, y)
+
+            results["models"][asset][horizon] = final
+            results["cv_reports"][asset][horizon] = {
+                "scores": scores,
+                "mean_accuracy": float(np.mean(scores)),
+                "n_splits": n_splits,
+                "classes": final.classes_.tolist(),
+            }
+
+    return results
+
+
+def model_metrics_summary(results: dict) -> dict:
+    """
+    Flatten regime and behavior model metrics into a single JSON-serialisable
+    structure suitable for dashboards and later reporting.
+
+    The function expects `results` to be a mapping from family name (e.g.
+    "regime", "behavior") to an iterable of pre-aggregated metric rows, where
+    each row is a dict containing at least:
+
+        {
+          "model": str,              # short model name ("rf", "dt", "behavior-rf", …)
+          "metric": str,             # e.g. "accuracy", "macro_f1"
+          "value": float,
+          "asset": str | None,       # ETF / portfolio name (for behavior models)
+          "horizon": int | None,     # forward horizon in quarters
+          "class_label": str | None, # regime or behavior class
+        }
+
+    This deliberately keeps the aggregation step decoupled from any particular
+    training helper so both regime- and behavior-focused plans can feed in
+    synthetic or real CV summaries without mutating the original structures.
+    """
+    rows: list[dict] = []
+    for family, family_rows in results.items():
+        for row in family_rows:
+            merged = {"family": family}
+            merged.update(row)
+            rows.append(merged)
+
+    return {"rows": rows}

@@ -1,12 +1,11 @@
 # Human-readable regime name overrides.
 # After clustering, the profiler assigns a label based on statistics.
-# You can pin specific cluster IDs to names here once clusters stabilize.
+# These entries pin specific cluster IDs to names once clusters stabilize.
 # Format:  cluster_id: "Name"
 
-# Example (fill in after first clustering run):
-# 0: "Stagflation"
-# 1: "Growth Boom"
-# 2: "Deflationary Recession"
-# 3: "Low-Rate Expansion"
-# 4: "Rising Rate Slowdown"
-# 5: "Crisis / Deleveraging"
+0: "Stagflation"
+1: "Growth Boom"
+2: "Deflationary Recession"
+3: "Low-Rate Expansion"
+4: "Rising Rate Slowdown"
+5: "Crisis / Deleveraging"

@@ -339,6 +339,13 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
     features_sup = engineer_all(raw, cfg, causal=True)
     features_sup.to_parquet(out_dir / "features_supervised.parquet")
     cm.save(features_sup, "features_supervised")
+
+    # Backwards-compatible aliases for plan-level artifact names.
+    # These mirror the non-causal and causal feature sets produced above so
+    # downstream plans can reference features_noncausal / features_causal
+    # explicitly without changing the core pipeline semantics.
+    cm.save(features, "features_noncausal")
+    cm.save(features_sup, "features_causal")
     log.info(
         "Step 2: wrote features.parquet (centered) and features_supervised.parquet (causal)"
     )

@@ -176,6 +176,21 @@ python pipelines/07_dashboard.py
 jupyter lab notebooks/
 ```
 
+### Feature Artifacts & Contracts
+
+Step 2 produces two feature variants from the `macro_raw` checkpoint:
+
+- **Centered features (non-causal)**: written to `data/processed/features.parquet` and checkpointed as `features` / `features_noncausal`. These use centered smoothing windows and are intended for unsupervised clustering and regime profiling (steps 3–4).
+- **Causal features**: written to `data/processed/features_supervised.parquet` and checkpointed as `features_supervised` / `features_causal`. These use backward-only smoothing windows so no future information leaks into derivatives; they are used for supervised models and live scoring (steps 5–7).
+
+To (re)generate both artifacts from the latest `macro_raw` checkpoint:
+
+```bash
+python pipelines/02_features.py
+```
+
+Downstream code and notebooks can load the non-causal or causal variants unambiguously via the corresponding parquet paths or `CheckpointManager` names.
+
 ### Market Code — Label Seeding Workflows
 
 The `market_code` is a per-quarter integer label (0–4) that serves as the reference

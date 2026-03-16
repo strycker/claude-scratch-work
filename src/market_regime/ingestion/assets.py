@@ -399,6 +399,14 @@ def fetch_all(cfg: dict) -> pd.DataFrame:
     start = cfg["data"]["start_date"]
     end = cfg["data"]["end_date"] or str(date.today())
 
+    log.info(
+        "Fetching ETF prices for %d tickers from %s to %s: %s",
+        len(tickers),
+        start,
+        end,
+        ", ".join(tickers),
+    )
+
     # Always use verify=False — see module docstring for rationale.
     session = _ssl_bypass_curl_session()
 
