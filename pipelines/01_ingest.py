@@ -22,7 +22,7 @@ from market_regime.ingestion import multpl as multpl_module
 import pandas as pd
 
 
-def main() -> None:
+def main(argv=None) -> None:
     setup_logging()
     cfg = load()
 
