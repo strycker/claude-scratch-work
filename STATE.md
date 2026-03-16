@@ -255,4 +255,4 @@ outputs/plots/               — PNG figures from --plots flag
 - All critical bugs fixed: GMM scaler consistency, gap_std vs gap_sk separation, spectral affinity caching, cluster comparison index alignment
 - `prediction/` converted from flat module to package; `classifier.py` provides backwards-compat bundle API for test assertions on fold-level CV metadata
 
-**⚠️ Note:** running the test suite writes synthetic 4-row data to `data/checkpoints/macro_raw.parquet` (and creates `features_causal`, `features_noncausal` checkpoints). Run `python run_pipeline.py --recompute` after `pytest` to restore real checkpoint data before using the pipeline.
+**Note:** the test suite no longer contaminates production checkpoints. Pipeline smoke tests use `monkeypatch.setattr(step, "DATA_DIR", tmp_path)` to isolate all file I/O. See DECISIONS.md D5.

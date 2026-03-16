@@ -295,27 +295,15 @@ per regime) are not valid inputs to the blending function.
 
 ## Test Suite Pitfalls
 
-### P20. Running `pytest` corrupts the `macro_raw` checkpoint
+### P20. ~~Running `pytest` corrupts the `macro_raw` checkpoint~~ — FIXED
 
-**Symptom:** after running the test suite, `python run_pipeline.py --steps 5,6,7`
-produces nonsense results or fails with shape errors.
+**Was:** `tests/test_pipelines_ingest_features.py` wrote synthetic 4-row data to
+`data/checkpoints/macro_raw.parquet` (and `features_causal`, `features_noncausal`)
+as a side effect of the pipeline smoke tests.
 
-**Cause:** `tests/test_pipelines_ingest_features.py` calls `step01.main([])` with
-monkeypatched FRED/multpl functions that return a synthetic 4-row DataFrame. It then
-calls `CheckpointManager().save(loaded, "macro_raw")`, which overwrites
-`data/checkpoints/macro_raw.parquet` with that 4-row synthetic file.
-`features_causal` and `features_noncausal` checkpoints are also overwritten with
-synthetic 1-column data.
-
-**Fix:** after any `pytest` run, restore real data by running:
-```bash
-python run_pipeline.py --recompute
-```
-Or from scratch: `python run_pipeline.py --refresh --recompute`
-
-**Note:** this is a known design issue in the test. The smoke test was written to
-be self-contained but has the side effect of poisoning the development checkpoints.
-A future fix would isolate test I/O to a `tmp_path` fixture rather than `DATA_DIR`.
+**Fix applied (March 2026):** both smoke tests now use `monkeypatch.setattr(step, "DATA_DIR", tmp_path)`
+to redirect all file I/O to pytest's temporary directory. No production checkpoint files
+are touched during `pytest`. The `--recompute` workaround is no longer needed after a test run.
 
 ---
 

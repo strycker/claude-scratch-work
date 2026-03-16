@@ -89,24 +89,24 @@ significantly changed, update the standalone scripts to delegate to them at the 
 
 ---
 
-### D5. Test checkpoints committed to git (synthetic data)
+### D5. Pipeline smoke tests use `tmp_path` — checkpoint contamination eliminated
 
-**Decision:** `data/checkpoints/macro_raw.parquet`, `features_causal.parquet`, and
-`features_noncausal.parquet` — which contain synthetic 4-row test data — are committed
-to git along with their `.meta.json` files.
+**Decision:** `tests/test_pipelines_ingest_features.py` redirects all file I/O to
+pytest's `tmp_path` fixture using `monkeypatch.setattr(step, "DATA_DIR", tmp_path)`.
 
-**Why:** these files are tracked in the repo (committed as real data on main) and the
-stop-hook requires all tracked changes to be committed. The test suite overwrites them
-with synthetic data as a side effect of the pipeline smoke tests.
+**Why:** previously the smoke tests called `step01.main([])` and `step02.main()`
+with `DATA_DIR` pointing at the real `data/` tree. This overwrote
+`data/checkpoints/macro_raw.parquet` (and `features_causal`, `features_noncausal`)
+with synthetic 4-row test data, requiring `python run_pipeline.py --recompute` after
+every `pytest` run and causing tracked checkpoint files to appear modified.
 
-**Consequence:** after any `pytest` run, the repo has uncommitted changes to these
-checkpoint files. Always commit or stash them before working on other changes, and
-always run `python run_pipeline.py --recompute` before using the pipeline after a
-test run. See PITFALLS.md P20.
+**How it works:** `step01.DATA_DIR` and `step02.DATA_DIR` are module-level attributes.
+`monkeypatch.setattr` patches them per-test in the loaded module's namespace, so the
+script writes to `tmp_path/raw/`, `tmp_path/processed/` etc. without touching production
+data. The patch is automatically reverted by monkeypatch after each test.
 
-**Future fix:** the smoke tests should use `tmp_path` (pytest's temporary directory
-fixture) for all file I/O instead of writing to `DATA_DIR` directly. This would prevent
-checkpoint contamination entirely.
+**Result:** no production checkpoint files are written during `pytest`. The committed
+synthetic checkpoint files in `data/checkpoints/` were removed (no longer needed).
 
 ---
 
