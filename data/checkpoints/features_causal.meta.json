@@ -1,12 +1,11 @@
 {
-  "name": "macro_raw",
-  "created": "2026-03-16T22:41:37.868294",
+  "name": "features_causal",
+  "created": "2026-03-16T22:41:37.919620",
   "config_hash": "06587e3d",
   "rows": 4,
-  "columns": 2,
+  "columns": 1,
   "col_names": [
-    "fred_gdp",
-    "fred_cpi"
+    "feature1"
   ],
   "index_start": "2000-03-31 00:00:00",
   "index_end": "2000-12-31 00:00:00"

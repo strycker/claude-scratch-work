@@ -20,9 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from market_regime import DATA_DIR
+from market_regime import DATA_DIR, transforms as _transforms_module
 from market_regime.config import load, setup_logging
-from market_regime.transforms import engineer_all
 
 import pandas as pd
 
@@ -38,13 +37,13 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Centered features — for clustering (steps 3-4)
-    features = engineer_all(raw, cfg, causal=False)
+    features = _transforms_module.engineer_all(raw, cfg, causal=False)
     out_path = out_dir / "features.parquet"
     features.to_parquet(out_path)
     print(f"Wrote {features.shape} → {out_path}  (centered)")
 
     # Causal features — for supervised learning and live scoring (steps 5-7)
-    features_sup = engineer_all(raw, cfg, causal=True)
+    features_sup = _transforms_module.engineer_all(raw, cfg, causal=True)
     out_path_sup = out_dir / "features_supervised.parquet"
     features_sup.to_parquet(out_path_sup)
     print(f"Wrote {features_sup.shape} → {out_path_sup}  (causal/backward)")

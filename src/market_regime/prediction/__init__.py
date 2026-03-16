@@ -245,9 +245,9 @@ def make_behavior_labels(
     def _label(r: float) -> str | float:
         if pd.isna(r):
             return np.nan
-        if r >= up_threshold:
+        if r > up_threshold:
             return "up"
-        if r <= down_threshold:
+        if r < down_threshold:
             return "down"
         return "flat"
 
