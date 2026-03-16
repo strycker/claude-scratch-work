@@ -1,9 +1,9 @@
 {
   "name": "features_supervised",
-  "created": "2026-03-11T15:53:32.063121",
+  "created": "2026-03-16T18:11:45.870102",
   "config_hash": "06587e3d",
   "rows": 305,
-  "columns": 71,
+  "columns": 70,
   "col_names": [
     "10yr_ustreas_d1",
     "10yr_ustreas_d2",
@@ -74,8 +74,7 @@
     "sp500_pe",
     "sp500_pe_d1",
     "us_infl",
-    "us_infl_d1",
-    "market_code"
+    "us_infl_d1"
   ],
   "index_start": "1950-03-31 00:00:00",
   "index_end": "2026-03-31 00:00:00"
