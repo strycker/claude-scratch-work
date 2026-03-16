@@ -204,3 +204,39 @@ do not define plotting logic inline.
 **Consequence:** if you need a new plot, add it to `plotting.py` first, then call
 it from the notebook. Never define a `fig, ax = plt.subplots()` block directly in
 a notebook cell that isn't backed by a function.
+
+---
+
+## 12. `prediction/` Package: Two APIs, One Consumer Each
+
+**Decision:** `prediction/__init__.py` (flat API) and `prediction/classifier.py` (bundle API)
+coexist in the same package but serve different consumers and must not be conflated.
+
+**Context:** During a GSD-assisted development session (March 2026), an alternative
+`pipelines/05_predict.py` was generated that used a "bundle" API:
+`train_current_regime(X, y, cv_splits=N)` returning a dict
+`{"models": {"rf": ..., "dt": ...}, "cv_reports": {"rf": [FoldReport, ...], ...}, "labels": [...]}`.
+This approach made it easy to write tests asserting on per-fold CV metadata. However,
+adopting it as the production API would have required simultaneous changes to:
+- `run_pipeline.py` (`step5_predict`) — imports and uses the flat API
+- `pipelines/07_dashboard.py` — loads `current_regime.pkl` and calls `hasattr(model, "feature_names_in_")`, assuming a bare `RandomForestClassifier`
+
+**Decision:** Keep the flat API in `prediction/__init__.py` as the production API.
+Create `prediction/classifier.py` as a backwards-compatible layer that exposes the
+bundle API exclusively for tests that need to inspect per-fold `FoldReport` objects
+or aggregate classification-report dicts across folds.
+
+**Rules that must hold:**
+- `run_pipeline.py` and all `pipelines/*.py` scripts import from `market_regime.prediction` (the flat API).
+- `tests/test_models_regime.py` and `tests/test_models_reporting.py` import from
+  `market_regime.prediction.classifier` (the bundle API).
+- `outputs/models/current_regime.pkl` always contains a bare `RandomForestClassifier`.
+  Code that loads this file (e.g., `07_dashboard.py`) must never receive a bundle dict.
+
+**Consequences:**
+- The two APIs will diverge over time as the flat API evolves. That is acceptable.
+- If you add a new classifier (e.g., LightGBM), add it to the flat API first and
+  wire it through `run_pipeline.py`. Only add bundle-API support in `classifier.py`
+  if a test specifically needs per-fold CV metadata for the new model type.
+- Do not "simplify" by merging the two modules — the bundle dict cannot be pickled
+  as `current_regime.pkl` without breaking `07_dashboard.py`.

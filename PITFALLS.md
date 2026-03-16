@@ -290,3 +290,144 @@ individual binary classifier probabilities do NOT sum to 1.0 — they're indepen
 **Fix:** only use `prediction["probabilities"]` (from the multi-class RF) as input
 to `blended_regime_portfolio()`. Forward classifier probabilities (binary, one
 per regime) are not valid inputs to the blending function.
+
+---
+
+## Test Suite Pitfalls
+
+### P20. Running `pytest` corrupts the `macro_raw` checkpoint
+
+**Symptom:** after running the test suite, `python run_pipeline.py --steps 5,6,7`
+produces nonsense results or fails with shape errors.
+
+**Cause:** `tests/test_pipelines_ingest_features.py` calls `step01.main([])` with
+monkeypatched FRED/multpl functions that return a synthetic 4-row DataFrame. It then
+calls `CheckpointManager().save(loaded, "macro_raw")`, which overwrites
+`data/checkpoints/macro_raw.parquet` with that 4-row synthetic file.
+`features_causal` and `features_noncausal` checkpoints are also overwritten with
+synthetic 1-column data.
+
+**Fix:** after any `pytest` run, restore real data by running:
+```bash
+python run_pipeline.py --recompute
+```
+Or from scratch: `python run_pipeline.py --refresh --recompute`
+
+**Note:** this is a known design issue in the test. The smoke test was written to
+be self-contained but has the side effect of poisoning the development checkpoints.
+A future fix would isolate test I/O to a `tmp_path` fixture rather than `DATA_DIR`.
+
+---
+
+## Behavior Model Pitfalls
+
+### P21. `make_behavior_labels` uses strict inequalities — exactly-at-threshold is "flat"
+
+**Symptom:** a return of exactly `0.0` is classified as `"flat"`, not `"up"`,
+even when `up_threshold=0.0`.
+
+**Cause:** the threshold checks use `r > up_threshold` and `r < down_threshold`
+(strict), not `>=` / `<=`. With both thresholds at `0.0` this means:
+- `r > 0`: "up"
+- `r < 0`: "down"
+- `r == 0`: "flat"
+
+**This is intentional.** The thresholds define the exclusive boundaries of the
+"flat" zone. A return right at the boundary is ambiguous and classified as flat.
+Do not change to `>=` / `<=` — the test suite verifies the strict behavior.
+
+---
+
+## Tech Debt and Security Pitfalls
+
+### P22. SSL verification is disabled in `ingestion/assets.py`
+
+**Symptom:** no warning; yfinance fetches succeed silently even on untrusted networks.
+
+**Cause:** `assets.py` uses `curl_cffi.requests.Session(verify=False, impersonate="chrome")`
+unconditionally and suppresses `InsecureRequestWarning`. This was the simplest fix for
+the curl_cffi CA-store problem on macOS/proxy environments.
+
+**Risk:** susceptible to MITM attacks on price data. Applies even on "trusted" networks
+(corporate proxies, captive portals).
+
+**Planned fix (ROADMAP Tier 1):** add a `RunConfig` / settings flag to control SSL
+verification, defaulting to secure. Make the insecure path opt-in with an explicit
+warning log line.
+
+---
+
+### P23. Partial ingestion silently produces plausible-looking outputs
+
+**Symptom:** pipeline runs successfully but regime analysis is based on fewer series
+than expected (e.g., 30 of 46 multpl series, or 5 of 7 FRED series).
+
+**Cause:** ingestion failures are caught and logged at WARNING level, but the pipeline
+continues with whatever data was successfully fetched. Missing columns are silently
+absent from `macro_raw.parquet`.
+
+**Detection:** check `macro_raw.parquet` column count after ingestion; should be ~53
+columns. Fewer columns means some series failed to fetch.
+
+**Fix (ROADMAP Tier 1):** add an ingestion completeness report (expected vs. actual
+series count) and optionally hard-fail below a minimum coverage threshold.
+
+---
+
+### P24. `CheckpointManager.list()` silently ignores corrupt metadata files
+
+**Symptom:** `cm.list()` returns fewer checkpoints than expected; no error.
+
+**Cause:** `CheckpointManager.list()` catches all JSON parse errors and continues
+without logging which file failed.
+
+**Detection:** manually inspect `data/checkpoints/*.meta.json` for malformed files.
+
+**Fix:** the method should log at WARNING which file failed to parse before continuing.
+
+---
+
+### P25. Committed data artifacts in `data/` can create stale-data bugs
+
+**Files present in repo:** `data/fred_api_datasets_snapshot_20260216.pickle`,
+`data/multpl_datasets_snapshot_20260216.pickle`,
+`data/grok_quarter_classifications_*.pickle`, `data/grok_quarter_classifications_*.xlsx`
+
+**Risk:** if the pipeline accidentally loads these instead of freshly-fetched data,
+results are silently based on Feb 2026 snapshots. Also increases repo size and carries
+unclear licensing for scraped data.
+
+**Planned fix:** move to `data/archives/` with explicit documentation, or move small
+fixtures to `tests/fixtures/` and gitignore the rest.
+
+---
+
+### P26. FRED ingestion hard-fails when `FRED_API_KEY` is missing
+
+**Symptom:** `pipelines/01_ingest.py` raises `EnvironmentError("FRED_API_KEY is not set")`
+even though `config.py` only logs a WARNING about the missing key.
+
+**Cause:** `fred.py`'s `fetch_all()` calls `fredapi.Fred(api_key=...)` which raises
+if the key is None. The config loader deliberately defers validation.
+
+**Fix:** copy `.env.example` to `.env` and add your free key from fred.stlouisfed.org.
+Alternatively, run steps 3-7 only if you already have a `macro_raw.parquet` checkpoint.
+
+---
+
+### P27. Pickle files are an arbitrary-code-execution risk
+
+**Affected files:** `outputs/models/current_regime.pkl`, `outputs/models/decision_tree.pkl`,
+`outputs/models/forward_classifiers.pkl`, `data/grok_quarter_classifications_*.pickle`,
+checkpoint model files in `data/checkpoints/`.
+
+**Risk:** Python's `pickle.load()` executes arbitrary code embedded in the file. If any of
+these files come from an untrusted source (shared drive, downloaded artifact), loading
+them is equivalent to running unknown code.
+
+**Current mitigation:** none — all pickles are assumed to be locally generated.
+Never load a pickle file whose provenance you cannot verify.
+
+**Planned fix:** migrate sklearn model serialization to `joblib.dump` / `joblib.load`
+(marginally more stable across Python versions, same security profile). For data
+exchange, prefer parquet or CSV. See ARCHITECTURE.md ADR #6.
