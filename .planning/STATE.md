@@ -49,3 +49,11 @@
 - Use `ROADMAP.md` as the source of truth for phase goals, dependencies, and success criteria.
 - Use `REQUIREMENTS.md` to keep requirement IDs and traceability aligned as implementation proceeds.
 - Phase 3 plan 01 is the next plan to execute (no SUMMARY exists for it yet).
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260317-3ng | refresh and expand ROADMAP.md, README.md, STATE.md, and agent docs to capture current structure, models, and next steps | 2026-03-17 | c3886e3 | [260317-3ng-refresh-and-expand-roadmap-md-readme-md-](./quick/260317-3ng-refresh-and-expand-roadmap-md-readme-md-/) |
+
+**Last activity:** 2026-03-17 - Completed quick task 260317-3ng: refresh and expand ROADMAP.md, README.md, STATE.md, and agent docs
