@@ -36,3 +36,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Claude Code / GSD — local dev tooling, not project source
+.claude/
+.planning/

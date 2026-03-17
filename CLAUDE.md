@@ -2,6 +2,8 @@
 
 This file is read automatically by Claude Code at the start of every session.
 It explains what this project is, how to work in it, and what conventions to follow.
+Architecture decisions, pitfalls, and development history are all in this file —
+no separate ARCHITECTURE.md, DECISIONS.md, or PITFALLS.md exists.
 
 ---
 
@@ -25,9 +27,6 @@ monolith that is ground truth for every formula, parameter choice, and pipeline 
 
 The modular pipeline in `src/` and `pipelines/` implements everything that script does,
 organized more cleanly, with checkpointing, CLI flags, and dedicated plotting notebooks.
-All algorithms are verified as matching (see "What the Legacy Code Does" section below).
-The two remaining gaps (empirical forward probabilities, confusion matrix plot) are also
-implemented from `legacy/unified_script.py` — see STATE.md Known Gaps.
 
 ---
 
@@ -35,11 +34,13 @@ implemented from `legacy/unified_script.py` — see STATE.md Known Gaps.
 
 ```
 trading-crab/
-├── CLAUDE.md                      ← you are here
+├── CLAUDE.md                      ← you are here (all dev docs in one place)
 ├── README.md                      ← project overview (user-facing)
-├── scratch/README.md              ← extended design notes
+├── ROADMAP.md                     ← prioritized feature backlog
+├── STATE.md                       ← current pipeline status and known gaps
 ├── .env.example                   ← copy to .env, fill in FRED_API_KEY
 ├── pyproject.toml                 ← pip-installable package (src layout)
+├── Makefile                       ← common dev shortcuts
 │
 ├── config/
 │   ├── settings.yaml              ← ALL tuneable parameters live here
@@ -49,11 +50,10 @@ trading-crab/
 │   ├── raw/                       ← macro_raw.parquet, asset_prices.parquet
 │   ├── processed/                 ← features.parquet (after step 02)
 │   ├── regimes/                   ← cluster_labels.parquet, profiles.parquet, …
-│   └── checkpoints/               ← timestamped pickle checkpoints (see CheckpointManager)
+│   └── checkpoints/               ← timestamped parquet checkpoints (see CheckpointManager)
 │
 ├── legacy/                        ← reference implementation; do not modify
-│   ├── unified_script.py          ← THE reference — all logic must be reachable here
-│   └── step{1-5}_*.ipynb          ← original Jupyter notebooks
+│   └── unified_script.py          ← THE reference — all logic must be reachable here
 │
 ├── notebooks/                     ← plotting/exploration notebooks (one per pipeline stage)
 │   ├── 01_ingestion.ipynb
@@ -109,7 +109,7 @@ trading-crab/
         │                             train_forward_classifiers, predict_current — used by run_pipeline.py
         └── classifier.py          ← BUNDLE API with FoldReport namedtuple — backwards-compat layer
                                       used only by tests asserting on per-fold CV metadata; do NOT
-                                      import this from pipeline code (see ARCHITECTURE.md ADR #12)
+                                      import this from pipeline code (see ADR #12 below)
 ```
 
 ---
@@ -271,8 +271,7 @@ The `prediction/` subpackage has two modules with deliberately different APIs:
   Used only by `tests/test_models_regime.py` and `tests/test_models_reporting.py` which assert on
   per-fold CV indices and aggregate classification-report metrics. **Do not use from pipeline code.**
 
-See ARCHITECTURE.md ADR #12 for the full rationale and the history of why GSD's bundle-API version
-of `pipelines/05_predict.py` was reviewed and explicitly not adopted.
+See ADR #12 below for the full rationale.
 
 ---
 
@@ -344,15 +343,14 @@ All tuneable parameters are in `config/settings.yaml`. Key sections:
 - **Saving to `.env` or committing API keys** — never. Use `.env.example` only.
 - **`prediction/__init__.py` flat API** — `run_pipeline.py`, `pipelines/05_predict.py`, and
   `pipelines/07_dashboard.py` all expect `current_regime.pkl` to be a bare `RandomForestClassifier`.
-  Do not change to the bundle-dict API without updating all three consumers. See ARCHITECTURE.md ADR #12.
+  Do not change to the bundle-dict API without updating all three consumers. See ADR #12 below.
 
 ---
 
 ## What the Legacy Code Does That Must Be Matched
 
 Cross-reference `legacy/unified_script.py` for ground truth on all algorithms.
-All items are verified as matching in `src/`; see STATE.md Known Gaps for the
-two remaining unimplemented features.
+All items are verified as matching in `src/`; see `STATE.md` for known gaps.
 
 ### Algorithms (all ✓ — fully matched in src/)
 
@@ -420,9 +418,7 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 ## Current Status (as of March 2026)
 
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
-files are produced.  See `ROADMAP.md` for prioritized feature backlog.
-See `ARCHITECTURE.md` for design decisions.  See `PITFALLS.md` for known gotchas.
-See `DECISIONS.md` for a log of smaller judgment calls made during development.
+files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
 **Summary:** all 7 pipeline steps run end-to-end on real data. **238 unit tests collected**
 (8 skipped: HDBSCAN optional). All 5 legacy alignment gaps closed. Clustering
@@ -439,8 +435,6 @@ Phase 3 supervised models (RF + DT + forward classifiers) implemented; 2/3 Phase
   macrotrends.net backfill would extend coverage to 1915+ for gold.
 - Clustering uses KMeans which treats each quarter independently; HMM would model
   temporal autocorrelation natively (Tier 2 roadmap item).
-
----
 
 ---
 
@@ -464,7 +458,7 @@ jupyter lab notebooks/
 
 # Quick sanity check (no network, loads a checkpoint)
 python -c "
-from market_regime.io.checkpoints import CheckpointManager
+from market_regime.checkpoints import CheckpointManager
 cm = CheckpointManager()
 print(cm.list())
 "
@@ -472,3 +466,456 @@ print(cm.list())
 # Print current dashboard (requires steps 01-06 to have run)
 python pipelines/07_dashboard.py
 ```
+
+---
+
+## Architecture Decision Records
+
+Documents the "why" behind key design decisions so future contributors
+don't accidentally break invariants that look arbitrary.
+
+### ADR #1. Two Feature Files: `features.parquet` and `features_supervised.parquet`
+
+Step 2 produces two separate parquet files from the same raw data.
+
+- **Centered smoothing** (`causal=False`) uses both past and future neighbors in each rolling
+  window. Superior for interpolating genuinely missing historical data and characterizing what
+  a regime "looks like" across its full span. Used for: clustering (step 3), regime profiling (step 4).
+- **Causal smoothing** (`causal=True`) uses only past data in every rolling window — exactly
+  what you could compute at the end of a quarter with only information available at that moment.
+  Used for: supervised learning (step 5), live scoring (steps 5-7).
+- **Critical invariant:** training a supervised model on centered features and then scoring
+  "today's" data is look-ahead bias — the model learned patterns that cannot be reproduced in real-time.
+
+**Column names are identical** in both files (intentional). The checkpoint manager uses
+`"features"` vs `"features_supervised"` keys to distinguish them.
+
+**Rejected alternative:** single file with a flag column — leads to accidental mixing of
+centered and causal features when steps share files.
+
+---
+
+### ADR #2. Five PCA Components (Fixed, Not Variance-Threshold)
+
+`n_pca_components: 5` in `settings.yaml`. Not "keep 90% variance".
+
+- The legacy script established 5 components as the working baseline after experimenting with
+  scree plots on the actual 69-column feature matrix.
+- Changing the number of PCA components changes the clustering geometry, which changes cluster
+  assignments, which invalidates any manually pinned regime names in `config/regime_labels.yaml`.
+- Variance-threshold PCA is non-deterministic across data updates (as more data arrives the
+  cumulative variance curve shifts). Fixed components are reproducible.
+
+**When to revisit:** if the feature set changes substantially, re-run the scree plot and
+benchmark silhouette scores for 3, 5, 7, 10 components. Document the new choice here.
+
+---
+
+### ADR #3. Balanced KMeans as the Primary Regime Assignment
+
+We use `balanced_cluster` (from `KMeansConstrained`) for all downstream steps, not `cluster`
+(from standard KMeans with best-k from silhouette).
+
+- Per-regime statistics require sufficient samples to be meaningful. Standard KMeans often
+  produces clusters of wildly different sizes (e.g., 70% in one cluster).
+- With only ~300 quarters, a cluster of 10 quarters has unreliable mean/std estimates.
+- `KMeansConstrained(size_min=bucket-2, size_max=bucket+2)` ensures each regime has ~60
+  quarters at k=5, giving reliable statistics for all downstream computations.
+
+**Tradeoff:** balanced clustering slightly distorts cluster geometry — some quarters near a
+boundary get assigned to a less-natural regime to meet the size constraint. Acceptable: the
+goal is interpretable regimes with robust statistics, not geometrically pure clusters.
+
+**Rejected alternative:** hierarchical clustering — doesn't produce equal-size clusters and
+has no clear stopping rule for k.
+
+---
+
+### ADR #4. Bernstein Polynomial Gap Fill in Log Space
+
+Gap fill happens AFTER log transform.
+
+- Raw series (e.g., S&P 500, GDP) are exponential-looking. Interpolating between 1000 and 2000
+  in linear space overshoots. In log space, the midpoint of [log(1000), log(2000)] = log(1414).
+- Bernstein polynomials require 4 boundary conditions per side (value, d1, d2, d3). All three
+  derivatives must also be computed in log space for consistency.
+- **Invariant:** the order is always: cross-ratios → log → select → gap-fill → derivatives → select.
+  Do not move gap fill before log transform.
+
+**Why Bernstein (not cubic spline)?** `BPoly.from_derivatives` exactly matches value + first 3
+derivatives at both endpoints — smooth and compatible with derivative features computed afterward.
+Cubic splines minimize curvature globally; Bernstein interpolates boundary conditions locally.
+For gap filling (usually 1-4 quarters), local is better.
+
+---
+
+### ADR #5. Taylor Extrapolation for Edge Gaps
+
+Use Taylor expansion (not Bernstein) for leading and trailing edge gaps.
+
+Bernstein requires boundary conditions on both sides. For edge gaps (missing data at the start
+or end of the time series), one side has no neighbors. Taylor extrapolation uses value + d1 + d2
++ d3 at the known edge to project outward: `f(x+h) ≈ f(x) + h·f'(x) + (h²/2)·f''(x) + ...`
+This is mathematically consistent with the interior Bernstein approach.
+
+---
+
+### ADR #6. CheckpointManager: Parquet for DataFrames, Pickle for Models
+
+**Parquet for DataFrames:** smaller files (columnar compression), typed (dtypes preserved),
+human-inspectable (duckdb/pandas/parquet-viewer), no Python version lock-in.
+
+**Pickle for sklearn models:** sklearn's serialization format is pickle; no parquet-serializable
+alternative exists for a fitted `RandomForestClassifier`. Risk: pickle files are Python-version-
+sensitive. Mitigation: use `joblib.dump` which is slightly more stable. (TODO: migrate from
+`pickle.dump` to `joblib.dump` in `pipelines/05_predict.py`)
+
+---
+
+### ADR #7. Publication-Lag Shifts for GDP and GNP
+
+`fred_gdp` and `fred_gnp` are shifted +1 quarter.
+
+The BEA releases the "advance estimate" of GDP approximately 30 days after quarter end; the
+"third estimate" (most revised) comes ~90 days later. At the end of Q1 you cannot know Q1 GDP.
+Not shifting introduces look-ahead bias. This is set in `config/settings.yaml` as `shift: true`
+per series. **Invariant:** all FRED series with significant revision history and a publication
+lag longer than one quarter should be shifted.
+
+---
+
+### ADR #8. Runtime Flags via `RunConfig` Dataclass
+
+All runtime behavior is controlled by a single `RunConfig` object passed through the pipeline,
+not by global variables or config file values.
+
+- Avoids action-at-a-distance bugs where a deeply nested module checks a global flag set elsewhere.
+- Makes the pipeline deterministic and testable: pass `RunConfig(generate_plots=False)` in tests
+  to skip all matplotlib code without monkeypatching globals.
+- The dataclass `from_args()` factory converts argparse `Namespace` to `RunConfig` in
+  `run_pipeline.py` — the only place argparse is used.
+
+---
+
+### ADR #9. Two-Clustering Architecture (Standard + Constrained)
+
+Always produce both `cluster` and `balanced_cluster`, even though only `balanced_cluster`
+is used downstream.
+
+- `cluster` (unconstrained, best-k from silhouette) serves as a geometric reference: if
+  `balanced_cluster` looks very different, the size constraint is distorting natural clusters.
+- Having both lets you visually compare in notebooks without re-running clustering.
+- The k-sweep silhouette scores that determine `best_k` are saved (`data/regimes/kmeans_scores.parquet`)
+  for elbow-curve visualization.
+
+---
+
+### ADR #10. Config-Driven Feature Lists
+
+`initial_features` and `clustering_features` lists live in `config/settings.yaml`, not
+hardcoded in Python. These were analytically determined by examining which series have coverage
+back to ~1950 and which derivatives are informative for clustering. Putting them in YAML lets
+you experiment without touching Python source code. **Invariant:** changing `clustering_features`
+changes clustering geometry and invalidates `regime_labels.yaml`. Delete the old checkpoint
+and re-run steps 3-7 before committing.
+
+---
+
+### ADR #11. All Visualization in `plotting.py` — Never Inline in Notebooks
+
+Notebooks call functions from `src/market_regime/plotting.py`; they do not define plotting logic
+inline. Reasons: reusability (same plot needed in notebook AND CLI `--plots` mode), testability
+(plotting functions can be tested by mocking matplotlib), consistency (same palette and naming),
+DRY (prevents three slightly-different versions of the same chart drifting apart). If you need
+a new plot, add it to `plotting.py` first, then call it from the notebook.
+
+---
+
+### ADR #12. `prediction/` Package: Two APIs, One Consumer Each
+
+`prediction/__init__.py` (flat API) and `prediction/classifier.py` (bundle API) coexist in the
+same package but serve different consumers and must not be conflated.
+
+**Context:** During a GSD-assisted development session (March 2026), an alternative
+`pipelines/05_predict.py` was generated using a "bundle" API returning a dict
+`{"models": {"rf": ..., "dt": ...}, "cv_reports": {...}}`. This made it easy to write tests
+asserting on per-fold CV metadata. However, adopting it as the production API would have required
+simultaneous changes to:
+- `run_pipeline.py` (`step5_predict`) — imports and uses the flat API
+- `pipelines/07_dashboard.py` — loads `current_regime.pkl` assuming a bare `RandomForestClassifier`
+
+**Decision:** keep the flat API in `prediction/__init__.py` as production. Create
+`prediction/classifier.py` as a backwards-compatible layer for tests that need to inspect
+per-fold `FoldReport` objects or aggregate classification-report dicts across folds.
+
+**Rules that must hold:**
+- `run_pipeline.py` and all `pipelines/*.py` scripts import from `market_regime.prediction` (flat API).
+- `tests/test_models_regime.py` and `tests/test_models_reporting.py` import from
+  `market_regime.prediction.classifier` (bundle API).
+- `outputs/models/current_regime.pkl` always contains a bare `RandomForestClassifier`.
+- Do not "simplify" by merging the two modules — the bundle dict cannot be pickled as
+  `current_regime.pkl` without breaking `07_dashboard.py`.
+- If you add a new classifier, add it to the flat API first. Only add bundle-API support in
+  `classifier.py` if a test specifically needs per-fold CV metadata for the new model type.
+
+---
+
+## Known Pitfalls and Gotchas
+
+A collection of traps, anti-patterns, and non-obvious failures discovered during development.
+Read before making changes.
+
+### Look-ahead Bias (the #1 Financial ML Sin)
+
+**P1. Using centered rolling windows for supervised learning**
+
+Symptom: model accuracy looks great but real-time predictions are wrong. Cause:
+`rolling(window=5, center=True)` uses 2 future quarters in every window — a model trained on
+centered features can only be scored on centered features, which requires knowing the future.
+Fix: always use `features_supervised.parquet` (causal=True) for steps 5-7. `features.parquet`
+(causal=False) is for clustering steps 3-4 only. Never swap them.
+
+**P2. Not applying publication-lag shifts to GDP/GNP**
+
+Symptom: model learns to use Q1 GDP to predict Q1 regime label. Fix: `shift: true` in
+`config/settings.yaml` for `fred_gdp` and `fred_gnp`. Any FRED series with significant revision
+history and a release lag longer than one quarter must be shifted. Check BEA release calendar.
+
+**P3. Using clustering labels as supervised training targets without alignment**
+
+Symptom: `X` and `y` have different lengths; `.dropna()` removes extra rows silently. Cause:
+clustering runs on `features.dropna()` which may drop leading rows. Fix — always use index intersection:
+```python
+common = features.index.intersection(labels.index)
+X = features.loc[common].drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
+y = labels.loc[common]
+```
+Never use `iloc[:len(labels)]` — this silently misaligns if any rows were dropped.
+
+---
+
+### Temporal Leakage in Cross-Validation
+
+**P4. Using `train_test_split` (shuffled) for time-series data**
+
+Symptom: CV accuracy is 95%; production accuracy is 60%. Fix: always use
+`TimeSeriesSplit(n_splits=5)`. `shuffle=False` is not enough — you need `TimeSeriesSplit`
+which ensures all training data precedes all test data in each fold.
+
+**P5. Forward-looking binary classifiers: label alignment**
+
+`y_future = y.shift(-h)` introduces NaN at the end. Current code does
+`y_future = y.shift(-h).dropna()` and then `X_aligned = X.loc[y_future.index]`. This is correct.
+Do not simplify to `X.iloc[:len(y_future)]`.
+
+---
+
+### SSL and Network Issues
+
+**P6. yfinance "self signed certificate in chain" error**
+
+`assets.py` sets `CURL_CA_BUNDLE` and `SSL_CERT_FILE` to `certifi.where()` at module load.
+Do not remove those lines.
+
+**P7. multpl.com rate limiting**
+
+Never reduce `RATE_LIMIT_SECONDS` below 2. The `--refresh` flag should only be used when
+genuinely needed. Use checkpoints for development iteration.
+
+---
+
+### Python Version and Dependency Issues
+
+**P8. `X | Y` union type syntax on Python < 3.10**
+
+Add `from __future__ import annotations` at the top of every module that uses `X | Y` syntax.
+All `src/market_regime/` files should have this.
+
+**P9. `contourpy` and other transitive deps failing on Python 3.10**
+
+`requirements.txt` uses `>=` minimum bounds (not exact pins) for direct dependencies only.
+Never regenerate with `pip-compile --generate-hashes`.
+
+**P10. `k-means-constrained` compilation on some platforms**
+
+Use the `--no-constrained` flag which falls back to standard KMeans. The `setup.sh` script
+prompts before attempting installation.
+
+---
+
+### Data and Config Pitfalls
+
+**P11. Changing `clustering_features` invalidates `regime_labels.yaml`**
+
+After any change: (1) delete `data/checkpoints/cluster_labels*` and
+`data/regimes/cluster_labels.parquet`, (2) re-run steps 3-4, (3) inspect new regime profiles
+and update `config/regime_labels.yaml`, (4) commit the new YAML.
+
+**P12. `end_date: "2025-09-30"` in settings.yaml is hardcoded**
+
+Pipeline silently ignores data after that date. Fix: change to `null` and handle in
+`ingestion/fred.py` and `ingestion/multpl.py` using `datetime.today()`.
+
+**P13. Checkpoint freshness check uses wall-clock time, not data time**
+
+`cm.is_fresh("macro_raw", max_age_days=7)` returns True even if FRED released new data
+yesterday. For production, always run with `--refresh` on Fridays. The weekly cron job
+(Tier 3 roadmap) should always pass `--refresh`.
+
+---
+
+### Clustering Pitfalls
+
+**P14. Silhouette score selects k=2 when data is bimodal**
+
+Real macro data often has two dominant modes (growth vs recession) that score highest at k=2.
+`k_cap: 5` in `settings.yaml` caps the accepted k at 5. `balanced_k: 5` forces 5 balanced
+clusters regardless of silhouette result.
+
+**P15. PCA re-scaling before KMeans**
+
+PCA components are not unit-variance. `StandardScaler` must be applied AFTER PCA and BEFORE
+KMeans. **Invariant:** `features → StandardScaler → PCA(5) → StandardScaler → KMeans`.
+
+---
+
+### Plotting Pitfalls
+
+**P16. `plt.show()` in headless environments**
+
+`run_cfg.show_plots = False` by default. Only set `True` via `--show-plots` locally.
+CI/CD pipelines should never pass `--show-plots`.
+
+**P17. Seaborn pairplot is very slow on large feature sets**
+
+Pairplot with 69 features generates 69×69 = 4761 subplots. Disabled by default
+(`generate_pairplot: False` in RunConfig). Enable only when specifically investigating
+feature relationships.
+
+---
+
+### Portfolio Construction Pitfalls
+
+**P18. `generate_recommendation()` parameter order differs from legacy**
+
+Always call with keyword arguments:
+```python
+generate_recommendation(target_weights=blended, current_weights=None)
+```
+Never rely on positional argument order for this function.
+
+**P19. `blended_regime_portfolio()` probabilities must sum to ~1.0**
+
+Only use `prediction["probabilities"]` (from the multi-class RF) as input to
+`blended_regime_portfolio()`. Forward classifier probabilities (binary, one per regime) are
+independent binary classifiers that do NOT sum to 1.0 — they are not valid blending inputs.
+
+---
+
+### Test Suite Pitfalls
+
+**P20. Running `pytest` no longer corrupts the `macro_raw` checkpoint** — FIXED
+
+`tests/test_pipelines_ingest_features.py` uses `monkeypatch.setattr(step, "DATA_DIR", tmp_path)`
+to redirect all file I/O to pytest's temporary directory. No production checkpoint files are
+touched during `pytest`.
+
+---
+
+### Behavior Model Pitfalls
+
+**P21. `make_behavior_labels` uses strict inequalities — exactly-at-threshold is "flat"**
+
+`r > up_threshold` and `r < down_threshold` (strict). With both thresholds at `0.0`:
+- `r > 0`: "up" | `r < 0`: "down" | `r == 0`: "flat"
+
+This is intentional. Do not change to `>=` / `<=` — the test suite verifies strict behavior.
+
+---
+
+### Tech Debt and Security Pitfalls
+
+**P22. SSL verification is disabled in `ingestion/assets.py`**
+
+Uses `curl_cffi.requests.Session(verify=False)` unconditionally — susceptible to MITM on price
+data. Planned fix: add a `RunConfig` / settings flag to control SSL verification, defaulting
+to secure.
+
+**P23. Partial ingestion silently produces plausible-looking outputs**
+
+Ingestion failures are caught and logged at WARNING level but the pipeline continues with
+whatever data was successfully fetched. Check `macro_raw.parquet` column count after ingestion;
+should be ~53 columns. Planned fix: add ingestion completeness report.
+
+**P24. `CheckpointManager.list()` silently ignores corrupt metadata files**
+
+Catches all JSON parse errors without logging which file failed. Fix: log at WARNING which file
+failed to parse before continuing.
+
+**P25. Committed data artifacts in `data/` can create stale-data bugs**
+
+`data/fred_api_datasets_snapshot_20260216.pickle`, `data/multpl_datasets_snapshot_20260216.pickle`,
+`data/grok_quarter_classifications_*.pickle` — if the pipeline accidentally loads these instead
+of freshly-fetched data, results are silently based on Feb 2026 snapshots. Planned fix: move to
+`data/archives/` with explicit documentation, or move small fixtures to `tests/fixtures/`.
+
+**P26. FRED ingestion hard-fails when `FRED_API_KEY` is missing**
+
+`fred.py`'s `fetch_all()` calls `fredapi.Fred(api_key=...)` which raises if the key is None.
+Fix: copy `.env.example` to `.env` and add your free key from fred.stlouisfed.org.
+
+**P27. Pickle files are an arbitrary-code-execution risk**
+
+`outputs/models/current_regime.pkl` and all other pickles execute arbitrary code on load.
+Never load a pickle file whose provenance you cannot verify. Planned fix: migrate sklearn model
+serialization to `joblib.dump` / `joblib.load`.
+
+---
+
+## Development Decisions Log
+
+A chronological log of judgment calls that don't rise to the level of a formal ADR but are
+important for future contributors to know about.
+
+### D1. GSD `pipelines_from_gsd_version/05_predict.py` — NOT adopted (2026-03-16)
+
+The GSD-generated `05_predict.py` (bundle API) was reviewed and rejected. The existing
+`pipelines/05_predict.py` (flat API) is canonical. Adopting the GSD version would have required
+simultaneous changes to `run_pipeline.py` and `pipelines/07_dashboard.py` with no immediate
+benefit. **What WAS adopted:** the monkeypatch fix in `pipelines/02_features.py` — changed direct
+import of `engineer_all` to a module-level reference so `monkeypatch.setattr` works in tests.
+
+### D2. `prediction/` converted from flat module to package (2026-03-16)
+
+`src/market_regime/prediction.py` was converted to a package so new test files could import from
+`market_regime.prediction.classifier`. Split: existing flat-API content moved intact to
+`__init__.py`; new `classifier.py` created with bundle API. See ADR #12.
+
+### D3. `make_behavior_labels` changed to strict inequalities (2026-03-16)
+
+Changed `r >= up_threshold` / `r <= down_threshold` to `r > up_threshold` / `r < down_threshold`.
+With both thresholds at `0.0`, a return of exactly `0.0` was incorrectly classified as "up".
+Impact: extremely rare on real price data; only affects synthetic test data.
+
+### D4. GSD `01_ingest.py` and `02_features.py` wrappers — NOT adopted (deferred) (2026-03-16)
+
+GSD wrappers adding `--refresh`, `--verbose`, `--market-code` CLI flags to standalone pipeline
+scripts were reviewed but not applied. `run_pipeline.py --steps 1,2` already provides the same
+functionality. Revisit if `step1_ingest()` and `step2_features()` are significantly changed.
+
+### D5. Pipeline smoke tests use `tmp_path` — checkpoint contamination eliminated (2026-03-16)
+
+`tests/test_pipelines_ingest_features.py` redirects all file I/O to pytest's `tmp_path` fixture
+using `monkeypatch.setattr(step, "DATA_DIR", tmp_path)`. No production checkpoint files are
+written during `pytest`. The `--recompute` workaround after test runs is no longer needed.
+
+### D6. `pipelines_from_gsd_version/` kept in repo (per owner decision) (2026-03-16)
+
+These scripts represent an alternative pipeline design explored via the GSD framework. The
+decisions about which changes to apply are documented in D1 and D4 above. Do not treat these
+as "more current" than `pipelines/`.
+
+### D7. `legacy/` kept in repo (per owner decision) (2026-03-16)
+
+`legacy/unified_script.py` is the algorithm ground truth. When implementing a remaining gap,
+refer to `unified_script.py`, not any modular legacy files, to avoid inconsistencies.
