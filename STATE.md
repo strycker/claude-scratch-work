@@ -39,7 +39,7 @@ tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeli
 tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
 tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 230 passed, 8 skipped (HDBSCAN optional) — ✅ all passing (Python 3.11)
+Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN optional)
 ```
 
 **Coverage gaps** (no tests for):
@@ -248,7 +248,7 @@ outputs/plots/               — PNG figures from --plots flag
 - Date: March 2026
 - Python: 3.11
 - All 7 steps ran successfully
-- **230 unit tests pass** (8 skipped: HDBSCAN not installed in CI)
+- **238 unit tests collected** (8 skipped: HDBSCAN not installed in CI)
 - Regime labels saved in `data/regimes/`; models in `outputs/models/`
 - All 5 legacy alignment gaps (TSCV, DT, portfolio, proxy returns, causal smoothing) closed
 - Clustering investigation suite fully implemented and tested (GMM, DBSCAN, Spectral, gap statistic, SVD, feature selection)

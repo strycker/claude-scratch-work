@@ -424,9 +424,10 @@ files are produced.  See `ROADMAP.md` for prioritized feature backlog.
 See `ARCHITECTURE.md` for design decisions.  See `PITFALLS.md` for known gotchas.
 See `DECISIONS.md` for a log of smaller judgment calls made during development.
 
-**Summary:** all 7 pipeline steps run end-to-end on real data. **230 unit tests pass**
+**Summary:** all 7 pipeline steps run end-to-end on real data. **238 unit tests collected**
 (8 skipped: HDBSCAN optional). All 5 legacy alignment gaps closed. Clustering
 investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully implemented.
+Phase 3 supervised models (RF + DT + forward classifiers) implemented; 2/3 Phase 3 plans complete.
 
 ### Known Limitations
 - `regime.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
