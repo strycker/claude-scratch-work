@@ -94,15 +94,14 @@ Compute derived yield-curve features in `transforms.py`:
 - `yield_spread_10y3m` = GS10 − TB3MS (already have both)
 - `yield_curve_slope` = (GS10 − TB3MS) / 10
 - These are among the strongest empirical recession predictors in the literature
-- **Files**: `src/market_regime/features/transforms.py`, `config/settings.yaml`
+- **Files**: `src/market_regime/transforms.py`, `config/settings.yaml`
 
 ### 1.4  Empirical forward probabilities  `S`
-Implement `compute_forward_probabilities()` from `legacy/regime_analysis.py`.
+Implement `compute_forward_probabilities()` from `legacy/unified_script.py`.
 Computes empirical P(reach regime j within N quarters | currently in regime i)
 as a diagnostic alongside model-based forward classifiers.
-- Already spec'd in `CLAUDE.md` as Low Priority gap 5
 - Output: `data/regimes/forward_probs_{N}q.parquet` for N in [1, 4, 8]
-- **Files**: `src/market_regime/regime/profiler.py`, `pipelines/04_regime_label.py`
+- **Files**: `src/market_regime/regime.py`, `pipelines/04_regime_label.py`
 
 ### 1.5  macrotrends.net historical price backfill  `M`
 Extends commodity and asset data before 1993 (ETF inception dates):
@@ -164,9 +163,9 @@ With a Finviz Elite subscription:
 - Produces soft probabilities rather than hard cluster assignments
 - Compare: does HMM agree with KMeans regimes? Does it produce cleaner transitions?
 - Risk: HMM requires EM fitting which is sensitive to initialization on small datasets
-- Implementation: add `fit_hmm()` to `src/market_regime/clustering/hmm.py` (new file)
+- Implementation: add `fit_hmm()` to `src/market_regime/hmm.py` (new module)
 - Use identical PCA features as input for fair comparison with KMeans
-- **Files**: `src/market_regime/clustering/hmm.py` (new), `pipelines/03_cluster.py`
+- **Files**: `src/market_regime/hmm.py` (new), `pipelines/03_cluster.py`
 
 ### 2.10  SMOTE / class-weight tuning for imbalanced regimes  `S`
 With 5 balanced clusters, sizes should be equal, but temporal distribution may still
@@ -191,7 +190,7 @@ Additional derived features for clustering and supervised models:
 - Cross-asset correlation (rolling 8Q window) between SP500 and 10Y yield
 - Inflation acceleration: 2nd derivative of CPI (d/dt of d/dt)
 - PMI-equivalent proxy from FRED INDPRO momentum
-- **Files**: `src/market_regime/features/transforms.py`, `config/settings.yaml`
+- **Files**: `src/market_regime/transforms.py`, `config/settings.yaml`
 
 ### 2.13  Markov regime-switching model (statsmodels)  `M`
 `statsmodels.tsa.regime_switching.markov_regression.MarkovRegression` fits a model
@@ -200,7 +199,7 @@ where parameters switch between discrete states via a Markov chain:
 - Useful as a 2-state sanity check: does our 5-regime KMeans align with the
   statsmodels recession/expansion signal?
 - Not a replacement for KMeans; more of a diagnostic and feature generator
-- **Files**: `src/market_regime/clustering/markov.py` (new)
+- **Files**: `src/market_regime/markov.py` (new)
 
 ### 2.14  Conference Board LEI proxy from FRED  `S`
 The Conference Board LEI is the gold standard for recession prediction but is not
@@ -208,7 +207,7 @@ freely available. Construct a proxy from FRED components:
 - `PERMIT` (building permits) + `AWHMAN` (avg weekly hours) + `AMDMNO` (new orders)
   + `ISM manufacturing` + `UMCSENT` + spread measures = 6-component LEI approximation
 - Validate against NBER recession dates (`USREC` on FRED — binary recession indicator)
-- **Files**: `src/market_regime/features/transforms.py`, `config/settings.yaml`
+- **Files**: `src/market_regime/transforms.py`, `config/settings.yaml`
 
 ---
 
@@ -312,9 +311,9 @@ Implementation approach (when ready):
 | StockCharts.com | custom scraper | Chart data + technical indicators | varies | ✗ | Tier 3 (3.6) |
 | hmmlearn | Python lib | HMM regime states | n/a | ✗ | Tier 2 (2.9) |
 | statsmodels | Python lib | Markov regime-switching | n/a | ✗ | Tier 2 (2.13) |
-| sklearn GMM | Python lib | Gaussian Mixture Models (soft clusters) | n/a | ✗ | Tier 2 (2.2) |
-| sklearn SpectralClustering | Python lib | Spectral / graph clustering | n/a | ✗ | Tier 2 (2.4) |
-| hdbscan | Python lib | Density-based clustering (HDBSCAN) | n/a | ✗ | Tier 2 (2.3) |
+| sklearn GMM | Python lib | Gaussian Mixture Models (soft clusters) | n/a | ✓ Investigation suite | Done |
+| sklearn SpectralClustering | Python lib | Spectral / graph clustering | n/a | ✓ Investigation suite | Done |
+| hdbscan | Python lib | Density-based clustering (HDBSCAN) | n/a | ✓ Investigation suite (optional) | Done |
 | Streamlit | Python lib | Interactive dashboard | n/a | ✗ | Tier 3 |
 | Claude API | `anthropic` | AI weekly narrative | n/a | ✗ | Tier 3 |
 | StockCharts | scrape | Historical OHLCV + technical indicators | varies | ✗ | Tier 3 (3.6) |

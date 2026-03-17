@@ -76,6 +76,34 @@ trading-crab/
 │
 ├── run_pipeline.py                ← master entry point with --steps / --refresh / --plots
 │
+├── requirements.txt               ← pinned runtime dependencies
+├── requirements-dev.txt           ← runtime + dev extras (pytest, jupyterlab)
+│
+├── scripts/
+│   ├── setup.sh                   ← automated environment setup
+│   └── jupyter_notebook_local.sh  ← local notebook launcher helper
+│
+├── tests/                         ← pytest test suite (238 tests)
+│   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
+│   ├── fixtures/                  ← test fixture data (currently empty)
+│   ├── integration/               ← integration tests (currently empty)
+│   ├── test_pipelines_ingest_features.py  ← pipeline steps 1-2 smoke tests
+│   ├── test_models_regime.py      ← regime classifier tests (bundle API)
+│   ├── test_models_behavior.py    ← behavior model tests
+│   ├── test_models_reporting.py   ← metrics aggregation tests
+│   ├── test_constraints_etf_universe.py   ← ETF universe validation
+│   ├── test_constraints_frequency.py      ← data frequency validation
+│   └── unit/                      ← unit tests for src/ modules
+│       ├── test_transforms.py
+│       ├── test_clustering.py
+│       ├── test_clustering_exploration.py
+│       ├── test_cluster_comparison.py
+│       ├── test_gmm.py
+│       ├── test_density.py
+│       ├── test_spectral.py
+│       ├── test_checkpoints.py
+│       └── test_returns.py
+│
 ├── outputs/                       ← gitignored; created at runtime
 │   ├── models/                    ← pickled sklearn models
 │   ├── plots/                     ← saved figures (PNG/PDF)
@@ -426,6 +454,8 @@ investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully implemente
 Phase 3 supervised models (RF + DT + forward classifiers) implemented; 2/3 Phase 3 plans complete.
 
 ### Known Limitations
+- `ingestion/fred.py` and `ingestion/multpl.py` are missing `from __future__ import annotations`
+  (no functional impact on Python 3.10+ but inconsistent with the project style guide).
 - `regime.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
   `fred_tb3ms`, `div_minus_baa`) because only their derivatives are in `clustering_features`.
   Graceful fallback is intentional.
@@ -435,6 +465,9 @@ Phase 3 supervised models (RF + DT + forward classifiers) implemented; 2/3 Phase
   macrotrends.net backfill would extend coverage to 1915+ for gold.
 - Clustering uses KMeans which treats each quarter independently; HMM would model
   temporal autocorrelation natively (Tier 2 roadmap item).
+- Standalone `pipelines/*.py` scripts do not use `RunConfig` or `CheckpointManager` —
+  they are simplified entry points without plot generation or checkpoint management.
+  Use `run_pipeline.py --steps N` for full-featured single-step execution.
 
 ---
 
@@ -909,11 +942,11 @@ functionality. Revisit if `step1_ingest()` and `step2_features()` are significan
 using `monkeypatch.setattr(step, "DATA_DIR", tmp_path)`. No production checkpoint files are
 written during `pytest`. The `--recompute` workaround after test runs is no longer needed.
 
-### D6. `pipelines_from_gsd_version/` kept in repo (per owner decision) (2026-03-16)
+### D6. `pipelines_from_gsd_version/` removed from repo (2026-03-16)
 
-These scripts represent an alternative pipeline design explored via the GSD framework. The
-decisions about which changes to apply are documented in D1 and D4 above. Do not treat these
-as "more current" than `pipelines/`.
+These scripts represented an alternative pipeline design explored via the GSD framework.
+They were deleted in commit `bc3bc1b` as they cluttered the repo. The decisions about which
+changes were adopted are documented in D1 and D4 above.
 
 ### D7. `legacy/` kept in repo (per owner decision) (2026-03-16)
 

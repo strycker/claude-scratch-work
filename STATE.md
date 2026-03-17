@@ -56,7 +56,7 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 ### Data Ingestion
 - ✅ multpl.com scraper: 46 quarterly series via lxml
 - ✅ FRED API: GDP, GNP, BAA, AAA, CPI, GS10, TB3MS (7 series)
-- ✅ yfinance: SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG (8 ETFs)
+- ✅ yfinance: SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG, HYG, XLK, XLP, XLE, GDX, TIP, BIL, EDV (16 ETFs)
 - ✅ Grok baseline labels: `data/grok_quarter_classifications_20260216.pickle`
 - ✅ SSL fix for curl_cffi (macOS/proxy environments)
 - ✅ Publication-lag shift for GDP (+1Q) and GNP (+1Q)
@@ -146,14 +146,14 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 | XGBoost/LightGBM classifiers | `classifier.py` | S |
 | Additional FRED series (VIX, unemployment, M2, yield spreads, housing) | `settings.yaml` + FRED ingestion | S |
 | Yield curve derived features (10Y-2Y, 10Y-3M spreads) | `transforms.py` | S |
-| Empirical forward probabilities | `profiler.py` | S |
+| Empirical forward probabilities | `regime.py` | S |
 | macrotrends.net scraper (gold, oil pre-1993) | `ingestion/macrotrends.py` (new) | M |
 | Confusion matrix plot | `plotting.py` | S |
 
 ### Priority 2
 | Gap | Where | Effort |
 |-----|-------|--------|
-| Hidden Markov Model regime detection | `clustering/hmm.py` (new) | M |
+| Hidden Markov Model regime detection | `hmm.py` (new module) | M |
 | SMOTE for class imbalance in XGB training | `classifier.py` | S |
 | Per-asset regime probability models | `prediction/asset_classifier.py` (new) | L |
 | Momentum + cross-asset ratio features | `transforms.py` | M |
@@ -186,6 +186,7 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 | Oil (ETF USO) | yfinance | 2006 | Quarterly |
 | Bonds (ETF TLT) | yfinance | 2002 | Quarterly |
 | SPY / QQQ / IWM / VNQ / AGG | yfinance | 1993-2003 | Quarterly |
+| HYG / XLK / XLP / XLE / GDX / TIP / BIL / EDV | yfinance | 2003-2007 | Quarterly |
 | Gold (spot price proxy) | macrotrends.net | **Not yet** | Monthly |
 | WTI Crude (spot) | macrotrends.net | **Not yet** | Monthly |
 | VIX | FRED | **Not yet** | Daily |
@@ -255,4 +256,4 @@ outputs/plots/               — PNG figures from --plots flag
 - All critical bugs fixed: GMM scaler consistency, gap_std vs gap_sk separation, spectral affinity caching, cluster comparison index alignment
 - `prediction/` converted from flat module to package; `classifier.py` provides backwards-compat bundle API for test assertions on fold-level CV metadata
 
-**Note:** the test suite no longer contaminates production checkpoints. Pipeline smoke tests use `monkeypatch.setattr(step, "DATA_DIR", tmp_path)` to isolate all file I/O. See DECISIONS.md D5.
+**Note:** the test suite no longer contaminates production checkpoints. Pipeline smoke tests use `monkeypatch.setattr(step, "DATA_DIR", tmp_path)` to isolate all file I/O. See CLAUDE.md D5.
