@@ -5,7 +5,7 @@
 
 data:
   start_date: "1950-01-01"
-  end_date:   "2025-09-30"    # set to null to use today
+  end_date:   null            # null → use today's date at runtime
   frequency:  "Q"             # quarterly resampling target
 
   # Remove the most-recent quarter from consideration for prediction/training
@@ -42,6 +42,29 @@ fred:
       shift: false
     TB3MS:
       name:  "fred_tb3ms"
+      shift: false
+
+    # Additional macro series (no publication-lag shift)
+    VIXCLS:
+      name:  "fred_vix"
+      shift: false
+    UNRATE:
+      name:  "fred_unrate"
+      shift: false
+    M2SL:
+      name:  "fred_m2sl"
+      shift: false
+    M2NS:
+      name:  "fred_m2ns"
+      shift: false
+    GS2:
+      name:  "fred_gs2"
+      shift: false
+    T10Y2Y:
+      name:  "fred_t10y2y"
+      shift: false
+    T10Y3M:
+      name:  "fred_t10y3m"
       shift: false
 
 # ── multpl.com series ─────────────────────────────────────────────────────────

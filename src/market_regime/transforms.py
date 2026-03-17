@@ -46,6 +46,25 @@ def add_cross_ratios(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_yield_curve_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add explicit yield-curve spread features when the underlying columns exist.
+
+    These are derived from rate series (fred_gs10, fred_gs2, fred_tb3ms) and
+    are created before log transforms / derivatives so they can participate in
+    the rest of the feature pipeline when included in config feature lists.
+    """
+    df = df.copy()
+    cols = set(df.columns)
+    if {"fred_gs10", "fred_gs2"} <= cols:
+        df["yc_10y_2y"] = df["fred_gs10"] - df["fred_gs2"]
+    if {"fred_gs10", "fred_tb3ms"} <= cols:
+        df["yc_10y_3m"] = df["fred_gs10"] - df["fred_tb3ms"]
+    if {"fred_gs2", "fred_tb3ms"} <= cols:
+        df["yc_2y_3m"] = df["fred_gs2"] - df["fred_tb3ms"]
+    return df
+
+
 # ── 2. Log transforms ──────────────────────────────────────────────────────
 
 def apply_log_transforms(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
@@ -249,6 +268,7 @@ def engineer_all(df: pd.DataFrame, cfg: dict, causal: bool = False) -> pd.DataFr
 
     log.info("Step 1/6 — cross-asset ratios")
     df = add_cross_ratios(df)
+    df = add_yield_curve_features(df)
 
     log.info("Step 2/6 — log transforms (%d columns)", len(feat_cfg["log_columns"]))
     df = apply_log_transforms(df, feat_cfg["log_columns"])
