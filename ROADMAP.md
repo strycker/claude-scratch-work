@@ -5,6 +5,33 @@ Updated: March 2026.
 
 ---
 
+## Phase Progress
+
+| Phase | Name                                          | Plans Complete | Status      | Completed  |
+|-------|-----------------------------------------------|----------------|-------------|------------|
+| 1     | Data and Constraints Foundations              | 3/3            | Complete    | -          |
+| 2     | Regime Clustering and Interpretation          | 2/2            | Complete    | 2026-03-16 |
+| 3     | Supervised Regime and Behavior Models         | 2/3            | In Progress | -          |
+| 4     | Regime-Conditional ETF and Portfolio Behavior | 0/0            | Not started | -          |
+| 5     | Recommendations and Machine-Readable Outputs  | 0/0            | Not started | -          |
+| 6     | Weekly Report Pipeline                        | 0/0            | Not started | -          |
+
+### Phase 1 Plans (3 plans — all complete)
+- [x] `01-null-01-PLAN.md` — Data ingestion foundations and checkpoint system
+- [x] `01-null-02-PLAN.md` — Feature engineering pipeline (transforms, gap fill, derivatives)
+- [x] `01-null-03-PLAN.md` — Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic)
+
+### Phase 2 Plans (2 plans — all complete)
+- [x] `02-regime-clustering-interpretation-01-PLAN.md` — Regime profiling and transition matrix
+- [x] `02-regime-clustering-interpretation-02-PLAN.md` — Regime naming heuristics and label overrides
+
+### Phase 3 Plans (3 plans — 2/3 complete)
+- [ ] `03-supervised-regime-behavior-models-01-PLAN.md` — **next to execute** (no SUMMARY yet)
+- [x] `03-supervised-regime-behavior-models-02-PLAN.md` — Supervised current-regime classifier (RF + DT)
+- [x] `03-supervised-regime-behavior-models-03-PLAN.md` — Forward binary classifiers and behavior models
+
+---
+
 ## How to Read This
 
 Each item has an effort estimate (S/M/L/XL) and a dependency note.
@@ -120,55 +147,6 @@ confusion matrix; this is not exposed in `src/` plotting or logs.
 ---
 
 ## Tier 2 — High Value, More Effort
-
-### 2.1  Optimal k investigation — beyond silhouette  `S`  ✓ **DONE**
-Multi-metric k-selection panel implemented in `notebooks/03_clustering.ipynb`:
-- Gap statistic (Tibshirani 2001): `compute_gap_statistic()` in `clustering.py`
-- BIC via GMM: `fit_gmm()` + `select_gmm_k()` in `gmm.py`
-- Elbow detection: `find_knee_k()` with `kneed` or gradient fallback
-- Davies-Bouldin + Calinski-Harabasz + silhouette all compared side-by-side
-
-### 2.2  Gaussian Mixture Models (GMM) as KMeans alternative  `M`  ✓ **DONE**
-Implemented in `src/market_regime/gmm.py`:
-- `fit_gmm()`: sweeps (k, covariance_type) pairs, returns bic_df + models + fitted scaler
-- `select_gmm_k()`: picks minimum-BIC model; raises on all-NaN BIC
-- `gmm_labels()`: hard labels with PC1 canonicalization; scaler param for consistency
-- `gmm_probabilities()`: soft probability matrix (rows sum to 1)
-- Convergence detection: warns when EM fails to converge within max_iter
-- 27 unit tests in `tests/unit/test_gmm.py`
-
-### 2.3  DBSCAN / HDBSCAN density-based clustering  `M`  ✓ **DONE**
-Implemented in `src/market_regime/density.py`:
-- `knn_distances()`: k-NN distance plot for eps selection
-- `fit_dbscan_sweep()`: eps sweep with noise/cluster summary
-- `fit_dbscan()`: single fit with noise handling; warns on 0 or 1 cluster
-- `fit_hdbscan_sweep()` + `hdbscan_labels()`: optional (`pip install hdbscan`)
-- All functions warn explicitly on all-noise or single-cluster results
-- 27 unit tests in `tests/unit/test_density.py` (8 skipped when hdbscan absent)
-
-### 2.4  Spectral Clustering  `M`  ✓ **DONE**
-Implemented in `src/market_regime/spectral.py`:
-- `fit_spectral_sweep()`: pre-computes affinity matrix once then reuses across all k (~k-fold speedup)
-- `spectral_labels()`: single fit with PC1 canonicalization
-- 16 unit tests in `tests/unit/test_spectral.py`
-
-### 2.5  SVD as complement / alternative to PCA  `S`  ✓ **DONE**
-Implemented as `compare_svd_pca()` in `clustering.py`:
-- Returns `(pca_df, svd_df, loadings_df)` — side-by-side absolute component loadings
-- Docstring corrected: on StandardScaler-centred data SVD ≈ PCA (same zero-mean matrix)
-- Verified by test: PC1 / SV1 correlation > 0.95 on synthetic data
-
-### 2.6  Feature selection for clustering using RF importances  `M`  ✓ **DONE**
-Implemented in `src/market_regime/cluster_comparison.py`:
-- `extract_rf_feature_importances()`: loads pickled RF, validates feature_names length
-- `recommend_clustering_features()`: ranks clustering_features by RF importance, warns on truncation
-
-### 2.7  Multi-clustering model selection strategy  `S`  ✓ **DONE**
-Implemented in `src/market_regime/cluster_comparison.py` + notebook 03:
-- `compare_all_methods()`: silhouette/DB/CH for all methods; guards empty inputs and noise-only results
-- `pairwise_rand_index()`: N×N ARI matrix; raises if < 2 methods
-- 36 unit tests in `tests/unit/test_cluster_comparison.py`
-- 40 unit tests for exploration functions in `tests/unit/test_clustering_exploration.py`
 
 ### 2.8  Finviz Elite integration for sector/stock signals  `M`
 With a Finviz Elite subscription:

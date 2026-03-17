@@ -352,4 +352,5 @@ Short summary:
 - ✓ **Clustering investigation suite** — gap statistic, GMM, DBSCAN/HDBSCAN, Spectral,
   SVD vs PCA, PCA component sweep, multi-method comparison + ARI heatmap, RF feature selection
 - ✓ **yfinance fallback chain** — stooq → OpenBB → macro proxy
-- ✓ **213 unit tests** covering all core modules and new clustering investigation suite
+- ✓ **238 unit tests** covering all core modules and new clustering investigation suite
+- ✓ **Phase 3 in progress** — supervised current-regime classifier (RF + DT), forward binary classifiers, and causal feature pipeline complete (2/3 plans done)
