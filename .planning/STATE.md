@@ -8,26 +8,26 @@
 
 ## Current Position
 
-- **Current phase**: Phase 1 — Data & Constraints Foundations
-- **Current plan**: Not yet planned (ready for `/gsd:plan-phase 1`)
-- **Overall status**: Roadmap created; implementation not started.
+- **Current phase**: Phase 3 — Supervised Regime & Behavior Models
+- **Current plan**: 03-01 (awaiting execution — no SUMMARY exists)
+- **Overall status**: Phases 1-2 complete; Phase 3 in progress (2/3 plans done).
 
 ### Phase Progress
 
 | Phase | Name                                      | Plans Complete | Status       | Notes                         |
 |-------|-------------------------------------------|----------------|--------------|-------------------------------|
-| 1     | Data & Constraints Foundations            | 0/0            | Not started  | First planning target         |
-| 2     | Regime Clustering & Interpretation        | 0/0            | Not started  | Depends on Phase 1            |
-| 3     | Supervised Regime & Behavior Models       | 0/0            | Not started  | Depends on Phases 1–2         |
+| 1     | Data & Constraints Foundations            | 3/3            | Complete     | All 3 plans have SUMMARYs     |
+| 2     | Regime Clustering & Interpretation        | 2/2            | Complete     | Marked complete 2026-03-16    |
+| 3     | Supervised Regime & Behavior Models       | 2/3            | In Progress  | Plans 02+03 done; 01 pending  |
 | 4     | Regime-Conditional ETF & Portfolio Behavior | 0/0          | Not started  | Depends on Phases 1–3         |
 | 5     | Recommendations & Machine-Readable Outputs | 0/0          | Not started  | Depends on Phases 1–4         |
 | 6     | Weekly Report Pipeline                    | 0/0            | Not started  | Depends on Phases 1–5         |
 
 ## Performance & Health
 
-- **Pipeline health**: Unknown (v1 implementation not yet executed end-to-end).
-- **Data freshness**: Unknown (to be tracked once ingestion/checkpoints are live).
-- **Model performance**: Not yet measured (pending Phases 2–3).
+- **Pipeline health**: All 7 steps run end-to-end. 238 tests collected.
+- **Data freshness**: Checkpoints in `data/checkpoints/`; re-scrape with `--refresh`.
+- **Model performance**: RF + DT trained with TSCV; forward classifiers operational.
 
 ## Accumulated Context
 
@@ -36,6 +36,8 @@
 - Focus on ETF-level portfolios only; no single stocks or direct crypto in v1.
 - Allow bitcoin exposure only via ETF wrappers.
 - Weekly report cadence; regime focus is quarterly.
+- `prediction/__init__.py` flat API is the pipeline interface; `prediction/classifier.py` bundle API is test-only (ADR #12).
+- Balanced clustering (`balanced_cluster`) is the default for downstream regime labeling.
 
 ### Open Questions / Risks
 
@@ -46,4 +48,4 @@
 
 - Use `ROADMAP.md` as the source of truth for phase goals, dependencies, and success criteria.
 - Use `REQUIREMENTS.md` to keep requirement IDs and traceability aligned as implementation proceeds.
-
+- Phase 3 plan 01 is the next plan to execute (no SUMMARY exists for it yet).
