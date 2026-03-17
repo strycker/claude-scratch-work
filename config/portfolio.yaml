@@ -1,0 +1,10 @@
+# Current portfolio weights (fractions; will be normalized to sum to 1).
+# Edit tickers and weights to match your actual holdings.
+# Used by pipeline step 7 for BUY/SELL/HOLD vs target regime allocation.
+
+SPY:  0.35
+IEF:  0.25
+QQQ:  0.15
+TLT:  0.10
+GLD:  0.10
+BIL:  0.05

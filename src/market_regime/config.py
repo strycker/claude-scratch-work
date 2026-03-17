@@ -34,6 +34,38 @@ def load(settings_path: Path | None = None) -> dict:
     return cfg
 
 
+def load_portfolio(portfolio_path: Path | None = None) -> dict[str, float]:
+    """
+    Load current portfolio weights from YAML (ticker -> weight fraction).
+    Weights are normalized to sum to 1. Missing or empty file returns {}.
+    """
+    path = portfolio_path or CONFIG_DIR / "portfolio.yaml"
+    if not path.exists():
+        log.debug("No portfolio file at %s", path)
+        return {}
+    with open(path) as f:
+        raw = yaml.safe_load(f)
+    if not raw or not isinstance(raw, dict):
+        return {}
+    # Accept numeric values only; normalize to sum = 1
+    weights: dict[str, float] = {}
+    for k, v in raw.items():
+        if str(k).startswith("#"):
+            continue
+        try:
+            w = float(v)
+            if w > 0:
+                weights[str(k).strip()] = w
+        except (TypeError, ValueError):
+            continue
+    if not weights:
+        return {}
+    total = sum(weights.values())
+    if total <= 0:
+        return {}
+    return {t: w / total for t, w in weights.items()}
+
+
 def setup_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
