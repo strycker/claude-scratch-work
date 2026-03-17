@@ -37,12 +37,6 @@ Thumbs.db
 .idea/
 *.swp
 
-# GSD framework internals — these belong in local Claude setup, not the repo
-.claude/get-shit-done/
-.claude/agents/
-.claude/commands/
-.claude/gsd-file-manifest.json
-.claude/package.json
-
-# GSD planning artifacts — local AI working files, not project source
+# Claude Code / GSD — local dev tooling, not project source
+.claude/
 .planning/
