@@ -230,7 +230,7 @@ downstream steps as an overlay/reference column.
 To list all available `market_code` checkpoints:
 ```bash
 python -c "
-from market_regime.io.checkpoints import CheckpointManager
+from market_regime.checkpoints import CheckpointManager
 cm = CheckpointManager()
 mc = [e for e in cm.list() if e['name'].startswith('market_code_')]
 for e in mc:
@@ -296,10 +296,8 @@ pip-compile pyproject.toml --extra dev --upgrade --output-file requirements-dev.
 
 | File | Contents |
 |------|----------|
-| `CLAUDE.md` | Code conventions, design rules, session instructions for AI |
+| `CLAUDE.md` | Code conventions, design rules, ADRs, pitfalls, session instructions for AI |
 | `ROADMAP.md` | Prioritized feature backlog with effort estimates |
-| `ARCHITECTURE.md` | Why key design decisions were made (ADR format) |
-| `PITFALLS.md` | Known gotchas, anti-patterns, and things not to break |
 | `STATE.md` | Current implementation status and test coverage |
 
 ---
