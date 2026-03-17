@@ -23,25 +23,30 @@ Updated: March 2026.
 ## Unit Tests
 
 ```
-tests/unit/test_checkpoints.py           18 tests — ✅ all passing
-tests/unit/test_clustering.py            15 tests — ✅ all passing
-tests/unit/test_clustering_exploration.py 40 tests — ✅ all passing
-tests/unit/test_cluster_comparison.py    36 tests — ✅ all passing
-tests/unit/test_density.py               27 tests — ✅ all passing (8 skipped: HDBSCAN)
-tests/unit/test_gmm.py                   27 tests — ✅ all passing
-tests/unit/test_returns.py               14 tests — ✅ all passing
-tests/unit/test_spectral.py              16 tests — ✅ all passing
-tests/unit/test_transforms.py            21 tests — ✅ all passing
+tests/unit/test_checkpoints.py              18 tests — ✅ all passing
+tests/unit/test_clustering.py               15 tests — ✅ all passing
+tests/unit/test_clustering_exploration.py   40 tests — ✅ all passing
+tests/unit/test_cluster_comparison.py       36 tests — ✅ all passing
+tests/unit/test_density.py                  27 tests — ✅ all passing (8 skipped: HDBSCAN)
+tests/unit/test_gmm.py                      27 tests — ✅ all passing
+tests/unit/test_returns.py                  14 tests — ✅ all passing
+tests/unit/test_spectral.py                 16 tests — ✅ all passing
+tests/unit/test_transforms.py               21 tests — ✅ all passing
+tests/test_models_regime.py                  3 tests — ✅ all passing (classifier bundle API + TSCV ordering)
+tests/test_models_reporting.py               3 tests — ✅ all passing (model_metrics_summary, 3 input shapes)
+tests/test_models_behavior.py                3 tests — ✅ all passing (make_behavior_labels, train_forward_behavior_models)
+tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeline step 01 + 02 smoke tests)
+tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
+tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 213 passed, 8 skipped (HDBSCAN optional) — ✅ all passing (Python 3.11)
+Total: 230 passed, 8 skipped (HDBSCAN optional) — ✅ all passing (Python 3.11)
 ```
 
 **Coverage gaps** (no tests for):
-- `src/market_regime/prediction/classifier.py` — classifier training + TSCV
-- `src/market_regime/reporting/portfolio.py` — portfolio construction
-- `src/market_regime/reporting/dashboard.py` — dashboard signals
-- `src/market_regime/ingestion/` — all ingestion (mocked network access needed)
-- `src/market_regime/regime/profiler.py` — regime naming heuristics
+- `src/market_regime/prediction/__init__.py` — flat API (`train_current_regime(X,y,cfg)`, `train_decision_tree`, `predict_current`)
+- `src/market_regime/reporting.py` — portfolio construction, dashboard signals
+- `src/market_regime/ingestion/` — all ingestion modules (mocked network access needed)
+- `src/market_regime/regime.py` — regime naming heuristics, transition matrix
 - `src/market_regime/plotting.py` — plotting functions
 
 ---
@@ -243,9 +248,11 @@ outputs/plots/               — PNG figures from --plots flag
 - Date: March 2026
 - Python: 3.11
 - All 7 steps ran successfully
-- **213 unit tests pass** (8 skipped: HDBSCAN not installed in CI)
+- **230 unit tests pass** (8 skipped: HDBSCAN not installed in CI)
 - Regime labels saved in `data/regimes/`; models in `outputs/models/`
-- All 4 legacy alignment gaps (TSCV, DT, portfolio, proxy returns) closed
-- Causal vs centered smoothing split implemented
+- All 5 legacy alignment gaps (TSCV, DT, portfolio, proxy returns, causal smoothing) closed
 - Clustering investigation suite fully implemented and tested (GMM, DBSCAN, Spectral, gap statistic, SVD, feature selection)
 - All critical bugs fixed: GMM scaler consistency, gap_std vs gap_sk separation, spectral affinity caching, cluster comparison index alignment
+- `prediction/` converted from flat module to package; `classifier.py` provides backwards-compat bundle API for test assertions on fold-level CV metadata
+
+**Note:** the test suite no longer contaminates production checkpoints. Pipeline smoke tests use `monkeypatch.setattr(step, "DATA_DIR", tmp_path)` to isolate all file I/O. See DECISIONS.md D5.

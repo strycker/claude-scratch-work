@@ -19,19 +19,15 @@ each regime to produce portfolio recommendations.
 **End goal:** a weekly automated report that says "current regime is X, these assets
 are green, hold / buy / sell."
 
-The reference implementation lives in `legacy/`.  Two layers of reference exist:
+The algorithm reference lives in `legacy/unified_script.py` — the original 1249-line
+monolith that is ground truth for every formula, parameter choice, and pipeline order.
+**Do not modify any file in `legacy/`.**
 
-- `legacy/unified_script.py` — the original 1249-line monolith; ground truth for
-  every algorithm, formula, and parameter choice.
-- `legacy/*.py` modular scripts — a refactored version of the monolith organized
-  into: `config.py`, `data_ingestion.py`, `feature_engineering.py`, `clustering.py`,
-  `regime_analysis.py`, `supervised.py`, `asset_returns.py`, `portfolio.py`,
-  `plotting.py`, `pipeline.py`.  These are used as the design reference for the
-  `src/market_regime/` package.  **Do not modify legacy files.**
-
-The modular pipeline in `src/` and `pipelines/` should do everything
-that script does, organized more cleanly, with checkpointing, CLI flags, and
-dedicated plotting notebooks.
+The modular pipeline in `src/` and `pipelines/` implements everything that script does,
+organized more cleanly, with checkpointing, CLI flags, and dedicated plotting notebooks.
+All algorithms are verified as matching (see "What the Legacy Code Does" section below).
+The two remaining gaps (empirical forward probabilities, confusion matrix plot) are also
+implemented from `legacy/unified_script.py` — see STATE.md Known Gaps.
 
 ---
 
@@ -62,10 +58,12 @@ trading-crab/
 ├── notebooks/                     ← plotting/exploration notebooks (one per pipeline stage)
 │   ├── 01_ingestion.ipynb
 │   ├── 02_features.ipynb
-│   ├── 03_clustering.ipynb
+│   ├── 03_clustering.ipynb        ← expanded: 28 investigation cells (GMM, DBSCAN, Spectral, gap stat)
 │   ├── 04_regimes.ipynb
 │   ├── 05_prediction.ipynb
-│   └── 06_assets.ipynb
+│   ├── 06_assets.ipynb
+│   ├── 07_pairplot.ipynb          ← triple-colored pairplots (unsupervised / grok / RF)
+│   └── 08_raw_series.ipynb        ← raw series inspection
 │
 ├── pipelines/                     ← runnable pipeline steps
 │   ├── 01_ingest.py
@@ -87,14 +85,8 @@ trading-crab/
     ├── __init__.py                ← defines ROOT, CONFIG_DIR, DATA_DIR, OUTPUT_DIR
     ├── config.py                  ← load(), setup_logging()
     ├── runtime.py                 ← RunConfig dataclass (verbose, plots, refresh flags)
-    ├── io/
-    │   └── checkpoints.py         ← CheckpointManager (save/load/is_fresh/clear)
-    ├── ingestion/
-    │   ├── multpl.py              ← lxml scraper for 46 multpl.com series
-    │   ├── fred.py                ← FRED API fetcher with publication-lag shift
-    │   └── assets.py              ← yfinance ETF price fetcher
-    ├── features/
-    │   └── transforms.py          ← ratios, log, select, gap-fill, derivatives, engineer_all
+    ├── checkpoints.py             ← CheckpointManager (save/load/is_fresh/clear)
+    ├── transforms.py              ← ratios, log, select, gap-fill, derivatives, engineer_all
     ├── clustering.py              ← reduce_pca, evaluate_kmeans, pick_best_k, fit_clusters
     │                                 + optimize_n_components, compare_svd_pca,
     │                                 + compute_gap_statistic, find_knee_k
@@ -103,15 +95,21 @@ trading-crab/
     ├── spectral.py                ← fit_spectral_sweep (affinity cached), spectral_labels
     ├── cluster_comparison.py      ← compare_all_methods, pairwise_rand_index,
     │                                 extract_rf_feature_importances, recommend_clustering_features
-    ├── regime/
-    │   └── profiler.py            ← build_profiles, suggest_names, build_transition_matrix
-    ├── prediction/
-    │   └── classifier.py          ← train_current_regime, train_forward_classifiers
-    ├── assets/
-    │   └── returns.py             ← compute_quarterly_returns, returns_by_regime, rank_assets_by_regime
-    ├── reporting/
-    │   └── dashboard.py           ← asset_signals, print_dashboard, save_dashboard_csv
-    └── plotting.py                ← ALL visualization helpers (used by notebooks + pipelines)
+    ├── regime.py                  ← build_profiles, suggest_names, build_transition_matrix
+    ├── asset_returns.py           ← compute_quarterly_returns, returns_by_regime, rank_assets_by_regime
+    ├── reporting.py               ← asset_signals, print_dashboard, save_dashboard_csv, portfolio helpers
+    ├── plotting.py                ← ALL visualization helpers (used by notebooks + pipelines)
+    ├── ingestion/
+    │   ├── multpl.py              ← lxml scraper for 46 multpl.com series
+    │   ├── fred.py                ← FRED API fetcher with publication-lag shift
+    │   ├── assets.py              ← yfinance ETF price fetcher (16 ETFs, 3-phase fallback)
+    │   └── grok.py               ← load external LLM-assisted quarter classifications
+    └── prediction/
+        ├── __init__.py            ← FLAT API: train_current_regime(X,y,cfg), train_decision_tree,
+        │                             train_forward_classifiers, predict_current — used by run_pipeline.py
+        └── classifier.py          ← BUNDLE API with FoldReport namedtuple — backwards-compat layer
+                                      used only by tests asserting on per-fold CV metadata; do NOT
+                                      import this from pipeline code (see ARCHITECTURE.md ADR #12)
 ```
 
 ---
@@ -259,6 +257,23 @@ CUSTOM_COLORS = ["#0000d0", "#d00000", "#f48c06", "#8338ec", "#50a000"]
 ```
 Use `plotting.REGIME_CMAP` everywhere for consistency.
 
+### `prediction/` package — two APIs, two consumers
+
+The `prediction/` subpackage has two modules with deliberately different APIs:
+
+- **`prediction/__init__.py` — flat API** (production): `train_current_regime(X, y, cfg)` returns a
+  single fitted `RandomForestClassifier`; `train_decision_tree()` returns a `DecisionTreeClassifier`;
+  `predict_current()` returns `{"regime": int, "probabilities": {...}}`. Used by `run_pipeline.py`
+  and `pipelines/05_predict.py`. The `outputs/models/current_regime.pkl` file contains a plain RF.
+
+- **`prediction/classifier.py` — bundle API** (backwards-compat): `train_current_regime(X, y, cv_splits=N)`
+  returns `{"models": {"rf": ..., "dt": ...}, "cv_reports": {"rf": [FoldReport, ...], ...}, "labels": [...]}`.
+  Used only by `tests/test_models_regime.py` and `tests/test_models_reporting.py` which assert on
+  per-fold CV indices and aggregate classification-report metrics. **Do not use from pipeline code.**
+
+See ARCHITECTURE.md ADR #12 for the full rationale and the history of why GSD's bundle-API version
+of `pipelines/05_predict.py` was reviewed and explicitly not adopted.
+
 ---
 
 ## Data Sources
@@ -327,14 +342,17 @@ All tuneable parameters are in `config/settings.yaml`. Key sections:
   the clustering geometry and invalidate any manually pinned `regime_labels.yaml`.
 - **`n_pca_components = 5`** — changing this changes which regimes you find. Benchmark first.
 - **Saving to `.env` or committing API keys** — never. Use `.env.example` only.
+- **`prediction/__init__.py` flat API** — `run_pipeline.py`, `pipelines/05_predict.py`, and
+  `pipelines/07_dashboard.py` all expect `current_regime.pkl` to be a bare `RandomForestClassifier`.
+  Do not change to the bundle-dict API without updating all three consumers. See ARCHITECTURE.md ADR #12.
 
 ---
 
 ## What the Legacy Code Does That Must Be Matched
 
-Cross-reference `legacy/unified_script.py` and the `legacy/*.py` modules for
-ground truth.  Items marked ✓ are verified as matching in `src/`.  Items marked
-✗ are known gaps that still need to be implemented or aligned.
+Cross-reference `legacy/unified_script.py` for ground truth on all algorithms.
+All items are verified as matching in `src/`; see STATE.md Known Gaps for the
+two remaining unimplemented features.
 
 ### Algorithms (all ✓ — fully matched in src/)
 
@@ -352,24 +370,15 @@ ground truth.  Items marked ✓ are verified as matching in `src/`.  Items marke
 9. **Balanced clustering** — `KMeansConstrained(size_min=bucket-2, size_max=bucket+2)`
 10. **Color palette** — `["#0000d0", "#d00000", "#f48c06", "#8338ec", "#50a000"]`
 
-### Features in legacy NOT yet in src/ (see Legacy Alignment Gaps section)
-
-- ✓ `DecisionTreeClassifier` training for interpretability — implemented in `classifier.py`
-- ✓ `TimeSeriesSplit` cross-validation — implemented via `_tscv_scores()` helper
-- ✓ Portfolio construction — `src/market_regime/reporting/portfolio.py` (new file)
-- ✓ Macro-data fallback for asset returns — `compute_proxy_returns()` in `assets/returns.py`
-- ✗ Empirical forward probabilities — `compute_forward_probabilities()` from `legacy/regime_analysis.py`
-- ✗ Confusion matrix in classification report — `generate_classification_report()` from `legacy/supervised.py`
-
 ### Things src/ does better than legacy (do not regress)
 
-- ✓ Real ETF price data via yfinance (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG)
-  instead of macro-data proxies
+- ✓ Real ETF price data via yfinance (16 ETFs) instead of macro-data proxies
 - ✓ `CheckpointManager` with parquet + manifest (vs. ad-hoc pickle/CSV)
 - ✓ `RunConfig` dataclass for clean flag management
 - ✓ All config in `settings.yaml` (vs. hardcoded Python constants)
 - ✓ Full CLI in `run_pipeline.py` with `--steps`, `--refresh`, `--recompute`, etc.
 - ✓ Dedicated exploration notebooks (01–08)
+- ✓ Clustering investigation suite (GMM, DBSCAN, HDBSCAN, Spectral, gap statistic, SVD)
 
 ---
 
@@ -413,43 +422,14 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
 files are produced.  See `ROADMAP.md` for prioritized feature backlog.
 See `ARCHITECTURE.md` for design decisions.  See `PITFALLS.md` for known gotchas.
+See `DECISIONS.md` for a log of smaller judgment calls made during development.
 
-### Complete ✓
-- Steps 01–07 run end-to-end; pipeline verified on real data (all 7 steps)
-- `CheckpointManager` — fully implemented; parquet + manifest
-- `RunConfig` — fully implemented, including `from_args()` factory
-- `run_pipeline.py` — master runner with full CLI (all flags implemented)
-- `ingestion/assets.py` — yfinance ETF price fetcher + 3-phase fallback chain (stooq → OpenBB → macro proxy)
-- `plotting.py` — 17 visualization helpers covering all 7 pipeline steps
-- `notebooks/01–08` — all notebooks present; 03_clustering expanded with 28 investigation cells
-- Requirements — minimum-bound strategy, Python 3.10+ compatible
-- `from __future__ import annotations` — present in all source files using `X | Y` syntax
-- Unit tests — **213 passing tests** (8 skipped: HDBSCAN) covering all modules including clustering investigation suite
-- **Gap 1** — `TimeSeriesSplit` CV in `classifier.py` (5-fold walk-forward)
-- **Gap 2** — `DecisionTreeClassifier` in `classifier.py` (max_depth=8)
-- **Gap 3** — `reporting/portfolio.py` — simple + blended portfolio + BUY/SELL/HOLD
-- **Gap 4** — `compute_proxy_returns()` fallback in `assets/returns.py`
-- **Causal smoothing** — `engineer_all(causal=True/False)` + dual parquet outputs from step 2
-- **Clustering investigation suite** — GMM (`gmm.py`), DBSCAN/HDBSCAN (`density.py`), Spectral (`spectral.py`), multi-method comparison (`cluster_comparison.py`), gap statistic + SVD + PCA sweep in `clustering.py`
-- **Config-driven var lists** — `plotting.sample_series`, `plotting.key_indicators`, `assets.etfs` all in `settings.yaml`
-- **16 ETFs** — expanded from 8 to 16 (added HYG, XLK, XLP, XLE, GDX, TIP, BIL, EDV)
-- **`pythonpath = ["src"]`** in `pyproject.toml` pytest config — tests run without `pip install -e .`
-
-### Next Priority (implement in upcoming sessions)
-1. **Additional FRED series** — VIX (VIXCLS), unemployment (UNRATE), M2 (M2NS),
-   yield spreads (T10Y2Y, T10Y3M, GS2), housing starts (HOUST), consumer sentiment (UMCSENT)
-2. **Yield curve derived features** — 10Y-2Y, 10Y-3M spread computed in `transforms.py`
-3. **Empirical forward probabilities** — `compute_forward_probabilities()` from legacy
-4. **Confusion matrix plot** — `plot_confusion_matrix()` in `plotting.py`
-5. **macrotrends.net scraper** — gold/oil spot prices back to 1915/1946
-6. **LightGBM classifier** — alongside RF + DT in `classifier.py`
-7. **Expand test suite** — classifier, portfolio, dashboard, profiler
-8. **`end_date: null`** in settings.yaml → use today's date at runtime
-9. **Per-asset regime probability models** ("Putting it all together — Part I")
-10. **Weekly automated report** with AI-written narrative via Claude API
+**Summary:** all 7 pipeline steps run end-to-end on real data. **230 unit tests pass**
+(8 skipped: HDBSCAN optional). All 5 legacy alignment gaps closed. Clustering
+investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully implemented.
 
 ### Known Limitations
-- `profiler.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
+- `regime.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
   `fred_tb3ms`, `div_minus_baa`) because only their derivatives are in `clustering_features`.
   Graceful fallback is intentional.
 - Only 7 FRED series currently ingested; many high-value series (VIX, unemployment,
@@ -460,29 +440,6 @@ See `ARCHITECTURE.md` for design decisions.  See `PITFALLS.md` for known gotchas
   temporal autocorrelation natively (Tier 2 roadmap item).
 
 ---
-
-## Legacy Alignment Gaps
-
-Full comparison of `legacy/*.py` vs `src/market_regime/` completed March 2026.
-
-### Closed Gaps (all implemented)
-- ✓ **Gap 1** — TimeSeriesSplit CV (`legacy/supervised.py` → `classifier.py`)
-- ✓ **Gap 2** — DecisionTreeClassifier (`legacy/supervised.py` → `classifier.py`)
-- ✓ **Gap 3** — Portfolio construction (`legacy/portfolio.py` → `reporting/portfolio.py`)
-- ✓ **Gap 4** — Macro-data proxy returns fallback (`legacy/asset_returns.py` → `assets/returns.py`)
-- ✓ **Gap 5** — Causal/backward rolling windows for supervised learning (`transforms.py`)
-
-### Remaining Gaps
-
-#### Empirical forward probabilities (`legacy/regime_analysis.py` → `regime/profiler.py`)
-`compute_forward_probabilities()` computes count-based empirical P(reach regime j
-within N quarters | currently in regime i).  Useful as a sanity check alongside the
-model-based binary RF forward classifiers.  Low effort.  Status: not implemented.
-
-#### Confusion matrix report (`legacy/supervised.py` → `plotting.py`)
-`generate_classification_report()` prints a per-class confusion matrix.  Currently
-we only log the in-sample `classification_report()` string but do not visualize
-the confusion matrix.  Status: not implemented.
 
 ---
 
