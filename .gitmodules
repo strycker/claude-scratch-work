@@ -1,0 +1,6 @@
+[submodule "gsd-scratch-work-repo-copy"]
+	path = gsd-scratch-work-repo-copy
+	url = https://github.com/strycker/gsd-scratch-work
+[submodule "trading-crab-repo-copy"]
+	path = trading-crab-repo-copy
+	url = https://github.com/strycker/trading-crab
