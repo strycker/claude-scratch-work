@@ -352,3 +352,87 @@ Short summary:
 - ✓ **yfinance fallback chain** — stooq → OpenBB → macro proxy
 - ✓ **238 unit tests** covering all core modules and new clustering investigation suite
 - ✓ **Phase 3 in progress** — supervised current-regime classifier (RF + DT), forward binary classifiers, and causal feature pipeline complete (2/3 plans done)
+
+---
+
+## Audit Discoveries (2026-03-17)
+
+Full codebase audit comparing documentation, disk state, and code quality.
+
+### Documentation vs. Disk Alignment
+
+**98%+ match** — nearly everything in `CLAUDE.md`'s layout tree exists on disk in the correct location. Specific findings:
+
+| Finding | Severity | Notes |
+|---------|----------|-------|
+| `data/raw/`, `data/processed/`, `data/regimes/` referenced in `.gitignore` and CLAUDE.md layout but don't exist on disk | Low | All data lives under `data/checkpoints/` instead. Dirs would be created on-demand if pipeline wrote there, but current code doesn't. |
+| `outputs/models/` and `outputs/reports/` don't exist yet | Low | Referenced in Makefile `clean-*` targets. Only `outputs/plots/` (26 PNGs) exists. Created on-demand when steps 5/7 save artifacts. |
+| `src/market_regime/ingestion/macrotrends.py` documented in ROADMAP Tier 1 but not created | Expected | Planned feature, not a gap. |
+| Undocumented data snapshots on disk | Info | `prepared_quarterly_data_smoothed_20260301.pickle`, `standardized_quarterly_data_20260216.pickle`, `grok_quarter_classifications_20260201.xlsx` — legitimate runtime artifacts, correctly gitignored. |
+| Checkpoint aliases not enumerated in docs | Info | `features_causal.parquet` = `features_supervised`, `features_noncausal.parquet` = `features` — consistent with ADR #1, just not listed in the layout tree. |
+
+### Runtime State
+
+- **22 checkpoint files** (11 parquet datasets + 11 `.meta.json` manifests) in `data/checkpoints/`
+- **26 PNG plots** in `outputs/plots/` covering all 8 pipeline stages
+- **238 tests collected**, 8 skipped (HDBSCAN optional dependency)
+- All 7 pipeline steps produce expected outputs end-to-end
+
+### Code Quality Observations
+
+1. **Prediction package dual-API is clean** — `prediction/__init__.py` (flat/production) and `prediction/classifier.py` (bundle/test) are correctly separated per ADR #12. No cross-contamination.
+2. **Checkpoint system works as designed** — parquet + manifest pairs, freshness checks, config hash tracking.
+3. **No stale or orphaned code detected** — the `pipelines_from_gsd_version/` directory was already cleaned up (D6).
+4. **SSL workaround in `assets.py`** is a known tech debt item (P22) but functional.
+
+---
+
+## Prioritized Next Steps
+
+Ranked by impact and effort, incorporating audit findings and existing ROADMAP items.
+
+### Priority 1 — High Impact, Low Effort (do first)
+
+1. **Clean up phantom directories in docs** — Update CLAUDE.md layout tree to reflect that `data/raw/`, `data/processed/`, `data/regimes/` are unused (all data is in `data/checkpoints/`). Remove or annotate the `.gitignore` entries. Prevents contributor confusion.
+
+2. **Create `outputs/models/` and `outputs/reports/` directories** — Add `.gitkeep` files so Makefile `clean-*` targets and step 5/7 outputs work without manual `mkdir`. Trivial fix.
+
+3. **Fix `end_date` hardcoding (P12)** — Change `end_date: "2025-09-30"` to `null` in `settings.yaml` and handle with `datetime.today()` in ingestion modules. Pipeline silently ignores data after Sept 2025 otherwise.
+
+4. **Add `from __future__ import annotations`** to `ingestion/fred.py` and `ingestion/multpl.py` — Known inconsistency noted in CLAUDE.md "Known Limitations". One-line fix per file.
+
+### Priority 2 — High Impact, Medium Effort
+
+5. **Expand FRED series** — Add VIX (`VIXCLS`), unemployment (`UNRATE`), M2 money supply (`M2NS`), yield curve spreads (`T10Y2Y`, `GS2`). These are the highest-value additions for regime discrimination. Requires `settings.yaml` entries + testing.
+
+6. **Add confusion matrix visualization** — `plotting.py` has no confusion matrix plot. Important for evaluating classifier performance visually. Straightforward matplotlib/sklearn addition.
+
+7. **LightGBM classifier** — Add alongside RF + DT in the flat prediction API. LightGBM typically outperforms RF on tabular data with minimal tuning. Requires adding `lightgbm` to dependencies.
+
+8. **Migrate pickle to joblib** (P27) — `outputs/models/current_regime.pkl` uses `pickle.dump`. Switch to `joblib.dump`/`joblib.load` for better sklearn compatibility and reduced arbitrary-code-execution risk.
+
+### Priority 3 — Medium Impact, Medium Effort
+
+9. **macrotrends.net scraper** — Gold (1915+) and oil (1946+) price backfill. Extends pre-1993 coverage significantly. Requires new `ingestion/macrotrends.py` module.
+
+10. **Yield curve derived features** — 10Y-2Y spread, 10Y-3M spread, yield curve slope/curvature in `transforms.py`. Classic recession predictors.
+
+11. **Ingestion completeness report (P23)** — Log column count after ingestion and warn if below expected threshold (~53 columns). Prevents silent partial-data runs.
+
+12. **Improve `CheckpointManager.list()` logging (P24)** — Log which `.meta.json` files fail to parse instead of silently ignoring corrupt metadata.
+
+### Priority 4 — High Impact, High Effort (plan carefully)
+
+13. **Hidden Markov Model regime detection** — Models temporal autocorrelation natively (quarters aren't independent). Would live in `clustering/hmm.py`. Requires careful integration with existing two-clustering architecture.
+
+14. **Per-asset probability models** — "Will ETF X be +Y% at Z quarters?" Binary classifiers per ETF per horizon. Core Part I vision item. Large scope.
+
+15. **Weekly automated report** — Cron job with `--refresh`, AI-written narrative via Claude API, email delivery. Tier 3 roadmap item requiring infrastructure.
+
+### Priority 5 — Cleanup / Tech Debt
+
+16. **Archive stale data snapshots (P25)** — Move `data/*_snapshot_*.pickle` and `data/grok_*.pickle` to `data/archives/` with README. Prevents accidental stale-data loading.
+
+17. **SSL verification flag (P22)** — Add `RunConfig.verify_ssl` flag, default to `True`. Currently `verify=False` unconditionally in `assets.py`.
+
+18. **Document checkpoint aliases** — Add `features_causal` / `features_noncausal` aliases to CLAUDE.md layout tree for completeness.
