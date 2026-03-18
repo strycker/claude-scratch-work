@@ -161,6 +161,58 @@ def build_transition_matrix(cluster_labels: pd.Series) -> pd.DataFrame:
     return matrix
 
 
+def compute_forward_probabilities(
+    cluster_labels: pd.Series,
+    horizons: list[int] | None = None,
+) -> dict[int, pd.DataFrame]:
+    """
+    Compute empirical forward regime probabilities.
+
+    For each horizon h, compute P(regime = j within h quarters | currently in regime i)
+    by counting how often regime j appears in the window [t+1, t+h] given regime i at t.
+
+    Args:
+        cluster_labels — integer Series of cluster IDs, time-ordered
+        horizons       — list of forward horizons in quarters (default [1, 4, 8])
+
+    Returns:
+        {horizon: DataFrame} where each DataFrame is k×k with entry [i,j] =
+        P(reach regime j within h quarters | currently in regime i).
+    """
+    if horizons is None:
+        horizons = [1, 4, 8]
+
+    labels = cluster_labels.dropna().astype(int)
+    k_vals = sorted(labels.unique())
+    vals = labels.values
+    n = len(vals)
+
+    results: dict[int, pd.DataFrame] = {}
+
+    for h in horizons:
+        counts = pd.DataFrame(0, index=k_vals, columns=k_vals, dtype=float)
+
+        for t in range(n):
+            current = vals[t]
+            window_end = min(t + h + 1, n)
+            future_regimes = set(vals[t + 1 : window_end])
+            for j in future_regimes:
+                counts.loc[current, j] += 1
+
+        row_sums = counts.sum(axis=1).replace(0, 1)
+        prob = counts.div(row_sums, axis=0)
+        prob.index.name = "from_regime"
+        prob.columns.name = "to_regime"
+        results[h] = prob
+
+        log.info(
+            "Forward probabilities (h=%dQ): %d regimes, %d observations",
+            h, len(k_vals), n,
+        )
+
+    return results
+
+
 def load_name_overrides(config_dir: Path) -> dict[int, str]:
     """
     Load manually pinned regime names from config/regime_labels.yaml.

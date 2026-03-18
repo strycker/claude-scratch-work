@@ -561,6 +561,67 @@ def plot_forward_probabilities(
     _save_or_show(fig, "05_current_regime_probs.png", run_cfg)
 
 
+def plot_confusion_matrix(
+    y_true: pd.Series,
+    y_pred: np.ndarray | pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    title: str = "Regime Classification — Confusion Matrix",
+    normalize: bool = True,
+) -> None:
+    """
+    Confusion matrix heatmap for the current-regime classifier.
+
+    Args:
+        y_true       — ground-truth cluster labels
+        y_pred       — model-predicted labels (same length / index as y_true)
+        regime_names — {cluster_id: human name}
+        run_cfg      — controls save/show behaviour
+        title        — plot title
+        normalize    — if True, show row-normalized (recall) percentages
+    """
+    from sklearn.metrics import confusion_matrix as _cm
+
+    labels = sorted(y_true.dropna().astype(int).unique())
+    cm = _cm(y_true, y_pred, labels=labels)
+
+    if normalize:
+        row_sums = cm.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1
+        cm_display = cm.astype(float) / row_sums
+        fmt = ".1%"
+    else:
+        cm_display = cm
+        fmt = "d"
+
+    tick_labels = [regime_names.get(i, f"Regime {i}") for i in labels]
+
+    try:
+        import seaborn as sns
+    except ImportError:
+        log.warning("seaborn not installed — skipping confusion matrix plot")
+        return
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    sns.heatmap(
+        cm_display,
+        ax=ax,
+        annot=True,
+        fmt=fmt,
+        cmap="Blues",
+        xticklabels=tick_labels,
+        yticklabels=tick_labels,
+        linewidths=0.5,
+        cbar_kws={"label": "Recall" if normalize else "Count"},
+    )
+    ax.set_xlabel("Predicted regime")
+    ax.set_ylabel("Actual regime")
+    ax.set_title(title, fontsize=12)
+    ax.tick_params(axis="both", labelsize=8)
+    fig.tight_layout()
+    _save_or_show(fig, "05_confusion_matrix.png", run_cfg)
+
+
 def plot_predicted_vs_actual(
     features: pd.DataFrame,
     labels: pd.Series,
