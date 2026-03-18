@@ -14,6 +14,10 @@ from market_regime.asset_returns import (
     returns_by_regime,
     returns_full_stats,
     rank_assets_by_regime,
+    compute_template_returns,
+    behavior_tables,
+    _absolute_signal,
+    _score_absolute,
 )
 
 
@@ -137,3 +141,120 @@ class TestRankAssetsByRegime:
         for _, grp in ranked.groupby("regime"):
             sorted_grp = grp.sort_values("rank")
             assert sorted_grp["median_quarterly_return"].is_monotonic_decreasing
+
+
+# ── _absolute_signal / _score_absolute ──────────────────────────────────────
+
+class TestAbsoluteSignal:
+    def test_green_above_threshold(self):
+        assert _absolute_signal(0.03, 0.02, 0.0) == "GREEN"
+
+    def test_red_below_threshold(self):
+        assert _absolute_signal(-0.01, 0.02, 0.0) == "RED"
+
+    def test_neutral_between(self):
+        assert _absolute_signal(0.01, 0.02, 0.0) == "NEUTRAL"
+
+    def test_exact_red_is_neutral(self):
+        """Exact red_median (0%) should be NEUTRAL, not RED."""
+        assert _absolute_signal(0.0, 0.02, 0.0) == "NEUTRAL"
+
+
+class TestScoreAbsolute:
+    def test_high_return_caps_at_100(self):
+        assert _score_absolute(0.10) == 100.0
+
+    def test_zero_return_is_50(self):
+        assert _score_absolute(0.0) == 50.0
+
+    def test_negative_return_below_50(self):
+        assert _score_absolute(-0.01) < 50.0
+
+    def test_moderate_positive(self):
+        score = _score_absolute(0.03)
+        assert 50.0 < score < 80.0
+
+
+# ── compute_template_returns ────────────────────────────────────────────────
+
+class TestComputeTemplateReturns:
+    def test_basic_template(self):
+        idx = pd.date_range("2000-03-31", periods=4, freq="QE")
+        returns = pd.DataFrame(
+            {"SPY": [0.05, 0.03, -0.02, 0.04], "GLD": [0.02, 0.01, 0.06, -0.01]},
+            index=idx,
+        )
+        templates = [{"name": "60_40", "weights": {"SPY": 0.6, "GLD": 0.4}}]
+        result = compute_template_returns(returns, templates)
+        assert "60_40" in result.columns
+        expected_q1 = 0.6 * 0.05 + 0.4 * 0.02
+        assert result["60_40"].iloc[0] == pytest.approx(expected_q1)
+
+    def test_missing_ticker_skipped(self):
+        idx = pd.date_range("2000-03-31", periods=2, freq="QE")
+        returns = pd.DataFrame({"SPY": [0.01, 0.02]}, index=idx)
+        templates = [{"name": "test", "weights": {"SPY": 0.5, "MISSING": 0.5}}]
+        result = compute_template_returns(returns, templates)
+        # SPY weight gets normalized to 1.0
+        assert "test" in result.columns
+        assert result["test"].iloc[0] == pytest.approx(0.01)
+
+    def test_empty_templates(self):
+        idx = pd.date_range("2000-03-31", periods=2, freq="QE")
+        returns = pd.DataFrame({"SPY": [0.01, 0.02]}, index=idx)
+        result = compute_template_returns(returns, [])
+        assert result.empty or len(result.columns) == 0
+
+
+# ── behavior_tables ─────────────────────────────────────────────────────────
+
+class TestBehaviorTables:
+    @pytest.fixture
+    def sample_data(self):
+        rng = np.random.default_rng(42)
+        idx = pd.date_range("2000-03-31", periods=20, freq="QE")
+        returns = pd.DataFrame(
+            {
+                "SPY": rng.normal(0.03, 0.04, 20),
+                "GLD": rng.normal(0.01, 0.06, 20),
+                "TLT": rng.normal(-0.005, 0.03, 20),
+            },
+            index=idx,
+        )
+        labels = pd.Series(
+            [0] * 7 + [1] * 6 + [2] * 7,
+            index=idx,
+            name="balanced_cluster",
+        )
+        return returns, labels
+
+    def test_behavior_tables_columns(self, sample_data):
+        returns, labels = sample_data
+        bt = behavior_tables(returns, labels)
+        expected_cols = {
+            "regime", "asset", "median_return", "q25", "q75", "hit_rate",
+            "n_quarters", "signal_absolute", "tertile", "signal_display",
+            "score_relative", "score_absolute", "rank",
+        }
+        assert expected_cols <= set(bt.columns)
+
+    def test_behavior_tables_all_assets_per_regime(self, sample_data):
+        returns, labels = sample_data
+        bt = behavior_tables(returns, labels)
+        for regime in labels.unique():
+            regime_rows = bt[bt["regime"] == regime]
+            assert set(regime_rows["asset"]) == set(returns.columns)
+
+    def test_behavior_tables_valid_signals(self, sample_data):
+        returns, labels = sample_data
+        bt = behavior_tables(returns, labels)
+        valid_abs = {"GREEN", "RED", "NEUTRAL"}
+        assert set(bt["signal_absolute"]) <= valid_abs
+        valid_display = {"green_strong", "green", "neutral", "light_blue", "red", "red_strong"}
+        assert set(bt["signal_display"]) <= valid_display
+
+    def test_behavior_tables_custom_thresholds(self, sample_data):
+        returns, labels = sample_data
+        bt = behavior_tables(returns, labels, thresholds={"green_median": 0.10, "red_median": -0.10})
+        # With high green threshold, most should be NEUTRAL
+        assert "NEUTRAL" in bt["signal_absolute"].values

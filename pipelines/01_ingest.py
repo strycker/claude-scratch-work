@@ -88,11 +88,22 @@ def main(argv: list[str] | None = None) -> None:
     # ── multpl.com ────────────────────────────────────────────────────────
     multpl_df = multpl_module.fetch_all(cfg)
 
+    # ── macrotrends.net ────────────────────────────────────────────────────
+    mt_df = pd.DataFrame()
+    if cfg.get("macrotrends", {}).get("series"):
+        try:
+            from market_regime.ingestion import macrotrends as mt_module
+            mt_df = mt_module.fetch_all(cfg)
+        except Exception as exc:
+            log.warning("macrotrends fetch failed (non-fatal): %s", exc)
+
     # ── Merge ─────────────────────────────────────────────────────────────
     if not multpl_df.empty:
         combined = fred_df.join(multpl_df, how="outer")
     else:
         combined = fred_df
+    if not mt_df.empty:
+        combined = combined.join(mt_df, how="outer")
 
     # Filter to configured date range
     start = cfg["data"]["start_date"]

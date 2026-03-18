@@ -287,6 +287,19 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
     multpl_df = multpl_module.fetch_all(cfg)
 
     combined = fred_df.join(multpl_df, how="outer") if not multpl_df.empty else fred_df
+
+    # macrotrends.net — long-history commodity prices (gold, oil)
+    if cfg.get("macrotrends", {}).get("series"):
+        try:
+            from market_regime.ingestion import macrotrends as mt_module
+            log.info("Step 1: scraping macrotrends.net (%d series) …",
+                     len(cfg["macrotrends"]["series"]))
+            mt_df = mt_module.fetch_all(cfg)
+            if not mt_df.empty:
+                combined = combined.join(mt_df, how="outer")
+                log.info("Step 1: macrotrends added %d columns", len(mt_df.columns))
+        except Exception as exc:
+            log.warning("Step 1: macrotrends fetch failed (non-fatal): %s", exc)
     start = cfg["data"]["start_date"]
     combined = combined[combined.index >= start]
 
