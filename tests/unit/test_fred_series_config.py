@@ -24,6 +24,8 @@ def test_fred_series_includes_additional_series() -> None:
         ("GS2", "fred_gs2"),
         ("T10Y2Y", "fred_t10y2y"),
         ("T10Y3M", "fred_t10y3m"),
+        ("HOUST", "fred_houst"),
+        ("UMCSENT", "fred_umcsent"),
     ]:
         assert key in series
         assert series[key]["name"] == name
