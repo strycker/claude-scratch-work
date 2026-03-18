@@ -85,6 +85,10 @@ clustering-extras = [
     "hdbscan>=0.8",
     "kneed>=0.8",
 ]
+# LightGBM gradient-boosted classifier (alternative to scikit-learn RF).
+boosting-extras = [
+    "lightgbm>=4.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
