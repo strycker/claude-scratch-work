@@ -27,6 +27,7 @@ outputs/reports/
 # Secrets / API keys (always use .env instead)
 *.key
 config/secrets.yaml
+config/email.local.yaml
 
 # OS
 .DS_Store
