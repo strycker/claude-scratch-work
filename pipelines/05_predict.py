@@ -20,7 +20,7 @@ Run:
 """
 
 import sys
-import pickle
+
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -79,12 +79,10 @@ def main() -> None:
     model_dir = OUTPUT_DIR / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(model_dir / "current_regime.pkl", "wb") as f:
-        pickle.dump(current_model, f)
-    with open(model_dir / "decision_tree.pkl", "wb") as f:
-        pickle.dump(dt_model, f)
-    with open(model_dir / "forward_classifiers.pkl", "wb") as f:
-        pickle.dump(forward_models, f)
+    import joblib
+    joblib.dump(current_model, model_dir / "current_regime.pkl")
+    joblib.dump(dt_model, model_dir / "decision_tree.pkl")
+    joblib.dump(forward_models, model_dir / "forward_classifiers.pkl")
 
     print(f"\nModels saved to {model_dir}")
 

@@ -48,10 +48,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import pickle
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+import joblib
 
 import pandas as pd
 import yaml
@@ -144,8 +145,13 @@ class CheckpointManager:
             log.debug("Checkpoint missing: %s", name)
             return False
 
-        meta = json.loads(meta_path.read_text())
-        created = datetime.fromisoformat(meta["created"])
+        try:
+            meta = json.loads(meta_path.read_text())
+            created = datetime.fromisoformat(meta["created"])
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+            log.warning("Corrupt checkpoint metadata %s: %s", meta_path.name, exc)
+            return False
+
         age = datetime.now() - created
 
         if age > timedelta(days=max_age_days):
@@ -186,8 +192,8 @@ class CheckpointManager:
             try:
                 meta = json.loads(meta_path.read_text())
                 entries.append(meta)
-            except Exception:
-                pass
+            except Exception as exc:
+                log.warning("Failed to parse checkpoint metadata %s: %s", meta_path.name, exc)
         entries.sort(key=lambda m: m.get("created", ""))
         return entries
 
@@ -207,20 +213,18 @@ class CheckpointManager:
     # ── Model (pickle) checkpoints ─────────────────────────────────────────
 
     def save_model(self, model: Any, name: str) -> Path:
-        """Pickle a sklearn model to {name}.pkl."""
+        """Serialize a sklearn model to {name}.pkl using joblib."""
         pkl_path = self.dir / f"{name}.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump(model, f)
+        joblib.dump(model, pkl_path)
         log.info("Model checkpoint saved: %s", name)
         return pkl_path
 
     def load_model(self, name: str) -> Any:
-        """Load a pickled model.  Raises FileNotFoundError if missing."""
+        """Load a serialized model.  Raises FileNotFoundError if missing."""
         pkl_path = self.dir / f"{name}.pkl"
         if not pkl_path.exists():
             raise FileNotFoundError(f"Model checkpoint not found: {pkl_path}")
-        with open(pkl_path, "rb") as f:
-            model = pickle.load(f)
+        model = joblib.load(pkl_path)
         log.info("Model checkpoint loaded: %s", name)
         return model
 

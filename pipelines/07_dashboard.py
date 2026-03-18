@@ -24,7 +24,6 @@ Run:
 """
 
 import sys
-import pickle
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -69,9 +68,9 @@ def main() -> None:
     cfg = load()
 
     # Load current-regime model
+    import joblib
     model_dir = OUTPUT_DIR / "models"
-    with open(model_dir / "current_regime.pkl", "rb") as f:
-        current_model = pickle.load(f)
+    current_model = joblib.load(model_dir / "current_regime.pkl")
 
     # Use causal features for live scoring — same as training in step 5
     sup_path = DATA_DIR / "processed" / "features_supervised.parquet"

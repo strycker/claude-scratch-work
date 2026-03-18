@@ -329,6 +329,18 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
         if sample_series:
             plotting.plot_raw_series_sample(combined, sample_series, run_cfg)
 
+    # ── Completeness report (P23) ───────────────────────────────────────
+    from market_regime.ingestion import ingestion_completeness_report
+    expected_cols: list[str] = []
+    for series_id, meta in cfg.get("fred", {}).get("series", {}).items():
+        expected_cols.append(meta.get("name", series_id.lower()))
+    for ds in cfg.get("multpl", {}).get("datasets", []):
+        expected_cols.append(ds[0] if isinstance(ds, list) else ds["name"])
+    for ds in cfg.get("macrotrends", {}).get("series", []):
+        expected_cols.append(ds["name"] if isinstance(ds, dict) else ds[0])
+    report = ingestion_completeness_report(combined, expected_columns=expected_cols)
+    log.info("Ingestion completeness:\n%s", report.summary())
+
     log.info("Step 1 done: %d rows × %d cols", len(combined), len(combined.columns))
 
 
@@ -561,12 +573,10 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     model_dir = OUTPUT_DIR / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(model_dir / "current_regime.pkl", "wb") as f:
-        pickle.dump(current_model, f)
-    with open(model_dir / "decision_tree.pkl", "wb") as f:
-        pickle.dump(dt_model, f)
-    with open(model_dir / "forward_classifiers.pkl", "wb") as f:
-        pickle.dump(forward_models, f)
+    import joblib
+    joblib.dump(current_model, model_dir / "current_regime.pkl")
+    joblib.dump(dt_model, model_dir / "decision_tree.pkl")
+    joblib.dump(forward_models, model_dir / "forward_classifiers.pkl")
 
     # Optionally save predicted labels as a market_code checkpoint
     predicted_labels = pd.Series(
@@ -713,8 +723,8 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
         log.warning("Step 7: current_regime.pkl not found — run step 5 first")
         return
 
-    with open(current_model_path, "rb") as f:
-        current_model = pickle.load(f)
+    import joblib
+    current_model = joblib.load(current_model_path)
 
     # Step 7 uses causal features for live scoring — same as step 5 training data.
     # Falls back to centered features.parquet when supervised file is absent.

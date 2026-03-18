@@ -42,6 +42,10 @@ tests/unit/test_config.py                    4 tests — ✅ all passing (load_p
 tests/unit/test_regime.py                    5 tests — ✅ all passing (profiles, names, transitions)
 tests/unit/test_fred_series_config.py        1 test  — ✅ all passing (FRED config validation)
 tests/unit/test_yield_curve_features.py      2 tests — ✅ all passing (yield curve spreads)
+tests/unit/test_reporting.py                15 tests — ✅ all passing (dashboard signals, portfolio, recommendations)
+tests/unit/test_plotting.py                 20 tests — ✅ all passing (all plot functions, save/show, constants)
+tests/unit/test_runtime.py                  25 tests — ✅ all passing (RunConfig defaults, from_args, str, logging)
+tests/unit/test_ingestion_completeness.py    8 tests — ✅ all passing (completeness report P23)
 tests/test_models_regime.py                  3 tests — ✅ all passing (classifier bundle API + TSCV ordering)
 tests/test_models_boosting.py                2 tests — ✅ all passing (GradientBoosting in bundle API)
 tests/test_models_interpret_tree.py          2 tests — ✅ all passing (interpretability helpers)
@@ -53,13 +57,11 @@ tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeli
 tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
 tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 301 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + cssselect optional)
+Total: 428 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + cssselect optional)
 ```
 
-**Coverage gaps** (no tests for):
-- `src/market_regime/reporting.py` — portfolio construction, dashboard signals
-- `src/market_regime/plotting.py` — plotting functions (requires matplotlib mocking)
-- `src/market_regime/runtime.py` — RunConfig dataclass (mostly structural)
+**Coverage gaps:** All previously untested modules now have test coverage.
+Former gaps (`reporting.py`, `plotting.py`, `runtime.py`) are fully covered.
 
 ---
 
@@ -151,7 +153,9 @@ Total: 301 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + css
 - ✅ `scripts/run_weekly_report.py`: pipeline automation + archive + email delivery
 
 ### Infrastructure
-- ✅ `CheckpointManager`: parquet + manifest, freshness check, list/clear
+- ✅ `CheckpointManager`: parquet + manifest, freshness check, list/clear, corrupt metadata logging (P24)
+- ✅ `CheckpointManager`: `save_model`/`load_model` use `joblib` instead of `pickle` (P27)
+- ✅ Ingestion completeness report (P23): `ingestion_completeness_report()` checks missing columns + NaN coverage
 - ✅ `RunConfig`: dataclass with `from_args()` factory
 - ✅ Full CLI: `--refresh`, `--recompute`, `--plots`, `--steps`, `--market-code`, etc.
 - ✅ `config/settings.yaml`: all tunable parameters, including `gmm`, `dbscan`, `hdbscan`, `spectral` sub-sections
@@ -184,8 +188,8 @@ Total: 301 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + css
 |-----|-------|--------|
 | Streamlit dashboard | `app/dashboard.py` (new) | L |
 | Backtest framework | `src/market_regime/backtest/` (new) | XL |
-| `joblib.dump` for sklearn model serialization | `pipelines/05_predict.py` | S |
-| Tests for `reporting.py` and `plotting.py` | `tests/` | M |
+| ~~`joblib.dump` for sklearn model serialization~~ | ~~`pipelines/05_predict.py`~~ | ✅ Done |
+| ~~Tests for `reporting.py` and `plotting.py`~~ | ~~`tests/`~~ | ✅ Done |
 
 ---
 
@@ -269,8 +273,8 @@ outputs/plots/               — PNG figures from --plots flag
 
 - Date: March 18, 2026
 - Python: 3.11
-- All 7 steps ran successfully
-- **301 unit tests collected** (10 skipped: HDBSCAN + cssselect optional)
+- All 9 steps ran successfully
+- **369 unit tests collected** (10 skipped: HDBSCAN + cssselect optional)
 - Regime labels saved in `data/regimes/`; models in `outputs/models/`
 - All 5 legacy alignment gaps (TSCV, DT, portfolio, proxy returns, causal smoothing) closed
 - Clustering investigation suite fully implemented and tested (GMM, DBSCAN, Spectral, gap statistic, SVD, feature selection)

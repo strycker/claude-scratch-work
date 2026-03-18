@@ -86,7 +86,7 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (301 tests)
+├── tests/                         ← pytest test suite (428 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/               ← integration tests (currently empty)
@@ -117,7 +117,11 @@ trading-crab/
 │       ├── test_config.py             ← config.load_portfolio()
 │       ├── test_regime.py             ← regime profiling + transition matrix
 │       ├── test_fred_series_config.py ← FRED settings.yaml validation
-│       └── test_yield_curve_features.py ← yield curve spread features
+│       ├── test_yield_curve_features.py ← yield curve spread features
+│       ├── test_reporting.py          ← dashboard signals, portfolio, recommendations
+│       ├── test_plotting.py           ← all plot functions (steps 01–06)
+│       ├── test_runtime.py            ← RunConfig defaults, from_args, str, logging
+│       └── test_ingestion_completeness.py ← ingestion completeness report (P23)
 │
 ├── outputs/                       ← gitignored; created at runtime
 │   ├── models/                    ← pickled sklearn models
@@ -469,7 +473,7 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
-**Summary:** all 9 pipeline steps run end-to-end on real data. **301 tests collected**
+**Summary:** all 9 pipeline steps run end-to-end on real data. **428 tests collected**
 (10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
 Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
 implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
@@ -1034,5 +1038,37 @@ Added 56 new tests covering previously untested modules:
 - Yield curve features (2 tests)
 
 Coverage gaps closed: `prediction/__init__.py`, `config.load_portfolio()`, `regime.py`,
-all three ingestion modules, and three new modules. Remaining untested: `reporting.py`,
-`plotting.py`, `runtime.py`.
+all three ingestion modules, and three new modules.
+
+### D14. Tier 2 improvements: test coverage, joblib migration, P23/P24 fixes (2026-03-18)
+
+**Test coverage** for previously untested modules — 68 new tests:
+- `reporting.py` (15 tests): dashboard signals, portfolio construction, recommendations,
+  recommendation digest, weekly report
+- `plotting.py` (20 tests): all plot functions (steps 01–06), `_save_or_show`, `_regime_color`,
+  constants, empty-input edge cases
+- `runtime.py` (25 tests): defaults, `from_args()` with all flag combinations, `apply_logging()`,
+  `__str__()` representation
+- Ingestion completeness report (8 tests): missing columns, high-NaN detection, summary formatting
+
+**P27 fix — pickle → joblib migration** across 7 files:
+- `checkpoints.py`: `save_model()` / `load_model()` now use `joblib.dump` / `joblib.load`
+- `pipelines/05_predict.py`, `pipelines/07_dashboard.py`, `run_pipeline.py`: all model
+  serialization switched from `pickle` to `joblib`
+- `cluster_comparison.py`: RF feature importance loading via `joblib.load`
+- `tests/unit/test_cluster_comparison.py`: test fixture uses `joblib.dump`
+- `requirements.txt`: added `joblib>=1.3`
+
+**P24 fix — CheckpointManager corrupt metadata logging:**
+- `is_fresh()`: catches `json.JSONDecodeError` / `KeyError` / `ValueError` and logs WARNING
+  with the specific file and error before returning `False`
+- `list()`: catches all metadata parse errors and logs WARNING with file name
+
+**P23 fix — Ingestion completeness report:**
+- New `ingestion_completeness_report()` in `src/market_regime/ingestion/__init__.py`
+- Returns `CompletenessReport` dataclass with missing columns, extra columns, high-NaN columns
+- Integrated into `pipelines/01_ingest.py` and `run_pipeline.py` step 1
+- Builds expected column list from config (FRED + multpl + macrotrends)
+
+Test count: 301 → 428 collected (11 skipped: HDBSCAN + cssselect optional).
+All previously untested modules now have test coverage.
