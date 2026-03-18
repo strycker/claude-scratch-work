@@ -1,18 +1,38 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "market-regime"
 version = "0.1.0"
-description = "Market regime classification and prediction pipeline"
+description = "Market regime classification and prediction pipeline using macroeconomic data"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
+authors = [
+    { name = "Strycker" },
+]
+keywords = [
+    "finance",
+    "market-regime",
+    "clustering",
+    "macroeconomics",
+    "portfolio",
+    "time-series",
+    "machine-learning",
+]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
 dependencies = [
     # Data
@@ -38,12 +58,18 @@ dependencies = [
     "certifi>=2024.0",            # SSL CA bundle used by curl_cffi / yfinance
 ]
 
+[project.urls]
+Homepage = "https://github.com/strycker/claude-scratch-work"
+Repository = "https://github.com/strycker/claude-scratch-work"
+Issues = "https://github.com/strycker/claude-scratch-work/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-cov",
     "ipykernel",
     "jupyterlab",
+    "flake8",
 ]
 # Alternative / fallback ETF price data sources (used when yfinance fails).
 # Phase 3 — stooq via pandas-datareader: free, no API key, daily data back to ~1993.
@@ -62,6 +88,9 @@ clustering-extras = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+market_regime = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
