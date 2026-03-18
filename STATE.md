@@ -16,7 +16,9 @@ Updated: March 2026.
 | 5 — Predict | `pipelines/05_predict.py` | ✅ Working | RF + DT + TSCV + forward classifiers |
 | 6 — Assets | `pipelines/06_asset_returns.py` | ✅ Working | yfinance + macro proxy fallback |
 | 7 — Dashboard | `pipelines/07_dashboard.py` | ✅ Working | Signals + portfolio + BUY/SELL/HOLD |
-| Master runner | `run_pipeline.py` | ✅ Working | All flags implemented |
+| 8 — Diagnostics | `pipelines/08_diagnostics.py` | ✅ Working | Ratio diagnostics + RRG rotation view |
+| 9 — Tactics | `pipelines/09_tactics.py` | ✅ Working | Per-asset buy_hold / swing / stand_aside |
+| Master runner | `run_pipeline.py` | ✅ Working | Steps 1-7,9 + --weekly-report + --send-email |
 
 ---
 
@@ -45,12 +47,13 @@ tests/test_models_boosting.py                2 tests — ✅ all passing (Gradie
 tests/test_models_interpret_tree.py          2 tests — ✅ all passing (interpretability helpers)
 tests/test_models_reporting.py               3 tests — ✅ all passing (model_metrics_summary, 3 input shapes)
 tests/test_models_behavior.py                3 tests — ✅ all passing (make_behavior_labels, train_forward_behavior_models)
-tests/test_email_weekly.py                  15 tests — ✅ all passing (email config, body, SMTP, archive, CLI)
+tests/test_email_weekly.py                  13 tests — ✅ all passing (email config, body, SMTP, archive)
+tests/test_scripts_weekly_report.py          7 tests — ✅ all passing (weekly report archive, CLI argv, email)
 tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeline step 01 + 02 smoke tests)
 tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
 tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 294 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + cssselect optional)
+Total: 301 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + cssselect optional)
 ```
 
 **Coverage gaps** (no tests for):
@@ -163,7 +166,6 @@ Total: 294 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + css
 | Gap | Where | Effort |
 |-----|-------|--------|
 | LightGBM classifier (production flat API) | `prediction/__init__.py` | S |
-| Integrate diagnostics/tactics into pipeline steps | `run_pipeline.py` | M |
 | Empirical forward probabilities | `regime.py` | S |
 | macrotrends.net scraper (gold, oil pre-1993) | `ingestion/macrotrends.py` (new) | M |
 | Confusion matrix plot | `plotting.py` | S |
@@ -268,7 +270,7 @@ outputs/plots/               — PNG figures from --plots flag
 - Date: March 18, 2026
 - Python: 3.11
 - All 7 steps ran successfully
-- **294 unit tests collected** (10 skipped: HDBSCAN + cssselect optional)
+- **301 unit tests collected** (10 skipped: HDBSCAN + cssselect optional)
 - Regime labels saved in `data/regimes/`; models in `outputs/models/`
 - All 5 legacy alignment gaps (TSCV, DT, portfolio, proxy returns, causal smoothing) closed
 - Clustering investigation suite fully implemented and tested (GMM, DBSCAN, Spectral, gap statistic, SVD, feature selection)

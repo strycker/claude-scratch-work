@@ -72,7 +72,9 @@ trading-crab/
 │   ├── 04_regime_label.py
 │   ├── 05_predict.py
 │   ├── 06_asset_returns.py
-│   └── 07_dashboard.py
+│   ├── 07_dashboard.py
+│   ├── 08_diagnostics.py          ← ratio diagnostics + RRG rotation view
+│   └── 09_tactics.py              ← per-asset buy_hold / swing / stand_aside
 │
 ├── run_pipeline.py                ← master entry point with --steps / --refresh / --plots
 │
@@ -84,7 +86,7 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (294 tests)
+├── tests/                         ← pytest test suite (301 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/               ← integration tests (currently empty)
@@ -95,6 +97,7 @@ trading-crab/
 │   ├── test_models_behavior.py    ← behavior model tests
 │   ├── test_models_reporting.py   ← metrics aggregation tests
 │   ├── test_email_weekly.py       ← email delivery + weekly report automation
+│   ├── test_scripts_weekly_report.py      ← weekly report script (archive, CLI, email)
 │   ├── test_constraints_etf_universe.py   ← ETF universe validation
 │   ├── test_constraints_frequency.py      ← data frequency validation
 │   └── unit/                      ← unit tests for src/ modules
@@ -177,6 +180,8 @@ python pipelines/04_regime_label.py
 python pipelines/05_predict.py
 python pipelines/06_asset_returns.py
 python pipelines/07_dashboard.py
+python pipelines/08_diagnostics.py
+python pipelines/09_tactics.py
 ```
 
 ### CLI flag reference (run_pipeline.py)
@@ -191,6 +196,8 @@ python pipelines/07_dashboard.py
 | `--market-code NAME` | Load market_code from `grok`, `clustered`, `predicted`, or any saved checkpoint |
 | `--save-market-code` | After step 3, save `balanced_cluster` as `market_code_clustered` checkpoint |
 | `--show-plots` | Call `plt.show()` in addition to saving (avoid in headless/CI) |
+| `--weekly-report` | Archive weekly_report.md to dated copy + email_body.txt |
+| `--send-email` | Send weekly report via SMTP (requires config/email.local.yaml) |
 
 ### Jupyter notebooks (exploration / plotting)
 ```bash
@@ -462,12 +469,14 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
-**Summary:** all 7 pipeline steps run end-to-end on real data. **294 tests collected**
+**Summary:** all 9 pipeline steps run end-to-end on real data. **301 tests collected**
 (10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
 Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
-implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented;
-2/3 Phase 3 plans complete. New modules: diagnostics (RRG), tactics, email/weekly report.
-FRED expanded from 7 to 14 series; yield curve features added.
+implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
+New modules: diagnostics (RRG), tactics, email/weekly report.  FRED expanded from 7
+to 14 series; yield curve features added.  ETF universe expanded from 16 to 38.
+Diagnostics and tactics integrated as pipeline steps 8-9.  Weekly report flow with
+`--weekly-report` + `--send-email` CLI flags.  Interpretability tree in step 5.
 
 ### Known Limitations
 - `regime.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
