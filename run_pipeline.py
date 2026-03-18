@@ -147,6 +147,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import pandas as pd  # noqa: F401 — used in type annotations
+
 # Allow running from repo root without `pip install -e .`
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
