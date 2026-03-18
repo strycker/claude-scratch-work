@@ -32,22 +32,31 @@ tests/unit/test_gmm.py                      27 tests — ✅ all passing
 tests/unit/test_returns.py                  14 tests — ✅ all passing
 tests/unit/test_spectral.py                 16 tests — ✅ all passing
 tests/unit/test_transforms.py               21 tests — ✅ all passing
+tests/unit/test_prediction_flat.py           5 tests — ✅ all passing (flat API: RF, DT, predict_current)
+tests/unit/test_ingestion.py                17 tests — ✅ all passing (HTTP-mocked: multpl, FRED, assets; 2 skipped: cssselect)
+tests/unit/test_diagnostics_rrg.py           8 tests — ✅ all passing (RRG analysis + rolling stats)
+tests/unit/test_tactics.py                   7 tests — ✅ all passing (tactical classification)
+tests/unit/test_config.py                    4 tests — ✅ all passing (load_portfolio)
+tests/unit/test_regime.py                    5 tests — ✅ all passing (profiles, names, transitions)
+tests/unit/test_fred_series_config.py        1 test  — ✅ all passing (FRED config validation)
+tests/unit/test_yield_curve_features.py      2 tests — ✅ all passing (yield curve spreads)
 tests/test_models_regime.py                  3 tests — ✅ all passing (classifier bundle API + TSCV ordering)
+tests/test_models_boosting.py                2 tests — ✅ all passing (GradientBoosting in bundle API)
+tests/test_models_interpret_tree.py          2 tests — ✅ all passing (interpretability helpers)
 tests/test_models_reporting.py               3 tests — ✅ all passing (model_metrics_summary, 3 input shapes)
 tests/test_models_behavior.py                3 tests — ✅ all passing (make_behavior_labels, train_forward_behavior_models)
+tests/test_email_weekly.py                  15 tests — ✅ all passing (email config, body, SMTP, archive, CLI)
 tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeline step 01 + 02 smoke tests)
 tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
 tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN optional)
+Total: 294 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + cssselect optional)
 ```
 
 **Coverage gaps** (no tests for):
-- `src/market_regime/prediction/__init__.py` — flat API (`train_current_regime(X,y,cfg)`, `train_decision_tree`, `predict_current`)
 - `src/market_regime/reporting.py` — portfolio construction, dashboard signals
-- `src/market_regime/ingestion/` — all ingestion modules (mocked network access needed)
-- `src/market_regime/regime.py` — regime naming heuristics, transition matrix
-- `src/market_regime/plotting.py` — plotting functions
+- `src/market_regime/plotting.py` — plotting functions (requires matplotlib mocking)
+- `src/market_regime/runtime.py` — RunConfig dataclass (mostly structural)
 
 ---
 
@@ -55,7 +64,7 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 
 ### Data Ingestion
 - ✅ multpl.com scraper: 46 quarterly series via lxml
-- ✅ FRED API: GDP, GNP, BAA, AAA, CPI, GS10, TB3MS (7 series)
+- ✅ FRED API: GDP, GNP, BAA, AAA, CPI, GS10, TB3MS, VIXCLS, UNRATE, M2SL, M2NS, GS2, T10Y2Y, T10Y3M (14 series)
 - ✅ yfinance: SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG, HYG, XLK, XLP, XLE, GDX, TIP, BIL, EDV (16 ETFs)
 - ✅ Grok baseline labels: `data/grok_quarter_classifications_20260216.pickle`
 - ✅ SSL fix for curl_cffi (macOS/proxy environments)
@@ -67,6 +76,7 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 - ✅ Column selection: `initial_features` (36 cols) and `clustering_features` (69 cols)
 - ✅ Bernstein polynomial gap fill (interior) with Taylor extrapolation (edges)
 - ✅ Smoothed derivatives: d1, d2, d3 per column via `np.gradient`
+- ✅ Yield curve features: 10Y-2Y and 10Y-3M spreads (from multpl + FRED)
 - ✅ Centered smoothing for clustering (`causal=False`)
 - ✅ Causal/backward smoothing for supervised learning (`causal=True`)
 
@@ -101,6 +111,9 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 - ✅ `train_decision_tree()`: shallow DecisionTree with TSCV (gap 2 — done)
 - ✅ `train_forward_classifiers()`: binary RF per (horizon, regime) pair
 - ✅ `predict_current()`: returns regime + probabilities for most recent quarter
+- ✅ GradientBoosting: optional `include_gb=True` in bundle API (`classifier.py`)
+- ✅ `extract_top_features()`: rank features by model importance
+- ✅ `train_interpretability_tree()`: shallow DT on top-k features for human-readable rules
 
 ### Asset Returns
 - ✅ `compute_quarterly_returns()`: pct_change from yfinance ETF prices
@@ -128,6 +141,12 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 - ✅ `05_prediction`: model loading tries both `current_regime.pkl` and `current_regime_classifier.pkl`
 - ✅ `07_pairplot`: triple-colored pairplots — unsupervised (balanced_cluster), Grok market_code, supervised (RF predicted)
 
+### Diagnostics and Tactics (new — library modules, not pipeline steps)
+- ✅ `diagnostics.py`: rolling z-score, percentile rank, normalize_100, RRG quadrant classification
+- ✅ `tactics.py`: volatility/trend/correlation metrics, buy_hold/swing/stand_aside classification
+- ✅ `email.py`: SMTP email delivery (TLS/SSL), config from `config/email.yaml`
+- ✅ `scripts/run_weekly_report.py`: pipeline automation + archive + email delivery
+
 ### Infrastructure
 - ✅ `CheckpointManager`: parquet + manifest, freshness check, list/clear
 - ✅ `RunConfig`: dataclass with `from_args()` factory
@@ -143,9 +162,8 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 ### Priority 1 (implement next)
 | Gap | Where | Effort |
 |-----|-------|--------|
-| XGBoost/LightGBM classifiers | `classifier.py` | S |
-| Additional FRED series (VIX, unemployment, M2, yield spreads, housing) | `settings.yaml` + FRED ingestion | S |
-| Yield curve derived features (10Y-2Y, 10Y-3M spreads) | `transforms.py` | S |
+| LightGBM classifier (production flat API) | `prediction/__init__.py` | S |
+| Integrate diagnostics/tactics into pipeline steps | `run_pipeline.py` | M |
 | Empirical forward probabilities | `regime.py` | S |
 | macrotrends.net scraper (gold, oil pre-1993) | `ingestion/macrotrends.py` (new) | M |
 | Confusion matrix plot | `plotting.py` | S |
@@ -162,11 +180,10 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 ### Priority 3
 | Gap | Where | Effort |
 |-----|-------|--------|
-| Weekly automated report | `scripts/weekly_report.py` (new) | XL |
 | Streamlit dashboard | `app/dashboard.py` (new) | L |
 | Backtest framework | `src/market_regime/backtest/` (new) | XL |
 | `joblib.dump` for sklearn model serialization | `pipelines/05_predict.py` | S |
-| `end_date: null` → use today | `settings.yaml` + ingestion | S |
+| Tests for `reporting.py` and `plotting.py` | `tests/` | M |
 
 ---
 
@@ -187,12 +204,14 @@ Total: 238 collected — ✅ all passing (Python 3.11; 8 skipped: HDBSCAN option
 | Bonds (ETF TLT) | yfinance | 2002 | Quarterly |
 | SPY / QQQ / IWM / VNQ / AGG | yfinance | 1993-2003 | Quarterly |
 | HYG / XLK / XLP / XLE / GDX / TIP / BIL / EDV | yfinance | 2003-2007 | Quarterly |
+| VIX (VIXCLS) | FRED | 1990 | Daily → Quarterly |
+| Unemployment (UNRATE) | FRED | 1948 | Monthly → Quarterly |
+| M2 Money Supply (M2SL + M2NS) | FRED | 1959 | Monthly → Quarterly |
+| 2Y Treasury (GS2) | FRED | 1976 | Monthly → Quarterly |
+| 10Y-2Y Spread (T10Y2Y) | FRED | 1976 | Daily → Quarterly |
+| 10Y-3M Spread (T10Y3M) | FRED | 1982 | Daily → Quarterly |
 | Gold (spot price proxy) | macrotrends.net | **Not yet** | Monthly |
 | WTI Crude (spot) | macrotrends.net | **Not yet** | Monthly |
-| VIX | FRED | **Not yet** | Daily |
-| Unemployment | FRED | **Not yet** | Monthly |
-| M2 Money Supply | FRED | **Not yet** | Monthly |
-| 10Y-2Y Spread | FRED | **Not yet** | Daily |
 
 ---
 
@@ -246,14 +265,17 @@ outputs/plots/               — PNG figures from --plots flag
 
 ## Last Verified End-to-End Run
 
-- Date: March 2026
+- Date: March 18, 2026
 - Python: 3.11
 - All 7 steps ran successfully
-- **238 unit tests collected** (8 skipped: HDBSCAN not installed in CI)
+- **294 unit tests collected** (10 skipped: HDBSCAN + cssselect optional)
 - Regime labels saved in `data/regimes/`; models in `outputs/models/`
 - All 5 legacy alignment gaps (TSCV, DT, portfolio, proxy returns, causal smoothing) closed
 - Clustering investigation suite fully implemented and tested (GMM, DBSCAN, Spectral, gap statistic, SVD, feature selection)
 - All critical bugs fixed: GMM scaler consistency, gap_std vs gap_sk separation, spectral affinity caching, cluster comparison index alignment
-- `prediction/` converted from flat module to package; `classifier.py` provides backwards-compat bundle API for test assertions on fold-level CV metadata
+- `prediction/` converted from flat module to package; `classifier.py` provides backwards-compat bundle API with GradientBoosting + interpretability helpers
+- FRED expanded from 7 to 14 series; yield curve features added
+- New modules: `diagnostics.py` (RRG), `tactics.py`, `email.py`, `scripts/run_weekly_report.py`
+- `end_date: null` fix applied (P12); `from __future__ import annotations` added to fred.py, multpl.py
 
 **Note:** the test suite no longer contaminates production checkpoints. Pipeline smoke tests use `monkeypatch.setattr(step, "DATA_DIR", tmp_path)` to isolate all file I/O. See CLAUDE.md D5.
