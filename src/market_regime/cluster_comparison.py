@@ -44,7 +44,7 @@ Usage
 from __future__ import annotations
 
 import logging
-import pickle
+import joblib
 from pathlib import Path
 
 import numpy as np
@@ -220,8 +220,7 @@ def extract_rf_feature_importances(
     if not model_path.exists():
         raise FileNotFoundError(f"Model not found: {model_path}")
 
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
+    model = joblib.load(model_path)
 
     if not hasattr(model, "feature_importances_"):
         raise AttributeError(

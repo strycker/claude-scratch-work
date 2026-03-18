@@ -11,7 +11,7 @@ Updated: March 2026.
 |-------|-----------------------------------------------|----------------|-------------|------------|
 | 1     | Data and Constraints Foundations              | 3/3            | Complete    | -          |
 | 2     | Regime Clustering and Interpretation          | 2/2            | Complete    | 2026-03-16 |
-| 3     | Supervised Regime and Behavior Models         | 2/3            | In Progress | -          |
+| 3     | Supervised Regime and Behavior Models         | 3/3            | Complete    | 2026-03-18 |
 | 4     | Regime-Conditional ETF and Portfolio Behavior | 0/0            | Not started | -          |
 | 5     | Recommendations and Machine-Readable Outputs  | 0/0            | Not started | -          |
 | 6     | Weekly Report Pipeline                        | 0/0            | Not started | -          |
@@ -25,8 +25,8 @@ Updated: March 2026.
 - [x] `02-regime-clustering-interpretation-01-PLAN.md` — Regime profiling and transition matrix
 - [x] `02-regime-clustering-interpretation-02-PLAN.md` — Regime naming heuristics and label overrides
 
-### Phase 3 Plans (3 plans — 2/3 complete)
-- [ ] `03-supervised-regime-behavior-models-01-PLAN.md` — **next to execute** (no SUMMARY yet)
+### Phase 3 Plans (3 plans — all complete)
+- [x] `03-supervised-regime-behavior-models-01-PLAN.md` — Classifier module scaffold + test modules (functionally complete; APIs in flat + bundle API)
 - [x] `03-supervised-regime-behavior-models-02-PLAN.md` — Supervised current-regime classifier (RF + DT)
 - [x] `03-supervised-regime-behavior-models-03-PLAN.md` — Forward binary classifiers and behavior models
 

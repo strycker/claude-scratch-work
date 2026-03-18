@@ -28,6 +28,7 @@ from market_regime import DATA_DIR
 from market_regime.config import load, setup_logging
 from market_regime.ingestion import fred as fred_module
 from market_regime.ingestion import multpl as multpl_module
+from market_regime.ingestion import ingestion_completeness_report
 from market_regime.runtime import RunConfig
 
 import pandas as pd
@@ -114,6 +115,19 @@ def main(argv: list[str] | None = None) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     combined.to_parquet(out_path)
     print(f"Wrote {len(combined)} rows × {len(combined.columns)} cols → {out_path}")
+
+    # ── Completeness report ─────────────────────────────────────────────
+    # Build expected column list from config
+    expected_cols: list[str] = []
+    for series_id, meta in cfg.get("fred", {}).get("series", {}).items():
+        expected_cols.append(meta.get("name", series_id.lower()))
+    for ds in cfg.get("multpl", {}).get("datasets", []):
+        expected_cols.append(ds[0] if isinstance(ds, list) else ds["name"])
+    for ds in cfg.get("macrotrends", {}).get("series", []):
+        expected_cols.append(ds["name"] if isinstance(ds, dict) else ds[0])
+
+    report = ingestion_completeness_report(combined, expected_columns=expected_cols)
+    print(report.summary())
 
 
 if __name__ == "__main__":

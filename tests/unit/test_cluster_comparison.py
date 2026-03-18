@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pickle
+import joblib
 import tempfile
 from pathlib import Path
 
@@ -72,8 +72,7 @@ def rf_model_path(tmp_path):
     rf = RandomForestClassifier(n_estimators=10, random_state=42)
     rf.fit(X, y)
     path = tmp_path / "rf_model.pkl"
-    with open(path, "wb") as f:
-        pickle.dump(rf, f)
+    joblib.dump(rf, path)
     return path, rf, [f"feat_{i}" for i in range(10)]
 
 
@@ -224,8 +223,7 @@ class TestExtractRfFeatureImportances:
         model = LinearRegression()
         model.fit([[1, 2], [3, 4]], [0, 1])
         path = tmp_path / "lr.pkl"
-        with open(path, "wb") as f:
-            pickle.dump(model, f)
+        joblib.dump(model, path)
         with pytest.raises(AttributeError, match="feature_importances_"):
             extract_rf_feature_importances(path)
 
