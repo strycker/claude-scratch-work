@@ -146,51 +146,35 @@ def test_send_email_ssl_success(mock_smtp_ssl_cls):
 # ── run_weekly_report.py tests ───────────────────────────────────────────────
 
 
-def test_archive_weekly_report_creates_archive(tmp_path):
+def test_archive_weekly_report_creates_dated_copy(tmp_path):
     import sys
+    from datetime import date
     sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
     from run_weekly_report import archive_weekly_report
 
-    (tmp_path / "dashboard.csv").write_text("asset,signal\nSPY,GREEN\n")
-    result = archive_weekly_report(tmp_path)
-    assert result is not None
-    assert result.exists()
-    assert (result / "dashboard.csv").exists()
+    content = "# Weekly Report\nAll good."
+    (tmp_path / "weekly_report.md").write_text(content, encoding="utf-8")
+    archive_weekly_report(tmp_path)
+
+    today = date.today().isoformat()
+    stamped = tmp_path / f"weekly_{today}.md"
+    email_body = tmp_path / "email_body.txt"
+    assert stamped.exists()
+    assert email_body.exists()
+    assert stamped.read_text(encoding="utf-8") == content
+    assert email_body.read_text(encoding="utf-8") == content
 
 
-def test_archive_weekly_report_no_files(tmp_path):
+def test_archive_weekly_report_noop_when_no_report(tmp_path):
     import sys
+    from datetime import date
     sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
     from run_weekly_report import archive_weekly_report
 
-    result = archive_weekly_report(tmp_path)
-    assert result is None
+    archive_weekly_report(tmp_path)
 
-
-def test_build_pipeline_command():
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-    from run_weekly_report import build_pipeline_command
-
-    cmd = build_pipeline_command(full=True, steps="5,6,7", verbose=True)
-    assert "--refresh" in cmd
-    assert "--recompute" in cmd
-    assert "--steps" in cmd
-    assert "5,6,7" in cmd
-    assert "--verbose" in cmd
-    assert "--plots" in cmd
-
-
-def test_build_pipeline_command_defaults():
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-    from run_weekly_report import build_pipeline_command
-
-    cmd = build_pipeline_command()
-    assert "--recompute" in cmd
-    assert "--refresh" not in cmd
-    assert "--plots" in cmd
+    today = date.today().isoformat()
+    assert not (tmp_path / f"weekly_{today}.md").exists()
+    assert not (tmp_path / "email_body.txt").exists()

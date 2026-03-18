@@ -317,26 +317,84 @@ prediction:
   cv_splits:                 5     # TimeSeriesSplit folds for walk-forward CV
   dt_max_depth:              8     # DecisionTree depth (shallow = human-readable)
   rf_max_depth:              12    # RandomForest max_depth (null = unlimited)
+  # Phase 9: optional boosted models + interpretability trees
+  use_boosted:               true  # try to train a boosted model when library is available
+  boosted_max_depth:         6
+  boosted_learning_rate:     0.1
+  boosted_n_estimators:      200
+  interpret_tree_max_depth:  3     # shallow tree for human-readable splits
+  interpret_top_k_features:  10    # number of top features to use when fitting interpretability tree
 
 # ── Asset classes ─────────────────────────────────────────────────────────────
 assets:
   etfs:
-    - SPY   # S&P 500 (broad US equity)
-    - GLD   # Gold
-    - TLT   # 20+ year Treasuries (long duration)
-    - USO   # Oil (WTI crude)
-    - QQQ   # Nasdaq-100 / Tech
-    - IWM   # Russell 2000 small-cap
-    - VNQ   # Real estate (REIT)
-    - AGG   # Aggregate bonds (investment-grade)
-    - HYG   # High-yield / junk bonds (credit risk signal)
-    - XLK   # Technology sector
-    - XLP   # Consumer staples (defensive)
-    - XLE   # Energy sector
-    - GDX   # Gold miners (amplified gold signal)
-    - TIP   # TIPS / inflation-linked bonds
-    - BIL   # T-bills / cash equivalent (defensive)
-    - EDV   # Extended-duration Treasuries (25+ yr)
+    # Core / broad
+    - SPY    # S&P 500
+    - QQQ    # Nasdaq-100 / Tech
+    - IWM    # Russell 2000 small-cap
+    - VT     # Total world equity
+    - ACWX   # ex-US developed + emerging
+    # Sectors
+    - XLK    # Technology
+    - XLV    # Health care
+    - XLU    # Utilities
+    - XLE    # Energy
+    - XLP    # Consumer staples
+    - XLY    # Consumer discretionary
+    - XLF    # Financials
+    - XLI    # Industrials
+    - XLB    # Materials
+    # Bonds
+    - TLT    # 20+ year Treasuries
+    - IEF    # 7–10 year Treasuries
+    - SHY    # 1–3 year Treasuries
+    - GOVT   # Broad Treasuries
+    - AGG    # Aggregate investment-grade
+    - HYG    # High-yield corporate
+    - LQD    # Investment-grade corporate
+    - TIP    # TIPS
+    - BIL    # T-bills / cash
+    - EDV    # Extended-duration Treasuries
+    # Commodities / metals / energy
+    - IAU    # Gold (alternate to GLD)
+    - GLD    # Gold
+    - SLV    # Silver
+    - GDX    # Gold miners
+    - USO    # Oil (WTI)
+    - UNG    # Natural gas
+    - DBC    # Broad commodities
+    # Bitcoin ETF
+    - FBTC   # Fidelity Bitcoin
+    # Real estate (kept from v1.0)
+    - VNQ    # REITs
+
+  # Portfolio templates: name → weights (ticker → fraction). Weights need not sum to 1.
+  portfolio_templates:
+    - name: "Core 60/40"
+      weights: { SPY: 0.6, IEF: 0.4 }
+    - name: "Aggressive growth"
+      weights: { QQQ: 0.7, XLK: 0.2, FBTC: 0.1 }
+    - name: "Defensive income"
+      weights: { TLT: 0.25, IEF: 0.2, TIP: 0.15, HYG: 0.15, XLU: 0.1, XLP: 0.1, SPY: 0.05 }
+    - name: "Commodities tilt"
+      weights: { SPY: 0.5, DBC: 0.2, GDX: 0.15, IAU: 0.1, USO: 0.05 }
+    - name: "Cash heavy"
+      weights: { BIL: 0.6, SPY: 0.25, IEF: 0.15 }
+    - name: "All-weather"
+      weights: { SPY: 0.3, TLT: 0.4, TIP: 0.15, GDX: 0.15 }
+    - name: "Quality tilt"
+      weights: { SPY: 0.4, QQQ: 0.3, XLV: 0.2, IEF: 0.1 }
+    - name: "Bond ladder"
+      weights: { SHY: 0.2, IEF: 0.3, TLT: 0.3, TIP: 0.2 }
+    - name: "REIT + bonds"
+      weights: { VNQ: 0.4, TLT: 0.3, IEF: 0.3 }
+
+  # Phase 4: per-regime behavior table stoplights (absolute rules + relative tertiles)
+  behavior_thresholds:
+    green_median: 0.02   # >= 2%/quarter → green band
+    red_median: 0.0      # <= 0% → red band; between = neutral
+  # Phase 5: minimum weight change (fraction) to trigger BUY/SELL vs HOLD
+  recommendation_threshold: 0.03   # 3%
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 dashboard:
@@ -375,3 +433,34 @@ plotting:
     - log_earn_yld
     - log_div_yield
     - real_gdp_per_cap_d1
+
+# ── Diagnostics (Phase 8) ───────────────────────────────────────────────────────
+diagnostics:
+  # Config-driven ratios: numerator / denominator
+  ratios:
+    - name: "Oil:Gold"
+      numerator: USO
+      denominator: GLD
+    - name: "Oil:Bonds"
+      numerator: USO
+      denominator: TLT
+    - name: "Bonds:Gold"
+      numerator: TLT
+      denominator: GLD
+    - name: "Lumber:Gold (proxy)"
+      numerator: XLB
+      denominator: GLD
+  # RRG benchmarks to compute rotation views against
+  rrg_benchmarks:
+    - SPY
+    - VT
+
+# ── Tactics (Phase 10A) ────────────────────────────────────────────────────────
+tactics:
+  vol_windows: [5, 20, 60]
+  vol_bands:
+    low: 0.05
+    high: 0.25
+  trend_windows: [20, 60]
+  trend_min_slope: 0.0
+  corr_lookback: 60
