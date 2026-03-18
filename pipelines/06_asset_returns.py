@@ -1,14 +1,13 @@
 """
 Pipeline step 6 — Asset Returns by Regime
 
-Fetches ETF price history via yfinance (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG),
-computes quarterly returns, and profiles median return per regime.
+Fetches ETF price history via yfinance, computes quarterly returns, profiles
+median return per regime, and generates behavior tables (stoplight signals + scores).
 
 Fallback: when yfinance is unavailable (SSL failure, network outage, or no cached
 prices), derives proxy returns directly from macro columns already present in
-data/raw/macro_raw.parquet (sp500, sp500_adj, 10yr_ustreas, gdp_growth, us_infl,
-credit_spread).  Coverage extends back to ~1950, so every historical regime is
-represented even without ETF data.
+data/raw/macro_raw.parquet.  Coverage extends back to ~1950, so every historical
+regime is represented even without ETF data.
 
 Priority order:
   1. yfinance (real ETF data — most accurate for recent periods)
@@ -16,14 +15,10 @@ Priority order:
   2. Cached asset_prices.parquet (if yfinance is temporarily unavailable)
   3. Macro-data proxy returns (fallback for SSL/network failures or back-history)
 
-SSL note:
-  Behind a corporate firewall with HTTPS inspection?  See the message printed
-  by fetch_all() for remediation steps.  The simplest workaround:
-    export CURL_CA_BUNDLE=""
-    export REQUESTS_CA_BUNDLE=""
-  Or run without --refresh-assets to skip yfinance and use the checkpoint.
-
-Writes data/regimes/asset_return_profile.parquet
+Writes:
+  data/regimes/asset_return_profile.parquet
+  data/regimes/etf_behavior_by_regime.parquet
+  data/regimes/template_behavior_by_regime.parquet  (if portfolio_templates configured)
 
 Run:
     python pipelines/06_asset_returns.py                  # use cache if available
@@ -44,6 +39,8 @@ from market_regime.asset_returns import (
     compute_proxy_returns,
     returns_by_regime,
     rank_assets_by_regime,
+    compute_template_returns,
+    behavior_tables,
 )
 
 import pandas as pd
@@ -113,13 +110,32 @@ def main() -> None:
             return
 
     common = returns.index.intersection(labels.index)
-    profile = returns_by_regime(returns.loc[common], labels.loc[common])
+    returns_aligned = returns.loc[common]
+    labels_aligned = labels.loc[common]
+    profile = returns_by_regime(returns_aligned, labels_aligned)
     ranked = rank_assets_by_regime(profile)
 
-    out = DATA_DIR / "regimes" / "asset_return_profile.parquet"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    profile.to_parquet(out)
-    print(f"Wrote asset return profile → {out}")
+    out_dir = DATA_DIR / "regimes"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    profile.to_parquet(out_dir / "asset_return_profile.parquet")
+    print(f"Wrote asset return profile → {out_dir / 'asset_return_profile.parquet'}")
+
+    # Behavior tables (median, IQR, stoplights, scores) for ETFs
+    behavior_thresholds = cfg.get("dashboard", {}).get("behavior_thresholds") or {}
+    etf_behavior = behavior_tables(returns_aligned, labels_aligned, thresholds=behavior_thresholds)
+    etf_behavior.to_parquet(out_dir / "etf_behavior_by_regime.parquet", index=False)
+    print(f"Wrote ETF behavior by regime → {out_dir / 'etf_behavior_by_regime.parquet'}")
+
+    # Template returns and behavior (if config has portfolio_templates)
+    templates = cfg.get("assets", {}).get("portfolio_templates") or []
+    if templates:
+        template_returns = compute_template_returns(returns_aligned, templates)
+        if not template_returns.empty:
+            template_behavior = behavior_tables(
+                template_returns, labels_aligned, thresholds=behavior_thresholds
+            )
+            template_behavior.to_parquet(out_dir / "template_behavior_by_regime.parquet", index=False)
+            print(f"Wrote template behavior by regime → {out_dir / 'template_behavior_by_regime.parquet'}")
 
     print("\nTop assets per regime (by median quarterly return):")
     print(ranked.to_string(index=False))

@@ -66,6 +66,12 @@ fred:
     T10Y3M:
       name:  "fred_t10y3m"
       shift: false
+    HOUST:
+      name:  "fred_houst"
+      shift: false
+    UMCSENT:
+      name:  "fred_umcsent"
+      shift: false
 
 # ── multpl.com series ─────────────────────────────────────────────────────────
 # Each entry: [short_name, description, url, value_type]
