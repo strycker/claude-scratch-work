@@ -1,7 +1,7 @@
 """
 run_pipeline.py — Master entry point for the Trading-Crab market regime pipeline.
 
-Runs all 7 pipeline steps in order, or any selected subset, with a consistent
+Runs all pipeline steps in order, or any selected subset, with a consistent
 RunConfig passed through every module.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -14,6 +14,7 @@ RunConfig passed through every module.
   5  predict        Supervised classifiers (current + forward horizons)
   6  asset_returns  ETF returns by regime via yfinance
   7  dashboard      Print dashboard + save outputs/reports/dashboard.csv
+  9  tactics        Per-asset buy_hold / swing / stand_aside classification
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  ALL CLI FLAGS
@@ -141,7 +142,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 import sys
+from datetime import date
 from pathlib import Path
 
 # Allow running from repo root without `pip install -e .`
@@ -150,6 +153,11 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from market_regime import DATA_DIR, OUTPUT_DIR, CONFIG_DIR
 from market_regime.config import load, setup_logging
 from market_regime.runtime import RunConfig
+from market_regime.email import (
+    build_weekly_email_body,
+    load_email_config,
+    send_weekly_email,
+)
 
 log = logging.getLogger(__name__)
 
@@ -570,6 +578,20 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
         except Exception as exc:
             log.warning("Could not generate prediction plots: %s", exc)
 
+    # ── Interpretability tree (Phase 9) ───────────────────────────────────────
+    try:
+        from market_regime.prediction.classifier import train_interpretability_tree
+        from sklearn.tree import export_text
+        tree_model, tree_features = train_interpretability_tree(current_model, X, y, cfg)
+        tree_txt = export_text(tree_model, feature_names=tree_features)
+        report_dir = OUTPUT_DIR / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        tree_path = report_dir / "current_regime_tree.txt"
+        tree_path.write_text(tree_txt, encoding="utf-8")
+        log.info("Wrote interpretability tree → %s", tree_path)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("Could not generate interpretability tree: %s", exc)
+
     log.info("Step 5 done — models saved to %s", model_dir)
 
 
@@ -760,6 +782,36 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
     log.info("Step 7 done")
 
 
+from market_regime.tactics import compute_tactics_metrics, classify_tactics
+
+
+def step9_tactics(cfg: dict, run_cfg: RunConfig) -> None:
+    """Compute per-asset tactics signals and write tactics_signals.parquet."""
+    import pandas as pd
+
+    prices_path = DATA_DIR / "raw" / "asset_prices.parquet"
+    labels_path = DATA_DIR / "regimes" / "cluster_labels.parquet"
+
+    if not prices_path.exists():
+        log.warning("Step 9: ETF prices checkpoint %s not found; skipping tactics.", prices_path)
+        return
+    if not labels_path.exists():
+        log.warning("Step 9: cluster labels %s not found; skipping tactics.", labels_path)
+        return
+
+    prices = pd.read_parquet(prices_path)
+    labels = pd.read_parquet(labels_path)["balanced_cluster"]
+
+    metrics = compute_tactics_metrics(prices, labels, cfg)
+    tactics_df = classify_tactics(metrics, cfg).reset_index()
+
+    out_dir = OUTPUT_DIR / "reports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "tactics_signals.parquet"
+    tactics_df.to_parquet(out_path, index=False)
+    log.info("Step 9: tactics signals written to %s", out_path)
+
+
 # ── Step dispatch table ────────────────────────────────────────────────────────
 
 STEPS: dict[int, tuple[str, callable]] = {
@@ -770,7 +822,36 @@ STEPS: dict[int, tuple[str, callable]] = {
     5: ("Supervised prediction",        step5_predict),
     6: ("Asset returns",                step6_asset_returns),
     7: ("Dashboard",                    step7_dashboard),
+    9: ("Tactics signals",              step9_tactics),
 }
+
+
+# ── Weekly report helpers (archive + email) ────────────────────────────────────
+
+def archive_weekly_report(reports_dir: Path | None = None) -> None:
+    """
+    Copy weekly_report.md to weekly_YYYY-MM-DD.md and write email_body.txt.
+
+    No-op if weekly_report.md does not exist. This mirrors the behaviour of
+    scripts/run_weekly_report.py so that the full weekly flow can be driven
+    directly via run_pipeline.
+    """
+    reports = reports_dir or (OUTPUT_DIR / "reports")
+    report_path = reports / "weekly_report.md"
+    if not report_path.exists():
+        print(f"No weekly_report.md at {report_path} — skip archive/email body.")
+        return
+
+    today = date.today().isoformat()
+    stamped = reports / f"weekly_{today}.md"
+    stamped.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(report_path, stamped)
+    print(f"Archived report → {stamped}")
+
+    email_body_path = reports / "email_body.txt"
+    body = report_path.read_text(encoding="utf-8")
+    email_body_path.write_text(body, encoding="utf-8")
+    print(f"Email body → {email_body_path}")
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
@@ -822,6 +903,22 @@ def build_parser() -> argparse.ArgumentParser:
                        "'market_code_clustered' checkpoint for future use with "
                        "--market-code clustered."
                    ))
+    p.add_argument(
+        "--weekly-report",
+        action="store_true",
+        help=(
+            "After running the selected steps, archive outputs/reports/weekly_report.md "
+            "to a dated copy and write outputs/reports/email_body.txt."
+        ),
+    )
+    p.add_argument(
+        "--send-email",
+        action="store_true",
+        help=(
+            "After weekly-report post-processing, send the weekly report email via "
+            "config/email.local.yaml (see config/email.example.yaml)."
+        ),
+    )
     return p
 
 
@@ -875,6 +972,22 @@ def main() -> None:
             log.exception("Step %d failed: %s", step_num, exc)
             print(f"   ✗ FAILED: {exc}\n")
             sys.exit(1)
+
+    # Optional weekly-report archive + email sending
+    if getattr(args, "weekly_report", False) or getattr(args, "send_email", False):
+        archive_weekly_report()
+
+    if getattr(args, "send_email", False):
+        email_cfg = load_email_config()
+        if not email_cfg:
+            print("Email config not found or invalid; skipping send.")
+        else:
+            subject, body = build_weekly_email_body()
+            ok = send_weekly_email(email_cfg, subject, body)
+            if ok:
+                print("Weekly report email sent.")
+            else:
+                print("Weekly report email failed to send (see logs).")
 
     print("Pipeline complete.")
 

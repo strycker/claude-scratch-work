@@ -208,7 +208,7 @@ def blended_regime_portfolio(
 def generate_recommendation(
     target_weights: pd.Series,
     current_weights: pd.Series | None = None,
-    threshold: float = 0.05,
+    threshold: float = 0.03,
 ) -> pd.DataFrame:
     """
     Compare current portfolio to target and emit BUY / SELL / HOLD signals.
@@ -218,7 +218,7 @@ def generate_recommendation(
         current_weights: current portfolio weights.  Pass None to assume all-cash
                          (every target position is a BUY).
         threshold:       minimum absolute weight change (as a fraction) to trigger
-                         a trade.  Smaller changes get HOLD.  Default 5%.
+                         a trade.  Smaller changes get HOLD.  Default 3%.
 
     Returns:
         DataFrame with columns:
@@ -268,3 +268,183 @@ def generate_recommendation(
         buys, sells, holds, threshold * 100,
     )
     return result
+
+
+# ── Phase 5: recommendation bundle + weekly report ─────────────────────────────
+
+def build_recommendation_digest(
+    behavior_df: pd.DataFrame,
+    current_regime: int,
+    current_weights: pd.Series,
+    target_weights: pd.Series,
+    rec_df: pd.DataFrame,
+    top_n: int = 5,
+) -> pd.DataFrame:
+    """
+    Build one row per ETF: current holdings + strong-green candidates not held.
+    Adds in_holdings, is_strong_green, in_top5, in_bottom5, and behavior columns.
+    """
+    regime_behav = behavior_df[behavior_df["regime"] == current_regime].copy()
+    if regime_behav.empty:
+        return pd.DataFrame()
+
+    holdings = set(current_weights.index) if current_weights is not None else set()
+    strong_green = set(
+        regime_behav[regime_behav["signal_display"] == "green_strong"]["asset"]
+    )
+    digest_assets = sorted(holdings | strong_green)
+
+    # Top/bottom N by rank within regime
+    by_rank = regime_behav.sort_values("rank")
+    top_assets = set(by_rank.head(top_n)["asset"])
+    bottom_assets = set(by_rank.tail(top_n)["asset"])
+
+    rows = []
+    for asset in digest_assets:
+        row: dict = {"asset": asset}
+        row["in_holdings"] = asset in holdings
+        row["is_strong_green"] = asset in strong_green
+        row["in_top5"] = asset in top_assets
+        row["in_bottom5"] = asset in bottom_assets
+
+        rec_row = rec_df.loc[asset] if asset in rec_df.index else None
+        if rec_row is not None:
+            row["current_pct"] = rec_row["current_pct"]
+            row["target_pct"] = rec_row["target_pct"]
+            row["delta_pct"] = rec_row["delta_pct"]
+            row["signal"] = rec_row["signal"]
+        else:
+            row["current_pct"] = 0.0
+            row["target_pct"] = 0.0
+            row["delta_pct"] = 0.0
+            row["signal"] = "HOLD"
+
+        beh = regime_behav[regime_behav["asset"] == asset]
+        if not beh.empty:
+            b = beh.iloc[0]
+            row["median_return"] = b.get("median_return")
+            row["signal_display"] = b.get("signal_display")
+            row["score_relative"] = b.get("score_relative")
+            row["score_absolute"] = b.get("score_absolute")
+            row["rank_in_regime"] = int(b.get("rank", 0))
+        else:
+            row["median_return"] = None
+            row["signal_display"] = None
+            row["score_relative"] = None
+            row["score_absolute"] = None
+            row["rank_in_regime"] = None
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+def save_recommendation_bundle(
+    digest_df: pd.DataFrame,
+    current_regime: int,
+    regime_name: str,
+    regime_probabilities: dict[int, float],
+    output_path: Path,
+) -> Path:
+    """Write recommendation_bundle with run metadata + per-ETF digest."""
+    if digest_df.empty:
+        log.warning("save_recommendation_bundle: empty digest, not writing")
+        return output_path
+
+    out = digest_df.copy()
+    out["current_regime"] = current_regime
+    out["regime_name"] = regime_name
+    for r, p in regime_probabilities.items():
+        out[f"prob_regime_{r}"] = p
+
+    out.to_parquet(output_path, index=False)
+    log.info("Recommendation bundle saved to %s", output_path)
+    return output_path
+
+
+def write_weekly_report_md(
+    current_regime: int,
+    regime_name: str,
+    regime_probabilities: dict[int, float],
+    rec_df: pd.DataFrame,
+    transition_row: pd.Series | None,
+    output_path: Path,
+) -> Path:
+    """
+    Write weekly_report.md: regime summary, BUY/SELL bullets, risk/transition note.
+    """
+    lines = [
+        "# Weekly Regime Report",
+        "",
+        f"**Current regime:** {current_regime} — {regime_name}",
+        "",
+    ]
+    prob = regime_probabilities.get(current_regime, 0.0)
+    lines.append(f"Confidence in this regime: {prob:.0%}.")
+    lines.append("")
+
+    # BUY / SELL bullets
+    buys = rec_df[rec_df["signal"] == "BUY"].index.tolist()
+    sells = rec_df[rec_df["signal"] == "SELL"].index.tolist()
+    lines.append("## Recommendations")
+    lines.append("")
+    if buys:
+        lines.append("**Strongest BUY ideas:**")
+        for a in buys[:10]:
+            row = rec_df.loc[a]
+            lines.append(f"- **{a}** — target +{row['delta_pct']:.1f}% vs current")
+        lines.append("")
+    if sells:
+        lines.append("**Strongest SELL ideas:**")
+        for a in sells[:10]:
+            row = rec_df.loc[a]
+            lines.append(f"- **{a}** — reduce {row['delta_pct']:.1f}%")
+        lines.append("")
+    if not buys and not sells:
+        lines.append("No BUY or SELL signals above threshold; current allocation is in line with the model.")
+    lines.append("")
+
+    # Risk / regime transition
+    lines.append("## Risk & regime transition")
+    lines.append("")
+    if transition_row is not None and not transition_row.empty:
+        top_trans = transition_row.drop(current_regime, errors="ignore").sort_values(ascending=False).head(3)
+        if not top_trans.empty:
+            lines.append("Most likely regime transitions from current state:")
+            for to_r, p in top_trans.items():
+                lines.append(f"- To regime {to_r}: {p:.0%}")
+        else:
+            lines.append("Regime is stable; no significant transition probability to other regimes.")
+    else:
+        lines.append("Transition probabilities not available.")
+    lines.append("")
+
+    # Optional tactics section
+    from market_regime import OUTPUT_DIR  # local import to avoid circulars
+
+    tactics_path = OUTPUT_DIR / "reports" / "tactics_signals.parquet"
+    if tactics_path.exists():
+        try:
+            tac = pd.read_parquet(tactics_path)
+            buy_hold = tac[tac["tactics_label"] == "buy_hold"]["asset"].tolist()
+            swing = tac[tac["tactics_label"] == "swing"]["asset"].tolist()
+            stand_aside = tac[tac["tactics_label"] == "stand_aside"]["asset"].tolist()
+
+            lines.append("## Tactics")
+            lines.append("")
+            if buy_hold:
+                lines.append(f"- **Buy-and-hold candidates:** {', '.join(buy_hold)}")
+            if swing:
+                lines.append(f"- **Swing-trade candidates:** {', '.join(swing)}")
+            if stand_aside:
+                lines.append(f"- **Stand-aside:** {', '.join(stand_aside)}")
+            lines.append("")
+        except Exception:
+            # Do not let a malformed tactics file break the report.
+            pass
+
+    text = "\n".join(lines)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(text, encoding="utf-8")
+    log.info("Weekly report saved to %s", output_path)
+    return output_path

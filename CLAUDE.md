@@ -72,7 +72,9 @@ trading-crab/
 │   ├── 04_regime_label.py
 │   ├── 05_predict.py
 │   ├── 06_asset_returns.py
-│   └── 07_dashboard.py
+│   ├── 07_dashboard.py
+│   ├── 08_diagnostics.py          ← ratio diagnostics + RRG rotation view
+│   └── 09_tactics.py              ← per-asset buy_hold / swing / stand_aside
 │
 ├── run_pipeline.py                ← master entry point with --steps / --refresh / --plots
 │
@@ -81,16 +83,21 @@ trading-crab/
 │
 ├── scripts/
 │   ├── setup.sh                   ← automated environment setup
-│   └── jupyter_notebook_local.sh  ← local notebook launcher helper
+│   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
+│   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (238 tests)
+├── tests/                         ← pytest test suite (301 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/               ← integration tests (currently empty)
 │   ├── test_pipelines_ingest_features.py  ← pipeline steps 1-2 smoke tests
 │   ├── test_models_regime.py      ← regime classifier tests (bundle API)
+│   ├── test_models_boosting.py    ← GradientBoosting in bundle API
+│   ├── test_models_interpret_tree.py ← interpretability helpers (feature ranking + reduced tree)
 │   ├── test_models_behavior.py    ← behavior model tests
 │   ├── test_models_reporting.py   ← metrics aggregation tests
+│   ├── test_email_weekly.py       ← email delivery + weekly report automation
+│   ├── test_scripts_weekly_report.py      ← weekly report script (archive, CLI, email)
 │   ├── test_constraints_etf_universe.py   ← ETF universe validation
 │   ├── test_constraints_frequency.py      ← data frequency validation
 │   └── unit/                      ← unit tests for src/ modules
@@ -102,7 +109,15 @@ trading-crab/
 │       ├── test_density.py
 │       ├── test_spectral.py
 │       ├── test_checkpoints.py
-│       └── test_returns.py
+│       ├── test_returns.py
+│       ├── test_prediction_flat.py    ← flat prediction API (production)
+│       ├── test_ingestion.py          ← HTTP-mocked tests for multpl, FRED, assets
+│       ├── test_diagnostics_rrg.py    ← RRG analysis + rolling statistics
+│       ├── test_tactics.py            ← tactical asset classification
+│       ├── test_config.py             ← config.load_portfolio()
+│       ├── test_regime.py             ← regime profiling + transition matrix
+│       ├── test_fred_series_config.py ← FRED settings.yaml validation
+│       └── test_yield_curve_features.py ← yield curve spread features
 │
 ├── outputs/                       ← gitignored; created at runtime
 │   ├── models/                    ← pickled sklearn models
@@ -111,7 +126,7 @@ trading-crab/
 │
 └── src/market_regime/             ← installable Python package
     ├── __init__.py                ← defines ROOT, CONFIG_DIR, DATA_DIR, OUTPUT_DIR
-    ├── config.py                  ← load(), setup_logging()
+    ├── config.py                  ← load(), load_portfolio(), setup_logging()
     ├── runtime.py                 ← RunConfig dataclass (verbose, plots, refresh flags)
     ├── checkpoints.py             ← CheckpointManager (save/load/is_fresh/clear)
     ├── transforms.py              ← ratios, log, select, gap-fill, derivatives, engineer_all
@@ -127,6 +142,9 @@ trading-crab/
     ├── asset_returns.py           ← compute_quarterly_returns, returns_by_regime, rank_assets_by_regime
     ├── reporting.py               ← asset_signals, print_dashboard, save_dashboard_csv, portfolio helpers
     ├── plotting.py                ← ALL visualization helpers (used by notebooks + pipelines)
+    ├── diagnostics.py             ← RRG analysis: rolling_zscore, percentile_rank, normalize_100, compute_rrg
+    ├── tactics.py                 ← tactical classification: compute_tactics_metrics, classify_tactics
+    ├── email.py                   ← weekly email: load_email_config, build_weekly_email_body, send_weekly_email
     ├── ingestion/
     │   ├── multpl.py              ← lxml scraper for 46 multpl.com series
     │   ├── fred.py                ← FRED API fetcher with publication-lag shift
@@ -135,9 +153,8 @@ trading-crab/
     └── prediction/
         ├── __init__.py            ← FLAT API: train_current_regime(X,y,cfg), train_decision_tree,
         │                             train_forward_classifiers, predict_current — used by run_pipeline.py
-        └── classifier.py          ← BUNDLE API with FoldReport namedtuple — backwards-compat layer
-                                      used only by tests asserting on per-fold CV metadata; do NOT
-                                      import this from pipeline code (see ADR #12 below)
+        └── classifier.py          ← BUNDLE API with FoldReport + GradientBoosting + interpretability
+                                      helpers; backwards-compat layer for tests (see ADR #12 below)
 ```
 
 ---
@@ -163,6 +180,8 @@ python pipelines/04_regime_label.py
 python pipelines/05_predict.py
 python pipelines/06_asset_returns.py
 python pipelines/07_dashboard.py
+python pipelines/08_diagnostics.py
+python pipelines/09_tactics.py
 ```
 
 ### CLI flag reference (run_pipeline.py)
@@ -177,6 +196,8 @@ python pipelines/07_dashboard.py
 | `--market-code NAME` | Load market_code from `grok`, `clustered`, `predicted`, or any saved checkpoint |
 | `--save-market-code` | After step 3, save `balanced_cluster` as `market_code_clustered` checkpoint |
 | `--show-plots` | Call `plt.show()` in addition to saving (avoid in headless/CI) |
+| `--weekly-report` | Archive weekly_report.md to dated copy + email_body.txt |
+| `--send-email` | Send weekly report via SMTP (requires config/email.local.yaml) |
 
 ### Jupyter notebooks (exploration / plotting)
 ```bash
@@ -310,12 +331,12 @@ Scraped via lxml cssselect from `#datatable`. All URLs and `value_type` metadata
 are in `config/settings.yaml` under `multpl.datasets`. Do not hardcode URLs in Python.
 Rate-limited to 2 seconds per request (`RATE_LIMIT_SECONDS`).
 
-### FRED API (7 series, more planned)
-Current: GDP (shifted +1Q), GNP (shifted +1Q), BAA, AAA, CPI (CPIAUCSL), GS10, TB3MS.
+### FRED API (14 series)
+Current: GDP (shifted +1Q), GNP (shifted +1Q), BAA, AAA, CPI (CPIAUCSL), GS10, TB3MS,
+VIXCLS, UNRATE, M2SL, M2NS, GS2, T10Y2Y, T10Y3M.
 
 Planned additions (see `ROADMAP.md` Tier 1):
-- VIXCLS (VIX, 1990+), UNRATE (unemployment, 1948+), M2NS (money supply, 1959+)
-- T10Y2Y (10Y-2Y spread), GS2 (2Y Treasury), HOUST (housing starts), UMCSENT
+- HOUST (housing starts), UMCSENT (consumer sentiment)
 
 Requires `FRED_API_KEY` in `.env`. Free registration at fred.stlouisfed.org.
 
@@ -448,19 +469,19 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
-**Summary:** all 7 pipeline steps run end-to-end on real data. **238 unit tests collected**
-(8 skipped: HDBSCAN optional). All 5 legacy alignment gaps closed. Clustering
-investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully implemented.
-Phase 3 supervised models (RF + DT + forward classifiers) implemented; 2/3 Phase 3 plans complete.
+**Summary:** all 9 pipeline steps run end-to-end on real data. **301 tests collected**
+(10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
+Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
+implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
+New modules: diagnostics (RRG), tactics, email/weekly report.  FRED expanded from 7
+to 14 series; yield curve features added.  ETF universe expanded from 16 to 38.
+Diagnostics and tactics integrated as pipeline steps 8-9.  Weekly report flow with
+`--weekly-report` + `--send-email` CLI flags.  Interpretability tree in step 5.
 
 ### Known Limitations
-- `ingestion/fred.py` and `ingestion/multpl.py` are missing `from __future__ import annotations`
-  (no functional impact on Python 3.10+ but inconsistent with the project style guide).
 - `regime.py` naming heuristics silently skip 4 features (`10yr_ustreas`, `fred_gs10`,
   `fred_tb3ms`, `div_minus_baa`) because only their derivatives are in `clustering_features`.
   Graceful fallback is intentional.
-- Only 7 FRED series currently ingested; many high-value series (VIX, unemployment,
-  M2, yield curve) are not yet fetched.
 - ETF data starts 1993-2006; pre-1993 gold and oil regime analysis uses proxy columns only.
   macrotrends.net backfill would extend coverage to 1915+ for gold.
 - Clustering uses KMeans which treats each quarter independently; HMM would model
@@ -468,6 +489,9 @@ Phase 3 supervised models (RF + DT + forward classifiers) implemented; 2/3 Phase
 - Standalone `pipelines/*.py` scripts do not use `RunConfig` or `CheckpointManager` —
   they are simplified entry points without plot generation or checkpoint management.
   Use `run_pipeline.py --steps N` for full-featured single-step execution.
+- `diagnostics.py` and `tactics.py` are not yet integrated into `run_pipeline.py` steps;
+  they are available as library modules for notebooks and custom scripts.
+- `email.py` requires `config/email.yaml` (not committed; add to `.env.example` pattern).
 
 ---
 
@@ -952,3 +976,63 @@ changes were adopted are documented in D1 and D4 above.
 
 `legacy/unified_script.py` is the algorithm ground truth. When implementing a remaining gap,
 refer to `unified_script.py`, not any modular legacy files, to avoid inconsistencies.
+
+### D8. FRED expanded from 7 to 14 series (2026-03-18)
+
+Added VIXCLS, UNRATE, M2SL, M2NS, GS2, T10Y2Y, T10Y3M to `config/settings.yaml`.
+All new series use `shift: false` (no publication-lag shift needed — these are released
+with minimal delay). `end_date` changed from hardcoded `"2025-09-30"` to `null` (P12 fix).
+
+### D9. Yield curve features added to transforms pipeline (2026-03-18)
+
+New `src/market_regime/yield_curve_features.py` module with `add_yield_curve_features()`.
+Computes 10Y-2Y and 10Y-3M spreads from multpl.com treasury columns and/or FRED columns
+(GS10-GS2, T10Y2Y, T10Y3M). Hooked into `engineer_all()` in `transforms.py` after
+cross-ratios step. Does not affect `clustering_features` list — spreads are available for
+analysis but must be explicitly added to the feature lists to influence clustering.
+
+### D10. GradientBoosting added to bundle API (2026-03-18)
+
+`classifier.py` now supports `include_gb=True` on `train_current_regime()` and
+`train_forward_classifiers()`. Uses `GradientBoostingClassifier` (sklearn, not LightGBM)
+for zero-dependency convenience. The flat API in `prediction/__init__.py` is NOT changed —
+production still uses bare RF. GB is bundle-API-only for comparative testing.
+
+### D11. Interpretability helpers added to classifier.py (2026-03-18)
+
+`extract_top_features(model, feature_names, top_k)` ranks features by importance.
+`train_interpretability_tree(X, y, model, top_k, max_depth)` trains a shallow DT on
+only the most important features for human-readable decision rules. Both are in
+`classifier.py` (bundle API side) since they're analysis tools, not production inference.
+
+### D12. New modules: diagnostics, tactics, email (2026-03-18)
+
+Three new library modules created from GSD Phase 6-8 designs:
+
+- **`diagnostics.py`** — Relative Rotation Graph (RRG) analysis. `compute_rrg()` classifies
+  assets into LEADING/WEAKENING/LAGGING/IMPROVING quadrants based on relative strength and
+  momentum vs benchmark. Also provides `rolling_zscore()`, `percentile_rank()`, `normalize_100()`.
+
+- **`tactics.py`** — Tactical asset classification. `compute_tactics_metrics()` computes
+  volatility, trend slope, and benchmark correlation. `classify_tactics()` assigns buy_hold /
+  swing / stand_aside based on vol + trend thresholds.
+
+- **`email.py`** — Weekly email delivery. `load_email_config()` reads `config/email.yaml`,
+  `build_weekly_email_body()` composes from report files, `send_weekly_email()` sends via
+  SMTP (TLS or SSL). Paired with `scripts/run_weekly_report.py` for full automation.
+
+These are library modules only — not yet integrated as pipeline steps. Use from notebooks
+or `scripts/run_weekly_report.py`.
+
+### D13. Test suite expanded from 238 to 294 tests (2026-03-18)
+
+Added 56 new tests covering previously untested modules:
+- `config.load_portfolio()` (4 tests), `regime.py` (5 tests), FRED config validation (1 test)
+- Flat prediction API (5 tests), GradientBoosting (2 tests), interpretability (2 tests)
+- Ingestion HTTP-mocked tests: multpl (6), FRED (5), assets (4)
+- Diagnostics/RRG (8 tests), tactics (7 tests), email/weekly report (15 tests)
+- Yield curve features (2 tests)
+
+Coverage gaps closed: `prediction/__init__.py`, `config.load_portfolio()`, `regime.py`,
+all three ingestion modules, and three new modules. Remaining untested: `reporting.py`,
+`plotting.py`, `runtime.py`.
