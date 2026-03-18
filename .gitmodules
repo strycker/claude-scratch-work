@@ -4,3 +4,6 @@
 [submodule "trading-crab-repo-copy"]
 	path = trading-crab-repo-copy
 	url = https://github.com/strycker/trading-crab
+[submodule "trading-crab-lib-repo-copy"]
+	path = trading-crab-lib-repo-copy
+	url = https://github.com/strycker/trading-crab-lib
