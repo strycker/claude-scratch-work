@@ -161,3 +161,67 @@ def compute_rrg(
         })
 
     return pd.DataFrame(records)
+
+
+def rrg_for_benchmark(
+    prices: pd.DataFrame,
+    benchmark: str,
+    lookback: int = 52,
+) -> pd.DataFrame:
+    """
+    Compute RS-Ratio and RS-Momentum for each asset vs a benchmark (price-based).
+
+    This is the price-level counterpart to :func:`compute_rrg` (which takes
+    returns).  Pipeline step 08 uses this variant because it operates directly
+    on ``asset_prices.parquet`` without pre-computing returns.
+
+    Args:
+        prices:    DataFrame of prices (columns = tickers, index = dates).
+        benchmark: column name in *prices* to use as benchmark.
+        lookback:  number of rows (periods) to use.
+
+    Returns:
+        DataFrame with columns: as_of, asset, benchmark, rs_ratio, rs_momentum,
+        quadrant (LEADING / WEAKENING / LAGGING / IMPROVING).
+    """
+    if benchmark not in prices.columns:
+        return pd.DataFrame()
+    if len(prices) < lookback:
+        lookback = len(prices)
+    window_prices = prices.iloc[-lookback:]
+    rs = window_prices.divide(window_prices[benchmark], axis=0)
+    rs_smooth = rs.rolling(window=min(13, lookback), min_periods=1).mean()
+    rs_ratio = rs_smooth.apply(normalize_100, axis=0)
+    rs_mom_raw = rs_ratio.diff()
+    rs_momentum = rs_mom_raw.apply(normalize_100, axis=0)
+
+    as_of = window_prices.index[-1]
+    records: list[dict] = []
+    for col in prices.columns:
+        if col == benchmark:
+            continue
+        rr = rs_ratio[col].dropna()
+        mm = rs_momentum[col].dropna()
+        if rr.empty or mm.empty:
+            continue
+        rr_last = rr.iloc[-1]
+        mm_last = mm.iloc[-1]
+        if rr_last >= 100 and mm_last >= 100:
+            quadrant = "LEADING"
+        elif rr_last >= 100 and mm_last < 100:
+            quadrant = "WEAKENING"
+        elif rr_last < 100 and mm_last < 100:
+            quadrant = "LAGGING"
+        else:
+            quadrant = "IMPROVING"
+        records.append(
+            {
+                "as_of": as_of,
+                "asset": col,
+                "benchmark": benchmark,
+                "rs_ratio": rr_last,
+                "rs_momentum": mm_last,
+                "quadrant": quadrant,
+            }
+        )
+    return pd.DataFrame.from_records(records)

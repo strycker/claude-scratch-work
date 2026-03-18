@@ -11,8 +11,8 @@ Two public functions:
                            This is the format expected by all plotting helpers
                            and rank_assets_by_regime().
 
-  returns_full_stats()   → pivoted DataFrames for median_return, hit_rate, and
-                           n_quarters — returned as a dict keyed by stat name.
+  returns_full_stats()   → pivoted DataFrames for median_return, q25, q75, hit_rate,
+                           and n_quarters — returned as a dict keyed by stat name.
                            Useful for deeper analysis or custom reporting.
 
   rank_assets_by_regime() → flat DataFrame with columns [regime, asset,
@@ -131,10 +131,10 @@ def returns_full_stats(
     cluster_labels: pd.Series,
 ) -> dict[str, pd.DataFrame]:
     """
-    Compute median return, hit rate, and n_quarters for each (regime, asset) pair.
+    Compute median return, q25, q75, hit rate, and n_quarters for each (regime, asset) pair.
 
     Returns:
-        dict with keys "median_return", "hit_rate", "n_quarters", each mapping
+        dict with keys "median_return", "q25", "q75", "hit_rate", "n_quarters", each mapping
         to a pivoted DataFrame: index=regime, columns=tickers.
 
     Use this when you need richer statistics than median_return alone (e.g.
@@ -150,20 +150,27 @@ def returns_full_stats(
             col = asset_data[ticker].dropna()
             if col.empty:
                 continue
+            q = col.quantile([0.25, 0.75])
             records.append({
                 "regime":        regime,
                 "asset":         ticker,
                 "median_return": col.median(),
+                "q25":           q.iloc[0],
+                "q75":           q.iloc[1],
                 "hit_rate":      (col > 0).mean(),
                 "n_quarters":    len(col),
             })
 
     if not records:
-        return {"median_return": pd.DataFrame(), "hit_rate": pd.DataFrame(), "n_quarters": pd.DataFrame()}
+        return {
+            "median_return": pd.DataFrame(), "q25": pd.DataFrame(),
+            "q75": pd.DataFrame(), "hit_rate": pd.DataFrame(),
+            "n_quarters": pd.DataFrame(),
+        }
 
     flat = pd.DataFrame(records)
     result = {}
-    for stat in ("median_return", "hit_rate", "n_quarters"):
+    for stat in ("median_return", "q25", "q75", "hit_rate", "n_quarters"):
         pivot = flat.pivot(index="regime", columns="asset", values=stat)
         pivot.index.name = "regime"
         pivot.columns.name = None

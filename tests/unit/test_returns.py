@@ -89,11 +89,11 @@ class TestReturnsByRegime:
 # ── returns_full_stats ─────────────────────────────────────────────────────
 
 class TestReturnsFullStats:
-    def test_returns_three_keys(self, asset_prices, cluster_labels):
+    def test_returns_five_keys(self, asset_prices, cluster_labels):
         returns = compute_quarterly_returns(asset_prices)
         common = returns.index.intersection(cluster_labels.index)
         stats = returns_full_stats(returns.loc[common], cluster_labels.loc[common])
-        assert set(stats.keys()) == {"median_return", "hit_rate", "n_quarters"}
+        assert set(stats.keys()) == {"median_return", "q25", "q75", "hit_rate", "n_quarters"}
 
     def test_hit_rate_between_0_and_1(self, asset_prices, cluster_labels):
         returns = compute_quarterly_returns(asset_prices)

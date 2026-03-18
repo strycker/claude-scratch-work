@@ -1,0 +1,21 @@
+---
+# Example SMTP config for weekly report email sending (Phase 7, v1.2).
+#
+# Copy this file to email.local.yaml and fill in the values.
+# IMPORTANT: email.local.yaml is gitignored and MUST NOT be committed.
+#
+# For Gmail, you need:
+# - 2-Step Verification enabled on your Google account.
+# - An App Password generated for "Mail" on your device.
+#   Use that 16-character app password here, NEVER your main password.
+
+smtp_host: "smtp.gmail.com"
+smtp_port: 587
+use_tls: true      # True for STARTTLS (port 587)
+use_ssl: false     # True for implicit SSL (port 465); leave false for Gmail + TLS
+
+username: "your_email@gmail.com"
+password: "your_app_password_here"
+
+from_address: "your_email@gmail.com"
+to_address: "your_email@gmail.com"   # can be the same as from_address
