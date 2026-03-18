@@ -129,6 +129,19 @@ multpl:
     - [us_pop,               "US Population",                       "https://www.multpl.com/united-states-population/table/by-month",                         million]
     - [us_pop_growth,        "US Population Growth Rate",           "https://www.multpl.com/us-population-growth-rate/table/by-month",                        percent]
 
+# ── macrotrends.net ──────────────────────────────────────────────────────────
+# Long-history commodity / rate data (gold back to 1915, oil back to 1946).
+# Extracted from embedded JavaScript on the page; rate-limited to 3s.
+macrotrends:
+  base_url: "https://www.macrotrends.net"
+  series:
+    - name: gold_spot
+      path: "/1333/historical-gold-prices-100-year-chart"
+      resample: mean
+    - name: wti_crude
+      path: "/1369/crude-oil-price-history-chart"
+      resample: mean
+
 # ── Feature engineering ───────────────────────────────────────────────────────
 features:
   # Columns to log-transform (applied after cross-asset ratios are computed)
@@ -156,6 +169,8 @@ features:
     - sp500
     - sp500_adj
     - us_pop
+    - fred_houst        # housing starts (1959+)
+    - fred_umcsent      # consumer sentiment (1952+)
 
   # Features retained after log-transform, before gap fill and derivatives.
   # Dropping noisy/redundant columns here keeps the derivative computation clean.
@@ -167,6 +182,8 @@ features:
     - fred_baa
     - fred_gs10
     - fred_tb3ms
+    - fred_unrate       # unemployment rate (1948+) — already a rate, no log
+    - fred_vix          # VIX (1990+) — already a level/index, no log
     - gdp_growth
     - log_cape_shiller
     - log_cpi
@@ -179,6 +196,8 @@ features:
     - log_fred_cpi
     - log_fred_gdp
     - log_fred_gnp
+    - log_fred_houst    # housing starts (1959+)
+    - log_fred_umcsent  # consumer sentiment (1952+)
     - log_gdp
     - log_price_div
     - log_price_gdp
