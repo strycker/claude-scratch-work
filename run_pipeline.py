@@ -537,7 +537,8 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
 def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     """Train supervised classifiers → outputs/models/"""
     from trading_crab_lib.prediction import (
-        train_current_regime, train_decision_tree, train_forward_classifiers, predict_current,
+        train_current_regime, train_decision_tree, train_lightgbm,
+        train_forward_classifiers, predict_current, HAS_LIGHTGBM,
     )
     from trading_crab_lib import plotting
     import pandas as pd
@@ -569,6 +570,12 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 
     dt_model = train_decision_tree(X, y, cfg)
 
+    lgbm_model = None
+    if HAS_LIGHTGBM:
+        lgbm_model = train_lightgbm(X, y, cfg)
+    else:
+        log.info("Step 5: LightGBM not installed — skipping (pip install lightgbm>=4.0)")
+
     forward_models = train_forward_classifiers(X, y, cfg)
 
     model_dir = OUTPUT_DIR / "models"
@@ -577,6 +584,8 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     import joblib
     joblib.dump(current_model, model_dir / "current_regime.pkl")
     joblib.dump(dt_model, model_dir / "decision_tree.pkl")
+    if lgbm_model is not None:
+        joblib.dump(lgbm_model, model_dir / "lightgbm_regime.pkl")
     joblib.dump(forward_models, model_dir / "forward_classifiers.pkl")
 
     # Optionally save predicted labels as a market_code checkpoint

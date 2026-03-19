@@ -30,6 +30,12 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.tree import DecisionTreeClassifier
 
+try:
+    import lightgbm as lgb
+    HAS_LIGHTGBM = True
+except ImportError:
+    HAS_LIGHTGBM = False
+
 log = logging.getLogger(__name__)
 
 
@@ -110,8 +116,28 @@ def train_classifier(
                 random_state=rs,
             )
         label = "DT current-regime"
+    elif kind == "lgbm":
+        if not HAS_LIGHTGBM:
+            raise ImportError(
+                "LightGBM is not installed. Install with: pip install lightgbm>=4.0"
+            )
+        def _factory():
+            return lgb.LGBMClassifier(
+                num_leaves=pcfg.get("lgbm_num_leaves", 15),
+                max_depth=pcfg.get("lgbm_max_depth", 5),
+                min_child_samples=pcfg.get("lgbm_min_child_samples", 5),
+                learning_rate=pcfg.get("lgbm_learning_rate", 0.05),
+                n_estimators=pcfg.get("lgbm_n_estimators", 300),
+                subsample=pcfg.get("lgbm_bagging_fraction", 0.8),
+                colsample_bytree=pcfg.get("lgbm_feature_fraction", 0.8),
+                reg_lambda=pcfg.get("lgbm_lambda_l2", 1.0),
+                class_weight="balanced",
+                random_state=rs,
+                verbose=-1,
+            )
+        label = "LGBM current-regime"
     else:
-        raise ValueError(f"kind must be 'rf' or 'dt', got {kind!r}")
+        raise ValueError(f"kind must be 'rf', 'dt', or 'lgbm', got {kind!r}")
 
     _tscv_scores(_factory, X, y, n_splits, label)
 
@@ -135,6 +161,14 @@ def train_current_regime(X: pd.DataFrame, y: pd.Series, cfg: dict) -> RandomFore
 def train_decision_tree(X: pd.DataFrame, y: pd.Series, cfg: dict) -> DecisionTreeClassifier:
     """Train a shallow DecisionTree to predict today's regime. See train_classifier()."""
     return train_classifier(X, y, cfg, kind="dt")
+
+
+def train_lightgbm(X: pd.DataFrame, y: pd.Series, cfg: dict):
+    """Train a LightGBM classifier to predict today's regime. See train_classifier().
+
+    Raises ImportError if lightgbm is not installed.
+    """
+    return train_classifier(X, y, cfg, kind="lgbm")
 
 
 def train_forward_classifiers(
