@@ -1104,13 +1104,22 @@ functionality needs porting. Key differences:
   probabilities, confusion matrix plot, diagnostics/tactics/email modules
 Submodules remain as read-only references only.
 
-### D17. Cross-asset divergence features design (2026-03-19)
+### D17. Cross-asset divergence features implemented (2026-03-19)
 
-New ROADMAP item 2.15. Concept: derive supervised learning features from breakdowns in
-historically correlated signal pairs. Three layers: (1) rolling correlation baseline,
-(2) divergence magnitude (including in derivative space), (3) binary/continuous trigger
-features. Implemented as a phased approach with a new `divergence.py` module.
-This is a Tier 2 item — not implemented yet but documented for future sessions.
+ROADMAP item 2.15 — Phases A+B complete. New `src/trading_crab_lib/divergence.py` module:
+- `compute_rolling_correlation()`: trailing Pearson correlation between signal pairs
+- `compute_divergence()`: short-window vs long-window correlation departure (raw, abs, z-score)
+- `compute_divergence_triggers()`: binary triggers when |z-score| > threshold, plus direction
+- `compute_derivative_divergence()`: divergence in d1 (derivative) space for leading indicators
+- `add_divergence_features()`: master wrapper, config-driven signal pairs and windows
+
+Hooked into `engineer_all()` in two places: (1) level-space divergence after momentum features
+(before log transforms), (2) derivative-space divergence after derivatives are computed.
+Default pairs: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX. Config: `features.divergence`.
+Per pair: 5 level columns + 3 derivative columns = 8 features.
+29 tests in `tests/unit/test_divergence.py`.
+
+Phases C (add to clustering/supervised feature lists) and D (evaluate impact) deferred.
 
 ### D18. Momentum and cross-asset ratio features (2026-03-19)
 
