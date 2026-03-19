@@ -1,10 +1,11 @@
 """
 Weekly email delivery for market regime reports.
 
-Loads SMTP configuration from config/email.yaml, composes an email body
-from the most recent weekly report, and sends via SMTP (TLS or SSL).
+Loads SMTP configuration from config/email.yaml (with fallback to
+config/email.local.yaml), composes an email body from the most recent
+weekly report, and sends via SMTP (TLS or SSL).
 
-  load_email_config()        — parse config/email.yaml
+  load_email_config()        — parse config/email.yaml or email.local.yaml
   build_weekly_email_body()  — compose subject + body from report files
   send_weekly_email()        — send via SMTP with TLS/SSL support
 """
@@ -41,9 +42,11 @@ def load_email_config(config_path: Path | None = None) -> dict:
     if config_path is None:
         from trading_crab import CONFIG_DIR
         config_path = CONFIG_DIR / "email.yaml"
+        if not config_path.exists():
+            config_path = CONFIG_DIR / "email.local.yaml"
 
     if not config_path.exists():
-        log.warning("Email config not found at %s", config_path)
+        log.warning("Email config not found at %s (also tried email.local.yaml)", config_path)
         return {}
 
     try:

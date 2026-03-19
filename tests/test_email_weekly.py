@@ -44,6 +44,29 @@ def test_malformed_yaml_returns_empty(tmp_path):
     assert result == {}
 
 
+def test_fallback_to_email_local_yaml(tmp_path, monkeypatch):
+    """When email.yaml is absent, load_email_config falls back to email.local.yaml."""
+    import trading_crab
+    monkeypatch.setattr(trading_crab, "CONFIG_DIR", tmp_path)
+    local_cfg = tmp_path / "email.local.yaml"
+    local_cfg.write_text(
+        "smtp_host: local.example.com\n"
+        "smtp_port: 465\n"
+    )
+    result = load_email_config()
+    assert result["smtp_host"] == "local.example.com"
+
+
+def test_email_yaml_takes_priority_over_local(tmp_path, monkeypatch):
+    """email.yaml is preferred when both email.yaml and email.local.yaml exist."""
+    import trading_crab
+    monkeypatch.setattr(trading_crab, "CONFIG_DIR", tmp_path)
+    (tmp_path / "email.yaml").write_text("smtp_host: primary.example.com\n")
+    (tmp_path / "email.local.yaml").write_text("smtp_host: local.example.com\n")
+    result = load_email_config()
+    assert result["smtp_host"] == "primary.example.com"
+
+
 # ── build_weekly_email_body tests ────────────────────────────────────────────
 
 
