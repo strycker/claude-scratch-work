@@ -21,9 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trading_crab import DATA_DIR
-from trading_crab.config import load, setup_logging
-from trading_crab.clustering import (
+from trading_crab_lib import DATA_DIR
+from trading_crab_lib.config import load, setup_logging
+from trading_crab_lib.clustering import (
     reduce_pca,
     evaluate_kmeans,
     pick_best_k,

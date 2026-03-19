@@ -24,7 +24,7 @@ construction for each k in the sweep, giving approximately a k-fold speedup.
 
 Usage
 ------
-    from trading_crab.spectral import fit_spectral_sweep, spectral_labels
+    from trading_crab_lib.spectral import fit_spectral_sweep, spectral_labels
 
     sweep_df, all_labels = fit_spectral_sweep(pca_df, k_range=range(2, 8))
     labels = spectral_labels(pca_df, k=5)

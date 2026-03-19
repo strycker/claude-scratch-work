@@ -1,4 +1,4 @@
-"""Tests for src/trading_crab/plotting.py — visualization helpers.
+"""Tests for src/trading_crab_lib/plotting.py — visualization helpers.
 
 Tests verify that plot functions run without crashing and produce matplotlib
 figures.  We do NOT assert on pixel-level content — only that figures are
@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab.runtime import RunConfig
-from trading_crab import plotting
+from trading_crab_lib.runtime import RunConfig
+from trading_crab_lib import plotting
 
 
 # ── Shared fixtures ──────────────────────────────────────────────────────────

@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from trading_crab import DATA_DIR, OUTPUT_DIR
-from trading_crab.config import load, setup_logging
-from trading_crab.tactics import compute_tactics_metrics, classify_tactics
+from trading_crab_lib import DATA_DIR, OUTPUT_DIR
+from trading_crab_lib.config import load, setup_logging
+from trading_crab_lib.tactics import compute_tactics_metrics, classify_tactics
 
 log = logging.getLogger(__name__)
 

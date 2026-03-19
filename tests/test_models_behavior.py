@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from trading_crab.prediction import (
+from trading_crab_lib.prediction import (
     make_behavior_labels,
     train_forward_behavior_models,
 )

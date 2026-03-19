@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from trading_crab.config import load_portfolio
+from trading_crab_lib.config import load_portfolio
 
 
 class TestLoadPortfolio:

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab.diagnostics import (
+from trading_crab_lib.diagnostics import (
     compute_rrg,
     normalize_100,
     percentile_rank,

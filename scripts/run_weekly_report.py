@@ -28,10 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 REPORTS_DIR = REPO_ROOT / "outputs" / "reports"
 WEEKLY_REPORT = "weekly_report.md"
 
-# Allow importing the trading_crab package when run as a script.
+# Allow importing the trading_crab_lib package when run as a script.
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from trading_crab.email import (  # noqa: E402
+from trading_crab_lib.email import (  # noqa: E402
     build_weekly_email_body,
     load_email_config,
     send_weekly_email,

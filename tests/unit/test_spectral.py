@@ -1,4 +1,4 @@
-"""Unit tests for src/trading_crab/spectral.py."""
+"""Unit tests for src/trading_crab_lib/spectral.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab.spectral import fit_spectral_sweep, spectral_labels
+from trading_crab_lib.spectral import fit_spectral_sweep, spectral_labels
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────

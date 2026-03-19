@@ -19,9 +19,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trading_crab import DATA_DIR, OUTPUT_DIR  # noqa: E402
-from trading_crab.config import load, setup_logging  # noqa: E402
-from trading_crab.diagnostics import (  # noqa: E402
+from trading_crab_lib import DATA_DIR, OUTPUT_DIR  # noqa: E402
+from trading_crab_lib.config import load, setup_logging  # noqa: E402
+from trading_crab_lib.diagnostics import (  # noqa: E402
     normalize_100,
     percentile_rank,
     rolling_zscore,
@@ -67,6 +67,7 @@ def _compute_ratios(prices: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         pct = percentile_rank(ratio_series)
         latest = ratio_series.dropna().iloc[-1] if not ratio_series.dropna().empty else float("nan")
         latest_z = z.dropna().iloc[-1] if not z.dropna().empty else float("nan")
+        latest_pct = pct.dropna().iloc[-1] if not pct.dropna().empty else float("nan")
         records.append(
             {
                 "name": name,
@@ -74,7 +75,7 @@ def _compute_ratios(prices: pd.DataFrame, cfg: dict) -> pd.DataFrame:
                 "denominator": den,
                 "latest_value": latest,
                 "latest_zscore": latest_z,
-                "percentile": pct,
+                "percentile": latest_pct,
             }
         )
     return pd.DataFrame.from_records(records)

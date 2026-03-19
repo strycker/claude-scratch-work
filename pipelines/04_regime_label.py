@@ -16,9 +16,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trading_crab import DATA_DIR, CONFIG_DIR
-from trading_crab.config import load, setup_logging
-from trading_crab.regime import (
+from trading_crab_lib import DATA_DIR, CONFIG_DIR
+from trading_crab_lib.config import load, setup_logging
+from trading_crab_lib.regime import (
     build_profiles,
     suggest_names,
     build_transition_matrix,

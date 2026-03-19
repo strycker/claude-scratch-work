@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from trading_crab.prediction.classifier import (
+from trading_crab_lib.prediction.classifier import (
     FoldReport,
     train_current_regime,
     train_forward_classifiers,

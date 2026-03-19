@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab.clustering import (
+from trading_crab_lib.clustering import (
     compare_svd_pca,
     compute_gap_statistic,
     evaluate_kmeans,

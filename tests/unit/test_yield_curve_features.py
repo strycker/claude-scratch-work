@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from trading_crab.transforms import add_yield_curve_features
+from trading_crab_lib.transforms import add_yield_curve_features
 
 
 def test_add_yield_curve_features_computes_spreads() -> None:

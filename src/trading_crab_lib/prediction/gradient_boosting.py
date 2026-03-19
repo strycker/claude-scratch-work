@@ -8,7 +8,7 @@ LightGBM is preferred over XGBoost for this dataset (~300 observations):
 faster training, lower memory, and comparable accuracy on small tabular data.
 
 Usage:
-    from trading_crab.prediction.gradient_boosting import (
+    from trading_crab_lib.prediction.gradient_boosting import (
         train_lightgbm_current_regime,
         train_lightgbm_forward,
     )

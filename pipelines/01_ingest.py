@@ -24,12 +24,12 @@ from pathlib import Path
 # Allow running from repo root without installing the package
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trading_crab import DATA_DIR
-from trading_crab.config import load, setup_logging
-from trading_crab.ingestion import fred as fred_module
-from trading_crab.ingestion import multpl as multpl_module
-from trading_crab.ingestion import ingestion_completeness_report
-from trading_crab.runtime import RunConfig
+from trading_crab_lib import DATA_DIR
+from trading_crab_lib.config import load, setup_logging
+from trading_crab_lib.ingestion import fred as fred_module
+from trading_crab_lib.ingestion import multpl as multpl_module
+from trading_crab_lib.ingestion import ingestion_completeness_report
+from trading_crab_lib.runtime import RunConfig
 
 import pandas as pd
 
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> None:
     mt_df = pd.DataFrame()
     if cfg.get("macrotrends", {}).get("series"):
         try:
-            from trading_crab.ingestion import macrotrends as mt_module
+            from trading_crab_lib.ingestion import macrotrends as mt_module
             mt_df = mt_module.fetch_all(cfg)
         except Exception as exc:
             log.warning("macrotrends fetch failed (non-fatal): %s", exc)

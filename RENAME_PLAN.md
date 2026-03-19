@@ -1,8 +1,8 @@
-# Rename Plan: `market_regime` → `trading_crab`
+# Rename Plan: `market_regime` → `trading_crab_lib`
 
 ## Scope
 
-Rename the Python package from `market_regime` to `trading_crab` across the entire
+Rename the Python package from `market_regime` to `trading_crab_lib` across the entire
 codebase. **438 references across 89 files** (excluding read-only submodules).
 
 ---
@@ -17,9 +17,9 @@ codebase. **438 references across 89 files** (excluding read-only submodules).
 
 ## Phase 1: Package Directory Rename (highest risk, do first)
 
-### Step 1.1 — Rename `src/market_regime/` → `src/trading_crab/`
+### Step 1.1 — Rename `src/market_regime/` → `src/trading_crab_lib/`
 ```
-mv src/market_regime src/trading_crab
+mv src/market_regime src/trading_crab_lib
 ```
 This is the atomic operation that everything else follows from.
 
@@ -27,27 +27,27 @@ This is the atomic operation that everything else follows from.
 ```
 rm -rf src/market_regime.egg-info
 ```
-Will be regenerated as `src/trading_crab.egg-info` after `pip install -e .`
+Will be regenerated as `src/trading_crab_lib.egg-info` after `pip install -e .`
 
 ### Step 1.3 — Update `pyproject.toml`
 - `name = "market-regime"` → `name = "trading-crab"`
-- `market_regime = ["py.typed"]` → `trading_crab = ["py.typed"]`
+- `market_regime = ["py.typed"]` → `trading_crab_lib = ["py.typed"]`
 - Any other references in build config
 
 ### Step 1.4 — Update `MANIFEST.in`
-- `recursive-include src/market_regime py.typed` → `recursive-include src/trading_crab py.typed`
+- `recursive-include src/market_regime py.typed` → `recursive-include src/trading_crab_lib py.typed`
 
 ### Step 1.5 — Reinstall in editable mode
 ```
 pip install -e ".[dev]"
 ```
-Verify: `python -c "import trading_crab; print(trading_crab.__file__)"`
+Verify: `python -c "import trading_crab_lib; print(trading_crab_lib.__file__)"`
 
 ---
 
 ## Phase 2: Source Code Imports (26 files)
 
-Update all intra-package imports within `src/trading_crab/`:
+Update all intra-package imports within `src/trading_crab_lib/`:
 
 - `__init__.py` — module docstring
 - `config.py` — any self-references
@@ -60,8 +60,8 @@ Update all intra-package imports within `src/trading_crab/`:
 - `ingestion/__init__.py`, `ingestion/assets.py`, `ingestion/grok.py`, `ingestion/macrotrends.py`
 - `prediction/__init__.py`, `prediction/classifier.py`, `prediction/gradient_boosting.py`
 
-**Approach:** Global find-and-replace `from market_regime` → `from trading_crab` and
-`import market_regime` → `import trading_crab` across all `.py` files in `src/trading_crab/`.
+**Approach:** Global find-and-replace `from market_regime` → `from trading_crab_lib` and
+`import market_regime` → `import trading_crab_lib` across all `.py` files in `src/trading_crab_lib/`.
 
 ---
 
@@ -71,7 +71,7 @@ Update all intra-package imports within `src/trading_crab/`:
 - `pipelines/01_ingest.py` through `pipelines/09_tactics.py` — 9 files
 - `scripts/run_weekly_report.py` — 2 occurrences
 
-Same pattern: `from market_regime.X import Y` → `from trading_crab.X import Y`.
+Same pattern: `from market_regime.X import Y` → `from trading_crab_lib.X import Y`.
 
 ---
 
@@ -83,7 +83,7 @@ All test files under `tests/` and `tests/unit/`:
 - All other test files — 1–9 occurrences each
 
 **Critical:** monkeypatch targets like `monkeypatch.setattr("market_regime.ingestion.fred.Fred", ...)`
-must be updated to `"trading_crab.ingestion.fred.Fred"`. These are string references,
+must be updated to `"trading_crab_lib.ingestion.fred.Fred"`. These are string references,
 not import statements — a simple find-replace handles them.
 
 ---
@@ -106,8 +106,8 @@ not import statements — a simple find-replace handles them.
 - `ROADMAP.md` — ~20 occurrences
 
 Also update:
-- `src/market_regime/` → `src/trading_crab/` in all directory references
-- `market_regime.prediction` → `trading_crab.prediction` in code examples
+- `src/market_regime/` → `src/trading_crab_lib/` in all directory references
+- `market_regime.prediction` → `trading_crab_lib.prediction` in code examples
 - Keep references to `market_code` column name unchanged (that's a data column, not the package)
 
 ---
@@ -141,15 +141,15 @@ pytest tests/ -v
 
 ### Step 8.3 — Verify pipeline import chain
 ```bash
-python -c "from trading_crab.config import load; print(load()['data'])"
-python -c "from trading_crab.prediction import train_current_regime; print('OK')"
-python -c "from trading_crab.checkpoints import CheckpointManager; print(CheckpointManager().list())"
+python -c "from trading_crab_lib.config import load; print(load()['data'])"
+python -c "from trading_crab_lib.prediction import train_current_regime; print('OK')"
+python -c "from trading_crab_lib.checkpoints import CheckpointManager; print(CheckpointManager().list())"
 ```
 
 ### Step 8.4 — Verify editable install
 ```bash
 pip show trading-crab
-python -c "import trading_crab; print(trading_crab.__file__)"
+python -c "import trading_crab_lib; print(trading_crab_lib.__file__)"
 ```
 
 ---
@@ -189,5 +189,5 @@ One commit per phase (or one atomic commit for the whole rename):
 - Option A: **Single atomic commit** — easier to revert if something breaks
 - Option B: **Per-phase commits** — easier to review, but intermediate states may not pass tests
 
-**Recommendation: Option A** — single atomic commit `refactor: rename market_regime → trading_crab`
+**Recommendation: Option A** — single atomic commit `refactor: rename market_regime → trading_crab_lib`
 since intermediate states (e.g., directory renamed but imports not updated) will break everything.
