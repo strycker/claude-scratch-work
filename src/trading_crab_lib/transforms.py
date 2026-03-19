@@ -266,23 +266,27 @@ def engineer_all(df: pd.DataFrame, cfg: dict, causal: bool = False) -> pd.DataFr
     window = feat_cfg.get("derivative_window", 5)
     mode = "causal/backward" if causal else "centered"
 
-    log.info("Step 1/6 — cross-asset ratios")
+    log.info("Step 1/7 — cross-asset ratios")
     df = add_cross_ratios(df)
     df = add_yield_curve_features(df)
 
-    log.info("Step 2/6 — log transforms (%d columns)", len(feat_cfg["log_columns"]))
+    log.info("Step 2/7 — momentum and cross-asset features")
+    from trading_crab_lib.momentum import add_momentum_features
+    df = add_momentum_features(df, cfg)
+
+    log.info("Step 3/7 — log transforms (%d columns)", len(feat_cfg["log_columns"]))
     df = apply_log_transforms(df, feat_cfg["log_columns"])
 
-    log.info("Step 3/6 — initial feature selection (%d features)", len(feat_cfg["initial_features"]))
+    log.info("Step 4/7 — initial feature selection (%d features)", len(feat_cfg["initial_features"]))
     df = select_features(df, feat_cfg["initial_features"])
 
-    log.info("Step 4/6 — Bernstein gap filling (always centered for boundary conditions)")
+    log.info("Step 5/7 — Bernstein gap filling (always centered for boundary conditions)")
     df = apply_gap_fill(df, window=window)
 
-    log.info("Step 5/6 — smoothed derivatives (window=%d, mode=%s)", window, mode)
+    log.info("Step 6/7 — smoothed derivatives (window=%d, mode=%s)", window, mode)
     df = apply_derivatives(df, window=window, causal=causal)
 
-    log.info("Step 6/6 — clustering feature selection (%d features)", len(feat_cfg["clustering_features"]))
+    log.info("Step 7/7 — clustering feature selection (%d features)", len(feat_cfg["clustering_features"]))
     df = select_features(df, feat_cfg["clustering_features"])
 
     nan_count = df.drop(columns=["market_code"], errors="ignore").isna().sum().sum()

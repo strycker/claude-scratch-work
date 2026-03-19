@@ -72,6 +72,15 @@ fred:
     UMCSENT:
       name:  "fred_umcsent"
       shift: false
+    INDPRO:
+      name:  "fred_indpro"
+      shift: false
+    PAYEMS:
+      name:  "fred_payems"
+      shift: true
+    DPCERA3Q086SBEA:
+      name:  "fred_real_pce"
+      shift: true
 
 # ── multpl.com series ─────────────────────────────────────────────────────────
 # Each entry: [short_name, description, url, value_type]
