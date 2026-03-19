@@ -32,9 +32,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trading_crab import DATA_DIR
-from trading_crab.config import load, setup_logging
-from trading_crab.asset_returns import (
+from trading_crab_lib import DATA_DIR
+from trading_crab_lib.config import load, setup_logging
+from trading_crab_lib.asset_returns import (
     compute_quarterly_returns,
     compute_proxy_returns,
     returns_by_regime,
@@ -73,7 +73,7 @@ def main() -> None:
         if not refresh_assets:
             print(f"No cached ETF prices found at {cache_path} — fetching from yfinance ...")
         try:
-            from trading_crab.ingestion.assets import fetch_all as fetch_prices
+            from trading_crab_lib.ingestion.assets import fetch_all as fetch_prices
             prices = fetch_prices(cfg)
             if not prices.empty:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)

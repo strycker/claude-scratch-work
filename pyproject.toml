@@ -94,7 +94,7 @@ boosting-extras = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-trading_crab = ["py.typed"]
+trading_crab_lib = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -10,14 +10,14 @@ python --version || echo "[check_env] python not found"
 echo "[check_env] pytest: $(command -v pytest || true)"
 pytest --version || echo "[check_env] pytest not found"
 
-echo "[check_env] Importing market_regime…"
+echo "[check_env] Importing trading_crab_lib…"
 python - <<'PY'
 import sys
 try:
-    import market_regime  # noqa: F401
-    print("[check_env] Imported market_regime OK")
+    import trading_crab_lib  # noqa: F401
+    print("[check_env] Imported trading_crab_lib OK")
 except Exception as e:
-    print("[check_env] FAILED to import market_regime:", e)
+    print("[check_env] FAILED to import trading_crab_lib:", e)
     sys.exit(1)
 PY
 

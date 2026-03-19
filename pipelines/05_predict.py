@@ -25,15 +25,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trading_crab import DATA_DIR, OUTPUT_DIR
-from trading_crab.config import load, setup_logging
-from trading_crab.prediction import (
+from trading_crab_lib import DATA_DIR, OUTPUT_DIR
+from trading_crab_lib.config import load, setup_logging
+from trading_crab_lib.prediction import (
     train_current_regime,
     train_decision_tree,
     train_forward_classifiers,
     predict_current,
 )
-from trading_crab.transforms import trim_incomplete_tail
+from trading_crab_lib.transforms import trim_incomplete_tail
 
 import pandas as pd
 

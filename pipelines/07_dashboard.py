@@ -28,11 +28,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trading_crab import DATA_DIR, CONFIG_DIR, OUTPUT_DIR
-from trading_crab.config import load, load_portfolio, setup_logging
-from trading_crab.prediction import predict_current
-from trading_crab.asset_returns import rank_assets_by_regime
-from trading_crab.reporting import (
+from trading_crab_lib import DATA_DIR, CONFIG_DIR, OUTPUT_DIR
+from trading_crab_lib.config import load, load_portfolio, setup_logging
+from trading_crab_lib.prediction import predict_current
+from trading_crab_lib.asset_returns import rank_assets_by_regime
+from trading_crab_lib.reporting import (
     asset_signals,
     print_dashboard,
     save_dashboard_csv,

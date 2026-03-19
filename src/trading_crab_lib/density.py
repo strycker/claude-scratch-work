@@ -23,7 +23,7 @@ eps is hard to tune (e.g. clusters of varying density).
 
 Usage
 ------
-    from trading_crab.density import (
+    from trading_crab_lib.density import (
         knn_distances, fit_dbscan_sweep, fit_dbscan,
         fit_hdbscan_sweep, hdbscan_labels,
     )

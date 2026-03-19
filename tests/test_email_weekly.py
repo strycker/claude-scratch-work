@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from trading_crab.email import (
+from trading_crab_lib.email import (
     build_weekly_email_body,
     load_email_config,
     send_weekly_email,
@@ -46,8 +46,8 @@ def test_malformed_yaml_returns_empty(tmp_path):
 
 def test_fallback_to_email_local_yaml(tmp_path, monkeypatch):
     """When email.yaml is absent, load_email_config falls back to email.local.yaml."""
-    import trading_crab
-    monkeypatch.setattr(trading_crab, "CONFIG_DIR", tmp_path)
+    import trading_crab_lib
+    monkeypatch.setattr(trading_crab_lib, "CONFIG_DIR", tmp_path)
     local_cfg = tmp_path / "email.local.yaml"
     local_cfg.write_text(
         "smtp_host: local.example.com\n"
@@ -59,8 +59,8 @@ def test_fallback_to_email_local_yaml(tmp_path, monkeypatch):
 
 def test_email_yaml_takes_priority_over_local(tmp_path, monkeypatch):
     """email.yaml is preferred when both email.yaml and email.local.yaml exist."""
-    import trading_crab
-    monkeypatch.setattr(trading_crab, "CONFIG_DIR", tmp_path)
+    import trading_crab_lib
+    monkeypatch.setattr(trading_crab_lib, "CONFIG_DIR", tmp_path)
     (tmp_path / "email.yaml").write_text("smtp_host: primary.example.com\n")
     (tmp_path / "email.local.yaml").write_text("smtp_host: local.example.com\n")
     result = load_email_config()
@@ -124,7 +124,7 @@ def test_send_email_no_recipients():
     assert result is False
 
 
-@patch("trading_crab.email.smtplib.SMTP")
+@patch("trading_crab_lib.email.smtplib.SMTP")
 def test_send_email_tls_success(mock_smtp_cls):
     mock_smtp = MagicMock()
     mock_smtp_cls.return_value = mock_smtp
@@ -146,7 +146,7 @@ def test_send_email_tls_success(mock_smtp_cls):
     mock_smtp.quit.assert_called_once()
 
 
-@patch("trading_crab.email.smtplib.SMTP_SSL")
+@patch("trading_crab_lib.email.smtplib.SMTP_SSL")
 def test_send_email_ssl_success(mock_smtp_ssl_cls):
     mock_smtp = MagicMock()
     mock_smtp_ssl_cls.return_value = mock_smtp

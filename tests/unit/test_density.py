@@ -1,4 +1,4 @@
-"""Unit tests for src/trading_crab/density.py."""
+"""Unit tests for src/trading_crab_lib/density.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab.density import (
+from trading_crab_lib.density import (
     fit_dbscan,
     fit_dbscan_sweep,
     hdbscan_labels,

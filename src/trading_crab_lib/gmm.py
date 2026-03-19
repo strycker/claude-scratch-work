@@ -26,7 +26,7 @@ which will produce wrong assignments if the data distribution differs at all.
 
 Usage
 ------
-    from trading_crab.gmm import fit_gmm, select_gmm_k, gmm_labels, gmm_probabilities
+    from trading_crab_lib.gmm import fit_gmm, select_gmm_k, gmm_labels, gmm_probabilities
 
     bic_df, models, scaler = fit_gmm(pca_df, k_range=range(2, 10))
     best_k, best_cov = select_gmm_k(bic_df)

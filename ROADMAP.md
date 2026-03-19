@@ -60,12 +60,12 @@ lgb_params = {
     "class_weight": "balanced",
 }
 ```
-- New file: `src/trading_crab/prediction/gradient_boosting.py`
+- New file: `src/trading_crab_lib/prediction/gradient_boosting.py`
 - Functions: `train_lightgbm_current_regime()`, `train_lightgbm_forward()`
 - Use same `_tscv_scores()` helper as RF + DT
 - Do NOT over-tune hyperparameters with 300 obs (fixed grid, max 50 combos)
 - Add `lightgbm>=4.0` as optional extra in `pyproject.toml`
-- **Files**: `src/trading_crab/prediction/gradient_boosting.py` (new), `pipelines/05_predict.py`
+- **Files**: `src/trading_crab_lib/prediction/gradient_boosting.py` (new), `pipelines/05_predict.py`
 
 ### 1.2  Additional FRED macro series  `S`
 Several high-signal FRED series are free and require no new scraping infrastructure:
@@ -86,7 +86,7 @@ Several high-signal FRED series are free and require no new scraping infrastruct
 - Add each to `config/settings.yaml` under `fred.series`
 - Apply appropriate `shift` lag (VIX: none; payrolls: +1Q; PCE: +1Q)
 - Rerun PCA + clustering after adding — expect silhouette improvement
-- **Files**: `config/settings.yaml`, `src/trading_crab/ingestion/fred.py`
+- **Files**: `config/settings.yaml`, `src/trading_crab_lib/ingestion/fred.py`
 
 ### 1.3  Yield curve features  `S`
 Compute derived yield-curve features in `transforms.py`:
@@ -94,14 +94,14 @@ Compute derived yield-curve features in `transforms.py`:
 - `yield_spread_10y3m` = GS10 − TB3MS (already have both)
 - `yield_curve_slope` = (GS10 − TB3MS) / 10
 - These are among the strongest empirical recession predictors in the literature
-- **Files**: `src/trading_crab/transforms.py`, `config/settings.yaml`
+- **Files**: `src/trading_crab_lib/transforms.py`, `config/settings.yaml`
 
 ### 1.4  Empirical forward probabilities  `S`
 Implement `compute_forward_probabilities()` from `legacy/unified_script.py`.
 Computes empirical P(reach regime j within N quarters | currently in regime i)
 as a diagnostic alongside model-based forward classifiers.
 - Output: `data/regimes/forward_probs_{N}q.parquet` for N in [1, 4, 8]
-- **Files**: `src/trading_crab/regime.py`, `pipelines/04_regime_label.py`
+- **Files**: `src/trading_crab_lib/regime.py`, `pipelines/04_regime_label.py`
 
 ### 1.5  macrotrends.net historical price backfill  `M`
 Extends commodity and asset data before 1993 (ETF inception dates):
@@ -116,7 +116,7 @@ Extends commodity and asset data before 1993 (ETF inception dates):
 - Rate-limit to 2-3s between requests
 - After resampling to quarterly, resample with `.mean()` (price) or `.last()` (rate)
 - Merge into `macro_raw.parquet` alongside FRED + multpl series
-- **Files**: `src/trading_crab/ingestion/macrotrends.py` (new), `config/settings.yaml`
+- **Files**: `src/trading_crab_lib/ingestion/macrotrends.py` (new), `config/settings.yaml`
 
 ### 1.6  Expand asset universe and move ticker lists to config  `S`
 Add ETFs that cover a wider range of regime-relevant categories:
@@ -133,7 +133,7 @@ All ticker lists now live in `config/settings.yaml` under `assets.etfs`.
 Notebooks read from `cfg["assets"]["etfs"]` — no hardcoded lists in notebook code.
 `plotting.sample_series` and `plotting.key_indicators` also moved to config.
 - **Files**: `config/settings.yaml`, `notebooks/01_ingestion.ipynb`, `notebooks/04_regimes.ipynb`,
-  `notebooks/06_assets.ipynb`, `src/trading_crab/plotting.py`
+  `notebooks/06_assets.ipynb`, `src/trading_crab_lib/plotting.py`
 - **Status**: ✓ Done (settings.yaml + notebooks updated; ETF data fetched on next step 1 run)
 
 ### 1.7  Confusion matrix and classification report in plots  `S`
@@ -141,7 +141,7 @@ Notebooks read from `cfg["assets"]["etfs"]` — no hardcoded lists in notebook c
 confusion matrix; this is not exposed in `src/` plotting or logs.
 - Add `plot_confusion_matrix(model, X, y, regime_names, run_cfg)` to `plotting.py`
 - Call from `pipelines/05_predict.py` when `--plots` is set
-- **Files**: `src/trading_crab/plotting.py`, `pipelines/05_predict.py`
+- **Files**: `src/trading_crab_lib/plotting.py`, `pipelines/05_predict.py`
 
 ---
 
@@ -155,7 +155,7 @@ With a Finviz Elite subscription:
 - Useful for "within-regime" stock picking after portfolio ETF allocation is set
 - **Note**: Finviz data is point-in-time; historical screener data requires Elite API
 - Separate from regime detection (which is macro-driven); feeds into a "stock signal" layer
-- **Files**: `src/trading_crab/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
+- **Files**: `src/trading_crab_lib/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
 
 ### 2.9  Hidden Markov Model regime detection (alternative to KMeans)  `M`
 `hmmlearn.hmm.GaussianHMM` is a principled alternative to KMeans for regime detection:
@@ -163,9 +163,9 @@ With a Finviz Elite subscription:
 - Produces soft probabilities rather than hard cluster assignments
 - Compare: does HMM agree with KMeans regimes? Does it produce cleaner transitions?
 - Risk: HMM requires EM fitting which is sensitive to initialization on small datasets
-- Implementation: add `fit_hmm()` to `src/trading_crab/hmm.py` (new module)
+- Implementation: add `fit_hmm()` to `src/trading_crab_lib/hmm.py` (new module)
 - Use identical PCA features as input for fair comparison with KMeans
-- **Files**: `src/trading_crab/hmm.py` (new), `pipelines/03_cluster.py`
+- **Files**: `src/trading_crab_lib/hmm.py` (new), `pipelines/03_cluster.py`
 
 ### 2.10  SMOTE / class-weight tuning for imbalanced regimes  `S`
 With 5 balanced clusters, sizes should be equal, but temporal distribution may still
@@ -173,7 +173,7 @@ cause class imbalance in train/test splits of the TSCV folds.
 - RF already uses `class_weight="balanced"` — log per-fold class counts to verify
 - Consider `imbalanced-learn` SMOTE for XGBoost (which doesn't have class_weight)
 - Add to `pyproject.toml` as optional extra: `imbalanced-learn>=0.11`
-- **Files**: `src/trading_crab/prediction/classifier.py`
+- **Files**: `src/trading_crab_lib/prediction/classifier.py`
 
 ### 2.11  Per-asset regime probability models  `L`
 For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
@@ -181,7 +181,7 @@ For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 - Features: regime probabilities + causal macro features + asset momentum
 - Output: per-asset stoplight probability matrix → feeds dashboard signal layer
 - This is "Putting it all together — Part I" from the original design doc
-- **Files**: `src/trading_crab/prediction/asset_classifier.py` (new), `pipelines/05b_asset_predict.py` (new)
+- **Files**: `src/trading_crab_lib/prediction/asset_classifier.py` (new), `pipelines/05b_asset_predict.py` (new)
 
 ### 2.12  Momentum and cross-asset ratio features  `M`
 Additional derived features for clustering and supervised models:
@@ -190,7 +190,7 @@ Additional derived features for clustering and supervised models:
 - Cross-asset correlation (rolling 8Q window) between SP500 and 10Y yield
 - Inflation acceleration: 2nd derivative of CPI (d/dt of d/dt)
 - PMI-equivalent proxy from FRED INDPRO momentum
-- **Files**: `src/trading_crab/transforms.py`, `config/settings.yaml`
+- **Files**: `src/trading_crab_lib/transforms.py`, `config/settings.yaml`
 
 ### 2.13  Markov regime-switching model (statsmodels)  `M`
 `statsmodels.tsa.regime_switching.markov_regression.MarkovRegression` fits a model
@@ -199,7 +199,7 @@ where parameters switch between discrete states via a Markov chain:
 - Useful as a 2-state sanity check: does our 5-regime KMeans align with the
   statsmodels recession/expansion signal?
 - Not a replacement for KMeans; more of a diagnostic and feature generator
-- **Files**: `src/trading_crab/markov.py` (new)
+- **Files**: `src/trading_crab_lib/markov.py` (new)
 
 ### 2.14  Conference Board LEI proxy from FRED  `S`
 The Conference Board LEI is the gold standard for recession prediction but is not
@@ -207,7 +207,7 @@ freely available. Construct a proxy from FRED components:
 - `PERMIT` (building permits) + `AWHMAN` (avg weekly hours) + `AMDMNO` (new orders)
   + `ISM manufacturing` + `UMCSENT` + spread measures = 6-component LEI approximation
 - Validate against NBER recession dates (`USREC` on FRED — binary recession indicator)
-- **Files**: `src/trading_crab/transforms.py`, `config/settings.yaml`
+- **Files**: `src/trading_crab_lib/transforms.py`, `config/settings.yaml`
 
 ---
 
@@ -245,7 +245,7 @@ LASSO regression / Ridge regression per regime:
 - Independent variables: causal macro features for that regime
 - Gives coefficient insights: "in stagflation regimes, credit spread and gold momentum
   are the dominant predictors of GLD outperformance"
-- **Files**: `src/trading_crab/prediction/factor_model.py` (new)
+- **Files**: `src/trading_crab_lib/prediction/factor_model.py` (new)
 
 ### 3.5  Backtest framework  `XL`
 Walk-forward backtest of the full pipeline:
@@ -253,7 +253,7 @@ Walk-forward backtest of the full pipeline:
 - Compare strategy vs S&P 500 benchmark: returns, Sharpe, max drawdown
 - Avoids look-ahead by construction (causal features + TSCV)
 - Requires ~50 walk-forward steps (1975–2025 at quarterly resolution)
-- **Files**: `src/trading_crab/backtest/` (new module)
+- **Files**: `src/trading_crab_lib/backtest/` (new module)
 
 ### 3.6  StockCharts.com — historical data scraping  `M`
 StockCharts.com (subscription already active) has historical OHLCV chart data
@@ -269,7 +269,7 @@ but no public JSON/CSV export API.  Potential approaches:
 - **Risk**: ToS review required; rate-limit to ≥3s/request; no guaranteed format stability.
 - **Alternative**: compute the same technical indicators from yfinance/stooq OHLCV
   using the `ta` or `pandas-ta` library — avoids scraping entirely.
-- **Files**: `src/trading_crab/ingestion/stockcharts.py` (new)
+- **Files**: `src/trading_crab_lib/ingestion/stockcharts.py` (new)
 
 ### 3.7  Finviz Elite — sector/fundamental overlays  `M`
 Finviz Elite (subscription already active) is a **stock screener**, not a
@@ -285,7 +285,7 @@ Implementation approach (when ready):
 - Use `finvizfinance` Python library: `pip install finvizfinance`
 - `finvizfinance.main.finvizfinance('SPY').ticker_fundament()` → current fundamentals
 - `finvizfinance.group.performance.Performance().screener_view(...)` → sector perf
-- **Files**: `src/trading_crab/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
+- **Files**: `src/trading_crab_lib/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
 - **Note**: historical screener data requires Finviz Elite API; current data is available
   via the `finvizfinance` library without authentication for many fields
 

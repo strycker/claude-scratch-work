@@ -230,7 +230,7 @@ downstream steps as an overlay/reference column.
 To list all available `market_code` checkpoints:
 ```bash
 python -c "
-from trading_crab.checkpoints import CheckpointManager
+from trading_crab_lib.checkpoints import CheckpointManager
 cm = CheckpointManager()
 mc = [e for e in cm.list() if e['name'].startswith('market_code_')]
 for e in mc:
@@ -385,7 +385,7 @@ Full codebase audit comparing documentation, disk state, and code quality.
 |---------|----------|-------|
 | `data/raw/`, `data/processed/`, `data/regimes/` referenced in `.gitignore` and CLAUDE.md layout but don't exist on disk | Low | All data lives under `data/checkpoints/` instead. Dirs would be created on-demand if pipeline wrote there, but current code doesn't. |
 | `outputs/models/` and `outputs/reports/` don't exist yet | Low | Referenced in Makefile `clean-*` targets. Only `outputs/plots/` (26 PNGs) exists. Created on-demand when steps 5/7 save artifacts. |
-| `src/trading_crab/ingestion/macrotrends.py` documented in ROADMAP Tier 1 but not created | Expected | Planned feature, not a gap. |
+| `src/trading_crab_lib/ingestion/macrotrends.py` documented in ROADMAP Tier 1 but not created | Expected | Planned feature, not a gap. |
 | Undocumented data snapshots on disk | Info | `prepared_quarterly_data_smoothed_20260301.pickle`, `standardized_quarterly_data_20260216.pickle`, `grok_quarter_classifications_20260201.xlsx` — legitimate runtime artifacts, correctly gitignored. |
 | Checkpoint aliases not enumerated in docs | Info | `features_causal.parquet` = `features_supervised`, `features_noncausal.parquet` = `features` — consistent with ADR #1, just not listed in the layout tree. |
 

@@ -5,8 +5,8 @@ from typing import Iterable
 import pandas as pd
 import pytest
 
-from trading_crab.config import load
-from trading_crab.checkpoints import CheckpointManager
+from trading_crab_lib.config import load
+from trading_crab_lib.checkpoints import CheckpointManager
 
 
 def _assert_columns_within_universe(

@@ -46,7 +46,7 @@ makes one HTTP request instead of one per ticker.  This dramatically reduces
 the chance of hitting Yahoo Finance's "Too Many Requests" rate limit.
 
 Usage:
-    from trading_crab.ingestion.assets import fetch_all
+    from trading_crab_lib.ingestion.assets import fetch_all
     prices = fetch_all(cfg)   # returns DataFrame of quarterly adj-close prices
 """
 

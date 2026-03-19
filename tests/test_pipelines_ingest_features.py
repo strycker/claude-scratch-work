@@ -7,8 +7,8 @@ import types
 import pandas as pd
 import pytest
 
-from trading_crab import transforms as transforms_module
-from trading_crab.config import load
+from trading_crab_lib import transforms as transforms_module
+from trading_crab_lib.config import load
 
 
 def _load_step_module(script_name: str) -> types.ModuleType:
@@ -55,8 +55,8 @@ def test_step01_ingest_writes_macro_raw_without_network(monkeypatch, tmp_path, c
     Network-dependent fetches are patched to return a tiny synthetic DataFrame.
     All I/O is redirected to tmp_path so no production checkpoints are touched.
     """
-    from trading_crab.ingestion import fred as fred_module
-    from trading_crab.ingestion import multpl as multpl_module
+    from trading_crab_lib.ingestion import fred as fred_module
+    from trading_crab_lib.ingestion import multpl as multpl_module
 
     synthetic = _make_synthetic_macro()
 

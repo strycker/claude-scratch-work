@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-from trading_crab import CONFIG_DIR
+from trading_crab_lib import CONFIG_DIR
 
 log = logging.getLogger(__name__)
 

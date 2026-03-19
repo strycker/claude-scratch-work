@@ -95,14 +95,14 @@ SMOKE_FULL_PIPELINE=1 bash scripts/smoke_step5.sh
 
 Uses `PYTHONPATH=src` and `python3` by default; override with `PYTHON=/path/to/python`.
 
-## install_trading_crab.sh
+## install_trading_crab_lib.sh
 
 One-shot installer for Trading-Crab on a new machine.
 
 **Usage:**
 
 ```bash
-bash scripts/install_trading_crab.sh
+bash scripts/install_trading_crab_lib.sh
 ```
 
 **What it does:**
@@ -125,5 +125,5 @@ bash scripts/check_env.sh
 **What it does:**
 
 - Prints the `python` and `pytest` executables and versions in use.
-- Verifies that `market_regime` can be imported.
+- Verifies that `trading_crab_lib` can be imported.
 - Runs a tiny pytest smoke test (`test_current_regime_models_and_probabilities`).

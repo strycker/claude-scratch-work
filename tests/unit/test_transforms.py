@@ -1,4 +1,4 @@
-"""Unit tests for src/trading_crab/features/transforms.py"""
+"""Unit tests for src/trading_crab_lib/features/transforms.py"""
 
 import sys
 from pathlib import Path
@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from trading_crab.transforms import (
+from trading_crab_lib.transforms import (
     add_cross_ratios,
     apply_log_transforms,
     apply_gap_fill,
