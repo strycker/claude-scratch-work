@@ -1130,3 +1130,23 @@ ROADMAP item 2.12 implementation. New `src/trading_crab_lib/momentum.py` module 
 - `compute_inflation_acceleration()`: 2nd derivative of CPI
 Hooked into `engineer_all()` in `transforms.py`. Features available for analysis;
 must be explicitly added to feature lists in `settings.yaml` to influence clustering.
+
+### D19. Divergence features Phase C+D: feature list integration and evaluation (2026-03-19)
+
+**Phase C** — Added divergence features to `settings.yaml` feature lists:
+- `initial_features`: added `sp500` (raw level for derivative-space), `div_spy_tlt_z_4q`,
+  `div_spy_tlt_trigger`, `div_cred_vix_z_4q`, `div_cred_vix_trigger`
+- `clustering_features`: added 10 divergence columns (level z-scores + d1 derivatives +
+  triggers + derivative-space z-scores + triggers for spy_tlt and cred_vix pairs)
+- Fixed `fred_vixcls` → `fred_vix` column name in DEFAULT_DIVERGENCE_PAIRS
+
+**Phase D** — Evaluated impact via `scripts/evaluate_divergence.py`:
+- **Clustering improved**: silhouette +0.032 (0.189→0.221), CH +6.8, DB −0.10. Improvement
+  consistent across k=2–6 in sweep; strongest at k=5 (+0.046 silhouette)
+- **Supervised accuracy**: −0.018 mean CV accuracy (within noise, 36.4%→34.6%). However,
+  `div_cred_vix_z_4q_d1` ranks 5th/80 in RF feature importance — the signal is there but
+  may need feature selection or more data to improve CV generalization
+- **Transition detection**: SPY-TLT z-score is 36% higher at regime transitions (0.92) vs
+  baseline (0.67) — confirmed as a leading indicator. Other pairs inconclusive with current data
+- **Recommendation**: keep in clustering (clear win). For supervised, defer until gold/oil data
+  activates additional pairs, or apply feature selection to prune noisy divergence columns
