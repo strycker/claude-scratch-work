@@ -4,3 +4,28 @@ include pyproject.toml
 recursive-include src/trading_crab py.typed
 exclude config/email.yaml
 exclude config/email.local.yaml
+
+
+prune claude-scratch-work-repo-copy
+prune gsd-scratch-work-repo-copy
+prune trading-crab-repo-copy
+
+prune pipelines
+prune scripts
+prune notebooks
+
+exclude run_pipeline.py
+
+prune config
+
+prune data
+prune outputs
+
+global-exclude .env
+global-exclude email.yaml
+global-exclude email.local.yaml
+
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
+
