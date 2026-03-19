@@ -103,20 +103,15 @@ as a diagnostic alongside model-based forward classifiers.
 - Output: `data/regimes/forward_probs_{N}q.parquet` for N in [1, 4, 8]
 - **Files**: `src/trading_crab_lib/regime.py`, `pipelines/04_regime_label.py`
 
-### 1.5  macrotrends.net historical price backfill  `M`
+### 1.5  macrotrends.net historical price backfill  `M`  ✅ DONE
 Extends commodity and asset data before 1993 (ETF inception dates):
 - **Gold price**: monthly back to 1915 (`https://www.macrotrends.net/1333/historical-gold-prices-100-year-chart`)
 - **WTI Crude Oil**: monthly back to 1946
-- **Silver**: back to 1960
-- **10Y Treasury yield**: back to 1962 (to cross-check FRED)
-- macrotrends uses **static HTML tables** (NOT JavaScript-rendered) — confirmed via research.
-- Parse approach: `pandas.read_html()` with CSS selector `table.historical_data_table`,
-  OR `requests` + `BeautifulSoup` with `.select("table.historical_data_table")`.
-  No Selenium or Playwright needed.
-- Rate-limit to 2-3s between requests
-- After resampling to quarterly, resample with `.mean()` (price) or `.last()` (rate)
-- Merge into `macro_raw.parquet` alongside FRED + multpl series
-- **Files**: `src/trading_crab_lib/ingestion/macrotrends.py` (new), `config/settings.yaml`
+- ✅ Scraper implemented in `src/trading_crab_lib/ingestion/macrotrends.py` (242 lines, 9 tests)
+- ✅ Wired into step 1 via `config/settings.yaml` macrotrends section
+- ✅ `log_gold_spot_d1/d2` and `log_wti_crude_d1/d2` added to `clustering_features`
+- ✅ Gold/oil divergence pairs (`spy_gld`, `gld_oil`) auto-activate when data present
+- **Files**: `src/trading_crab_lib/ingestion/macrotrends.py`, `config/settings.yaml`
 
 ### 1.6  Expand asset universe and move ticker lists to config  `S`
 Add ETFs that cover a wider range of regime-relevant categories:
@@ -135,6 +130,10 @@ Notebooks read from `cfg["assets"]["etfs"]` — no hardcoded lists in notebook c
 - **Files**: `config/settings.yaml`, `notebooks/01_ingestion.ipynb`, `notebooks/04_regimes.ipynb`,
   `notebooks/06_assets.ipynb`, `src/trading_crab_lib/plotting.py`
 - **Status**: ✓ Done (settings.yaml + notebooks updated; ETF data fetched on next step 1 run)
+- **Update (D20)**: ETF price ingestion moved from step 6 to step 1. A curated subset
+  (SPY, TLT, GLD, QQQ, VNQ) is merged into `macro_raw` as `etf_{ticker}` columns.
+  Their log-price derivatives are available in `initial_features` for supervised learning.
+  Gold/oil derivatives from macrotrends are in `clustering_features` (deep enough history).
 
 ### 1.7  Confusion matrix and classification report in plots  `S`
 `legacy/supervised.py` has `generate_classification_report()` that produces a
@@ -362,7 +361,7 @@ Implementation approach (when ready):
 |--------|-----------------|-------------|---------|-------------|----------|
 | multpl.com | lxml scraper | 46 Shiller series | varies | ✓ Step 1 | Done |
 | FRED API | `fredapi` | GDP, CPI, BAA, AAA, GS10, TB3MS, GNP | varies | ✓ Step 1 | Done |
-| yfinance | `yfinance` | ETF OHLCV (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG) | 1993+ | ✓ Step 6 | Done |
+| yfinance | `yfinance` | ETF OHLCV (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG) | 1993+ | ✓ Step 1+6 | Done |
 | FRED — VIX | `fredapi` | VIXCLS daily volatility index | 1990 | ✓ Step 1 | Done |
 | FRED — unemployment | `fredapi` | UNRATE monthly | 1948 | ✓ Step 1 | Done |
 | FRED — M2 | `fredapi` | M2SL + M2NS money supply | 1959 | ✓ Step 1 | Done |
@@ -370,7 +369,7 @@ Implementation approach (when ready):
 | FRED — housing | `fredapi` | HOUST | 1959 | ✓ Step 1 | Done |
 | FRED — consumer | `fredapi` | UMCSENT | 1952 | ✓ Step 1 | Done |
 | FRED — industrial | `fredapi` | INDPRO, PAYEMS, DPCERA3Q086SBEA | varies | ✗ | **Tier 1** |
-| macrotrends.net | custom scraper | Gold, oil, silver prices | 1915+ | ✗ | **Tier 1** |
+| macrotrends.net | custom scraper | Gold, oil, silver prices | 1915+ | ✓ Step 1 | Done |
 | stooq.pl | `pandas-datareader` | Free ETF/stock OHLCV (Phase 3 yfinance fallback) | ~1993 | ✓ Phase 3 | Done (optional install) |
 | OpenBB | `openbb` | Multi-provider ETF prices (Phase 4 yfinance fallback) | varies | ✓ Phase 4 | Done (optional install) |
 | Finviz Elite | `finvizfinance` | Sector screener + fundamentals (NOT historical prices) | recent | ✗ | Tier 3 (3.7) |

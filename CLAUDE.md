@@ -1150,3 +1150,35 @@ must be explicitly added to feature lists in `settings.yaml` to influence cluste
   baseline (0.67) — confirmed as a leading indicator. Other pairs inconclusive with current data
 - **Recommendation**: keep in clustering (clear win). For supervised, defer until gold/oil data
   activates additional pairs, or apply feature selection to prune noisy divergence columns
+
+### D20. ETF prices moved to step 1; macrotrends + asset derivatives added (2026-03-19)
+
+**Architectural change**: ETF price ingestion moved from step 6 to step 1. Prices are now
+fetched alongside FRED/multpl/macrotrends data and cached as the `asset_prices` checkpoint.
+Step 6 reuses cached prices instead of re-fetching (unless `--refresh-assets` is passed).
+
+**Why**: ETF price derivatives (d1, d2) of major asset classes are informative for regime
+classification. Moving ingestion to step 1 makes ETF data available for step 2 feature
+engineering alongside macro data.
+
+**New data flow**:
+- `_fetch_and_cache_asset_prices()`: extracted from step 6, now called in step 1
+- `_merge_asset_prices_into_raw()`: merges a curated ETF subset (SPY, TLT, GLD, QQQ, VNQ)
+  into `macro_raw` as `etf_spy`, `etf_tlt`, etc. columns
+- Config: `features.asset_price_columns` controls which tickers merge into macro_raw
+
+**Feature list additions** (`config/settings.yaml`):
+- `log_columns`: added `gold_spot`, `wti_crude`, `etf_spy`, `etf_tlt`, `etf_gld`, `etf_qqq`, `etf_vnq`
+- `initial_features`: added `log_gold_spot`, `log_wti_crude`, `log_etf_*` (available for supervised learning)
+- `clustering_features`: added `log_gold_spot_d1`, `log_gold_spot_d2`, `log_wti_crude_d1`, `log_wti_crude_d2`
+
+**Key decision**: ETF derivatives (e.g. `log_etf_spy_d1`) are intentionally NOT in
+`clustering_features`. ETFs start 1993–2004 (~80 quarters), while clustering uses 305 quarters
+back to 1950. Adding ETF derivatives to clustering features would force `dropna()` to discard
+all pre-1993 rows, losing 55 years of regime history. Gold (1915+) and oil (1946+) from
+macrotrends have enough history for clustering. ETF derivatives remain available for supervised
+learning via `features_supervised.parquet`.
+
+**Divergence auto-activation**: `spy_gld` and `gld_oil` divergence pairs (in
+`DEFAULT_DIVERGENCE_PAIRS`) will now auto-activate once macrotrends data populates
+`gold_spot` and `wti_crude` columns in `macro_raw`.

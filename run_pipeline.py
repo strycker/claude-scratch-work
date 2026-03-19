@@ -7,12 +7,12 @@ RunConfig passed through every module.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  PIPELINE STEPS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1  ingest         Scrape multpl.com (46 series) + FRED API → macro_raw.parquet
+  1  ingest         Scrape multpl.com + FRED + macrotrends + ETF prices → macro_raw.parquet
   2  features       Log transforms, derivatives, gap-fill → features.parquet
   3  cluster        PCA + KMeans → cluster_labels.parquet
   4  regime_label   Statistical profiling + human-readable names → profiles.parquet
   5  predict        Supervised classifiers (current + forward horizons)
-  6  asset_returns  ETF returns by regime via yfinance
+  6  asset_returns  ETF returns by regime (prices cached from step 1)
   7  dashboard      Print dashboard + save outputs/reports/dashboard.csv
   8  diagnostics    Ratio + RRG diagnostics → outputs/reports/diagnostics/
   9  tactics        Per-asset buy_hold / swing / stand_aside classification
@@ -253,8 +253,90 @@ def _save_market_code(labels: "pd.Series", name: str) -> None:
 
 # ── Step registry ──────────────────────────────────────────────────────────────
 
+def _fetch_and_cache_asset_prices(
+    cfg: dict, run_cfg: RunConfig
+) -> "pd.DataFrame":
+    """
+    Fetch ETF prices via yfinance/stooq/OpenBB and cache to asset_prices checkpoint.
+
+    Called from step 1 (early ingestion) so that asset prices are available for
+    feature engineering in step 2.  Step 6 reuses the cached checkpoint — it no
+    longer re-fetches unless --refresh-assets is passed.
+
+    Returns the prices DataFrame (may be empty if all sources fail).
+    """
+    from trading_crab_lib.ingestion.assets import fetch_all as fetch_prices
+    from trading_crab_lib.checkpoints import CheckpointManager
+    import pandas as pd
+
+    cm = CheckpointManager()
+    cache_path = DATA_DIR / "raw" / "asset_prices.parquet"
+
+    prices: pd.DataFrame = pd.DataFrame()
+
+    if run_cfg.refresh_asset_prices or not cache_path.exists():
+        try:
+            prices = fetch_prices(cfg)
+            if not prices.empty:
+                raw_dir = DATA_DIR / "raw"
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                prices.to_parquet(cache_path)
+                cm.save(prices, "asset_prices")
+                log.info(
+                    "Step 1: fetched ETF prices — %d tickers, %d quarters",
+                    len(prices.columns), len(prices),
+                )
+        except Exception as exc:
+            log.warning("Step 1: ETF price fetch failed (non-fatal): %s", exc)
+
+    if prices.empty and cache_path.exists():
+        prices = pd.read_parquet(cache_path)
+        log.info("Step 1: loaded cached ETF prices (%d tickers)", len(prices.columns))
+
+    return prices
+
+
+def _merge_asset_prices_into_raw(
+    combined: "pd.DataFrame",
+    prices: "pd.DataFrame",
+    cfg: dict,
+) -> "pd.DataFrame":
+    """
+    Merge a curated subset of ETF quarterly prices into macro_raw.
+
+    Only ETFs listed in cfg["features"]["asset_price_columns"] are included.
+    The column names are lowercased (e.g., SPY → etf_spy) to avoid collisions
+    with existing macro columns and to follow the snake_case convention.
+
+    These columns then participate in step 2 feature engineering (log transform,
+    gap fill, derivatives) like any other macro series.
+    """
+    import pandas as pd
+
+    asset_cols = cfg.get("features", {}).get("asset_price_columns", [])
+    if not asset_cols or prices.empty:
+        return combined
+
+    merged_count = 0
+    for ticker in asset_cols:
+        if ticker in prices.columns:
+            col_name = f"etf_{ticker.lower()}"
+            combined[col_name] = prices[ticker].reindex(combined.index)
+            merged_count += 1
+            valid = combined[col_name].notna().sum()
+            log.info(
+                "Step 1: merged %s → %s (%d/%d quarters with data)",
+                ticker, col_name, valid, len(combined),
+            )
+
+    if merged_count:
+        log.info("Step 1: merged %d ETF price columns into macro_raw", merged_count)
+
+    return combined
+
+
 def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
-    """Scrape multpl.com + FRED → data/raw/macro_raw.parquet.
+    """Scrape multpl.com + FRED + macrotrends + ETF prices → data/raw/macro_raw.parquet.
     Optionally attaches a market_code column from the configured source."""
     from trading_crab_lib.ingestion import fred as fred_module
     from trading_crab_lib.ingestion import multpl as multpl_module
@@ -301,6 +383,11 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
                 log.info("Step 1: macrotrends added %d columns", len(mt_df.columns))
         except Exception as exc:
             log.warning("Step 1: macrotrends fetch failed (non-fatal): %s", exc)
+
+    # ETF prices — fetch and cache early so they're available for step 2
+    prices = _fetch_and_cache_asset_prices(cfg, run_cfg)
+    combined = _merge_asset_prices_into_raw(combined, prices, cfg)
+
     start = cfg["data"]["start_date"]
     combined = combined[combined.index >= start]
 
@@ -339,6 +426,8 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
         expected_cols.append(ds[0] if isinstance(ds, list) else ds["name"])
     for ds in cfg.get("macrotrends", {}).get("series", []):
         expected_cols.append(ds["name"] if isinstance(ds, dict) else ds[0])
+    for ticker in cfg.get("features", {}).get("asset_price_columns", []):
+        expected_cols.append(f"etf_{ticker.lower()}")
     report = ingestion_completeness_report(combined, expected_columns=expected_cols)
     log.info("Ingestion completeness:\n%s", report.summary())
 
@@ -631,9 +720,9 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 
 
 def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
-    """Fetch ETF prices via yfinance → data/regimes/asset_return_profile.parquet.
-    Falls back to macro-data proxy returns when yfinance is unavailable."""
-    from trading_crab_lib.ingestion.assets import fetch_all as fetch_prices
+    """Load ETF prices (cached from step 1) → data/regimes/asset_return_profile.parquet.
+    Falls back to macro-data proxy returns when prices are unavailable.
+    Re-fetches only when --refresh-assets is passed."""
     from trading_crab_lib.asset_returns import (
         compute_quarterly_returns, compute_proxy_returns,
         returns_by_regime, rank_assets_by_regime,
@@ -646,23 +735,18 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 
     labels = _load_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels")["balanced_cluster"]
 
-    # Try yfinance first; fall back to cached parquet if present
+    # Load cached prices (fetched by step 1); re-fetch only if --refresh-assets
     prices: pd.DataFrame | None = None
     cache_path = DATA_DIR / "raw" / "asset_prices.parquet"
 
-    if run_cfg.refresh_asset_prices or not cache_path.exists():
-        try:
-            prices = fetch_prices(cfg)
-            if not prices.empty:
-                raw_dir = DATA_DIR / "raw"
-                raw_dir.mkdir(parents=True, exist_ok=True)
-                prices.to_parquet(cache_path)
-                cm.save(prices, "asset_prices")
-        except Exception as exc:
-            log.warning("yfinance fetch failed: %s", exc)
-
-    if (prices is None or prices.empty) and cache_path.exists():
+    if run_cfg.refresh_asset_prices:
+        # Re-fetch when explicitly requested
+        prices = _fetch_and_cache_asset_prices(cfg, run_cfg)
+    elif cache_path.exists():
         prices = pd.read_parquet(cache_path)
+    else:
+        # No cache — try fetching now
+        prices = _fetch_and_cache_asset_prices(cfg, run_cfg)
 
     # Compute returns: use real ETF prices when available, macro proxies otherwise
     returns: pd.DataFrame | None = None
@@ -914,12 +998,12 @@ def step9_tactics(cfg: dict, run_cfg: RunConfig) -> None:
 # ── Step dispatch table ────────────────────────────────────────────────────────
 
 STEPS: dict[int, tuple[str, callable]] = {
-    1: ("Ingest macro data",            step1_ingest),
+    1: ("Ingest macro + ETF data",      step1_ingest),
     2: ("Engineer features",            step2_features),
     3: ("PCA + clustering",             step3_cluster),
     4: ("Regime profiling + labeling",  step4_regime_label),
     5: ("Supervised prediction",        step5_predict),
-    6: ("Asset returns",                step6_asset_returns),
+    6: ("Asset returns (cached prices)", step6_asset_returns),
     7: ("Dashboard",                    step7_dashboard),
     8: ("Diagnostics (ratios + RRG)",   step8_diagnostics),
     9: ("Tactics signals",              step9_tactics),
