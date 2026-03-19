@@ -14,6 +14,7 @@ RunConfig passed through every module.
   5  predict        Supervised classifiers (current + forward horizons)
   6  asset_returns  ETF returns by regime via yfinance
   7  dashboard      Print dashboard + save outputs/reports/dashboard.csv
+  8  diagnostics    Ratio + RRG diagnostics → outputs/reports/diagnostics/
   9  tactics        Per-asset buy_hold / swing / stand_aside classification
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -807,6 +808,69 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
     log.info("Step 7 done")
 
 
+from trading_crab.diagnostics import (
+    percentile_rank,
+    rolling_zscore,
+    rrg_for_benchmark,
+)
+
+
+def step8_diagnostics(cfg: dict, run_cfg: RunConfig) -> None:
+    """Compute ratio and RRG diagnostics from ETF prices → outputs/reports/diagnostics/."""
+    import pandas as pd
+
+    prices_path = DATA_DIR / "raw" / "asset_prices.parquet"
+    if not prices_path.exists():
+        log.warning("Step 8: ETF prices %s not found; skipping diagnostics.", prices_path)
+        return
+
+    prices = pd.read_parquet(prices_path)
+    tickers = cfg.get("assets", {}).get("etfs") or list(prices.columns)
+    cols = [t for t in tickers if t in prices.columns]
+    if not cols:
+        log.warning("Step 8: no configured ETF columns in prices; skipping diagnostics.")
+        return
+    prices = prices[cols]
+
+    diag_dir = OUTPUT_DIR / "reports" / "diagnostics"
+    diag_dir.mkdir(parents=True, exist_ok=True)
+
+    ratios_cfg = cfg.get("diagnostics", {}).get("ratios") or []
+    if ratios_cfg:
+        records = []
+        for item in ratios_cfg:
+            name = item.get("name")
+            num = item.get("numerator")
+            den = item.get("denominator")
+            if not name or not num or not den or num not in prices.columns or den not in prices.columns:
+                continue
+            ratio_series = prices[num] / prices[den]
+            z = rolling_zscore(ratio_series)
+            pct = percentile_rank(ratio_series)
+            latest = ratio_series.dropna().iloc[-1] if not ratio_series.dropna().empty else float("nan")
+            latest_z = z.dropna().iloc[-1] if not z.dropna().empty else float("nan")
+            records.append({
+                "name": name, "numerator": num, "denominator": den,
+                "latest_value": latest, "latest_zscore": latest_z, "percentile": pct,
+            })
+        if records:
+            pd.DataFrame.from_records(records).to_parquet(diag_dir / "ratios_current.parquet", index=False)
+            log.info("Step 8: wrote ratio diagnostics to %s", diag_dir / "ratios_current.parquet")
+
+    benchmarks = cfg.get("diagnostics", {}).get("rrg_benchmarks") or ["SPY"]
+    all_rrg = []
+    for bench in benchmarks:
+        df_b = rrg_for_benchmark(prices, bench)
+        if not df_b.empty:
+            all_rrg.append(df_b)
+    if all_rrg:
+        rrg_path = diag_dir / "rrg_current.parquet"
+        pd.concat(all_rrg, ignore_index=True).to_parquet(rrg_path, index=False)
+        log.info("Step 8: wrote RRG diagnostics to %s", rrg_path)
+
+    log.info("Step 8 done")
+
+
 from trading_crab.tactics import compute_tactics_metrics, classify_tactics
 
 
@@ -847,6 +911,7 @@ STEPS: dict[int, tuple[str, callable]] = {
     5: ("Supervised prediction",        step5_predict),
     6: ("Asset returns",                step6_asset_returns),
     7: ("Dashboard",                    step7_dashboard),
+    8: ("Diagnostics (ratios + RRG)",   step8_diagnostics),
     9: ("Tactics signals",              step9_tactics),
 }
 
