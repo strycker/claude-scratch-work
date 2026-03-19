@@ -252,9 +252,19 @@ divergences can signal regime transitions and trading opportunities.
   derivative-space z-scores + triggers) to `initial_features` and `clustering_features` in
   `settings.yaml`. Fixed `fred_vixcls` → `fred_vix` column name bug. Added `sp500` raw level
   to `initial_features` for derivative-space divergence support.
-- Phase D: Evaluate impact on regime classification accuracy and transition detection
+- ✅ Phase D: Evaluation complete (`scripts/evaluate_divergence.py`). Results:
+  - **Clustering quality improved**: silhouette +0.032 (0.189→0.221), CH +6.8, DB −0.10
+  - **K-sweep**: divergence features improve silhouette at k=2–6; largest gain at k=5 (+0.046)
+  - **Supervised accuracy**: slight degradation (−0.018 mean CV, within noise). RF feature
+    importance ranks `div_cred_vix_z_4q_d1` 5th out of 80 features — divergence features
+    carry signal but more samples or feature selection may be needed to improve CV scores
+  - **Transition detection**: `spy_tlt` z-score is 36% higher at transitions (0.92) vs
+    baseline (0.67) — confirmed as a leading indicator of regime change. Other pairs inconclusive
+  - **Recommendation**: keep divergence features in clustering pipeline (clear improvement).
+    For supervised pipeline, consider (a) feature selection to prune noisy divergence columns,
+    (b) waiting for gold/oil data (macrotrends) to activate spy_gld and gld_oil pairs
 - **Files**: `src/trading_crab_lib/divergence.py`, `src/trading_crab_lib/transforms.py`,
-  `config/settings.yaml`
+  `config/settings.yaml`, `scripts/evaluate_divergence.py`
 
 ### 2.14  Conference Board LEI proxy from FRED  `S`
 The Conference Board LEI is the gold standard for recession prediction but is not
