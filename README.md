@@ -292,6 +292,24 @@ pip-compile pyproject.toml --extra dev --upgrade --output-file requirements-dev.
 
 ---
 
+## Reference Submodules
+
+This repo contains two Git submodules that are **read-only references**. Never modify
+files inside them — use them only to compare implementations and inform changes to the
+main repo.
+
+| Submodule | Purpose |
+|-----------|---------|
+| `gsd-scratch-work-repo-copy/` | GSD framework version of the project (earlier development checkpoint) |
+| `trading-crab-lib-repo-copy/` | Separate trading-crab library repo |
+
+To initialize submodules after cloning:
+```bash
+git submodule update --init --recursive
+```
+
+---
+
 ## Project Documentation
 
 | File | Contents |

@@ -28,6 +28,12 @@ monolith that is ground truth for every formula, parameter choice, and pipeline 
 The modular pipeline in `src/` and `pipelines/` implements everything that script does,
 organized more cleanly, with checkpointing, CLI flags, and dedicated plotting notebooks.
 
+**Reference submodules** — This repo contains two Git submodules that are **read-only
+references**. Never modify files inside them; use them only to compare implementations
+and inform changes to the main repo:
+- `gsd-scratch-work-repo-copy/` — GSD framework version of the project (earlier checkpoint)
+- `trading-crab-lib-repo-copy/` — Separate trading-crab library repo
+
 ---
 
 ## Repository Layout
@@ -36,6 +42,8 @@ organized more cleanly, with checkpointing, CLI flags, and dedicated plotting no
 trading-crab/
 ├── CLAUDE.md                      ← you are here (all dev docs in one place)
 ├── README.md                      ← project overview (user-facing)
+├── gsd-scratch-work-repo-copy/    ← READ-ONLY submodule (GSD framework version)
+├── trading-crab-lib-repo-copy/    ← READ-ONLY submodule (trading-crab library repo)
 ├── ROADMAP.md                     ← prioritized feature backlog
 ├── STATE.md                       ← current pipeline status and known gaps
 ├── .env.example                   ← copy to .env, fill in FRED_API_KEY
@@ -397,6 +405,9 @@ All tuneable parameters are in `config/settings.yaml`. Key sections:
 - **`prediction/__init__.py` flat API** — `run_pipeline.py`, `pipelines/05_predict.py`, and
   `pipelines/07_dashboard.py` all expect `current_regime.pkl` to be a bare `RandomForestClassifier`.
   Do not change to the bundle-dict API without updating all three consumers. See ADR #12 below.
+- **Reference submodules are read-only** — `gsd-scratch-work-repo-copy/` and
+  `trading-crab-lib-repo-copy/` are Git submodules for reference only. Never modify files
+  inside them. Use them to compare implementations and inform changes to the main repo.
 
 ---
 
