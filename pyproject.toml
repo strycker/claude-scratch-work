@@ -3,7 +3,7 @@ requires = ["setuptools>=68,<76", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "trading-crab"
+name = "trading-crab-lib"
 version = "0.1.0"
 description = "Market regime classification and prediction pipeline using macroeconomic data"
 readme = "README.md"
