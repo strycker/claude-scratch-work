@@ -223,7 +223,13 @@ features:
     - real_gdp_per_cap
     - sp500_pe
     - us_infl
+    - sp500              # raw level needed for derivative-space divergence (sp500_d1)
     - us_pop_growth
+    # Divergence features (level-space, computed before log transforms)
+    - div_spy_tlt_z_4q        # equity-bond divergence z-score
+    - div_spy_tlt_trigger     # equity-bond divergence trigger (binary)
+    - div_cred_vix_z_4q       # credit-vol divergence z-score
+    - div_cred_vix_trigger    # credit-vol divergence trigger (binary)
 
   # Final feature set fed into PCA + clustering.
   # Uses d1+d2 for most series; d1+d2+d3 only for sp500 series (higher-order
@@ -300,6 +306,18 @@ features:
     - sp500_pe_d1
     - us_infl
     - us_infl_d1
+    # Divergence features — level-space (z-scores + their d1 derivatives + triggers)
+    - div_spy_tlt_z_4q
+    - div_spy_tlt_z_4q_d1
+    - div_spy_tlt_trigger
+    - div_cred_vix_z_4q
+    - div_cred_vix_z_4q_d1
+    - div_cred_vix_trigger
+    # Divergence features — derivative-space (computed after derivatives)
+    - div_d1_spy_tlt_z_4q
+    - div_d1_spy_tlt_trigger
+    - div_d1_cred_vix_z_4q
+    - div_d1_cred_vix_trigger
 
   derivative_window: 5  # rolling mean window applied before/after np.gradient
 

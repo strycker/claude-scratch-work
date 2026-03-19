@@ -332,7 +332,7 @@ Short summary:
 
 ### Medium Term (Tier 2)
 - [ ] **Momentum & cross-asset ratio features** — 6M/12M trailing returns, S&P-in-Gold, Gold-in-Oil, rolling cross-asset correlation, inflation acceleration (2nd derivative CPI)
-- [ ] **Cross-asset divergence features (NEW)** — rolling correlation baselines between signal pairs (SPY/TLT, GLD/USO, credit_spread/VIX), divergence magnitude and triggers as supervised learning features, derivative-space divergences for leading indicator detection. See ROADMAP 2.15.
+- [ ] **Cross-asset divergence features** — Phases A+B done (module + pipeline hook); Phase C (add to feature lists) and Phase D (evaluate impact) remaining. See ROADMAP 2.15.
 - [ ] Hidden Markov Model regime detection (`hmm.py`)
 - [ ] Per-asset probability models — "will ETF be +X% at Y quarters?" (Part I vision)
 - [ ] Conference Board LEI proxy from FRED components
@@ -415,7 +415,7 @@ See **`ROADMAP.md`** for full details and effort estimates. Quick summary of wha
 | 2 | macrotrends.net live verification | S | Code exists, needs real-data test |
 | 3 | LightGBM flat-API wiring | M | `gradient_boosting.py` exists |
 | 4 | Momentum & cross-asset ratio features | M | 6M/12M momentum, relative strength |
-| 5 | Cross-asset divergence features | L | Rolling corr baselines → triggers (ROADMAP 2.15) |
+| 5 | Cross-asset divergence features | S | Phases A+B done; C+D remaining (ROADMAP 2.15) |
 | 6 | HMM regime detection | M | Temporal alternative to KMeans |
 | 7 | Backtest framework | XL | Walk-forward strategy validation |
 
