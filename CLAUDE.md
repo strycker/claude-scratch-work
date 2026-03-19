@@ -1085,3 +1085,39 @@ all three ingestion modules, and three new modules.
 
 Test count: 301 → 428 collected (11 skipped: HDBSCAN + cssselect optional).
 All previously untested modules now have test coverage.
+
+### D15. Package renamed from `market_regime` to `trading_crab_lib` (2026-03-19)
+
+Atomic rename of the Python package directory `src/market_regime/` → `src/trading_crab_lib/`
+plus ~438 import references across 89 files. pip package name: `trading-crab-lib`.
+See `RENAME_PLAN.md` for the full rename strategy. `market_code` (a DataFrame column name)
+was NOT renamed — it is a data concept, not a package reference.
+
+### D16. Submodule comparison: main repo is authoritative (2026-03-19)
+
+Compared `gsd-scratch-work-repo-copy/` and `trading-crab-lib-repo-copy/` against the main
+repo. Both submodules are earlier snapshots — the main repo is strictly ahead. No GSD-only
+functionality needs porting. Key differences:
+- GSD has 7 FRED series; main has 14
+- GSD has 28 test files; main has 35+
+- GSD lacks: LightGBM, macrotrends scraper, ingestion completeness report, forward
+  probabilities, confusion matrix plot, diagnostics/tactics/email modules
+Submodules remain as read-only references only.
+
+### D17. Cross-asset divergence features design (2026-03-19)
+
+New ROADMAP item 2.15. Concept: derive supervised learning features from breakdowns in
+historically correlated signal pairs. Three layers: (1) rolling correlation baseline,
+(2) divergence magnitude (including in derivative space), (3) binary/continuous trigger
+features. Implemented as a phased approach with a new `divergence.py` module.
+This is a Tier 2 item — not implemented yet but documented for future sessions.
+
+### D18. Momentum and cross-asset ratio features (2026-03-19)
+
+ROADMAP item 2.12 implementation. New `src/trading_crab_lib/momentum.py` module with:
+- `compute_trailing_momentum()`: 2Q, 4Q, 8Q trailing returns for major series
+- `compute_relative_strength()`: S&P-in-Gold, S&P-in-Oil, Gold-in-Oil ratios
+- `compute_rolling_cross_correlation()`: rolling 8Q correlation between signal pairs
+- `compute_inflation_acceleration()`: 2nd derivative of CPI
+Hooked into `engineer_all()` in `transforms.py`. Features available for analysis;
+must be explicitly added to feature lists in `settings.yaml` to influence clustering.

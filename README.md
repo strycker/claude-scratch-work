@@ -325,51 +325,51 @@ git submodule update --init --recursive
 See **`ROADMAP.md`** for the full prioritized backlog with effort estimates.
 Short summary:
 
-### Next Up (Tier 1)
-- [ ] Add FRED series: VIX, unemployment, M2, yield spreads (10Y-2Y, 10Y-3M), housing starts
-- [ ] Add yield curve derived features in `transforms.py`
+### Next Up (Tier 1 — remaining)
+- [ ] Add FRED series: INDPRO (industrial production), PAYEMS (nonfarm payrolls), DPCERA3Q086SBEA (real PCE)
 - [ ] macrotrends.net scraper for gold (1915+) and oil (1946+) price backfill
-- [ ] LightGBM classifier alongside RandomForest + Decision Tree
-- [ ] Empirical forward probabilities in `profiler.py` (small remaining legacy gap)
-- [ ] Confusion matrix visualization in `plotting.py`
-- [ ] `end_date: null` → use today in `settings.yaml`
-- [ ] Expand test suite (classifier, portfolio, dashboard, profiler)
+- [ ] LightGBM integration into flat production API (module exists, needs wiring)
 
 ### Medium Term (Tier 2)
-- [ ] Hidden Markov Model regime detection (`clustering/hmm.py`)
+- [ ] **Momentum & cross-asset ratio features** — 6M/12M trailing returns, S&P-in-Gold, Gold-in-Oil, rolling cross-asset correlation, inflation acceleration (2nd derivative CPI)
+- [ ] **Cross-asset divergence features (NEW)** — rolling correlation baselines between signal pairs (SPY/TLT, GLD/USO, credit_spread/VIX), divergence magnitude and triggers as supervised learning features, derivative-space divergences for leading indicator detection. See ROADMAP 2.15.
+- [ ] Hidden Markov Model regime detection (`hmm.py`)
 - [ ] Per-asset probability models — "will ETF be +X% at Y quarters?" (Part I vision)
-- [ ] Momentum + cross-asset ratio features (6M/12M momentum, gold-in-oil, etc.)
+- [ ] Conference Board LEI proxy from FRED components
 - [ ] Finviz Elite sector/stock signals for within-regime stock picking
 
 ### Long Term (Tier 3)
-- [ ] Individual asset-return predictors per regime (binary classifiers per ETF)
-- [ ] Regime-conditional portfolio optimization (mean-variance, risk-parity)
+- [ ] Backtest framework — walk-forward validation of full strategy
 - [ ] Weekly automated report with AI-written narrative via Claude API
 - [ ] Streamlit interactive dashboard
+- [ ] Factor model for asset returns within regimes (LASSO/Ridge per regime)
 
 ### Completed ✓
 
-- ✓ Full 7-step pipeline runs end-to-end on real data
-- ✓ Data ingestion: multpl.com (46 series), FRED (7 series), yfinance (16 ETFs)
+- ✓ Full 9-step pipeline runs end-to-end on real data
+- ✓ Data ingestion: multpl.com (46 series), FRED (14 series), yfinance (38 ETFs)
 - ✓ Feature engineering: log transforms, Bernstein gap fill, smoothed derivatives
+- ✓ Yield curve features: 10Y-2Y and 10Y-3M spreads
 - ✓ Causal + centered smoothing — two separate feature files prevent look-ahead bias
 - ✓ PCA + KMeans clustering (standard + size-constrained)
-- ✓ Regime profiling, naming heuristics, transition matrix
-- ✓ RandomForest + DecisionTree with TimeSeriesSplit 5-fold walk-forward CV
+- ✓ Clustering investigation suite — gap statistic, GMM, DBSCAN/HDBSCAN, Spectral, SVD, RF feature selection
+- ✓ Regime profiling, naming heuristics, transition matrix, forward probabilities
+- ✓ RandomForest + DecisionTree + GradientBoosting with TimeSeriesSplit 5-fold CV
 - ✓ Forward binary classifiers for each (horizon, regime) pair
+- ✓ Interpretability tree (shallow DT on top-k features for human-readable rules)
 - ✓ Asset returns by regime (yfinance ETFs + macro proxy fallback)
 - ✓ Portfolio construction: simple + blended weights + BUY/SELL/HOLD recommendations
 - ✓ Text + CSV dashboard with GREEN/YELLOW/RED asset signals
-- ✓ CheckpointManager (parquet + manifest; avoids re-scraping)
+- ✓ Diagnostics: RRG analysis (relative rotation graphs), tactical classification
+- ✓ Weekly email report pipeline (`--weekly-report` + `--send-email`)
+- ✓ CheckpointManager (parquet + manifest, joblib for models, corrupt metadata logging)
+- ✓ Ingestion completeness report (validates column count + NaN coverage)
 - ✓ Full CLI (`run_pipeline.py --steps --refresh --recompute --plots …`)
+- ✓ Confusion matrix visualization in `plotting.py`
+- ✓ Package renamed: `market_regime` → `trading_crab_lib` (pip name: `trading-crab-lib`)
+- ✓ yfinance fallback chain: stooq → OpenBB → macro proxy
+- ✓ 428 unit tests, all passing (10 skipped: HDBSCAN + cssselect optional)
 - ✓ Exploration notebooks (01–08)
-- ✓ Installation setup (`requirements.txt`, `setup.sh`, `Makefile`)
-- ✓ Python 3.10+ compatibility; SSL fix for yfinance curl_cffi
-- ✓ **Clustering investigation suite** — gap statistic, GMM, DBSCAN/HDBSCAN, Spectral,
-  SVD vs PCA, PCA component sweep, multi-method comparison + ARI heatmap, RF feature selection
-- ✓ **yfinance fallback chain** — stooq → OpenBB → macro proxy
-- ✓ **238 unit tests** covering all core modules and new clustering investigation suite
-- ✓ **Phase 3 in progress** — supervised current-regime classifier (RF + DT), forward binary classifiers, and causal feature pipeline complete (2/3 plans done)
 
 ---
 
@@ -407,50 +407,24 @@ Full codebase audit comparing documentation, disk state, and code quality.
 
 ## Prioritized Next Steps
 
-Ranked by impact and effort, incorporating audit findings and existing ROADMAP items.
+See **`ROADMAP.md`** for full details and effort estimates. Quick summary of what's next:
 
-### Priority 1 — High Impact, Low Effort (do first)
+| # | Item | Effort | Notes |
+|---|------|--------|-------|
+| 1 | Add FRED: INDPRO, PAYEMS, DPCERA3Q086SBEA | S | Config-only |
+| 2 | macrotrends.net live verification | S | Code exists, needs real-data test |
+| 3 | LightGBM flat-API wiring | M | `gradient_boosting.py` exists |
+| 4 | Momentum & cross-asset ratio features | M | 6M/12M momentum, relative strength |
+| 5 | Cross-asset divergence features | L | Rolling corr baselines → triggers (ROADMAP 2.15) |
+| 6 | HMM regime detection | M | Temporal alternative to KMeans |
+| 7 | Backtest framework | XL | Walk-forward strategy validation |
 
-1. **Clean up phantom directories in docs** — Update CLAUDE.md layout tree to reflect that `data/raw/`, `data/processed/`, `data/regimes/` are unused (all data is in `data/checkpoints/`). Remove or annotate the `.gitignore` entries. Prevents contributor confusion.
-
-2. **Create `outputs/models/` and `outputs/reports/` directories** — Add `.gitkeep` files so Makefile `clean-*` targets and step 5/7 outputs work without manual `mkdir`. Trivial fix.
-
-3. **Fix `end_date` hardcoding (P12)** — Change `end_date: "2025-09-30"` to `null` in `settings.yaml` and handle with `datetime.today()` in ingestion modules. Pipeline silently ignores data after Sept 2025 otherwise.
-
-4. **Add `from __future__ import annotations`** to `ingestion/fred.py` and `ingestion/multpl.py` — Known inconsistency noted in CLAUDE.md "Known Limitations". One-line fix per file.
-
-### Priority 2 — High Impact, Medium Effort
-
-5. **Expand FRED series** — Add VIX (`VIXCLS`), unemployment (`UNRATE`), M2 money supply (`M2NS`), yield curve spreads (`T10Y2Y`, `GS2`). These are the highest-value additions for regime discrimination. Requires `settings.yaml` entries + testing.
-
-6. **Add confusion matrix visualization** — `plotting.py` has no confusion matrix plot. Important for evaluating classifier performance visually. Straightforward matplotlib/sklearn addition.
-
-7. **LightGBM classifier** — Add alongside RF + DT in the flat prediction API. LightGBM typically outperforms RF on tabular data with minimal tuning. Requires adding `lightgbm` to dependencies.
-
-8. **Migrate pickle to joblib** (P27) — `outputs/models/current_regime.pkl` uses `pickle.dump`. Switch to `joblib.dump`/`joblib.load` for better sklearn compatibility and reduced arbitrary-code-execution risk.
-
-### Priority 3 — Medium Impact, Medium Effort
-
-9. **macrotrends.net scraper** — Gold (1915+) and oil (1946+) price backfill. Extends pre-1993 coverage significantly. Requires new `ingestion/macrotrends.py` module.
-
-10. **Yield curve derived features** — 10Y-2Y spread, 10Y-3M spread, yield curve slope/curvature in `transforms.py`. Classic recession predictors.
-
-11. **Ingestion completeness report (P23)** — Log column count after ingestion and warn if below expected threshold (~53 columns). Prevents silent partial-data runs.
-
-12. **Improve `CheckpointManager.list()` logging (P24)** — Log which `.meta.json` files fail to parse instead of silently ignoring corrupt metadata.
-
-### Priority 4 — High Impact, High Effort (plan carefully)
-
-13. **Hidden Markov Model regime detection** — Models temporal autocorrelation natively (quarters aren't independent). Would live in `clustering/hmm.py`. Requires careful integration with existing two-clustering architecture.
-
-14. **Per-asset probability models** — "Will ETF X be +Y% at Z quarters?" Binary classifiers per ETF per horizon. Core Part I vision item. Large scope.
-
-15. **Weekly automated report** — Cron job with `--refresh`, AI-written narrative via Claude API, email delivery. Tier 3 roadmap item requiring infrastructure.
-
-### Priority 5 — Cleanup / Tech Debt
-
-16. **Archive stale data snapshots (P25)** — Move `data/*_snapshot_*.pickle` and `data/grok_*.pickle` to `data/archives/` with README. Prevents accidental stale-data loading.
-
-17. **SSL verification flag (P22)** — Add `RunConfig.verify_ssl` flag, default to `True`. Currently `verify=False` unconditionally in `assets.py`.
-
-18. **Document checkpoint aliases** — Add `features_causal` / `features_noncausal` aliases to CLAUDE.md layout tree for completeness.
+### Already completed (former priority items)
+- ✅ P12 fix (`end_date: null`) — done
+- ✅ FRED expansion (7 → 14 series) — done
+- ✅ Yield curve features — done
+- ✅ Confusion matrix plot — done
+- ✅ Pickle → joblib migration (P27) — done
+- ✅ Ingestion completeness report (P23) — done
+- ✅ CheckpointManager corrupt metadata logging (P24) — done
+- ✅ Package rename `market_regime` → `trading_crab_lib` — done
