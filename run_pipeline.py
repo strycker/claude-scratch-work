@@ -131,7 +131,7 @@ RunConfig passed through every module.
 
   To list all available market_code checkpoints:
     python -c "
-    from market_regime.io.checkpoints import CheckpointManager
+    from trading_crab.io.checkpoints import CheckpointManager
     cm = CheckpointManager()
     mc = [e for e in cm.list() if e['name'].startswith('market_code_')]
     for e in mc: print(e['name'], '—', e.get('rows', '?'), 'rows')
@@ -152,10 +152,10 @@ import pandas as pd  # noqa: F401 — used in type annotations
 # Allow running from repo root without `pip install -e .`
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from market_regime import DATA_DIR, OUTPUT_DIR, CONFIG_DIR
-from market_regime.config import load, setup_logging
-from market_regime.runtime import RunConfig
-from market_regime.email import (
+from trading_crab import DATA_DIR, OUTPUT_DIR, CONFIG_DIR
+from trading_crab.config import load, setup_logging
+from trading_crab.runtime import RunConfig
+from trading_crab.email import (
     build_weekly_email_body,
     load_email_config,
     send_weekly_email,
@@ -175,7 +175,7 @@ def _load_parquet(canonical_path: Path, checkpoint_name: str) -> "pd.DataFrame":
     machine and only its checkpoint was committed to the repo.
     """
     import pandas as pd
-    from market_regime.checkpoints import CheckpointManager
+    from trading_crab.checkpoints import CheckpointManager
 
     if canonical_path.exists():
         return pd.read_parquet(canonical_path)
@@ -208,12 +208,12 @@ def _load_market_code(
         pd.Series of integer codes indexed by quarter-end dates, or None on failure.
     """
     import pandas as pd
-    from market_regime.checkpoints import CheckpointManager
+    from trading_crab.checkpoints import CheckpointManager
 
     cm = CheckpointManager()
 
     if source == "grok":
-        from market_regime.ingestion.grok import load_grok_labels
+        from trading_crab.ingestion.grok import load_grok_labels
         mc = load_grok_labels(DATA_DIR)
         if mc is not None:
             # Cache so subsequent runs don't need to reload the pickle
@@ -240,7 +240,7 @@ def _load_market_code(
 
 def _save_market_code(labels: "pd.Series", name: str) -> None:
     """Persist a market_code variant (any integer-coded label Series) to a checkpoint."""
-    from market_regime.checkpoints import CheckpointManager
+    from trading_crab.checkpoints import CheckpointManager
     import pandas as pd
 
     cm = CheckpointManager()
@@ -255,10 +255,10 @@ def _save_market_code(labels: "pd.Series", name: str) -> None:
 def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
     """Scrape multpl.com + FRED → data/raw/macro_raw.parquet.
     Optionally attaches a market_code column from the configured source."""
-    from market_regime.ingestion import fred as fred_module
-    from market_regime.ingestion import multpl as multpl_module
-    from market_regime.checkpoints import CheckpointManager
-    from market_regime import plotting
+    from trading_crab.ingestion import fred as fred_module
+    from trading_crab.ingestion import multpl as multpl_module
+    from trading_crab.checkpoints import CheckpointManager
+    from trading_crab import plotting
     import pandas as pd
 
     cm = CheckpointManager()
@@ -291,7 +291,7 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
     # macrotrends.net — long-history commodity prices (gold, oil)
     if cfg.get("macrotrends", {}).get("series"):
         try:
-            from market_regime.ingestion import macrotrends as mt_module
+            from trading_crab.ingestion import macrotrends as mt_module
             log.info("Step 1: scraping macrotrends.net (%d series) …",
                      len(cfg["macrotrends"]["series"]))
             mt_df = mt_module.fetch_all(cfg)
@@ -330,7 +330,7 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
             plotting.plot_raw_series_sample(combined, sample_series, run_cfg)
 
     # ── Completeness report (P23) ───────────────────────────────────────
-    from market_regime.ingestion import ingestion_completeness_report
+    from trading_crab.ingestion import ingestion_completeness_report
     expected_cols: list[str] = []
     for series_id, meta in cfg.get("fred", {}).get("series", {}).items():
         expected_cols.append(meta.get("name", series_id.lower()))
@@ -346,9 +346,9 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
 
 def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
     """Engineer features from macro_raw → data/processed/features.parquet"""
-    from market_regime.transforms import engineer_all
-    from market_regime.checkpoints import CheckpointManager
-    from market_regime import plotting
+    from trading_crab.transforms import engineer_all
+    from trading_crab.checkpoints import CheckpointManager
+    from trading_crab import plotting
     import pandas as pd
 
     cm = CheckpointManager()
@@ -396,11 +396,11 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
 def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False) -> None:
     """PCA + KMeans clustering → data/regimes/cluster_labels.parquet.
     When save_market_code=True, also checkpoints balanced_cluster as market_code_clustered."""
-    from market_regime.clustering import (
+    from trading_crab.clustering import (
         reduce_pca, evaluate_kmeans, pick_best_k, fit_clusters,
     )
-    from market_regime.checkpoints import CheckpointManager
-    from market_regime import plotting
+    from trading_crab.checkpoints import CheckpointManager
+    from trading_crab import plotting
     from sklearn.preprocessing import StandardScaler
     import pandas as pd
 
@@ -483,11 +483,11 @@ def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False)
 
 def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
     """Profile clusters → data/regimes/profiles.parquet + transition_matrix.parquet"""
-    from market_regime.regime import (
+    from trading_crab.regime import (
         build_profiles, suggest_names, build_transition_matrix, load_name_overrides,
     )
-    from market_regime.checkpoints import CheckpointManager
-    from market_regime import plotting
+    from trading_crab.checkpoints import CheckpointManager
+    from trading_crab import plotting
     import pandas as pd
     import yaml
 
@@ -535,10 +535,10 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
 
 def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     """Train supervised classifiers → outputs/models/"""
-    from market_regime.prediction import (
+    from trading_crab.prediction import (
         train_current_regime, train_decision_tree, train_forward_classifiers, predict_current,
     )
-    from market_regime import plotting
+    from trading_crab import plotting
     import pandas as pd
     import pickle
 
@@ -605,7 +605,7 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 
     # ── Interpretability tree (Phase 9) ───────────────────────────────────────
     try:
-        from market_regime.prediction.classifier import train_interpretability_tree
+        from trading_crab.prediction.classifier import train_interpretability_tree
         from sklearn.tree import export_text
         tree_model, tree_features = train_interpretability_tree(current_model, X, y, cfg)
         tree_txt = export_text(tree_model, feature_names=tree_features)
@@ -623,13 +623,13 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
     """Fetch ETF prices via yfinance → data/regimes/asset_return_profile.parquet.
     Falls back to macro-data proxy returns when yfinance is unavailable."""
-    from market_regime.ingestion.assets import fetch_all as fetch_prices
-    from market_regime.asset_returns import (
+    from trading_crab.ingestion.assets import fetch_all as fetch_prices
+    from trading_crab.asset_returns import (
         compute_quarterly_returns, compute_proxy_returns,
         returns_by_regime, rank_assets_by_regime,
     )
-    from market_regime.checkpoints import CheckpointManager
-    from market_regime import plotting
+    from trading_crab.checkpoints import CheckpointManager
+    from trading_crab import plotting
     import pandas as pd
 
     cm = CheckpointManager()
@@ -707,9 +707,9 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
 def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
     """Print + save stoplight dashboard → outputs/reports/dashboard.csv
     Also computes portfolio weights and BUY/SELL/HOLD trade recommendations."""
-    from market_regime.prediction import predict_current
-    from market_regime.asset_returns import rank_assets_by_regime
-    from market_regime.reporting import (
+    from trading_crab.prediction import predict_current
+    from trading_crab.asset_returns import rank_assets_by_regime
+    from trading_crab.reporting import (
         asset_signals, print_dashboard, save_dashboard_csv,
         simple_regime_portfolio, blended_regime_portfolio, generate_recommendation,
     )
@@ -807,7 +807,7 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
     log.info("Step 7 done")
 
 
-from market_regime.tactics import compute_tactics_metrics, classify_tactics
+from trading_crab.tactics import compute_tactics_metrics, classify_tactics
 
 
 def step9_tactics(cfg: dict, run_cfg: RunConfig) -> None:

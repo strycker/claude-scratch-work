@@ -13,7 +13,7 @@ quarterly frequency.
 Rate-limited to 3 seconds per request (polite scraping).
 
 Usage:
-    from market_regime.ingestion.macrotrends import fetch_all
+    from trading_crab.ingestion.macrotrends import fetch_all
     prices = fetch_all(cfg)
 """
 

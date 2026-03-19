@@ -312,22 +312,22 @@ clustering:
   # Gap statistic (clustering.compute_gap_statistic)
   gap_statistic_boots:   10   # bootstrap samples; 10 is fast, 50 for publication
 
-  # GMM (market_regime.gmm)
+  # GMM (trading_crab.gmm)
   gmm:
     covariance_types:    [diag, tied, full]
     n_init:              10
     k_range_max:         10   # sweep k from 2 to this value
 
-  # DBSCAN (market_regime.density)
+  # DBSCAN (trading_crab.density)
   dbscan:
     eps_values:          [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
     min_samples:         5
 
-  # HDBSCAN (market_regime.density — requires: pip install hdbscan)
+  # HDBSCAN (trading_crab.density — requires: pip install hdbscan)
   hdbscan:
     min_cluster_sizes:   [10, 15, 20, 25]
 
-  # Spectral Clustering (market_regime.spectral)
+  # Spectral Clustering (trading_crab.spectral)
   spectral:
     affinity:            nearest_neighbors
     n_neighbors:         10

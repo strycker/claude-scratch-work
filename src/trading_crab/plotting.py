@@ -10,8 +10,8 @@ Custom 5-regime color palette (from legacy/unified_script.py):
     CUSTOM_COLORS = ["#0000d0","#d00000","#f48c06","#8338ec","#50a000"]
 
 Usage:
-    from market_regime import plotting
-    from market_regime.runtime import RunConfig
+    from trading_crab import plotting
+    from trading_crab.runtime import RunConfig
     run_cfg = RunConfig(generate_plots=True, save_plots=True)
     plotting.plot_pca_scatter(pca_df, labels, regime_names, run_cfg)
 """
@@ -43,9 +43,9 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
-from market_regime import OUTPUT_DIR
-from market_regime.runtime import RunConfig
-from market_regime.transforms import trim_incomplete_tail
+from trading_crab import OUTPUT_DIR
+from trading_crab.runtime import RunConfig
+from trading_crab.transforms import trim_incomplete_tail
 
 log = logging.getLogger(__name__)
 

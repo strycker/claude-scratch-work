@@ -46,10 +46,10 @@ class _FakeResponse:
             raise Exception(f"HTTP {self.status_code}")
 
 
-@patch("market_regime.ingestion.multpl.time.sleep")
-@patch("market_regime.ingestion.multpl.requests.get")
+@patch("trading_crab.ingestion.multpl.time.sleep")
+@patch("trading_crab.ingestion.multpl.requests.get")
 def test_multpl_scrape_raw_rows(mock_get, mock_sleep):
-    from market_regime.ingestion.multpl import _scrape_raw_rows
+    from trading_crab.ingestion.multpl import _scrape_raw_rows
 
     mock_get.return_value = _FakeResponse(SAMPLE_MULTPL_HTML)
     try:
@@ -60,10 +60,10 @@ def test_multpl_scrape_raw_rows(mock_get, mock_sleep):
     assert rows[0] == ["Mar 31, 2024", "5,200.00"]
 
 
-@patch("market_regime.ingestion.multpl.time.sleep")
-@patch("market_regime.ingestion.multpl.requests.get")
+@patch("trading_crab.ingestion.multpl.time.sleep")
+@patch("trading_crab.ingestion.multpl.requests.get")
 def test_multpl_parse_series_numeric(mock_get, mock_sleep):
-    from market_regime.ingestion.multpl import _parse_series
+    from trading_crab.ingestion.multpl import _parse_series
 
     raw = [
         ["Mar 31, 2024", "5,200.00"],
@@ -76,10 +76,10 @@ def test_multpl_parse_series_numeric(mock_get, mock_sleep):
     assert s.iloc[0] == pytest.approx(4300.0)  # earliest by date, quarterly resampled
 
 
-@patch("market_regime.ingestion.multpl.time.sleep")
-@patch("market_regime.ingestion.multpl.requests.get")
+@patch("trading_crab.ingestion.multpl.time.sleep")
+@patch("trading_crab.ingestion.multpl.requests.get")
 def test_multpl_parse_series_percent(mock_get, mock_sleep):
-    from market_regime.ingestion.multpl import _parse_series
+    from trading_crab.ingestion.multpl import _parse_series
 
     raw = [
         ["Mar 31, 2024", "1.50%"],
@@ -91,10 +91,10 @@ def test_multpl_parse_series_percent(mock_get, mock_sleep):
     assert s.iloc[-1] == pytest.approx(0.015)
 
 
-@patch("market_regime.ingestion.multpl.time.sleep")
-@patch("market_regime.ingestion.multpl.requests.get")
+@patch("trading_crab.ingestion.multpl.time.sleep")
+@patch("trading_crab.ingestion.multpl.requests.get")
 def test_multpl_fetch_all_basic(mock_get, mock_sleep):
-    from market_regime.ingestion.multpl import fetch_all
+    from trading_crab.ingestion.multpl import fetch_all
 
     mock_get.return_value = _FakeResponse(SAMPLE_MULTPL_HTML)
     cfg = {
@@ -113,10 +113,10 @@ def test_multpl_fetch_all_basic(mock_get, mock_sleep):
     assert len(df) > 0
 
 
-@patch("market_regime.ingestion.multpl.time.sleep")
-@patch("market_regime.ingestion.multpl.requests.get")
+@patch("trading_crab.ingestion.multpl.time.sleep")
+@patch("trading_crab.ingestion.multpl.requests.get")
 def test_multpl_fetch_all_handles_scrape_failure(mock_get, mock_sleep):
-    from market_regime.ingestion.multpl import fetch_all
+    from trading_crab.ingestion.multpl import fetch_all
 
     mock_get.side_effect = Exception("Connection refused")
     cfg = {
@@ -132,7 +132,7 @@ def test_multpl_fetch_all_handles_scrape_failure(mock_get, mock_sleep):
 
 
 def test_multpl_fetch_all_no_datasets():
-    from market_regime.ingestion.multpl import fetch_all
+    from trading_crab.ingestion.multpl import fetch_all
 
     df = fetch_all({"multpl": {"datasets": []}})
     assert df.empty
@@ -162,9 +162,9 @@ def _make_mock_fred_series():
     return pd.Series(np.arange(100.0, 116.0), index=idx)
 
 
-@patch("market_regime.ingestion.fred.Fred")
+@patch("trading_crab.ingestion.fred.Fred")
 def test_fred_fetch_all_basic(mock_fred_cls):
-    from market_regime.ingestion.fred import fetch_all
+    from trading_crab.ingestion.fred import fetch_all
 
     mock_fred = MagicMock()
     mock_fred.get_series.return_value = _make_mock_fred_series()
@@ -177,9 +177,9 @@ def test_fred_fetch_all_basic(mock_fred_cls):
     assert "fred_baa" in df.columns
 
 
-@patch("market_regime.ingestion.fred.Fred")
+@patch("trading_crab.ingestion.fred.Fred")
 def test_fred_shift_applies_to_gdp(mock_fred_cls):
-    from market_regime.ingestion.fred import _fetch_one
+    from trading_crab.ingestion.fred import _fetch_one
 
     mock_fred = MagicMock()
     raw = _make_mock_fred_series()
@@ -192,9 +192,9 @@ def test_fred_shift_applies_to_gdp(mock_fred_cls):
     assert result.iloc[1] == pytest.approx(raw.resample("QE").last().iloc[0])
 
 
-@patch("market_regime.ingestion.fred.Fred")
+@patch("trading_crab.ingestion.fred.Fred")
 def test_fred_no_shift_for_baa(mock_fred_cls):
-    from market_regime.ingestion.fred import _fetch_one
+    from trading_crab.ingestion.fred import _fetch_one
 
     mock_fred = MagicMock()
     raw = _make_mock_fred_series()
@@ -206,7 +206,7 @@ def test_fred_no_shift_for_baa(mock_fred_cls):
 
 
 def test_fred_missing_api_key_raises():
-    from market_regime.ingestion.fred import fetch_all
+    from trading_crab.ingestion.fred import fetch_all
 
     cfg = {
         "fred": {"api_key": None, "series": {}},
@@ -216,9 +216,9 @@ def test_fred_missing_api_key_raises():
         fetch_all(cfg)
 
 
-@patch("market_regime.ingestion.fred.Fred")
+@patch("trading_crab.ingestion.fred.Fred")
 def test_fred_fetch_all_handles_single_series_failure(mock_fred_cls):
-    from market_regime.ingestion.fred import fetch_all
+    from trading_crab.ingestion.fred import fetch_all
 
     mock_fred = MagicMock()
 
@@ -249,10 +249,10 @@ def _make_assets_cfg():
     }
 
 
-@patch("market_regime.ingestion.assets._ssl_bypass_curl_session")
-@patch("market_regime.ingestion.assets._batch_yfinance")
+@patch("trading_crab.ingestion.assets._ssl_bypass_curl_session")
+@patch("trading_crab.ingestion.assets._batch_yfinance")
 def test_assets_fetch_all_basic(mock_batch, mock_session):
-    from market_regime.ingestion.assets import fetch_all
+    from trading_crab.ingestion.assets import fetch_all
 
     idx = pd.date_range("2020-03-31", periods=16, freq="QE")
     mock_batch.return_value = (
@@ -272,11 +272,11 @@ def test_assets_fetch_all_basic(mock_batch, mock_session):
     assert len(df) == 16
 
 
-@patch("market_regime.ingestion.assets._ssl_bypass_curl_session")
-@patch("market_regime.ingestion.assets._batch_yfinance")
-@patch("market_regime.ingestion.assets._fetch_missing_with_ssl_bypass")
+@patch("trading_crab.ingestion.assets._ssl_bypass_curl_session")
+@patch("trading_crab.ingestion.assets._batch_yfinance")
+@patch("trading_crab.ingestion.assets._fetch_missing_with_ssl_bypass")
 def test_assets_phase2_retry_on_missing(mock_phase2, mock_batch, mock_session):
-    from market_regime.ingestion.assets import fetch_all
+    from trading_crab.ingestion.assets import fetch_all
 
     idx = pd.date_range("2020-03-31", periods=16, freq="QE")
     # Phase 1 only gets SPY
@@ -297,21 +297,21 @@ def test_assets_phase2_retry_on_missing(mock_phase2, mock_batch, mock_session):
 
 
 def test_assets_fetch_all_no_tickers():
-    from market_regime.ingestion.assets import fetch_all
+    from trading_crab.ingestion.assets import fetch_all
 
     df = fetch_all({"assets": {"etfs": []}, "data": {"start_date": "2020-01-01", "end_date": "2024-01-01"}})
     assert df.empty
 
 
-@patch("market_regime.ingestion.assets._ssl_bypass_curl_session")
-@patch("market_regime.ingestion.assets._batch_yfinance")
-@patch("market_regime.ingestion.assets._fetch_missing_with_ssl_bypass")
-@patch("market_regime.ingestion.assets._fetch_tickers_stooq")
-@patch("market_regime.ingestion.assets._fetch_tickers_openbb")
+@patch("trading_crab.ingestion.assets._ssl_bypass_curl_session")
+@patch("trading_crab.ingestion.assets._batch_yfinance")
+@patch("trading_crab.ingestion.assets._fetch_missing_with_ssl_bypass")
+@patch("trading_crab.ingestion.assets._fetch_tickers_stooq")
+@patch("trading_crab.ingestion.assets._fetch_tickers_openbb")
 def test_assets_all_phases_fail_returns_empty(
     mock_openbb, mock_stooq, mock_phase2, mock_batch, mock_session
 ):
-    from market_regime.ingestion.assets import fetch_all
+    from trading_crab.ingestion.assets import fetch_all
 
     mock_batch.return_value = ({}, False)
     mock_phase2.return_value = {}

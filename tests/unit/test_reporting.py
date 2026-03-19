@@ -1,4 +1,4 @@
-"""Tests for src/market_regime/reporting.py — dashboard + portfolio construction."""
+"""Tests for src/trading_crab/reporting.py — dashboard + portfolio construction."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_regime.reporting import (
+from trading_crab.reporting import (
     asset_signals,
     print_dashboard,
     save_dashboard_csv,

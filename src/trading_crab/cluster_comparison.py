@@ -28,7 +28,7 @@ Once you identify the best method in the notebook:
 
 Usage
 ------
-    from market_regime.cluster_comparison import (
+    from trading_crab.cluster_comparison import (
         compare_all_methods, pairwise_rand_index,
         extract_rf_feature_importances, recommend_clustering_features,
     )

@@ -19,9 +19,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from market_regime import DATA_DIR, OUTPUT_DIR  # noqa: E402
-from market_regime.config import load, setup_logging  # noqa: E402
-from market_regime.diagnostics import (  # noqa: E402
+from trading_crab import DATA_DIR, OUTPUT_DIR  # noqa: E402
+from trading_crab.config import load, setup_logging  # noqa: E402
+from trading_crab.diagnostics import (  # noqa: E402
     normalize_100,
     percentile_rank,
     rolling_zscore,

@@ -5,7 +5,7 @@ import datetime as dt
 import pandas as pd
 import pytest
 
-from market_regime.checkpoints import CheckpointManager
+from trading_crab.checkpoints import CheckpointManager
 
 
 @pytest.fixture(scope="module")
