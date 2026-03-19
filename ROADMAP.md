@@ -248,7 +248,10 @@ divergences can signal regime transitions and trading opportunities.
   `add_divergence_features()` (~250 lines, 29 tests)
 - ✅ Phase B: Hooked into `transforms.py` `engineer_all()` in two places: level-space
   divergence after momentum features, derivative-space after derivatives computed
-- Phase C: Add best divergence features to `clustering_features` and/or supervised feature lists
+- ✅ Phase C: Added spy_tlt + cred_vix divergence features (z-scores, triggers, d1 derivatives,
+  derivative-space z-scores + triggers) to `initial_features` and `clustering_features` in
+  `settings.yaml`. Fixed `fred_vixcls` → `fred_vix` column name bug. Added `sp500` raw level
+  to `initial_features` for derivative-space divergence support.
 - Phase D: Evaluate impact on regime classification accuracy and transition detection
 - **Files**: `src/trading_crab_lib/divergence.py`, `src/trading_crab_lib/transforms.py`,
   `config/settings.yaml`

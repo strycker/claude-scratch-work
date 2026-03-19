@@ -43,7 +43,7 @@ DEFAULT_DIVERGENCE_PAIRS: list[tuple[str, str, str]] = [
     ("sp500", "10yr_ustreas", "spy_tlt"),       # equity-bond
     ("sp500", "gold_spot", "spy_gld"),           # equity-gold
     ("gold_spot", "wti_crude", "gld_oil"),       # gold-oil
-    ("credit_spread", "fred_vixcls", "cred_vix"),  # credit risk vs equity vol
+    ("credit_spread", "fred_vix", "cred_vix"),  # credit risk vs equity vol
 ]
 
 

@@ -42,7 +42,7 @@ def quarterly_df() -> pd.DataFrame:
             "gold_spot": gold,
             "wti_crude": oil,
             "credit_spread": credit,
-            "fred_vixcls": vix,
+            "fred_vix": vix,
         },
         index=idx,
     )
