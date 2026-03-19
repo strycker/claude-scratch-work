@@ -201,6 +201,56 @@ where parameters switch between discrete states via a Markov chain:
 - Not a replacement for KMeans; more of a diagnostic and feature generator
 - **Files**: `src/trading_crab_lib/markov.py` (new)
 
+### 2.15  Cross-asset divergence features for regime change detection  `L`
+Derive new supervised learning features from **divergences between historically correlated
+signals** (or their derivatives). When correlations that have held for years suddenly break
+(e.g., S&P500 and TLT move together instead of inversely; gold and oil decouple), these
+divergences can signal regime transitions and trading opportunities.
+
+**Core idea — three layers:**
+
+1. **Rolling correlation baseline** — For each signal pair (SPY/TLT, GLD/USO, SPY/GLD,
+   10Y yield/S&P, credit_spread/VIX, etc.), compute rolling Pearson or Spearman correlation
+   over a trailing window (8Q, 12Q). This is the "expected" relationship.
+
+2. **Divergence magnitude** — At each quarter, measure how far the current correlation
+   departs from its trailing mean. Also measure divergence in **derivative space**: if
+   d1(SPY) and d1(TLT) normally move inversely (corr ~ −0.5), and suddenly both spike up
+   (corr ~ +0.5), the **divergence magnitude = |actual_corr − expected_corr|** is ~1.0.
+   Differential equations angle: if dS/dt and dT/dt satisfy a quasi-linear relationship
+   in normal times, deviations from that relationship are regime-change evidence.
+
+3. **Divergence trigger features** — Binary or continuous features for the supervised model:
+   - `div_spy_tlt_8q`: rolling correlation divergence magnitude (continuous)
+   - `div_spy_tlt_trigger`: 1 if divergence exceeds 2σ of its own history, 0 otherwise (binary)
+   - `div_spy_tlt_direction`: +1 if correlation increased, −1 if decreased (categorical)
+   - `div_d1_spy_d1_gld_8q`: divergence in derivative space (captures leading indicators)
+
+**Signal pairs to start with (high macro significance):**
+- SPY vs TLT (equity-bond: breaks during stagflation and liquidity crises)
+- SPY vs GLD (equity-gold: breaks during inflation fears)
+- GLD vs USO (gold-oil: breaks when gold is safe-haven vs commodity)
+- 10Y yield vs S&P 500 (rate-equity: breaks during Fed pivots)
+- Credit spread (BAA-AAA) vs VIX (credit risk vs equity vol)
+- CPI derivative vs M2 derivative (money supply → inflation pipeline)
+
+**Why this is valuable:**
+- Current clustering treats each quarter independently; divergence features inject
+  **relational dynamics** that capture "something is changing" before the change manifests
+  in level data.
+- Leading indicator potential: derivative divergences may lead level changes by 1-2 quarters.
+- Natural fit for the existing pipeline: compute in `transforms.py` after cross-ratios,
+  add to `clustering_features` or `supervised_features` lists in settings.yaml.
+
+**Implementation phases:**
+- Phase A: `src/trading_crab_lib/divergence.py` — `compute_rolling_correlations()`,
+  `compute_divergence_features()`, `compute_derivative_divergences()` (~200 lines)
+- Phase B: Hook into `transforms.py` `engineer_all()` after cross-ratios step
+- Phase C: Add best divergence features to `clustering_features` and/or supervised feature lists
+- Phase D: Evaluate impact on regime classification accuracy and transition detection
+- **Files**: `src/trading_crab_lib/divergence.py` (new), `src/trading_crab_lib/transforms.py`,
+  `config/settings.yaml`
+
 ### 2.14  Conference Board LEI proxy from FRED  `S`
 The Conference Board LEI is the gold standard for recession prediction but is not
 freely available. Construct a proxy from FRED components:
@@ -298,12 +348,13 @@ Implementation approach (when ready):
 | multpl.com | lxml scraper | 46 Shiller series | varies | ✓ Step 1 | Done |
 | FRED API | `fredapi` | GDP, CPI, BAA, AAA, GS10, TB3MS, GNP | varies | ✓ Step 1 | Done |
 | yfinance | `yfinance` | ETF OHLCV (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG) | 1993+ | ✓ Step 6 | Done |
-| FRED — VIX | `fredapi` | VIXCLS daily volatility index | 1990 | ✗ | **Tier 1** |
-| FRED — unemployment | `fredapi` | UNRATE monthly | 1948 | ✗ | **Tier 1** |
-| FRED — M2 | `fredapi` | M2NS money supply | 1959 | ✗ | **Tier 1** |
-| FRED — yield spreads | `fredapi` | T10Y2Y, T10Y3M, GS2 | varies | ✗ | **Tier 1** |
-| FRED — housing | `fredapi` | HOUST, PERMIT | 1959 | ✗ | **Tier 1** |
-| FRED — consumer | `fredapi` | UMCSENT, DPCERA3Q086SBEA | 1952 | ✗ | **Tier 1** |
+| FRED — VIX | `fredapi` | VIXCLS daily volatility index | 1990 | ✓ Step 1 | Done |
+| FRED — unemployment | `fredapi` | UNRATE monthly | 1948 | ✓ Step 1 | Done |
+| FRED — M2 | `fredapi` | M2SL + M2NS money supply | 1959 | ✓ Step 1 | Done |
+| FRED — yield spreads | `fredapi` | T10Y2Y, T10Y3M, GS2 | varies | ✓ Step 1 | Done |
+| FRED — housing | `fredapi` | HOUST | 1959 | ✓ Step 1 | Done |
+| FRED — consumer | `fredapi` | UMCSENT | 1952 | ✓ Step 1 | Done |
+| FRED — industrial | `fredapi` | INDPRO, PAYEMS, DPCERA3Q086SBEA | varies | ✗ | **Tier 1** |
 | macrotrends.net | custom scraper | Gold, oil, silver prices | 1915+ | ✗ | **Tier 1** |
 | stooq.pl | `pandas-datareader` | Free ETF/stock OHLCV (Phase 3 yfinance fallback) | ~1993 | ✓ Phase 3 | Done (optional install) |
 | OpenBB | `openbb` | Multi-provider ETF prices (Phase 4 yfinance fallback) | varies | ✓ Phase 4 | Done (optional install) |
@@ -322,10 +373,20 @@ Implementation approach (when ready):
 
 ## What to Do This Session (Suggested Starting Points)
 
-1. Add FRED series (VIX, unemployment, M2, yield spreads) — very low effort, high signal
-2. Add yield curve features in `transforms.py` — computed from existing FRED data
-3. Add `compute_forward_probabilities()` to `profiler.py` — small gap, legacy already has it
-4. Add `plot_confusion_matrix()` to `plotting.py` — small visualization gap
-5. Start `macrotrends.py` scraper — extends gold/oil back to 1915/1946
+**Already completed (prior sessions):**
+- ~~Add FRED series (VIX, unemployment, M2, yield spreads)~~ → ✅ 14 FRED series now
+- ~~Add yield curve features~~ → ✅ 10Y-2Y and 10Y-3M spreads
+- ~~Add `compute_forward_probabilities()`~~ → ✅ in `regime.py`
+- ~~Add `plot_confusion_matrix()`~~ → ✅ in `plotting.py`
+- ~~Package rename to `trading_crab_lib`~~ → ✅ complete
+- ~~Expand ETF universe to 38~~ → ✅ in settings.yaml
+- ~~HOUST + UMCSENT FRED series~~ → ✅ added
 
-Items 1-4 can be done in a single session. Item 5 needs care with scraping.
+**Next priorities (March 2026):**
+1. Add remaining FRED series (INDPRO, PAYEMS, DPCERA3Q086SBEA) — `S`, quick config additions
+2. Implement macrotrends.net scraper (gold/oil pre-1993 backfill) — `M`, extends data to 1915+
+3. LightGBM flat-API integration for production use — `M`, `gradient_boosting.py` exists but not in flat API
+4. Cross-asset divergence features (new item 2.15) — `L`, phased implementation
+5. Momentum and cross-asset ratio features (item 2.12) — `M`, pairs well with divergence features
+6. HMM regime detection (item 2.9) — `M`, temporal structure alternative to KMeans
+7. Backtest framework (item 3.5) — `XL`, validates the full strategy end-to-end
