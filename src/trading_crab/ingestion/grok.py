@@ -16,7 +16,7 @@ All market_code variants are stored via CheckpointManager under the name
 ``market_code_{source}`` (e.g. ``market_code_grok``, ``market_code_clustered``).
 
 Usage:
-    from market_regime.ingestion.grok import load_grok_labels
+    from trading_crab.ingestion.grok import load_grok_labels
     mc = load_grok_labels(data_dir)   # pd.Series or None
 """
 
@@ -38,7 +38,7 @@ def load_grok_labels(data_dir: Path) -> pd.Series | None:
     Locate and load the grok classification pickle, return a ``market_code`` Series.
 
     Args:
-        data_dir: root data directory (typically DATA_DIR from market_regime.__init__)
+        data_dir: root data directory (typically DATA_DIR from trading_crab.__init__)
 
     Returns:
         pd.Series of integer market_code values indexed by quarter-end dates,

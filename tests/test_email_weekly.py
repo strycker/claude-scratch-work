@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from market_regime.email import (
+from trading_crab.email import (
     build_weekly_email_body,
     load_email_config,
     send_weekly_email,
@@ -101,7 +101,7 @@ def test_send_email_no_recipients():
     assert result is False
 
 
-@patch("market_regime.email.smtplib.SMTP")
+@patch("trading_crab.email.smtplib.SMTP")
 def test_send_email_tls_success(mock_smtp_cls):
     mock_smtp = MagicMock()
     mock_smtp_cls.return_value = mock_smtp
@@ -123,7 +123,7 @@ def test_send_email_tls_success(mock_smtp_cls):
     mock_smtp.quit.assert_called_once()
 
 
-@patch("market_regime.email.smtplib.SMTP_SSL")
+@patch("trading_crab.email.smtplib.SMTP_SSL")
 def test_send_email_ssl_success(mock_smtp_ssl_cls):
     mock_smtp = MagicMock()
     mock_smtp_ssl_cls.return_value = mock_smtp

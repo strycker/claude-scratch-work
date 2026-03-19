@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from market_regime.regime import compute_forward_probabilities
+from trading_crab.regime import compute_forward_probabilities
 
 
 def _make_labels():
@@ -41,7 +41,7 @@ def test_forward_prob_h1_matches_transition_matrix():
     labels = pd.Series([0, 0, 1, 0, 1])
     result = compute_forward_probabilities(labels, horizons=[1])
 
-    from market_regime.regime import build_transition_matrix
+    from trading_crab.regime import build_transition_matrix
     tm = build_transition_matrix(labels)
 
     # At h=1 the forward probability (reach j within 1 quarter) is the same

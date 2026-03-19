@@ -16,7 +16,7 @@ Models (sklearn objects) are stored as pickle alongside, since they have
 no parquet-compatible serialization.
 
 Usage:
-    from market_regime.checkpoints import CheckpointManager
+    from trading_crab.checkpoints import CheckpointManager
     cm = CheckpointManager()
 
     # Save
@@ -57,7 +57,7 @@ import joblib
 import pandas as pd
 import yaml
 
-from market_regime import DATA_DIR, CONFIG_DIR
+from trading_crab import DATA_DIR, CONFIG_DIR
 
 log = logging.getLogger(__name__)
 

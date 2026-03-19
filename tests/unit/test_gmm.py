@@ -1,4 +1,4 @@
-"""Unit tests for src/market_regime/gmm.py."""
+"""Unit tests for src/trading_crab/gmm.py."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
 
-from market_regime.gmm import fit_gmm, gmm_labels, gmm_probabilities, select_gmm_k
+from trading_crab.gmm import fit_gmm, gmm_labels, gmm_probabilities, select_gmm_k
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────

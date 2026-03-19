@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 import pandas as pd
 import pytest
 
-from market_regime.ingestion.macrotrends import (
+from trading_crab.ingestion.macrotrends import (
     _extract_json_data,
     _scrape_series,
     fetch_all,
@@ -74,7 +74,7 @@ def test_extract_json_data_returns_none_for_no_data():
 
 # ── _scrape_series tests ─────────────────────────────────────────────────────
 
-@patch("market_regime.ingestion.macrotrends.requests.get")
+@patch("trading_crab.ingestion.macrotrends.requests.get")
 def test_scrape_series_from_json_embed(mock_get):
     mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
 
@@ -87,7 +87,7 @@ def test_scrape_series_from_json_embed(mock_get):
     assert hasattr(s.index, "freqstr") or len(s) <= 6
 
 
-@patch("market_regime.ingestion.macrotrends.requests.get")
+@patch("trading_crab.ingestion.macrotrends.requests.get")
 def test_scrape_series_html_table_fallback(mock_get):
     """When no embedded JSON, falls back to pandas.read_html."""
     mock_get.return_value = _FakeResponse(SAMPLE_TABLE_HTML)
@@ -100,8 +100,8 @@ def test_scrape_series_html_table_fallback(mock_get):
 
 # ── fetch_all tests ──────────────────────────────────────────────────────────
 
-@patch("market_regime.ingestion.macrotrends.time.sleep")
-@patch("market_regime.ingestion.macrotrends.requests.get")
+@patch("trading_crab.ingestion.macrotrends.time.sleep")
+@patch("trading_crab.ingestion.macrotrends.requests.get")
 def test_fetch_all_default_series(mock_get, mock_sleep):
     mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
 
@@ -114,8 +114,8 @@ def test_fetch_all_default_series(mock_get, mock_sleep):
     assert len(df) > 0
 
 
-@patch("market_regime.ingestion.macrotrends.time.sleep")
-@patch("market_regime.ingestion.macrotrends.requests.get")
+@patch("trading_crab.ingestion.macrotrends.time.sleep")
+@patch("trading_crab.ingestion.macrotrends.requests.get")
 def test_fetch_all_custom_config(mock_get, mock_sleep):
     mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
 
@@ -133,8 +133,8 @@ def test_fetch_all_custom_config(mock_get, mock_sleep):
     assert "test_gold" in df.columns
 
 
-@patch("market_regime.ingestion.macrotrends.time.sleep")
-@patch("market_regime.ingestion.macrotrends.requests.get")
+@patch("trading_crab.ingestion.macrotrends.time.sleep")
+@patch("trading_crab.ingestion.macrotrends.requests.get")
 def test_fetch_all_handles_failure_gracefully(mock_get, mock_sleep):
     mock_get.side_effect = Exception("Network error")
 

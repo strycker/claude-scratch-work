@@ -5,7 +5,7 @@ The public functions in this module mirror the original API used by pipelines
 and tests that pre-date the refactor.  They return rich bundle dicts with
 FoldReport objects, dual (RF + DT) models, and class-order metadata.
 
-New code should import from ``market_regime.prediction`` directly; this module
+New code should import from ``trading_crab.prediction`` directly; this module
 exists for backwards compatibility and for tests that assert on fold-level CV
 metadata.
 """

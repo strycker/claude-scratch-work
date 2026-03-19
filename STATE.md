@@ -98,11 +98,11 @@ Former gaps (`reporting.py`, `plotting.py`, `runtime.py`) are fully covered.
 - ✅ **SVD vs PCA comparison**: `compare_svd_pca()` — side-by-side component loadings
 - ✅ **Gap statistic**: `compute_gap_statistic()` — Tibshirani 2001 criterion; correctly separates `gap_std` (raw sd) from `gap_sk` (simulation error = std×√(1+1/B))
 - ✅ **Elbow detection**: `find_knee_k()` — kneed library or gradient fallback
-- ✅ **Gaussian Mixture Models** (`src/market_regime/gmm.py`): BIC sweep, soft probabilities, convergence detection; `fit_gmm()` returns fitted scaler for consistent predictions
-- ✅ **DBSCAN** (`src/market_regime/density.py`): eps sweep, k-NN distance plot, noise handling with warnings
-- ✅ **HDBSCAN** (`src/market_regime/density.py`): optional (`pip install hdbscan`), `min_cluster_size` sweep
-- ✅ **Spectral Clustering** (`src/market_regime/spectral.py`): affinity matrix pre-computed once per sweep (~k-fold speedup), k sweep
-- ✅ **Multi-method comparison** (`src/market_regime/cluster_comparison.py`): silhouette/DB/CH for all methods, pairwise ARI matrix
+- ✅ **Gaussian Mixture Models** (`src/trading_crab/gmm.py`): BIC sweep, soft probabilities, convergence detection; `fit_gmm()` returns fitted scaler for consistent predictions
+- ✅ **DBSCAN** (`src/trading_crab/density.py`): eps sweep, k-NN distance plot, noise handling with warnings
+- ✅ **HDBSCAN** (`src/trading_crab/density.py`): optional (`pip install hdbscan`), `min_cluster_size` sweep
+- ✅ **Spectral Clustering** (`src/trading_crab/spectral.py`): affinity matrix pre-computed once per sweep (~k-fold speedup), k sweep
+- ✅ **Multi-method comparison** (`src/trading_crab/cluster_comparison.py`): silhouette/DB/CH for all methods, pairwise ARI matrix
 - ✅ **RF feature selection**: `extract_rf_feature_importances()` + `recommend_clustering_features()` — rank and filter the 69 clustering features by step-5 RF importance
 
 ### Regime Profiling
@@ -187,7 +187,7 @@ Former gaps (`reporting.py`, `plotting.py`, `runtime.py`) are fully covered.
 | Gap | Where | Effort |
 |-----|-------|--------|
 | Streamlit dashboard | `app/dashboard.py` (new) | L |
-| Backtest framework | `src/market_regime/backtest/` (new) | XL |
+| Backtest framework | `src/trading_crab/backtest/` (new) | XL |
 | ~~`joblib.dump` for sklearn model serialization~~ | ~~`pipelines/05_predict.py`~~ | ✅ Done |
 | ~~Tests for `reporting.py` and `plotting.py`~~ | ~~`tests/`~~ | ✅ Done |
 

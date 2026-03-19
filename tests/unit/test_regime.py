@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-from market_regime.regime import (
+from trading_crab.regime import (
     build_profiles,
     suggest_names,
     build_transition_matrix,

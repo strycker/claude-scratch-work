@@ -10,7 +10,7 @@ import pytest
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 
-from market_regime.prediction import (
+from trading_crab.prediction import (
     predict_current,
     train_classifier,
     train_current_regime,

@@ -230,7 +230,7 @@ downstream steps as an overlay/reference column.
 To list all available `market_code` checkpoints:
 ```bash
 python -c "
-from market_regime.checkpoints import CheckpointManager
+from trading_crab.checkpoints import CheckpointManager
 cm = CheckpointManager()
 mc = [e for e in cm.list() if e['name'].startswith('market_code_')]
 for e in mc:
@@ -288,6 +288,24 @@ To upgrade all pinned dependencies to their latest compatible versions:
 pip install pip-tools
 pip-compile pyproject.toml --upgrade --output-file requirements.txt
 pip-compile pyproject.toml --extra dev --upgrade --output-file requirements-dev.txt
+```
+
+---
+
+## Reference Submodules
+
+This repo contains two Git submodules that are **read-only references**. Never modify
+files inside them — use them only to compare implementations and inform changes to the
+main repo.
+
+| Submodule | Purpose |
+|-----------|---------|
+| `gsd-scratch-work-repo-copy/` | GSD framework version of the project (earlier development checkpoint) |
+| `trading-crab-lib-repo-copy/` | Separate trading-crab library repo |
+
+To initialize submodules after cloning:
+```bash
+git submodule update --init --recursive
 ```
 
 ---
@@ -367,7 +385,7 @@ Full codebase audit comparing documentation, disk state, and code quality.
 |---------|----------|-------|
 | `data/raw/`, `data/processed/`, `data/regimes/` referenced in `.gitignore` and CLAUDE.md layout but don't exist on disk | Low | All data lives under `data/checkpoints/` instead. Dirs would be created on-demand if pipeline wrote there, but current code doesn't. |
 | `outputs/models/` and `outputs/reports/` don't exist yet | Low | Referenced in Makefile `clean-*` targets. Only `outputs/plots/` (26 PNGs) exists. Created on-demand when steps 5/7 save artifacts. |
-| `src/market_regime/ingestion/macrotrends.py` documented in ROADMAP Tier 1 but not created | Expected | Planned feature, not a gap. |
+| `src/trading_crab/ingestion/macrotrends.py` documented in ROADMAP Tier 1 but not created | Expected | Planned feature, not a gap. |
 | Undocumented data snapshots on disk | Info | `prepared_quarterly_data_smoothed_20260301.pickle`, `standardized_quarterly_data_20260216.pickle`, `grok_quarter_classifications_20260201.xlsx` — legitimate runtime artifacts, correctly gitignored. |
 | Checkpoint aliases not enumerated in docs | Info | `features_causal.parquet` = `features_supervised`, `features_noncausal.parquet` = `features` — consistent with ADR #1, just not listed in the layout tree. |
 

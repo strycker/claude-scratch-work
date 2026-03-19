@@ -1,4 +1,4 @@
-"""Unit tests for src/market_regime/clustering/kmeans.py"""
+"""Unit tests for src/trading_crab/clustering/kmeans.py"""
 
 import sys
 from pathlib import Path
@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from market_regime.clustering import (
+from trading_crab.clustering import (
     reduce_pca,
     evaluate_kmeans,
     pick_best_k,

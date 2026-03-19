@@ -3,7 +3,7 @@ requires = ["setuptools>=68,<76", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "market-regime"
+name = "trading-crab"
 version = "0.1.0"
 description = "Market regime classification and prediction pipeline using macroeconomic data"
 readme = "README.md"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = [
     "finance",
-    "market-regime",
+    "trading-crab",
     "clustering",
     "macroeconomics",
     "portfolio",
@@ -94,7 +94,7 @@ boosting-extras = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-market_regime = ["py.typed"]
+trading_crab = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

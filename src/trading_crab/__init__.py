@@ -1,5 +1,5 @@
 """
-market_regime — Market Regime Classification & Prediction Pipeline
+trading_crab — Market Regime Classification & Prediction Pipeline
 """
 
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""Unit tests for src/market_regime/cluster_comparison.py."""
+"""Unit tests for src/trading_crab/cluster_comparison.py."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestClassifier
 
-from market_regime.cluster_comparison import (
+from trading_crab.cluster_comparison import (
     compare_all_methods,
     extract_rf_feature_importances,
     pairwise_rand_index,

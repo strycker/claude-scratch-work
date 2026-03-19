@@ -28,6 +28,13 @@ monolith that is ground truth for every formula, parameter choice, and pipeline 
 The modular pipeline in `src/` and `pipelines/` implements everything that script does,
 organized more cleanly, with checkpointing, CLI flags, and dedicated plotting notebooks.
 
+**Reference submodules** — This repo contains two Git submodules used as **read-only
+references**. You may `git pull` / `git submodule update` to keep them current, but
+never modify or push to them. Use them only to compare implementations and inform
+changes to the main repo:
+- `gsd-scratch-work-repo-copy/` — GSD framework version of the project (earlier checkpoint)
+- `trading-crab-lib-repo-copy/` — Separate trading-crab library repo
+
 ---
 
 ## Repository Layout
@@ -36,6 +43,8 @@ organized more cleanly, with checkpointing, CLI flags, and dedicated plotting no
 trading-crab/
 ├── CLAUDE.md                      ← you are here (all dev docs in one place)
 ├── README.md                      ← project overview (user-facing)
+├── gsd-scratch-work-repo-copy/    ← READ-ONLY submodule (GSD framework version)
+├── trading-crab-lib-repo-copy/    ← READ-ONLY submodule (trading-crab library repo)
 ├── ROADMAP.md                     ← prioritized feature backlog
 ├── STATE.md                       ← current pipeline status and known gaps
 ├── .env.example                   ← copy to .env, fill in FRED_API_KEY
@@ -128,7 +137,7 @@ trading-crab/
 │   ├── plots/                     ← saved figures (PNG/PDF)
 │   └── reports/                   ← dashboard.csv, weekly summaries
 │
-└── src/market_regime/             ← installable Python package
+└── src/trading_crab/             ← installable Python package
     ├── __init__.py                ← defines ROOT, CONFIG_DIR, DATA_DIR, OUTPUT_DIR
     ├── config.py                  ← load(), load_portfolio(), setup_logging()
     ├── runtime.py                 ← RunConfig dataclass (verbose, plots, refresh flags)
@@ -225,7 +234,7 @@ cp .env.example .env
 # edit .env: FRED_API_KEY=your_key_here
 
 # 4. Verify
-python -c "from market_regime.config import load; print(load()['data'])"
+python -c "from trading_crab.config import load; print(load()['data'])"
 ```
 
 ### Key dependencies
@@ -298,7 +307,7 @@ steps default to `balanced_cluster` for regime labeling because equal-size clust
 are better for per-regime statistics with limited data.
 
 ### Plotting convention
-All visualization helpers live in `src/market_regime/plotting.py`. Notebooks import
+All visualization helpers live in `src/trading_crab/plotting.py`. Notebooks import
 from there — they do not define plotting logic inline. Every plot function accepts
 `run_cfg: RunConfig` and honours `save_plots` / `show_plots`. Output filenames are
 standardized as `outputs/plots/{step}_{description}.png`.
@@ -346,7 +355,7 @@ Requires `FRED_API_KEY` in `.env`. Free registration at fred.stlouisfed.org.
 
 ### macrotrends.net (planned — not yet implemented)
 Gold spot price back to 1915, WTI crude oil back to 1946, silver, copper.
-See `ROADMAP.md` Tier 1 item 1.5 and `src/market_regime/ingestion/macrotrends.py` (to be created).
+See `ROADMAP.md` Tier 1 item 1.5 and `src/trading_crab/ingestion/macrotrends.py` (to be created).
 Scraping approach: extract embedded JSON from `<script>var rawData={...}</script>` tags.
 
 ### ETF price history (yfinance)
@@ -397,6 +406,10 @@ All tuneable parameters are in `config/settings.yaml`. Key sections:
 - **`prediction/__init__.py` flat API** — `run_pipeline.py`, `pipelines/05_predict.py`, and
   `pipelines/07_dashboard.py` all expect `current_regime.pkl` to be a bare `RandomForestClassifier`.
   Do not change to the bundle-dict API without updating all three consumers. See ADR #12 below.
+- **Reference submodules — no modifications, no pushes** — `gsd-scratch-work-repo-copy/`
+  and `trading-crab-lib-repo-copy/` are Git submodules for reference only. Pulling updates
+  (`git pull` / `git submodule update`) is fine, but never modify files inside them or push
+  to their remotes. Use them to compare implementations and inform changes to the main repo.
 
 ---
 
@@ -519,7 +532,7 @@ jupyter lab notebooks/
 
 # Quick sanity check (no network, loads a checkpoint)
 python -c "
-from market_regime.checkpoints import CheckpointManager
+from trading_crab.checkpoints import CheckpointManager
 cm = CheckpointManager()
 print(cm.list())
 "
@@ -684,7 +697,7 @@ and re-run steps 3-7 before committing.
 
 ### ADR #11. All Visualization in `plotting.py` — Never Inline in Notebooks
 
-Notebooks call functions from `src/market_regime/plotting.py`; they do not define plotting logic
+Notebooks call functions from `src/trading_crab/plotting.py`; they do not define plotting logic
 inline. Reasons: reusability (same plot needed in notebook AND CLI `--plots` mode), testability
 (plotting functions can be tested by mocking matplotlib), consistency (same palette and naming),
 DRY (prevents three slightly-different versions of the same chart drifting apart). If you need
@@ -710,9 +723,9 @@ simultaneous changes to:
 per-fold `FoldReport` objects or aggregate classification-report dicts across folds.
 
 **Rules that must hold:**
-- `run_pipeline.py` and all `pipelines/*.py` scripts import from `market_regime.prediction` (flat API).
+- `run_pipeline.py` and all `pipelines/*.py` scripts import from `trading_crab.prediction` (flat API).
 - `tests/test_models_regime.py` and `tests/test_models_reporting.py` import from
-  `market_regime.prediction.classifier` (bundle API).
+  `trading_crab.prediction.classifier` (bundle API).
 - `outputs/models/current_regime.pkl` always contains a bare `RandomForestClassifier`.
 - Do not "simplify" by merging the two modules — the bundle dict cannot be pickled as
   `current_regime.pkl` without breaking `07_dashboard.py`.
@@ -790,7 +803,7 @@ genuinely needed. Use checkpoints for development iteration.
 **P8. `X | Y` union type syntax on Python < 3.10**
 
 Add `from __future__ import annotations` at the top of every module that uses `X | Y` syntax.
-All `src/market_regime/` files should have this.
+All `src/trading_crab/` files should have this.
 
 **P9. `contourpy` and other transitive deps failing on Python 3.10**
 
@@ -948,8 +961,8 @@ import of `engineer_all` to a module-level reference so `monkeypatch.setattr` wo
 
 ### D2. `prediction/` converted from flat module to package (2026-03-16)
 
-`src/market_regime/prediction.py` was converted to a package so new test files could import from
-`market_regime.prediction.classifier`. Split: existing flat-API content moved intact to
+`src/trading_crab/prediction.py` was converted to a package so new test files could import from
+`trading_crab.prediction.classifier`. Split: existing flat-API content moved intact to
 `__init__.py`; new `classifier.py` created with bundle API. See ADR #12.
 
 ### D3. `make_behavior_labels` changed to strict inequalities (2026-03-16)
@@ -989,7 +1002,7 @@ with minimal delay). `end_date` changed from hardcoded `"2025-09-30"` to `null` 
 
 ### D9. Yield curve features added to transforms pipeline (2026-03-18)
 
-New `src/market_regime/yield_curve_features.py` module with `add_yield_curve_features()`.
+New `src/trading_crab/yield_curve_features.py` module with `add_yield_curve_features()`.
 Computes 10Y-2Y and 10Y-3M spreads from multpl.com treasury columns and/or FRED columns
 (GS10-GS2, T10Y2Y, T10Y3M). Hooked into `engineer_all()` in `transforms.py` after
 cross-ratios step. Does not affect `clustering_features` list — spreads are available for
@@ -1065,7 +1078,7 @@ all three ingestion modules, and three new modules.
 - `list()`: catches all metadata parse errors and logs WARNING with file name
 
 **P23 fix — Ingestion completeness report:**
-- New `ingestion_completeness_report()` in `src/market_regime/ingestion/__init__.py`
+- New `ingestion_completeness_report()` in `src/trading_crab/ingestion/__init__.py`
 - Returns `CompletenessReport` dataclass with missing columns, extra columns, high-NaN columns
 - Integrated into `pipelines/01_ingest.py` and `run_pipeline.py` step 1
 - Builds expected column list from config (FRED + multpl + macrotrends)

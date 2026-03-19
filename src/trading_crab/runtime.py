@@ -10,7 +10,7 @@ Construct one RunConfig at the entry point (run_pipeline.py or a pipeline
 script) and pass it through to every module that needs it.
 
 Usage:
-    from market_regime.runtime import RunConfig
+    from trading_crab.runtime import RunConfig
     run_cfg = RunConfig(generate_plots=True, verbose=True)
 """
 

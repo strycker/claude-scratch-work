@@ -39,7 +39,7 @@ def load_email_config(config_path: Path | None = None) -> dict:
     Returns empty dict if file is missing or malformed.
     """
     if config_path is None:
-        from market_regime import CONFIG_DIR
+        from trading_crab import CONFIG_DIR
         config_path = CONFIG_DIR / "email.yaml"
 
     if not config_path.exists():

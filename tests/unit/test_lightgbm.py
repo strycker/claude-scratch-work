@@ -11,7 +11,7 @@ import pytest
 
 lgb = pytest.importorskip("lightgbm", reason="lightgbm not installed")
 
-from market_regime.prediction.gradient_boosting import (
+from trading_crab.prediction.gradient_boosting import (
     train_lightgbm_current_regime,
     train_lightgbm_forward,
 )

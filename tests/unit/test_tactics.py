@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_regime.tactics import (
+from trading_crab.tactics import (
     classify_tactics,
     compute_tactics_metrics,
     _realized_vol,

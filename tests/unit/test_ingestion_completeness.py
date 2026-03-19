@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_regime.ingestion import ingestion_completeness_report, CompletenessReport
+from trading_crab.ingestion import ingestion_completeness_report, CompletenessReport
 
 
 @pytest.fixture

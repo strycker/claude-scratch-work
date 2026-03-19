@@ -20,8 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from market_regime import DATA_DIR, transforms as _transforms_module
-from market_regime.config import load, setup_logging
+from trading_crab import DATA_DIR, transforms as _transforms_module
+from trading_crab.config import load, setup_logging
 
 import pandas as pd
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 
-from market_regime.prediction.classifier import model_metrics_summary
+from trading_crab.prediction.classifier import model_metrics_summary
 
 
 def _fake_report(accuracy: float, cls0_support: int, cls1_support: int):

@@ -1,4 +1,4 @@
-"""Tests for src/market_regime/runtime.py — RunConfig dataclass."""
+"""Tests for src/trading_crab/runtime.py — RunConfig dataclass."""
 from __future__ import annotations
 
 import logging
@@ -6,7 +6,7 @@ from argparse import Namespace
 
 import pytest
 
-from market_regime.runtime import RunConfig
+from trading_crab.runtime import RunConfig
 
 
 class TestRunConfigDefaults:
