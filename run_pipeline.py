@@ -1073,7 +1073,7 @@ def main() -> None:
         if not email_cfg:
             print("Email config not found or invalid; skipping send.")
         else:
-            subject, body = build_weekly_email_body()
+            subject, body = build_weekly_email_body(OUTPUT_DIR / "reports")
             ok = send_weekly_email(email_cfg, subject, body)
             if ok:
                 print("Weekly report email sent.")
