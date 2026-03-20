@@ -180,6 +180,23 @@ features:
     - us_pop
     - fred_houst        # housing starts (1959+)
     - fred_umcsent      # consumer sentiment (1952+)
+    - gold_spot         # macrotrends — gold price (1915+)
+    - wti_crude         # macrotrends — WTI crude oil (1946+)
+    - etf_spy           # S&P 500 ETF (1993+)
+    - etf_tlt           # 20+ year Treasury ETF (2002+)
+    - etf_gld           # Gold ETF (2004+)
+    - etf_qqq           # Nasdaq-100 ETF (1999+)
+    - etf_vnq           # REIT ETF (2004+)
+
+  # ETF tickers to merge into macro_raw as etf_{ticker.lower()} columns.
+  # Only tickers with enough history to be useful for clustering are included.
+  # Full ETF universe remains in assets.etfs for step 6 return analysis.
+  asset_price_columns:
+    - SPY               # S&P 500 ETF (1993+)
+    - TLT               # 20+ year Treasury ETF (2002+)
+    - GLD               # Gold ETF (2004+)
+    - QQQ               # Nasdaq-100 ETF (1999+)
+    - VNQ               # REIT ETF (2004+)
 
   # Features retained after log-transform, before gap fill and derivatives.
   # Dropping noisy/redundant columns here keeps the derivative computation clean.
@@ -225,6 +242,15 @@ features:
     - us_infl
     - sp500              # raw level needed for derivative-space divergence (sp500_d1)
     - us_pop_growth
+    # Macrotrends commodity prices (log-transformed)
+    - log_gold_spot     # gold price (1915+) — deep history for clustering
+    - log_wti_crude     # WTI crude oil (1946+) — deep history for clustering
+    # ETF price columns (log-transformed) — for supervised learning features
+    - log_etf_spy       # S&P 500 ETF (1993+)
+    - log_etf_tlt       # 20+ year Treasury ETF (2002+)
+    - log_etf_gld       # Gold ETF (2004+)
+    - log_etf_qqq       # Nasdaq-100 ETF (1999+)
+    - log_etf_vnq       # REIT ETF (2004+)
     # Divergence features (level-space, computed before log transforms)
     - div_spy_tlt_z_4q        # equity-bond divergence z-score
     - div_spy_tlt_trigger     # equity-bond divergence trigger (binary)
@@ -306,6 +332,15 @@ features:
     - sp500_pe_d1
     - us_infl
     - us_infl_d1
+    # Macrotrends commodity derivatives (gold 1915+, oil 1946+ — enough history)
+    - log_gold_spot_d1
+    - log_gold_spot_d2
+    - log_wti_crude_d1
+    - log_wti_crude_d2
+    # Note: ETF derivatives (etf_spy, etf_tlt, etc.) are intentionally NOT in
+    # clustering_features. They start 1993-2004, which would drop all pre-1993
+    # rows during clustering dropna(). ETF derivatives are available in
+    # initial_features for supervised learning (step 5) via features_supervised.
     # Divergence features — level-space (z-scores + their d1 derivatives + triggers)
     - div_spy_tlt_z_4q
     - div_spy_tlt_z_4q_d1
