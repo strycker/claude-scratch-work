@@ -156,15 +156,15 @@ With a Finviz Elite subscription:
 - Separate from regime detection (which is macro-driven); feeds into a "stock signal" layer
 - **Files**: `src/trading_crab_lib/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
 
-### 2.9  Hidden Markov Model regime detection (alternative to KMeans)  `M`
-`hmmlearn.hmm.GaussianHMM` is a principled alternative to KMeans for regime detection:
-- Handles temporal autocorrelation natively (KMeans treats each quarter independently)
-- Produces soft probabilities rather than hard cluster assignments
-- Compare: does HMM agree with KMeans regimes? Does it produce cleaner transitions?
-- Risk: HMM requires EM fitting which is sensitive to initialization on small datasets
-- Implementation: add `fit_hmm()` to `src/trading_crab_lib/hmm.py` (new module)
-- Use identical PCA features as input for fair comparison with KMeans
-- **Files**: `src/trading_crab_lib/hmm.py` (new), `pipelines/03_cluster.py`
+### 2.9  Hidden Markov Model regime detection (alternative to KMeans)  `M` ✅ DONE
+**Implementation**: `src/trading_crab_lib/hmm.py` (D22).
+- `fit_hmm()`: GaussianHMM sweep across k with best-of-N restarts, BIC/AIC scoring
+- `select_hmm_k()`: BIC-based model selection
+- `hmm_labels()`: Viterbi-decoded hard state assignments (canonicalized)
+- `hmm_probabilities()`: forward-backward posterior probabilities
+- `hmm_transition_matrix()`: learned state transition matrix
+- 19 tests in `tests/unit/test_hmm.py`. Library module only — not yet in pipeline.
+- **Next**: integrate into `pipelines/03_cluster.py` and compare with KMeans
 
 ### 2.10  SMOTE / class-weight tuning for imbalanced regimes  `S`
 With 5 balanced clusters, sizes should be equal, but temporal distribution may still
@@ -182,23 +182,26 @@ For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 - This is "Putting it all together — Part I" from the original design doc
 - **Files**: `src/trading_crab_lib/prediction/asset_classifier.py` (new), `pipelines/05b_asset_predict.py` (new)
 
-### 2.12  Momentum and cross-asset ratio features  `M`
-Additional derived features for clustering and supervised models:
-- 6M and 12M momentum (trailing return) for each major series
-- Relative strength: S&P priced in Gold, S&P priced in Oil, Gold priced in Oil
-- Cross-asset correlation (rolling 8Q window) between SP500 and 10Y yield
-- Inflation acceleration: 2nd derivative of CPI (d/dt of d/dt)
-- PMI-equivalent proxy from FRED INDPRO momentum
-- **Files**: `src/trading_crab_lib/transforms.py`, `config/settings.yaml`
+### 2.12  Momentum and cross-asset ratio features  `M` ✅ DONE
+**Implementation**: `src/trading_crab_lib/momentum.py` (Phases A+B, D18).
+- Trailing 2Q/4Q/8Q returns for sp500, sp500_adj, 10yr_ustreas, credit_spread
+- Relative strength: S&P-in-Gold, S&P-in-Oil, Gold-in-Oil (activate when macrotrends data available)
+- Rolling 8Q equity-bond correlation (corr_sp500_10yr_ustreas_8q)
+- CPI acceleration (2nd derivative)
 
-### 2.13  Markov regime-switching model (statsmodels)  `M`
-`statsmodels.tsa.regime_switching.markov_regression.MarkovRegression` fits a model
-where parameters switch between discrete states via a Markov chain:
-- Interprets GDP growth as a switching-mean process (growth vs recession states)
-- Useful as a 2-state sanity check: does our 5-regime KMeans align with the
-  statsmodels recession/expansion signal?
-- Not a replacement for KMeans; more of a diagnostic and feature generator
-- **Files**: `src/trading_crab_lib/markov.py` (new)
+**Phase C+D** (D21): Added 6 momentum features to `initial_features`, 11 to
+`clustering_features` (all 1950+, safe for clustering). Evaluation script:
+`scripts/evaluate_momentum.py`. 20 tests in `tests/unit/test_evaluate_momentum.py`.
+Fixed `fred_vixcls` → `fred_vix` column name bug.
+
+### 2.13  Markov regime-switching model (statsmodels)  `M` ✅ DONE
+**Implementation**: `src/trading_crab_lib/markov.py` (D22).
+- `fit_markov_switching()`: switching-mean model on univariate series (GDP growth)
+- `markov_labels()`: hard 2-state assignments (regime 0 = lower mean = recession)
+- `markov_probabilities()`: smoothed marginal probabilities
+- `compare_markov_kmeans()`: cross-tabulate Markov vs KMeans regimes
+- 18 tests in `tests/unit/test_markov.py`. Library module — diagnostic use from notebooks.
+- **Next**: use recession probability as a supervised feature; compare with KMeans regimes
 
 ### 2.15  Cross-asset divergence features for regime change detection  `L`
 Derive new supervised learning features from **divergences between historically correlated

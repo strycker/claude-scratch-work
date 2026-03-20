@@ -256,6 +256,13 @@ features:
     - div_spy_tlt_trigger     # equity-bond divergence trigger (binary)
     - div_cred_vix_z_4q       # credit-vol divergence z-score
     - div_cred_vix_trigger    # credit-vol divergence trigger (binary)
+    # Momentum features (computed before log transforms, all 1950+)
+    - sp500_mom_4q            # trailing 4Q return (1950+)
+    - sp500_mom_8q            # trailing 8Q return (1950+)
+    - 10yr_ustreas_mom_4q     # trailing 4Q rate change (1950+)
+    - credit_spread_mom_4q    # trailing 4Q spread change (1950+)
+    - corr_sp500_10yr_ustreas_8q  # rolling 8Q equity-bond correlation (1951+)
+    - cpi_acceleration        # 2nd derivative of CPI (1950+)
 
   # Final feature set fed into PCA + clustering.
   # Uses d1+d2 for most series; d1+d2+d3 only for sp500 series (higher-order
@@ -353,6 +360,18 @@ features:
     - div_d1_spy_tlt_trigger
     - div_d1_cred_vix_z_4q
     - div_d1_cred_vix_trigger
+    # Momentum features — rate-like values + d1 derivatives (all 1950+)
+    - sp500_mom_4q            # trailing 4Q equity return (already a rate)
+    - sp500_mom_4q_d1         # acceleration of equity momentum
+    - sp500_mom_8q            # trailing 8Q equity return
+    - 10yr_ustreas_mom_4q     # trailing 4Q rate change
+    - 10yr_ustreas_mom_4q_d1  # acceleration of rate momentum
+    - credit_spread_mom_4q    # trailing 4Q spread change
+    - credit_spread_mom_4q_d1 # acceleration of credit momentum
+    - corr_sp500_10yr_ustreas_8q    # rolling equity-bond correlation (1951+)
+    - corr_sp500_10yr_ustreas_8q_d1 # change in equity-bond correlation
+    - cpi_acceleration        # inflation acceleration (2nd deriv of CPI)
+    - cpi_acceleration_d1     # jerk of inflation (3rd-order signal)
 
   derivative_window: 5  # rolling mean window applied before/after np.gradient
 
