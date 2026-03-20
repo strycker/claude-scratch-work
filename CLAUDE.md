@@ -95,7 +95,7 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (496 tests)
+├── tests/                         ← pytest test suite (533 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/               ← integration tests (currently empty)
@@ -147,6 +147,8 @@ trading-crab/
     │                                 + optimize_n_components, compare_svd_pca,
     │                                 + compute_gap_statistic, find_knee_k
     ├── gmm.py                     ← fit_gmm (returns scaler), select_gmm_k, gmm_labels, gmm_probabilities
+    ├── hmm.py                     ← fit_hmm, select_hmm_k, hmm_labels, hmm_probabilities, hmm_transition_matrix
+    ├── markov.py                  ← fit_markov_switching, markov_labels, markov_probabilities, compare_markov_kmeans
     ├── density.py                 ← knn_distances, fit_dbscan_sweep, fit_dbscan, fit_hdbscan_sweep, hdbscan_labels
     ├── spectral.py                ← fit_spectral_sweep (affinity cached), spectral_labels
     ├── cluster_comparison.py      ← compare_all_methods, pairwise_rand_index,
@@ -486,7 +488,7 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
-**Summary:** all 9 pipeline steps run end-to-end on real data. **496 tests collected**
+**Summary:** all 9 pipeline steps run end-to-end on real data. **533 tests collected**
 (10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
 Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
 implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
@@ -1203,3 +1205,30 @@ learning via `features_supervised.parquet`.
 
 All momentum features have deep history (1950+), so they are safe for
 `clustering_features` without dropping pre-1993 rows.
+
+### D22. HMM and Markov regime-switching modules (2026-03-20)
+
+Two new regime detection modules implementing ROADMAP items 2.9 and 2.13:
+
+- **`src/trading_crab_lib/hmm.py`** — GaussianHMM regime detection via `hmmlearn`.
+  API mirrors GMM module: `fit_hmm()` sweeps k with best-of-N restarts, returns
+  scores + models + scaler. `select_hmm_k()` picks best k via BIC. `hmm_labels()`
+  returns Viterbi-decoded hard state assignments (canonicalized). `hmm_probabilities()`
+  returns forward-backward posterior probabilities. `hmm_transition_matrix()` extracts
+  the learned transition matrix. Key advantage over KMeans: models temporal
+  autocorrelation — P(state_t | state_{t-1}) is estimated directly.
+
+- **`src/trading_crab_lib/markov.py`** — Markov regime-switching via
+  `statsmodels.MarkovRegression`. Fits a switching-mean model on univariate
+  macro series (e.g., GDP growth) for 2-state recession/expansion classification.
+  `compare_markov_kmeans()` cross-tabulates Markov labels against KMeans regimes
+  to answer "which KMeans regimes are recessions?"
+
+Both modules are library-only (not integrated into pipeline steps). Use from
+notebooks or comparison scripts. Both are optional dependencies — graceful
+`ImportError` with install instructions if `hmmlearn` or `statsmodels` missing.
+Tests skip via `pytest.mark.skipif` when libraries unavailable.
+
+New dependencies: `hmmlearn>=0.3`, `statsmodels>=0.14` (added to requirements.txt
+and pyproject.toml).
+37 new tests (19 HMM + 18 Markov). Total: 533 collected, all passing.

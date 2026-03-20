@@ -47,6 +47,8 @@ dependencies = [
     # Feature engineering / ML
     "scikit-learn>=1.4",
     "scipy>=1.11",
+    "hmmlearn>=0.3",
+    "statsmodels>=0.14",
     # Config
     "pyyaml>=6.0",
     # Visualization

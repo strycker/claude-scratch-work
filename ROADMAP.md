@@ -156,15 +156,15 @@ With a Finviz Elite subscription:
 - Separate from regime detection (which is macro-driven); feeds into a "stock signal" layer
 - **Files**: `src/trading_crab_lib/ingestion/finviz.py` (new), `pipelines/08_stock_signals.py` (new)
 
-### 2.9  Hidden Markov Model regime detection (alternative to KMeans)  `M`
-`hmmlearn.hmm.GaussianHMM` is a principled alternative to KMeans for regime detection:
-- Handles temporal autocorrelation natively (KMeans treats each quarter independently)
-- Produces soft probabilities rather than hard cluster assignments
-- Compare: does HMM agree with KMeans regimes? Does it produce cleaner transitions?
-- Risk: HMM requires EM fitting which is sensitive to initialization on small datasets
-- Implementation: add `fit_hmm()` to `src/trading_crab_lib/hmm.py` (new module)
-- Use identical PCA features as input for fair comparison with KMeans
-- **Files**: `src/trading_crab_lib/hmm.py` (new), `pipelines/03_cluster.py`
+### 2.9  Hidden Markov Model regime detection (alternative to KMeans)  `M` ✅ DONE
+**Implementation**: `src/trading_crab_lib/hmm.py` (D22).
+- `fit_hmm()`: GaussianHMM sweep across k with best-of-N restarts, BIC/AIC scoring
+- `select_hmm_k()`: BIC-based model selection
+- `hmm_labels()`: Viterbi-decoded hard state assignments (canonicalized)
+- `hmm_probabilities()`: forward-backward posterior probabilities
+- `hmm_transition_matrix()`: learned state transition matrix
+- 19 tests in `tests/unit/test_hmm.py`. Library module only — not yet in pipeline.
+- **Next**: integrate into `pipelines/03_cluster.py` and compare with KMeans
 
 ### 2.10  SMOTE / class-weight tuning for imbalanced regimes  `S`
 With 5 balanced clusters, sizes should be equal, but temporal distribution may still
@@ -194,14 +194,14 @@ For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 `scripts/evaluate_momentum.py`. 20 tests in `tests/unit/test_evaluate_momentum.py`.
 Fixed `fred_vixcls` → `fred_vix` column name bug.
 
-### 2.13  Markov regime-switching model (statsmodels)  `M`
-`statsmodels.tsa.regime_switching.markov_regression.MarkovRegression` fits a model
-where parameters switch between discrete states via a Markov chain:
-- Interprets GDP growth as a switching-mean process (growth vs recession states)
-- Useful as a 2-state sanity check: does our 5-regime KMeans align with the
-  statsmodels recession/expansion signal?
-- Not a replacement for KMeans; more of a diagnostic and feature generator
-- **Files**: `src/trading_crab_lib/markov.py` (new)
+### 2.13  Markov regime-switching model (statsmodels)  `M` ✅ DONE
+**Implementation**: `src/trading_crab_lib/markov.py` (D22).
+- `fit_markov_switching()`: switching-mean model on univariate series (GDP growth)
+- `markov_labels()`: hard 2-state assignments (regime 0 = lower mean = recession)
+- `markov_probabilities()`: smoothed marginal probabilities
+- `compare_markov_kmeans()`: cross-tabulate Markov vs KMeans regimes
+- 18 tests in `tests/unit/test_markov.py`. Library module — diagnostic use from notebooks.
+- **Next**: use recession probability as a supervised feature; compare with KMeans regimes
 
 ### 2.15  Cross-asset divergence features for regime change detection  `L`
 Derive new supervised learning features from **divergences between historically correlated
