@@ -95,7 +95,7 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (428 tests)
+├── tests/                         ← pytest test suite (496 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/               ← integration tests (currently empty)
@@ -486,7 +486,7 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
-**Summary:** all 9 pipeline steps run end-to-end on real data. **428 tests collected**
+**Summary:** all 9 pipeline steps run end-to-end on real data. **496 tests collected**
 (10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
 Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
 implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
@@ -1182,3 +1182,24 @@ learning via `features_supervised.parquet`.
 **Divergence auto-activation**: `spy_gld` and `gld_oil` divergence pairs (in
 `DEFAULT_DIVERGENCE_PAIRS`) will now auto-activate once macrotrends data populates
 `gold_spot` and `wti_crude` columns in `macro_raw`.
+
+### D21. Momentum features Phase C+D: feature list integration and evaluation (2026-03-20)
+
+**Phase C** — Added momentum features to `settings.yaml` feature lists:
+- `initial_features`: added `sp500_mom_4q`, `sp500_mom_8q`, `10yr_ustreas_mom_4q`,
+  `credit_spread_mom_4q`, `corr_sp500_10yr_ustreas_8q`, `cpi_acceleration`
+- `clustering_features`: added 11 momentum columns (raw rate-like values + d1 derivatives):
+  `sp500_mom_4q`, `sp500_mom_4q_d1`, `sp500_mom_8q`, `10yr_ustreas_mom_4q`,
+  `10yr_ustreas_mom_4q_d1`, `credit_spread_mom_4q`, `credit_spread_mom_4q_d1`,
+  `corr_sp500_10yr_ustreas_8q`, `corr_sp500_10yr_ustreas_8q_d1`,
+  `cpi_acceleration`, `cpi_acceleration_d1`
+- Fixed `fred_vixcls` → `fred_vix` column name in `default_mom_cols` (line 210)
+
+**Phase D** — Evaluation script `scripts/evaluate_momentum.py`:
+- Same A/B methodology as divergence evaluation: compare clustering quality,
+  supervised accuracy, and transition detection with/without momentum features
+- 20 tests in `tests/unit/test_evaluate_momentum.py`
+- Requires checkpoint data from pipeline steps 1-3 to run evaluation
+
+All momentum features have deep history (1950+), so they are safe for
+`clustering_features` without dropping pre-1993 rows.

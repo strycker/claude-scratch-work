@@ -57,7 +57,7 @@ tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeli
 tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
 tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 428 collected — ✅ all passing (Python 3.11; 10 skipped: HDBSCAN + cssselect optional)
+Total: 496 collected — ✅ all passing (Python 3.11; 11 skipped: HDBSCAN + cssselect optional)
 ```
 
 **Coverage gaps:** All previously untested modules now have test coverage.

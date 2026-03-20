@@ -115,7 +115,7 @@ def compute_relative_strength(
 DEFAULT_CORRELATION_PAIRS: list[tuple[str, str, int]] = [
     ("sp500", "10yr_ustreas", 8),
     ("sp500", "gold_spot", 8),
-    ("credit_spread", "fred_vixcls", 8),
+    ("credit_spread", "fred_vix", 8),
 ]
 
 
@@ -207,7 +207,7 @@ def add_momentum_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     # Momentum columns: default to key price/macro series present in df
     default_mom_cols = [
         c for c in ["sp500", "gold_spot", "wti_crude", "10yr_ustreas",
-                     "sp500_adj", "credit_spread", "fred_vixcls"]
+                     "sp500_adj", "credit_spread", "fred_vix"]
         if c in df.columns
     ]
     mom_cols = mom_cfg.get("momentum_columns", default_mom_cols)

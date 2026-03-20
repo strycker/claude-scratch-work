@@ -182,14 +182,17 @@ For each ETF (SPY, GLD, TLT, USO, QQQ, IWM, VNQ, AGG), train per-asset models:
 - This is "Putting it all together — Part I" from the original design doc
 - **Files**: `src/trading_crab_lib/prediction/asset_classifier.py` (new), `pipelines/05b_asset_predict.py` (new)
 
-### 2.12  Momentum and cross-asset ratio features  `M`
-Additional derived features for clustering and supervised models:
-- 6M and 12M momentum (trailing return) for each major series
-- Relative strength: S&P priced in Gold, S&P priced in Oil, Gold priced in Oil
-- Cross-asset correlation (rolling 8Q window) between SP500 and 10Y yield
-- Inflation acceleration: 2nd derivative of CPI (d/dt of d/dt)
-- PMI-equivalent proxy from FRED INDPRO momentum
-- **Files**: `src/trading_crab_lib/transforms.py`, `config/settings.yaml`
+### 2.12  Momentum and cross-asset ratio features  `M` ✅ DONE
+**Implementation**: `src/trading_crab_lib/momentum.py` (Phases A+B, D18).
+- Trailing 2Q/4Q/8Q returns for sp500, sp500_adj, 10yr_ustreas, credit_spread
+- Relative strength: S&P-in-Gold, S&P-in-Oil, Gold-in-Oil (activate when macrotrends data available)
+- Rolling 8Q equity-bond correlation (corr_sp500_10yr_ustreas_8q)
+- CPI acceleration (2nd derivative)
+
+**Phase C+D** (D21): Added 6 momentum features to `initial_features`, 11 to
+`clustering_features` (all 1950+, safe for clustering). Evaluation script:
+`scripts/evaluate_momentum.py`. 20 tests in `tests/unit/test_evaluate_momentum.py`.
+Fixed `fred_vixcls` → `fred_vix` column name bug.
 
 ### 2.13  Markov regime-switching model (statsmodels)  `M`
 `statsmodels.tsa.regime_switching.markov_regression.MarkovRegression` fits a model
