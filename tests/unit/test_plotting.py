@@ -224,6 +224,68 @@ class TestPlotAssetHeatmap:
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
+# ── Phase A2: PCA & Clustering Plots ─────────────────────────────────────────
+
+class TestPlotScree:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        from sklearn.decomposition import PCA
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((40, 10))
+        pca = PCA(n_components=5).fit(X)
+        plotting.plot_scree(pca, run_cfg)
+        assert (tmp_path / "03_scree.png").exists()
+
+
+class TestPlotPcaLoadings:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        from sklearn.decomposition import PCA
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((40, 10))
+        pca = PCA(n_components=3).fit(X)
+        names = [f"feat_{i}" for i in range(10)]
+        plotting.plot_pca_loadings(pca, names, run_cfg, top_n=5)
+        assert (tmp_path / "03_pca_loadings.png").exists()
+
+
+class TestPlotSilhouetteSamples:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((40, 5))
+        labels = np.array([i % 3 for i in range(40)])
+        plotting.plot_silhouette_samples(X, labels, run_cfg)
+        assert (tmp_path / "03_silhouette_samples.png").exists()
+
+
+class TestPlotGmmBicSurface:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        bic_df = pd.DataFrame({
+            "k": [2, 2, 3, 3],
+            "covariance_type": ["diag", "full", "diag", "full"],
+            "bic": [1200, 1150, 1100, 1050],
+        })
+        plotting.plot_gmm_bic_surface(bic_df, run_cfg)
+        assert (tmp_path / "03_gmm_bic_surface.png").exists()
+
+    def test_missing_columns_no_crash(self, run_cfg):
+        plotting.plot_gmm_bic_surface(pd.DataFrame({"x": [1]}), run_cfg)
+
+
+class TestPlotMethodComparisonTable:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        df = pd.DataFrame({
+            "method": ["KMeans", "GMM", "Spectral"],
+            "n_clusters": [5, 4, 5],
+            "silhouette": [0.25, 0.22, 0.19],
+            "davies_bouldin": [1.1, 1.3, 1.5],
+            "calinski": [45.0, 40.0, 38.0],
+        })
+        plotting.plot_method_comparison_table(df, run_cfg)
+        assert (tmp_path / "03_method_comparison.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_method_comparison_table(pd.DataFrame(), run_cfg)
+
+
 # ── Phase A1: Model Evaluation Plots ─────────────────────────────────────────
 
 class TestPlotDecisionTree:
