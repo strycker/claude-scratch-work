@@ -166,7 +166,7 @@ Former gaps (`reporting.py`, `plotting.py`, `runtime.py`) are fully covered.
 
 ## Monitoring & Notebook Gaps
 
-See `MONITORING_EXPANSION_PLAN.md` for the full phased plan (40 items).
+See `MONITORING_EXPANSION_PLAN.md` for the full phased plan (85 items, 17 phases).
 
 | Gap | Category |
 |-----|----------|
@@ -185,6 +185,16 @@ See `MONITORING_EXPANSION_PLAN.md` for the full phased plan (40 items).
 | No regime-colored feature overlay time-series | Plot |
 | No diagnostics notebook (09) | Notebook |
 | No model comparison notebook (10) | Notebook |
+| No feature selection workbench notebook (11) | Notebook |
+| No divergence/momentum workbench notebook (12) | Notebook |
+| No learning curve plot (overfitting detection) | Plot |
+| No regime duration histogram | Plot |
+| No per-regime correlation change heatmap | Plot |
+| No feature selection cumulative importance curve | Plot |
+| No divergence time-series with transition markers | Plot |
+| No pipeline step timing summary | Monitoring |
+| No pipeline health summary at end of run | Monitoring |
+| No per-fold class distribution check | Monitoring |
 
 ---
 
