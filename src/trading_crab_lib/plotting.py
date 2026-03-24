@@ -798,3 +798,1092 @@ def plot_asset_return_distributions(
     ax.grid(alpha=0.3)
     fig.tight_layout()
     _save_or_show(fig, f"06_returns_dist_{ticker}.png", run_cfg)
+
+
+# ── Model Evaluation Plots (Phase A1) ────────────────────────────────────────
+
+
+def plot_decision_tree(
+    tree,
+    feature_names: list[str],
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    max_depth: int | None = 4,
+    filename: str = "05_decision_tree.png",
+) -> None:
+    """Render a sklearn DecisionTreeClassifier as a readable tree diagram."""
+    from sklearn.tree import plot_tree
+
+    class_names = [regime_names.get(i, f"R{i}") for i in sorted(regime_names)]
+    depth = min(max_depth, tree.get_depth()) if max_depth else tree.get_depth()
+    fig_h = max(6, 2 * depth)
+    fig_w = max(14, 3 * (2 ** min(depth, 4)))
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    plot_tree(
+        tree,
+        feature_names=feature_names,
+        class_names=class_names,
+        filled=True,
+        rounded=True,
+        max_depth=max_depth,
+        fontsize=8,
+        ax=ax,
+    )
+    ax.set_title("Decision Tree — Regime Classification", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_cv_fold_accuracy(
+    fold_accuracies: list[float],
+    run_cfg: RunConfig,
+    *,
+    model_name: str = "RF",
+    filename: str = "05_cv_fold_accuracy.png",
+) -> None:
+    """Bar chart of per-fold accuracy from TimeSeriesSplit."""
+    n = len(fold_accuracies)
+    if n == 0:
+        return
+    mean_acc = np.mean(fold_accuracies)
+    fig, ax = plt.subplots(figsize=(8, 4))
+    bars = ax.bar(range(1, n + 1), fold_accuracies, color=CUSTOM_COLORS[0], alpha=0.8)
+    ax.axhline(mean_acc, color="red", linestyle="--", linewidth=1.5,
+               label=f"Mean = {mean_acc:.1%}")
+    for bar, acc in zip(bars, fold_accuracies):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+                f"{acc:.1%}", ha="center", va="bottom", fontsize=9)
+    ax.set_xlabel("Fold")
+    ax.set_ylabel("Accuracy")
+    ax.set_title(f"{model_name} — TimeSeriesSplit CV Accuracy per Fold", fontsize=12)
+    ax.set_ylim(0, min(1.05, max(fold_accuracies) + 0.15))
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_model_comparison_bar(
+    metrics: dict[str, dict[str, float]],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "05_model_comparison.png",
+) -> None:
+    """Grouped bar chart comparing models (RF, DT, GB) on accuracy/F1.
+
+    Parameters
+    ----------
+    metrics : dict
+        ``{"RF": {"accuracy": 0.7, "f1": 0.65}, "DT": {...}, ...}``
+    """
+    if not metrics:
+        return
+    model_names = list(metrics.keys())
+    metric_names = list(next(iter(metrics.values())).keys())
+    n_models = len(model_names)
+    n_metrics = len(metric_names)
+    x = np.arange(n_metrics)
+    width = 0.8 / n_models
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for i, model in enumerate(model_names):
+        vals = [metrics[model].get(m, 0) for m in metric_names]
+        color = CUSTOM_COLORS[i % len(CUSTOM_COLORS)]
+        bars = ax.bar(x + i * width, vals, width, label=model, color=color, alpha=0.85)
+        for bar, v in zip(bars, vals):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+                    f"{v:.2f}", ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks(x + width * (n_models - 1) / 2)
+    ax.set_xticklabels(metric_names)
+    ax.set_ylabel("Score")
+    ax.set_title("Model Comparison", fontsize=12)
+    ax.set_ylim(0, 1.15)
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_calibration_curve(
+    y_true: pd.Series | np.ndarray,
+    y_proba: np.ndarray,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    n_bins: int = 8,
+    filename: str = "05_calibration_curve.png",
+) -> None:
+    """Reliability diagram: predicted probability vs actual frequency per regime.
+
+    Parameters
+    ----------
+    y_true : array-like of int
+        True regime labels.
+    y_proba : ndarray, shape (n_samples, n_classes)
+        Predicted probabilities (e.g. from ``model.predict_proba(X)``).
+    """
+    y_true = np.asarray(y_true)
+    classes = sorted(set(y_true))
+    n_classes = len(classes)
+    cols = min(3, n_classes)
+    rows = (n_classes + cols - 1) // cols
+    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 4 * rows), squeeze=False)
+
+    for idx, cls in enumerate(classes):
+        ax = axes[idx // cols][idx % cols]
+        probs = y_proba[:, idx] if y_proba.shape[1] > idx else np.zeros(len(y_true))
+        binary = (y_true == cls).astype(int)
+
+        # bin predictions
+        bin_edges = np.linspace(0, 1, n_bins + 1)
+        bin_centers = []
+        bin_freqs = []
+        for lo, hi in zip(bin_edges[:-1], bin_edges[1:]):
+            mask = (probs >= lo) & (probs < hi)
+            if mask.sum() == 0:
+                continue
+            bin_centers.append((lo + hi) / 2)
+            bin_freqs.append(binary[mask].mean())
+
+        name = regime_names.get(cls, f"Regime {cls}")
+        ax.plot([0, 1], [0, 1], "k--", alpha=0.4, label="Perfect")
+        ax.plot(bin_centers, bin_freqs, "o-", color=_regime_color(cls), label=name)
+        ax.set_xlabel("Mean predicted probability")
+        ax.set_ylabel("Observed frequency")
+        ax.set_title(name, fontsize=10)
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_ylim(-0.02, 1.02)
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3)
+
+    # hide unused axes
+    for idx in range(n_classes, rows * cols):
+        axes[idx // cols][idx % cols].set_visible(False)
+
+    fig.suptitle("Calibration Curves (Reliability Diagram)", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_learning_curve(
+    model,
+    X: pd.DataFrame | np.ndarray,
+    y: pd.Series | np.ndarray,
+    run_cfg: RunConfig,
+    *,
+    cv: int = 5,
+    n_points: int = 8,
+    filename: str = "05_learning_curve.png",
+) -> None:
+    """Train/test score vs training set size — detects overfitting.
+
+    Uses TimeSeriesSplit to respect temporal ordering.
+    """
+    from sklearn.model_selection import TimeSeriesSplit
+
+    X_arr = np.asarray(X)
+    y_arr = np.asarray(y)
+    n_total = len(X_arr)
+
+    # generate increasing training sizes
+    min_train = max(cv * 2, 10)
+    sizes = np.linspace(min_train, n_total, n_points, dtype=int)
+    sizes = np.unique(sizes)
+
+    train_scores = []
+    test_scores = []
+    actual_sizes = []
+
+    for size in sizes:
+        X_sub, y_sub = X_arr[:size], y_arr[:size]
+        if len(np.unique(y_sub)) < 2:
+            continue
+        tscv = TimeSeriesSplit(n_splits=min(cv, size // 3))
+        fold_train, fold_test = [], []
+        for tr_idx, te_idx in tscv.split(X_sub):
+            if len(np.unique(y_sub[tr_idx])) < 2:
+                continue
+            m = model.__class__(**model.get_params())
+            m.fit(X_sub[tr_idx], y_sub[tr_idx])
+            fold_train.append(m.score(X_sub[tr_idx], y_sub[tr_idx]))
+            fold_test.append(m.score(X_sub[te_idx], y_sub[te_idx]))
+        if fold_train and fold_test:
+            train_scores.append(np.mean(fold_train))
+            test_scores.append(np.mean(fold_test))
+            actual_sizes.append(size)
+
+    if not actual_sizes:
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(actual_sizes, train_scores, "o-", color=CUSTOM_COLORS[0], label="Train")
+    ax.plot(actual_sizes, test_scores, "o-", color=CUSTOM_COLORS[1], label="Test (CV)")
+    ax.fill_between(actual_sizes, train_scores, test_scores, alpha=0.1, color="gray")
+    ax.set_xlabel("Training set size (quarters)")
+    ax.set_ylabel("Accuracy")
+    ax.set_title("Learning Curve — Overfitting Detection", fontsize=12)
+    ax.set_ylim(0, 1.05)
+    ax.legend()
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+# ── PCA & Clustering Plots (Phase A2) ────────────────────────────────────────
+
+
+def plot_scree(
+    pca_obj,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "03_scree.png",
+) -> None:
+    """Scree plot: individual + cumulative explained variance per PCA component."""
+    ratios = pca_obj.explained_variance_ratio_
+    cum = np.cumsum(ratios)
+    n = len(ratios)
+    x = np.arange(1, n + 1)
+
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+    ax1.bar(x, ratios, color=CUSTOM_COLORS[0], alpha=0.7, label="Individual")
+    ax1.set_xlabel("Principal Component")
+    ax1.set_ylabel("Explained Variance Ratio")
+    ax1.set_xticks(x)
+
+    ax2 = ax1.twinx()
+    ax2.plot(x, cum, "o-", color=CUSTOM_COLORS[1], linewidth=2, label="Cumulative")
+    ax2.axhline(0.9, color="gray", linestyle="--", alpha=0.5, label="90% threshold")
+    ax2.set_ylabel("Cumulative Explained Variance")
+    ax2.set_ylim(0, 1.05)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="center right")
+
+    ax1.set_title("PCA Scree Plot", fontsize=12)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_pca_loadings(
+    pca_obj,
+    feature_names: list[str],
+    run_cfg: RunConfig,
+    *,
+    top_n: int = 15,
+    filename: str = "03_pca_loadings.png",
+) -> None:
+    """Heatmap of top features x PCA components (absolute loadings)."""
+    import seaborn as sns
+
+    components = pca_obj.components_  # (n_components, n_features)
+    abs_loadings = np.abs(components)
+    max_per_feature = abs_loadings.max(axis=0)
+    top_idx = np.argsort(max_per_feature)[::-1][:top_n]
+
+    selected_names = [feature_names[i] for i in top_idx]
+    selected_loadings = components[:, top_idx].T  # (top_n, n_components)
+
+    n_comp = components.shape[0]
+    comp_labels = [f"PC{i+1}" for i in range(n_comp)]
+
+    df = pd.DataFrame(selected_loadings, index=selected_names, columns=comp_labels)
+
+    fig, ax = plt.subplots(figsize=(max(6, n_comp + 2), max(6, top_n * 0.4)))
+    sns.heatmap(
+        df, ax=ax, annot=True, fmt=".2f", cmap="RdBu_r", center=0,
+        linewidths=0.5, cbar_kws={"label": "Loading"},
+    )
+    ax.set_title(f"PCA Loadings — Top {top_n} Features", fontsize=12)
+    ax.tick_params(axis="y", labelsize=9)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_silhouette_samples(
+    X: np.ndarray | pd.DataFrame,
+    labels: pd.Series | np.ndarray,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "03_silhouette_samples.png",
+) -> None:
+    """Per-sample silhouette width plot grouped by cluster."""
+    from sklearn.metrics import silhouette_samples, silhouette_score
+
+    X_arr = np.asarray(X)
+    labels_arr = np.asarray(labels).astype(int)
+    unique_labels = np.sort(np.unique(labels_arr))
+    n_clusters = len(unique_labels)
+
+    sil_vals = silhouette_samples(X_arr, labels_arr)
+    avg_score = silhouette_score(X_arr, labels_arr)
+
+    fig, ax = plt.subplots(figsize=(8, max(5, n_clusters * 1.5)))
+    y_lower = 0
+
+    for cid in unique_labels:
+        cluster_sil = np.sort(sil_vals[labels_arr == cid])
+        size = len(cluster_sil)
+        y_upper = y_lower + size
+        color = _regime_color(cid)
+        ax.fill_betweenx(np.arange(y_lower, y_upper), 0, cluster_sil,
+                         facecolor=color, edgecolor=color, alpha=0.7)
+        ax.text(-0.05, y_lower + 0.5 * size, f"C{cid}", fontsize=9, va="center")
+        y_lower = y_upper + 2
+
+    ax.axvline(avg_score, color="red", linestyle="--",
+               label=f"Mean = {avg_score:.3f}")
+    ax.set_xlabel("Silhouette Coefficient")
+    ax.set_ylabel("Samples (grouped by cluster)")
+    ax.set_title("Silhouette Analysis", fontsize=12)
+    ax.set_yticks([])
+    ax.legend()
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_gmm_bic_surface(
+    bic_df: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "03_gmm_bic_surface.png",
+) -> None:
+    """Heatmap of (k, covariance_type) -> BIC score from fit_gmm().
+
+    Parameters
+    ----------
+    bic_df : DataFrame
+        Must have columns 'k', 'covariance_type', 'bic'.
+    """
+    import seaborn as sns
+
+    required = {"k", "covariance_type", "bic"}
+    if not required.issubset(bic_df.columns):
+        log.warning("plot_gmm_bic_surface: missing columns %s", required - set(bic_df.columns))
+        return
+
+    pivot = bic_df.pivot_table(index="covariance_type", columns="k", values="bic")
+
+    fig, ax = plt.subplots(figsize=(max(6, len(pivot.columns) + 2), 4))
+    sns.heatmap(
+        pivot, ax=ax, annot=True, fmt=".0f", cmap="YlOrRd_r",
+        linewidths=0.5, cbar_kws={"label": "BIC (lower = better)"},
+    )
+    ax.set_title("GMM — BIC by (k, Covariance Type)", fontsize=12)
+    ax.set_xlabel("Number of Components (k)")
+    ax.set_ylabel("Covariance Type")
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_method_comparison_table(
+    comparison_df: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "03_method_comparison.png",
+) -> None:
+    """Render a clustering method comparison DataFrame as a table figure.
+
+    Parameters
+    ----------
+    comparison_df : DataFrame
+        Output of ``compare_all_methods()``. Expected columns include
+        'method', 'n_clusters', 'silhouette', 'davies_bouldin', 'calinski'.
+    """
+    if comparison_df.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(10, max(2, 0.5 * len(comparison_df) + 1)))
+    ax.axis("off")
+
+    display_df = comparison_df.copy()
+    for col in ["silhouette", "davies_bouldin", "calinski"]:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].map(lambda v: f"{v:.3f}" if pd.notna(v) else "—")
+
+    table = ax.table(
+        cellText=display_df.values,
+        colLabels=display_df.columns.tolist(),
+        loc="center",
+        cellLoc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1.0, 1.4)
+
+    # header styling
+    for j in range(len(display_df.columns)):
+        table[0, j].set_facecolor("#4472C4")
+        table[0, j].set_text_props(color="white", fontweight="bold")
+
+    # highlight best silhouette row
+    if "silhouette" in comparison_df.columns:
+        best_idx = comparison_df["silhouette"].idxmax()
+        row_pos = list(comparison_df.index).index(best_idx) + 1
+        for j in range(len(display_df.columns)):
+            table[row_pos, j].set_facecolor("#D6EAF8")
+
+    ax.set_title("Clustering Method Comparison", fontsize=13, pad=20)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+# ── Time-Series & Regime Plots (Phase A3) ─────────────────────────────────────
+
+
+def plot_soft_probabilities(
+    probs_df: pd.DataFrame,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    title: str = "Soft Regime Probabilities Over Time",
+    filename: str = "03_soft_probabilities.png",
+) -> None:
+    """Stacked area chart of GMM/HMM posterior probabilities over time.
+
+    Parameters
+    ----------
+    probs_df : DataFrame
+        Rows = quarters (DatetimeIndex), columns = regime probability columns
+        (e.g. ``gmm_prob_0``, ``hmm_prob_1``, or simply ``0, 1, 2, ...``).
+    """
+    if probs_df.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    cols = probs_df.columns.tolist()
+    labels = []
+    colors = []
+    for i, col in enumerate(cols):
+        # try to extract regime id from column name
+        try:
+            rid = int(str(col).rsplit("_", 1)[-1])
+        except ValueError:
+            rid = i
+        labels.append(regime_names.get(rid, f"Regime {rid}"))
+        colors.append(_regime_color(rid))
+
+    ax.stackplot(
+        probs_df.index, *[probs_df[c].values for c in cols],
+        labels=labels, colors=colors, alpha=0.8,
+    )
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Probability")
+    ax.set_ylim(0, 1)
+    ax.set_title(title, fontsize=12)
+    ax.legend(loc="upper left", fontsize=8, ncol=min(len(cols), 5))
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_feature_regime_overlay(
+    feature_series: pd.Series,
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    feature_name: str | None = None,
+    filename: str | None = None,
+) -> None:
+    """Time-series line plot with regime-colored background bands."""
+    common = feature_series.index.intersection(labels.index)
+    if len(common) == 0:
+        return
+
+    feat = feature_series.loc[common]
+    lab = labels.loc[common].astype(int)
+    name = feature_name or getattr(feature_series, "name", "feature") or "feature"
+
+    fig, ax = plt.subplots(figsize=(14, 4))
+
+    # draw regime background bands
+    unique_regimes = sorted(lab.unique())
+    for i in range(len(common)):
+        dt = common[i]
+        cid = lab.iloc[i]
+        # quarter width: approximate as 90 days
+        left = dt - pd.Timedelta(days=45)
+        right = dt + pd.Timedelta(days=45)
+        ax.axvspan(left, right, color=_regime_color(cid), alpha=0.15)
+
+    ax.plot(feat.index, feat.values, color="black", linewidth=1.2)
+    ax.set_title(f"{name} with Regime Overlay", fontsize=12)
+    ax.set_xlabel("Date")
+    ax.set_ylabel(name)
+    ax.grid(alpha=0.3)
+
+    # legend for regimes
+    from matplotlib.patches import Patch
+    handles = [Patch(facecolor=_regime_color(r), alpha=0.4,
+                     label=regime_names.get(r, f"R{r}")) for r in unique_regimes]
+    ax.legend(handles=handles, loc="upper left", fontsize=8, ncol=min(len(unique_regimes), 5))
+
+    fig.tight_layout()
+    fname = filename or f"04_feature_overlay_{name}.png"
+    _save_or_show(fig, fname, run_cfg)
+
+
+def plot_forward_prob_evolution(
+    forward_probs: dict[int, pd.DataFrame],
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "04_forward_prob_evolution.png",
+) -> None:
+    """Heatmap: regime x horizon showing P(transition) over 1Q/2Q/4Q/8Q.
+
+    Parameters
+    ----------
+    forward_probs : dict
+        ``{horizon: DataFrame}`` where each DataFrame has shape (n_regimes, n_regimes),
+        rows = source regime, columns = target regime.  From ``compute_forward_probabilities()``.
+    """
+    import seaborn as sns
+
+    if not forward_probs:
+        return
+
+    horizons = sorted(forward_probs.keys())
+    n_h = len(horizons)
+    fig, axes = plt.subplots(1, n_h, figsize=(5 * n_h, 4), squeeze=False)
+
+    for i, h in enumerate(horizons):
+        ax = axes[0][i]
+        df = forward_probs[h]
+        row_labels = [regime_names.get(r, f"R{r}") for r in df.index]
+        col_labels = [regime_names.get(c, f"R{c}") for c in df.columns]
+        sns.heatmap(
+            df.values, ax=ax, annot=True, fmt=".2f", cmap="YlOrRd",
+            vmin=0, vmax=1, xticklabels=col_labels, yticklabels=row_labels,
+            linewidths=0.5, cbar=i == n_h - 1,
+        )
+        ax.set_title(f"{h}Q Forward", fontsize=10)
+        ax.set_xlabel("Target Regime")
+        if i == 0:
+            ax.set_ylabel("Current Regime")
+
+    fig.suptitle("Forward Transition Probabilities by Horizon", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_gap_fill_before_after(
+    raw_series: pd.Series,
+    filled_series: pd.Series,
+    run_cfg: RunConfig,
+    *,
+    series_name: str | None = None,
+    filename: str | None = None,
+) -> None:
+    """Overlay of raw (with gaps) vs filled series, gaps highlighted."""
+    name = series_name or getattr(raw_series, "name", "series") or "series"
+
+    fig, ax = plt.subplots(figsize=(14, 4))
+
+    # identify gap locations (NaN in raw, filled in result)
+    gap_mask = raw_series.isna() & filled_series.notna()
+
+    ax.plot(raw_series.index, raw_series.values, "o-", color=CUSTOM_COLORS[0],
+            markersize=3, linewidth=1, label="Raw (with gaps)", alpha=0.7)
+    ax.plot(filled_series.index, filled_series.values, "-", color=CUSTOM_COLORS[1],
+            linewidth=1.5, label="After gap fill", alpha=0.8)
+
+    # highlight filled gaps
+    if gap_mask.any():
+        gap_vals = filled_series[gap_mask]
+        ax.scatter(gap_vals.index, gap_vals.values, color=CUSTOM_COLORS[2],
+                   s=25, zorder=5, label="Filled gaps", edgecolors="black", linewidths=0.5)
+
+    ax.set_title(f"Gap Fill: {name}", fontsize=12)
+    ax.set_xlabel("Date")
+    ax.set_ylabel(name)
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fname = filename or f"02_gap_fill_{name}.png"
+    _save_or_show(fig, fname, run_cfg)
+
+
+def plot_regime_colored_pca_3d(
+    pca_df: pd.DataFrame,
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "03_pca_3d.png",
+) -> None:
+    """3D scatter of PC1 x PC2 x PC3 with regime colors."""
+    cols = [c for c in pca_df.columns if c.startswith("PC")]
+    if len(cols) < 3:
+        log.warning("plot_regime_colored_pca_3d: need >= 3 PC columns, got %d", len(cols))
+        return
+
+    common = pca_df.index.intersection(labels.index)
+    pca = pca_df.loc[common]
+    lab = labels.loc[common].astype(int)
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    unique_regimes = sorted(lab.unique())
+    for cid in unique_regimes:
+        mask = lab == cid
+        subset = pca.loc[mask]
+        ax.scatter(
+            subset[cols[0]], subset[cols[1]], subset[cols[2]],
+            c=_regime_color(cid), label=regime_names.get(cid, f"R{cid}"),
+            s=20, alpha=0.7,
+        )
+
+    ax.set_xlabel(cols[0])
+    ax.set_ylabel(cols[1])
+    ax.set_zlabel(cols[2])
+    ax.set_title("PCA 3D — Regime Clustering", fontsize=12)
+    ax.legend(fontsize=8, loc="upper left")
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+# ── Specialty Diagnostic Plots (Phase A4) ─────────────────────────────────────
+
+
+def plot_rrg_scatter(
+    rrg_df: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "08_rrg_scatter.png",
+) -> None:
+    """RRG 4-quadrant scatter plot with asset labels.
+
+    Parameters
+    ----------
+    rrg_df : DataFrame
+        Must have columns ``rs`` (relative strength) and ``rm`` (relative momentum),
+        indexed by asset ticker. Optionally ``quadrant`` for coloring.
+    """
+    required = {"rs", "rm"}
+    if not required.issubset(rrg_df.columns) or rrg_df.empty:
+        return
+
+    quad_colors = {
+        "LEADING": "#50a000", "WEAKENING": "#f48c06",
+        "LAGGING": "#d00000", "IMPROVING": "#0000d0",
+    }
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # draw quadrant background
+    ax.axhline(100, color="gray", linewidth=0.8, linestyle="--")
+    ax.axvline(100, color="gray", linewidth=0.8, linestyle="--")
+    ax.text(101, 101, "LEADING", fontsize=8, color="#50a000", alpha=0.6)
+    ax.text(99, 101, "IMPROVING", fontsize=8, color="#0000d0", alpha=0.6, ha="right")
+    ax.text(99, 99, "LAGGING", fontsize=8, color="#d00000", alpha=0.6, ha="right", va="top")
+    ax.text(101, 99, "WEAKENING", fontsize=8, color="#f48c06", alpha=0.6, va="top")
+
+    for ticker, row in rrg_df.iterrows():
+        quad = row.get("quadrant", "")
+        color = quad_colors.get(str(quad).upper(), "gray")
+        ax.scatter(row["rs"], row["rm"], c=color, s=60, zorder=5, edgecolors="black", linewidths=0.5)
+        ax.annotate(str(ticker), (row["rs"], row["rm"]),
+                    textcoords="offset points", xytext=(5, 5), fontsize=8)
+
+    ax.set_xlabel("Relative Strength (RS)")
+    ax.set_ylabel("Relative Momentum (RM)")
+    ax.set_title("Relative Rotation Graph", fontsize=12)
+    ax.grid(alpha=0.2)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_feature_importance_comparison(
+    models_dict: dict[str, object],
+    feature_names: list[str],
+    run_cfg: RunConfig,
+    *,
+    top_n: int = 20,
+    filename: str = "05_feature_importance_comparison.png",
+) -> None:
+    """Side-by-side feature importance: RF vs DT vs GB in one figure.
+
+    Parameters
+    ----------
+    models_dict : dict
+        ``{"RF": fitted_rf, "DT": fitted_dt, ...}``. Each model must have
+        ``feature_importances_`` attribute.
+    """
+    valid = {k: m for k, m in models_dict.items() if hasattr(m, "feature_importances_")}
+    if not valid:
+        return
+
+    n_models = len(valid)
+    fig, axes = plt.subplots(1, n_models, figsize=(6 * n_models, max(5, top_n * 0.3)),
+                             squeeze=False)
+
+    for i, (name, model) in enumerate(valid.items()):
+        ax = axes[0][i]
+        imp = model.feature_importances_
+        indices = np.argsort(imp)[::-1][:top_n]
+        top_names = [feature_names[j] for j in indices]
+        top_vals = imp[indices]
+
+        color = CUSTOM_COLORS[i % len(CUSTOM_COLORS)]
+        ax.barh(range(top_n), top_vals[::-1], color=color, alpha=0.8)
+        ax.set_yticks(range(top_n))
+        ax.set_yticklabels(top_names[::-1], fontsize=8)
+        ax.set_xlabel("Importance")
+        ax.set_title(f"{name} — Top {top_n}", fontsize=11)
+        ax.grid(axis="x", alpha=0.3)
+
+    fig.suptitle("Feature Importance Comparison", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_regime_duration_histogram(
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "04_regime_duration.png",
+) -> None:
+    """Histogram of consecutive quarters each regime persists."""
+    lab = labels.dropna().astype(int)
+    if lab.empty:
+        return
+
+    # compute run lengths
+    durations: dict[int, list[int]] = {}
+    current_regime = lab.iloc[0]
+    run_len = 1
+    for val in lab.iloc[1:]:
+        if val == current_regime:
+            run_len += 1
+        else:
+            durations.setdefault(current_regime, []).append(run_len)
+            current_regime = val
+            run_len = 1
+    durations.setdefault(current_regime, []).append(run_len)
+
+    unique_regimes = sorted(durations.keys())
+    n = len(unique_regimes)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 4), squeeze=False)
+
+    for i, cid in enumerate(unique_regimes):
+        ax = axes[0][i]
+        runs = durations[cid]
+        name = regime_names.get(cid, f"Regime {cid}")
+        ax.hist(runs, bins=range(1, max(runs) + 2), color=_regime_color(cid),
+                alpha=0.8, edgecolor="white", align="left")
+        ax.set_xlabel("Duration (quarters)")
+        ax.set_ylabel("Count")
+        ax.set_title(f"{name}\nMean={np.mean(runs):.1f}Q", fontsize=10)
+        ax.grid(axis="y", alpha=0.3)
+
+    fig.suptitle("Regime Duration Distribution", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_correlation_change_heatmap(
+    features: pd.DataFrame,
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    top_n: int = 15,
+    filename: str = "04_correlation_change.png",
+) -> None:
+    """Per-regime feature correlation heatmap (shows structure changes).
+
+    Selects top_n features by variance, then plots one correlation heatmap
+    per regime side-by-side.
+    """
+    import seaborn as sns
+
+    common = features.index.intersection(labels.index)
+    if len(common) < 10:
+        return
+
+    feat = features.loc[common].select_dtypes(include="number")
+    lab = labels.loc[common].astype(int)
+
+    # pick top-N by variance
+    variances = feat.var().sort_values(ascending=False)
+    top_cols = variances.head(top_n).index.tolist()
+    feat = feat[top_cols]
+
+    unique_regimes = sorted(lab.unique())
+    n = len(unique_regimes)
+    fig, axes = plt.subplots(1, n, figsize=(5 * n, max(4, top_n * 0.35)), squeeze=False)
+
+    for i, cid in enumerate(unique_regimes):
+        ax = axes[0][i]
+        subset = feat.loc[lab == cid]
+        if len(subset) < 3:
+            ax.set_title(f"{regime_names.get(cid, f'R{cid}')}\n(too few samples)")
+            continue
+        corr = subset.corr()
+        sns.heatmap(corr, ax=ax, cmap="RdBu_r", center=0, vmin=-1, vmax=1,
+                    xticklabels=False, yticklabels=(i == 0),
+                    linewidths=0.3, cbar=(i == n - 1))
+        ax.set_title(regime_names.get(cid, f"R{cid}"), fontsize=10)
+        ax.tick_params(axis="y", labelsize=7)
+
+    fig.suptitle("Feature Correlation by Regime", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_feature_variance_ranking(
+    features: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    top_n: int = 30,
+    filename: str = "02_feature_variance_ranking.png",
+) -> None:
+    """Horizontal bar chart of features ranked by variance."""
+    numeric = features.select_dtypes(include="number")
+    if numeric.empty:
+        return
+
+    variances = numeric.var().sort_values(ascending=False).head(top_n)
+
+    fig, ax = plt.subplots(figsize=(8, max(5, top_n * 0.3)))
+    colors = [CUSTOM_COLORS[0] if v > variances.median() else CUSTOM_COLORS[2]
+              for v in variances.values[::-1]]
+    ax.barh(range(len(variances)), variances.values[::-1], color=colors, alpha=0.8)
+    ax.set_yticks(range(len(variances)))
+    ax.set_yticklabels(variances.index[::-1], fontsize=8)
+    ax.set_xlabel("Variance")
+    ax.set_title(f"Feature Variance Ranking — Top {top_n}", fontsize=12)
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+# ── Feature Engineering & Selection Plots (Phase A5) ──────────────────────────
+
+
+def plot_feature_selection_curve(
+    importances: list[tuple[str, float]] | pd.Series,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "05_feature_selection_curve.png",
+) -> None:
+    """Cumulative importance vs # features — find diminishing returns.
+
+    Parameters
+    ----------
+    importances : list of (name, importance) or pd.Series
+        Feature importances sorted descending. If a Series, index=feature names.
+    """
+    if isinstance(importances, pd.Series):
+        vals = importances.sort_values(ascending=False).values
+    else:
+        if not importances:
+            return
+        vals = np.array([v for _, v in importances])
+
+    cum = np.cumsum(vals) / vals.sum()
+    x = np.arange(1, len(cum) + 1)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(x, cum, "o-", color=CUSTOM_COLORS[0], markersize=3, linewidth=1.5)
+    ax.axhline(0.9, color="gray", linestyle="--", alpha=0.5, label="90% threshold")
+    ax.axhline(0.95, color="gray", linestyle=":", alpha=0.4, label="95% threshold")
+
+    # mark where 90% is reached
+    idx_90 = np.searchsorted(cum, 0.9)
+    if idx_90 < len(cum):
+        ax.axvline(idx_90 + 1, color=CUSTOM_COLORS[1], linestyle="--", alpha=0.6)
+        ax.text(idx_90 + 1.5, 0.85, f"{idx_90 + 1} features\nfor 90%",
+                fontsize=9, color=CUSTOM_COLORS[1])
+
+    ax.set_xlabel("Number of Features")
+    ax.set_ylabel("Cumulative Importance (fraction)")
+    ax.set_title("Feature Selection — Cumulative Importance", fontsize=12)
+    ax.set_ylim(0, 1.05)
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_divergence_timeseries(
+    div_features: pd.DataFrame,
+    labels: pd.Series,
+    run_cfg: RunConfig,
+    *,
+    cols: list[str] | None = None,
+    filename: str = "02_divergence_timeseries.png",
+) -> None:
+    """Z-score divergence features over time with regime-transition markers.
+
+    Parameters
+    ----------
+    div_features : DataFrame
+        Must contain z-score divergence columns (e.g. ``div_spy_tlt_z_4q``).
+    labels : Series
+        Regime labels for detecting transitions.
+    cols : list[str], optional
+        Columns to plot. If None, auto-detect columns containing ``_z_``.
+    """
+    if cols is None:
+        cols = [c for c in div_features.columns if "_z_" in c]
+    cols = [c for c in cols if c in div_features.columns]
+    if not cols:
+        return
+
+    common = div_features.index.intersection(labels.index)
+    div = div_features.loc[common, cols]
+    lab = labels.loc[common].astype(int)
+
+    # find transition points
+    transitions = lab.index[lab.diff().fillna(0) != 0]
+
+    n = len(cols)
+    fig, axes = plt.subplots(n, 1, figsize=(14, 3 * n), sharex=True, squeeze=False)
+
+    for i, col in enumerate(cols):
+        ax = axes[i][0]
+        ax.plot(div.index, div[col].values, color=CUSTOM_COLORS[0], linewidth=1)
+        ax.axhline(0, color="gray", linewidth=0.5)
+        ax.axhline(2, color=CUSTOM_COLORS[1], linestyle="--", alpha=0.5, linewidth=0.8)
+        ax.axhline(-2, color=CUSTOM_COLORS[1], linestyle="--", alpha=0.5, linewidth=0.8)
+        for t in transitions:
+            ax.axvline(t, color=CUSTOM_COLORS[3], alpha=0.3, linewidth=0.8)
+        ax.set_ylabel(col, fontsize=8)
+        ax.grid(alpha=0.2)
+
+    axes[0][0].set_title("Divergence Z-Scores with Regime Transitions", fontsize=12)
+    axes[-1][0].set_xlabel("Date")
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_momentum_dashboard(
+    momentum_features: pd.DataFrame,
+    labels: pd.Series,
+    run_cfg: RunConfig,
+    *,
+    cols: list[str] | None = None,
+    filename: str = "02_momentum_dashboard.png",
+) -> None:
+    """Grid of trailing momentum + relative strength for key series.
+
+    Parameters
+    ----------
+    momentum_features : DataFrame
+        Must contain momentum columns (e.g. ``sp500_mom_4q``).
+    cols : list[str], optional
+        Columns to plot. If None, auto-detect columns containing ``_mom_`` or ``_rs_``.
+    """
+    if cols is None:
+        cols = [c for c in momentum_features.columns
+                if "_mom_" in c or "_rs_" in c or "acceleration" in c]
+    cols = [c for c in cols if c in momentum_features.columns]
+    if not cols:
+        return
+
+    common = momentum_features.index.intersection(labels.index)
+    mom = momentum_features.loc[common, cols]
+    lab = labels.loc[common].astype(int)
+
+    n = len(cols)
+    ncols_grid = min(3, n)
+    nrows = (n + ncols_grid - 1) // ncols_grid
+    fig, axes = plt.subplots(nrows, ncols_grid, figsize=(5 * ncols_grid, 3.5 * nrows),
+                             squeeze=False)
+
+    for i, col in enumerate(cols):
+        ax = axes[i // ncols_grid][i % ncols_grid]
+        for cid in sorted(lab.unique()):
+            mask = lab == cid
+            ax.scatter(mom.index[mask], mom.loc[mask, col],
+                       c=_regime_color(cid), s=10, alpha=0.6)
+        ax.plot(mom.index, mom[col].values, color="black", linewidth=0.7, alpha=0.5)
+        ax.axhline(0, color="gray", linewidth=0.5)
+        ax.set_title(col, fontsize=9)
+        ax.grid(alpha=0.2)
+        ax.tick_params(labelsize=7)
+
+    for i in range(n, nrows * ncols_grid):
+        axes[i // ncols_grid][i % ncols_grid].set_visible(False)
+
+    fig.suptitle("Momentum & Relative Strength Dashboard", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_nan_heatmap(
+    df: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "01_nan_heatmap.png",
+) -> None:
+    """Binary heatmap: which cells are NaN (data coverage map)."""
+    if df.empty:
+        return
+
+    nan_matrix = df.isna().astype(int)
+
+    fig, ax = plt.subplots(figsize=(max(8, len(df.columns) * 0.25), max(4, len(df) * 0.04)))
+    ax.imshow(nan_matrix.values, aspect="auto", cmap="Reds", interpolation="nearest",
+              vmin=0, vmax=1)
+    ax.set_xlabel("Features")
+    ax.set_ylabel("Quarter")
+
+    # x-axis labels
+    if len(df.columns) <= 40:
+        ax.set_xticks(range(len(df.columns)))
+        ax.set_xticklabels(df.columns, rotation=90, fontsize=6)
+    else:
+        ax.set_xticks([])
+
+    # y-axis: show decade markers
+    if hasattr(df.index, "year"):
+        years = df.index.year
+        decade_idx = [i for i in range(len(years)) if years[i] % 10 == 0 and
+                      (i == 0 or years[i] != years[i - 1])]
+        ax.set_yticks(decade_idx)
+        ax.set_yticklabels([str(years[i]) for i in decade_idx], fontsize=8)
+
+    ax.set_title("NaN Heatmap (red = missing)", fontsize=12)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_centered_vs_causal_comparison(
+    features_centered: pd.DataFrame,
+    features_causal: pd.DataFrame,
+    cols: list[str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "02_centered_vs_causal.png",
+) -> None:
+    """Side-by-side: centered vs causal for same features (shows look-ahead effect)."""
+    cols = [c for c in cols if c in features_centered.columns and c in features_causal.columns]
+    if not cols:
+        return
+
+    n = len(cols)
+    fig, axes = plt.subplots(n, 1, figsize=(14, 3 * n), sharex=True, squeeze=False)
+
+    for i, col in enumerate(cols):
+        ax = axes[i][0]
+        ax.plot(features_centered.index, features_centered[col].values,
+                color=CUSTOM_COLORS[0], linewidth=1, label="Centered", alpha=0.8)
+        ax.plot(features_causal.index, features_causal[col].values,
+                color=CUSTOM_COLORS[1], linewidth=1, label="Causal", alpha=0.8)
+        ax.set_ylabel(col, fontsize=8)
+        ax.legend(fontsize=7, loc="upper right")
+        ax.grid(alpha=0.2)
+
+    axes[0][0].set_title("Centered vs Causal Feature Comparison", fontsize=12)
+    axes[-1][0].set_xlabel("Date")
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)

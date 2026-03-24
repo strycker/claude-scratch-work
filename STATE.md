@@ -164,6 +164,40 @@ Former gaps (`reporting.py`, `plotting.py`, `runtime.py`) are fully covered.
 
 ---
 
+## Monitoring & Notebook Gaps
+
+See `MONITORING_EXPANSION_PLAN.md` for the full phased plan (85 items, 17 phases).
+
+| Gap | Category |
+|-----|----------|
+| No decision tree visualization in step 5 | Plot |
+| No CV fold-by-fold accuracy chart | Plot |
+| No PCA loadings or scree plot in step 3 | Plot |
+| No soft probability (GMM/HMM) time-series plot | Plot |
+| No silhouette per-sample plot | Plot |
+| No calibration/reliability diagram | Plot |
+| No RRG scatter plot in step 8 | Plot |
+| No gap-fill before/after overlay in step 2 | Plot |
+| Notebooks regenerate all plots instead of loading PNGs | Infrastructure |
+| Email has no plot attachments | Infrastructure |
+| Pipeline steps lack validation summaries between steps | Monitoring |
+| No model comparison bar chart (RF vs DT vs GB) | Plot |
+| No regime-colored feature overlay time-series | Plot |
+| No diagnostics notebook (09) | Notebook |
+| No model comparison notebook (10) | Notebook |
+| No feature selection workbench notebook (11) | Notebook |
+| No divergence/momentum workbench notebook (12) | Notebook |
+| No learning curve plot (overfitting detection) | Plot |
+| No regime duration histogram | Plot |
+| No per-regime correlation change heatmap | Plot |
+| No feature selection cumulative importance curve | Plot |
+| No divergence time-series with transition markers | Plot |
+| No pipeline step timing summary | Monitoring |
+| No pipeline health summary at end of run | Monitoring |
+| No per-fold class distribution check | Monitoring |
+
+---
+
 ## Known Gaps (Not Yet Implemented)
 
 ### Priority 1 (implement next)
