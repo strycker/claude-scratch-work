@@ -798,3 +798,234 @@ def plot_asset_return_distributions(
     ax.grid(alpha=0.3)
     fig.tight_layout()
     _save_or_show(fig, f"06_returns_dist_{ticker}.png", run_cfg)
+
+
+# ── Model Evaluation Plots (Phase A1) ────────────────────────────────────────
+
+
+def plot_decision_tree(
+    tree,
+    feature_names: list[str],
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    max_depth: int | None = 4,
+    filename: str = "05_decision_tree.png",
+) -> None:
+    """Render a sklearn DecisionTreeClassifier as a readable tree diagram."""
+    from sklearn.tree import plot_tree
+
+    class_names = [regime_names.get(i, f"R{i}") for i in sorted(regime_names)]
+    depth = min(max_depth, tree.get_depth()) if max_depth else tree.get_depth()
+    fig_h = max(6, 2 * depth)
+    fig_w = max(14, 3 * (2 ** min(depth, 4)))
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    plot_tree(
+        tree,
+        feature_names=feature_names,
+        class_names=class_names,
+        filled=True,
+        rounded=True,
+        max_depth=max_depth,
+        fontsize=8,
+        ax=ax,
+    )
+    ax.set_title("Decision Tree — Regime Classification", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_cv_fold_accuracy(
+    fold_accuracies: list[float],
+    run_cfg: RunConfig,
+    *,
+    model_name: str = "RF",
+    filename: str = "05_cv_fold_accuracy.png",
+) -> None:
+    """Bar chart of per-fold accuracy from TimeSeriesSplit."""
+    n = len(fold_accuracies)
+    if n == 0:
+        return
+    mean_acc = np.mean(fold_accuracies)
+    fig, ax = plt.subplots(figsize=(8, 4))
+    bars = ax.bar(range(1, n + 1), fold_accuracies, color=CUSTOM_COLORS[0], alpha=0.8)
+    ax.axhline(mean_acc, color="red", linestyle="--", linewidth=1.5,
+               label=f"Mean = {mean_acc:.1%}")
+    for bar, acc in zip(bars, fold_accuracies):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+                f"{acc:.1%}", ha="center", va="bottom", fontsize=9)
+    ax.set_xlabel("Fold")
+    ax.set_ylabel("Accuracy")
+    ax.set_title(f"{model_name} — TimeSeriesSplit CV Accuracy per Fold", fontsize=12)
+    ax.set_ylim(0, min(1.05, max(fold_accuracies) + 0.15))
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_model_comparison_bar(
+    metrics: dict[str, dict[str, float]],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "05_model_comparison.png",
+) -> None:
+    """Grouped bar chart comparing models (RF, DT, GB) on accuracy/F1.
+
+    Parameters
+    ----------
+    metrics : dict
+        ``{"RF": {"accuracy": 0.7, "f1": 0.65}, "DT": {...}, ...}``
+    """
+    if not metrics:
+        return
+    model_names = list(metrics.keys())
+    metric_names = list(next(iter(metrics.values())).keys())
+    n_models = len(model_names)
+    n_metrics = len(metric_names)
+    x = np.arange(n_metrics)
+    width = 0.8 / n_models
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for i, model in enumerate(model_names):
+        vals = [metrics[model].get(m, 0) for m in metric_names]
+        color = CUSTOM_COLORS[i % len(CUSTOM_COLORS)]
+        bars = ax.bar(x + i * width, vals, width, label=model, color=color, alpha=0.85)
+        for bar, v in zip(bars, vals):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+                    f"{v:.2f}", ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks(x + width * (n_models - 1) / 2)
+    ax.set_xticklabels(metric_names)
+    ax.set_ylabel("Score")
+    ax.set_title("Model Comparison", fontsize=12)
+    ax.set_ylim(0, 1.15)
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_calibration_curve(
+    y_true: pd.Series | np.ndarray,
+    y_proba: np.ndarray,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    n_bins: int = 8,
+    filename: str = "05_calibration_curve.png",
+) -> None:
+    """Reliability diagram: predicted probability vs actual frequency per regime.
+
+    Parameters
+    ----------
+    y_true : array-like of int
+        True regime labels.
+    y_proba : ndarray, shape (n_samples, n_classes)
+        Predicted probabilities (e.g. from ``model.predict_proba(X)``).
+    """
+    y_true = np.asarray(y_true)
+    classes = sorted(set(y_true))
+    n_classes = len(classes)
+    cols = min(3, n_classes)
+    rows = (n_classes + cols - 1) // cols
+    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 4 * rows), squeeze=False)
+
+    for idx, cls in enumerate(classes):
+        ax = axes[idx // cols][idx % cols]
+        probs = y_proba[:, idx] if y_proba.shape[1] > idx else np.zeros(len(y_true))
+        binary = (y_true == cls).astype(int)
+
+        # bin predictions
+        bin_edges = np.linspace(0, 1, n_bins + 1)
+        bin_centers = []
+        bin_freqs = []
+        for lo, hi in zip(bin_edges[:-1], bin_edges[1:]):
+            mask = (probs >= lo) & (probs < hi)
+            if mask.sum() == 0:
+                continue
+            bin_centers.append((lo + hi) / 2)
+            bin_freqs.append(binary[mask].mean())
+
+        name = regime_names.get(cls, f"Regime {cls}")
+        ax.plot([0, 1], [0, 1], "k--", alpha=0.4, label="Perfect")
+        ax.plot(bin_centers, bin_freqs, "o-", color=_regime_color(cls), label=name)
+        ax.set_xlabel("Mean predicted probability")
+        ax.set_ylabel("Observed frequency")
+        ax.set_title(name, fontsize=10)
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_ylim(-0.02, 1.02)
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3)
+
+    # hide unused axes
+    for idx in range(n_classes, rows * cols):
+        axes[idx // cols][idx % cols].set_visible(False)
+
+    fig.suptitle("Calibration Curves (Reliability Diagram)", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_learning_curve(
+    model,
+    X: pd.DataFrame | np.ndarray,
+    y: pd.Series | np.ndarray,
+    run_cfg: RunConfig,
+    *,
+    cv: int = 5,
+    n_points: int = 8,
+    filename: str = "05_learning_curve.png",
+) -> None:
+    """Train/test score vs training set size — detects overfitting.
+
+    Uses TimeSeriesSplit to respect temporal ordering.
+    """
+    from sklearn.model_selection import TimeSeriesSplit
+
+    X_arr = np.asarray(X)
+    y_arr = np.asarray(y)
+    n_total = len(X_arr)
+
+    # generate increasing training sizes
+    min_train = max(cv * 2, 10)
+    sizes = np.linspace(min_train, n_total, n_points, dtype=int)
+    sizes = np.unique(sizes)
+
+    train_scores = []
+    test_scores = []
+    actual_sizes = []
+
+    for size in sizes:
+        X_sub, y_sub = X_arr[:size], y_arr[:size]
+        if len(np.unique(y_sub)) < 2:
+            continue
+        tscv = TimeSeriesSplit(n_splits=min(cv, size // 3))
+        fold_train, fold_test = [], []
+        for tr_idx, te_idx in tscv.split(X_sub):
+            if len(np.unique(y_sub[tr_idx])) < 2:
+                continue
+            m = model.__class__(**model.get_params())
+            m.fit(X_sub[tr_idx], y_sub[tr_idx])
+            fold_train.append(m.score(X_sub[tr_idx], y_sub[tr_idx]))
+            fold_test.append(m.score(X_sub[te_idx], y_sub[te_idx]))
+        if fold_train and fold_test:
+            train_scores.append(np.mean(fold_train))
+            test_scores.append(np.mean(fold_test))
+            actual_sizes.append(size)
+
+    if not actual_sizes:
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(actual_sizes, train_scores, "o-", color=CUSTOM_COLORS[0], label="Train")
+    ax.plot(actual_sizes, test_scores, "o-", color=CUSTOM_COLORS[1], label="Test (CV)")
+    ax.fill_between(actual_sizes, train_scores, test_scores, alpha=0.1, color="gray")
+    ax.set_xlabel("Training set size (quarters)")
+    ax.set_ylabel("Accuracy")
+    ax.set_title("Learning Curve — Overfitting Detection", fontsize=12)
+    ax.set_ylim(0, 1.05)
+    ax.legend()
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)

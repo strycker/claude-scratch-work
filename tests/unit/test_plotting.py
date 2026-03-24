@@ -224,6 +224,64 @@ class TestPlotAssetHeatmap:
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
+# ── Phase A1: Model Evaluation Plots ─────────────────────────────────────────
+
+class TestPlotDecisionTree:
+    def test_does_not_crash(self, regime_names, run_cfg, tmp_path):
+        from sklearn.tree import DecisionTreeClassifier
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((40, 5))
+        y = np.array([i % 3 for i in range(40)])
+        tree = DecisionTreeClassifier(max_depth=3, random_state=42).fit(X, y)
+        features = [f"feat_{i}" for i in range(5)]
+        plotting.plot_decision_tree(tree, features, regime_names, run_cfg)
+        assert (tmp_path / "05_decision_tree.png").exists()
+
+
+class TestPlotCvFoldAccuracy:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        plotting.plot_cv_fold_accuracy([0.6, 0.7, 0.55, 0.65, 0.72], run_cfg)
+        assert (tmp_path / "05_cv_fold_accuracy.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_cv_fold_accuracy([], run_cfg)
+
+
+class TestPlotModelComparisonBar:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        metrics = {
+            "RF": {"accuracy": 0.72, "f1": 0.68},
+            "DT": {"accuracy": 0.58, "f1": 0.55},
+        }
+        plotting.plot_model_comparison_bar(metrics, run_cfg)
+        assert (tmp_path / "05_model_comparison.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_model_comparison_bar({}, run_cfg)
+
+
+class TestPlotCalibrationCurve:
+    def test_does_not_crash(self, regime_names, run_cfg, tmp_path):
+        rng = np.random.default_rng(42)
+        y_true = np.array([i % 3 for i in range(60)])
+        y_proba = rng.dirichlet([1, 1, 1], size=60)
+        plotting.plot_calibration_curve(y_true, y_proba, regime_names, run_cfg)
+        assert (tmp_path / "05_calibration_curve.png").exists()
+
+
+class TestPlotLearningCurve:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        from sklearn.tree import DecisionTreeClassifier
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((60, 5))
+        y = np.array([i % 3 for i in range(60)])
+        model = DecisionTreeClassifier(max_depth=3, random_state=42).fit(X, y)
+        plotting.plot_learning_curve(model, X, y, run_cfg, cv=3, n_points=4)
+        assert (tmp_path / "05_learning_curve.png").exists()
+
+
+# ── Constants ────────────────────────────────────────────────────────────────
+
 class TestConstants:
     def test_custom_colors_count(self):
         assert len(plotting.CUSTOM_COLORS) == 5
