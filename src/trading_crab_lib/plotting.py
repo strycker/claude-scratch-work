@@ -1446,3 +1446,220 @@ def plot_regime_colored_pca_3d(
     ax.legend(fontsize=8, loc="upper left")
     fig.tight_layout()
     _save_or_show(fig, filename, run_cfg)
+
+
+# ── Specialty Diagnostic Plots (Phase A4) ─────────────────────────────────────
+
+
+def plot_rrg_scatter(
+    rrg_df: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "08_rrg_scatter.png",
+) -> None:
+    """RRG 4-quadrant scatter plot with asset labels.
+
+    Parameters
+    ----------
+    rrg_df : DataFrame
+        Must have columns ``rs`` (relative strength) and ``rm`` (relative momentum),
+        indexed by asset ticker. Optionally ``quadrant`` for coloring.
+    """
+    required = {"rs", "rm"}
+    if not required.issubset(rrg_df.columns) or rrg_df.empty:
+        return
+
+    quad_colors = {
+        "LEADING": "#50a000", "WEAKENING": "#f48c06",
+        "LAGGING": "#d00000", "IMPROVING": "#0000d0",
+    }
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # draw quadrant background
+    ax.axhline(100, color="gray", linewidth=0.8, linestyle="--")
+    ax.axvline(100, color="gray", linewidth=0.8, linestyle="--")
+    ax.text(101, 101, "LEADING", fontsize=8, color="#50a000", alpha=0.6)
+    ax.text(99, 101, "IMPROVING", fontsize=8, color="#0000d0", alpha=0.6, ha="right")
+    ax.text(99, 99, "LAGGING", fontsize=8, color="#d00000", alpha=0.6, ha="right", va="top")
+    ax.text(101, 99, "WEAKENING", fontsize=8, color="#f48c06", alpha=0.6, va="top")
+
+    for ticker, row in rrg_df.iterrows():
+        quad = row.get("quadrant", "")
+        color = quad_colors.get(str(quad).upper(), "gray")
+        ax.scatter(row["rs"], row["rm"], c=color, s=60, zorder=5, edgecolors="black", linewidths=0.5)
+        ax.annotate(str(ticker), (row["rs"], row["rm"]),
+                    textcoords="offset points", xytext=(5, 5), fontsize=8)
+
+    ax.set_xlabel("Relative Strength (RS)")
+    ax.set_ylabel("Relative Momentum (RM)")
+    ax.set_title("Relative Rotation Graph", fontsize=12)
+    ax.grid(alpha=0.2)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_feature_importance_comparison(
+    models_dict: dict[str, object],
+    feature_names: list[str],
+    run_cfg: RunConfig,
+    *,
+    top_n: int = 20,
+    filename: str = "05_feature_importance_comparison.png",
+) -> None:
+    """Side-by-side feature importance: RF vs DT vs GB in one figure.
+
+    Parameters
+    ----------
+    models_dict : dict
+        ``{"RF": fitted_rf, "DT": fitted_dt, ...}``. Each model must have
+        ``feature_importances_`` attribute.
+    """
+    valid = {k: m for k, m in models_dict.items() if hasattr(m, "feature_importances_")}
+    if not valid:
+        return
+
+    n_models = len(valid)
+    fig, axes = plt.subplots(1, n_models, figsize=(6 * n_models, max(5, top_n * 0.3)),
+                             squeeze=False)
+
+    for i, (name, model) in enumerate(valid.items()):
+        ax = axes[0][i]
+        imp = model.feature_importances_
+        indices = np.argsort(imp)[::-1][:top_n]
+        top_names = [feature_names[j] for j in indices]
+        top_vals = imp[indices]
+
+        color = CUSTOM_COLORS[i % len(CUSTOM_COLORS)]
+        ax.barh(range(top_n), top_vals[::-1], color=color, alpha=0.8)
+        ax.set_yticks(range(top_n))
+        ax.set_yticklabels(top_names[::-1], fontsize=8)
+        ax.set_xlabel("Importance")
+        ax.set_title(f"{name} — Top {top_n}", fontsize=11)
+        ax.grid(axis="x", alpha=0.3)
+
+    fig.suptitle("Feature Importance Comparison", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_regime_duration_histogram(
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "04_regime_duration.png",
+) -> None:
+    """Histogram of consecutive quarters each regime persists."""
+    lab = labels.dropna().astype(int)
+    if lab.empty:
+        return
+
+    # compute run lengths
+    durations: dict[int, list[int]] = {}
+    current_regime = lab.iloc[0]
+    run_len = 1
+    for val in lab.iloc[1:]:
+        if val == current_regime:
+            run_len += 1
+        else:
+            durations.setdefault(current_regime, []).append(run_len)
+            current_regime = val
+            run_len = 1
+    durations.setdefault(current_regime, []).append(run_len)
+
+    unique_regimes = sorted(durations.keys())
+    n = len(unique_regimes)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 4), squeeze=False)
+
+    for i, cid in enumerate(unique_regimes):
+        ax = axes[0][i]
+        runs = durations[cid]
+        name = regime_names.get(cid, f"Regime {cid}")
+        ax.hist(runs, bins=range(1, max(runs) + 2), color=_regime_color(cid),
+                alpha=0.8, edgecolor="white", align="left")
+        ax.set_xlabel("Duration (quarters)")
+        ax.set_ylabel("Count")
+        ax.set_title(f"{name}\nMean={np.mean(runs):.1f}Q", fontsize=10)
+        ax.grid(axis="y", alpha=0.3)
+
+    fig.suptitle("Regime Duration Distribution", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_correlation_change_heatmap(
+    features: pd.DataFrame,
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    top_n: int = 15,
+    filename: str = "04_correlation_change.png",
+) -> None:
+    """Per-regime feature correlation heatmap (shows structure changes).
+
+    Selects top_n features by variance, then plots one correlation heatmap
+    per regime side-by-side.
+    """
+    import seaborn as sns
+
+    common = features.index.intersection(labels.index)
+    if len(common) < 10:
+        return
+
+    feat = features.loc[common].select_dtypes(include="number")
+    lab = labels.loc[common].astype(int)
+
+    # pick top-N by variance
+    variances = feat.var().sort_values(ascending=False)
+    top_cols = variances.head(top_n).index.tolist()
+    feat = feat[top_cols]
+
+    unique_regimes = sorted(lab.unique())
+    n = len(unique_regimes)
+    fig, axes = plt.subplots(1, n, figsize=(5 * n, max(4, top_n * 0.35)), squeeze=False)
+
+    for i, cid in enumerate(unique_regimes):
+        ax = axes[0][i]
+        subset = feat.loc[lab == cid]
+        if len(subset) < 3:
+            ax.set_title(f"{regime_names.get(cid, f'R{cid}')}\n(too few samples)")
+            continue
+        corr = subset.corr()
+        sns.heatmap(corr, ax=ax, cmap="RdBu_r", center=0, vmin=-1, vmax=1,
+                    xticklabels=False, yticklabels=(i == 0),
+                    linewidths=0.3, cbar=(i == n - 1))
+        ax.set_title(regime_names.get(cid, f"R{cid}"), fontsize=10)
+        ax.tick_params(axis="y", labelsize=7)
+
+    fig.suptitle("Feature Correlation by Regime", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_feature_variance_ranking(
+    features: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    top_n: int = 30,
+    filename: str = "02_feature_variance_ranking.png",
+) -> None:
+    """Horizontal bar chart of features ranked by variance."""
+    numeric = features.select_dtypes(include="number")
+    if numeric.empty:
+        return
+
+    variances = numeric.var().sort_values(ascending=False).head(top_n)
+
+    fig, ax = plt.subplots(figsize=(8, max(5, top_n * 0.3)))
+    colors = [CUSTOM_COLORS[0] if v > variances.median() else CUSTOM_COLORS[2]
+              for v in variances.values[::-1]]
+    ax.barh(range(len(variances)), variances.values[::-1], color=colors, alpha=0.8)
+    ax.set_yticks(range(len(variances)))
+    ax.set_yticklabels(variances.index[::-1], fontsize=8)
+    ax.set_xlabel("Variance")
+    ax.set_title(f"Feature Variance Ranking — Top {top_n}", fontsize=12)
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)

@@ -283,6 +283,70 @@ class TestPlotRegimeColoredPca3d:
         plotting.plot_regime_colored_pca_3d(df, labels, regime_names, run_cfg)
 
 
+# ── Phase A4: Specialty Diagnostic Plots ─────────────────────────────────────
+
+class TestPlotRrgScatter:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        rrg_df = pd.DataFrame({
+            "rs": [102, 98, 95, 105],
+            "rm": [101, 103, 97, 96],
+            "quadrant": ["LEADING", "IMPROVING", "LAGGING", "WEAKENING"],
+        }, index=["SPY", "GLD", "TLT", "USO"])
+        plotting.plot_rrg_scatter(rrg_df, run_cfg)
+        assert (tmp_path / "08_rrg_scatter.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_rrg_scatter(pd.DataFrame(), run_cfg)
+
+
+class TestPlotFeatureImportanceComparison:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        from sklearn.tree import DecisionTreeClassifier
+        from sklearn.ensemble import RandomForestClassifier
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((40, 10))
+        y = np.array([i % 3 for i in range(40)])
+        rf = RandomForestClassifier(n_estimators=10, random_state=42).fit(X, y)
+        dt = DecisionTreeClassifier(max_depth=3, random_state=42).fit(X, y)
+        names = [f"feat_{i}" for i in range(10)]
+        plotting.plot_feature_importance_comparison({"RF": rf, "DT": dt}, names, run_cfg, top_n=5)
+        assert (tmp_path / "05_feature_importance_comparison.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_feature_importance_comparison({}, [], run_cfg)
+
+
+class TestPlotRegimeDurationHistogram:
+    def test_does_not_crash(self, labels, regime_names, run_cfg, tmp_path):
+        plotting.plot_regime_duration_histogram(labels, regime_names, run_cfg)
+        assert (tmp_path / "04_regime_duration.png").exists()
+
+    def test_empty_no_crash(self, regime_names, run_cfg):
+        plotting.plot_regime_duration_histogram(pd.Series(dtype=int), regime_names, run_cfg)
+
+
+class TestPlotCorrelationChangeHeatmap:
+    def test_does_not_crash(self, labels, regime_names, run_cfg, tmp_path):
+        rng = np.random.default_rng(42)
+        idx = labels.index
+        features = pd.DataFrame(rng.standard_normal((len(idx), 8)),
+                                index=idx, columns=[f"f{i}" for i in range(8)])
+        plotting.plot_correlation_change_heatmap(features, labels, regime_names, run_cfg, top_n=5)
+        assert (tmp_path / "04_correlation_change.png").exists()
+
+
+class TestPlotFeatureVarianceRanking:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        rng = np.random.default_rng(42)
+        features = pd.DataFrame(rng.standard_normal((40, 10)),
+                                columns=[f"feat_{i}" for i in range(10)])
+        plotting.plot_feature_variance_ranking(features, run_cfg, top_n=8)
+        assert (tmp_path / "02_feature_variance_ranking.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_feature_variance_ranking(pd.DataFrame(), run_cfg)
+
+
 # ── Phase A2: PCA & Clustering Plots ─────────────────────────────────────────
 
 class TestPlotScree:
