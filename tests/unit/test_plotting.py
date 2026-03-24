@@ -224,6 +224,65 @@ class TestPlotAssetHeatmap:
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
+# ── Phase A3: Time-Series & Regime Plots ─────────────────────────────────────
+
+class TestPlotSoftProbabilities:
+    def test_does_not_crash(self, regime_names, run_cfg, tmp_path):
+        idx = pd.date_range("2000-03-31", periods=20, freq="QE")
+        rng = np.random.default_rng(42)
+        probs = rng.dirichlet([1, 1, 1], size=20)
+        probs_df = pd.DataFrame(probs, index=idx, columns=["prob_0", "prob_1", "prob_2"])
+        plotting.plot_soft_probabilities(probs_df, regime_names, run_cfg)
+        assert (tmp_path / "03_soft_probabilities.png").exists()
+
+    def test_empty_no_crash(self, regime_names, run_cfg):
+        plotting.plot_soft_probabilities(pd.DataFrame(), regime_names, run_cfg)
+
+
+class TestPlotFeatureRegimeOverlay:
+    def test_does_not_crash(self, labels, regime_names, run_cfg, tmp_path):
+        idx = labels.index
+        feat = pd.Series(np.random.default_rng(42).standard_normal(len(idx)),
+                         index=idx, name="sp500")
+        plotting.plot_feature_regime_overlay(feat, labels, regime_names, run_cfg)
+        assert (tmp_path / "04_feature_overlay_sp500.png").exists()
+
+
+class TestPlotForwardProbEvolution:
+    def test_does_not_crash(self, regime_names, run_cfg, tmp_path):
+        mat = pd.DataFrame(
+            [[0.6, 0.2, 0.2], [0.1, 0.7, 0.2], [0.3, 0.2, 0.5]],
+            index=[0, 1, 2], columns=[0, 1, 2],
+        )
+        plotting.plot_forward_prob_evolution({1: mat, 4: mat}, regime_names, run_cfg)
+        assert (tmp_path / "04_forward_prob_evolution.png").exists()
+
+    def test_empty_no_crash(self, regime_names, run_cfg):
+        plotting.plot_forward_prob_evolution({}, regime_names, run_cfg)
+
+
+class TestPlotGapFillBeforeAfter:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        idx = pd.date_range("2000-03-31", periods=20, freq="QE")
+        raw = pd.Series([1, 2, np.nan, np.nan, 5, 6, 7, np.nan, 9, 10,
+                         11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+                        index=idx, name="test_col")
+        filled = raw.interpolate()
+        plotting.plot_gap_fill_before_after(raw, filled, run_cfg)
+        assert (tmp_path / "02_gap_fill_test_col.png").exists()
+
+
+class TestPlotRegimeColoredPca3d:
+    def test_does_not_crash(self, pca_df, labels, regime_names, run_cfg, tmp_path):
+        plotting.plot_regime_colored_pca_3d(pca_df, labels, regime_names, run_cfg)
+        assert (tmp_path / "03_pca_3d.png").exists()
+
+    def test_too_few_components_no_crash(self, labels, regime_names, run_cfg):
+        idx = labels.index
+        df = pd.DataFrame({"PC1": range(len(idx)), "PC2": range(len(idx))}, index=idx)
+        plotting.plot_regime_colored_pca_3d(df, labels, regime_names, run_cfg)
+
+
 # ── Phase A2: PCA & Clustering Plots ─────────────────────────────────────────
 
 class TestPlotScree:

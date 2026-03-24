@@ -1229,3 +1229,220 @@ def plot_method_comparison_table(
     ax.set_title("Clustering Method Comparison", fontsize=13, pad=20)
     fig.tight_layout()
     _save_or_show(fig, filename, run_cfg)
+
+
+# ── Time-Series & Regime Plots (Phase A3) ─────────────────────────────────────
+
+
+def plot_soft_probabilities(
+    probs_df: pd.DataFrame,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    title: str = "Soft Regime Probabilities Over Time",
+    filename: str = "03_soft_probabilities.png",
+) -> None:
+    """Stacked area chart of GMM/HMM posterior probabilities over time.
+
+    Parameters
+    ----------
+    probs_df : DataFrame
+        Rows = quarters (DatetimeIndex), columns = regime probability columns
+        (e.g. ``gmm_prob_0``, ``hmm_prob_1``, or simply ``0, 1, 2, ...``).
+    """
+    if probs_df.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    cols = probs_df.columns.tolist()
+    labels = []
+    colors = []
+    for i, col in enumerate(cols):
+        # try to extract regime id from column name
+        try:
+            rid = int(str(col).rsplit("_", 1)[-1])
+        except ValueError:
+            rid = i
+        labels.append(regime_names.get(rid, f"Regime {rid}"))
+        colors.append(_regime_color(rid))
+
+    ax.stackplot(
+        probs_df.index, *[probs_df[c].values for c in cols],
+        labels=labels, colors=colors, alpha=0.8,
+    )
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Probability")
+    ax.set_ylim(0, 1)
+    ax.set_title(title, fontsize=12)
+    ax.legend(loc="upper left", fontsize=8, ncol=min(len(cols), 5))
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_feature_regime_overlay(
+    feature_series: pd.Series,
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    feature_name: str | None = None,
+    filename: str | None = None,
+) -> None:
+    """Time-series line plot with regime-colored background bands."""
+    common = feature_series.index.intersection(labels.index)
+    if len(common) == 0:
+        return
+
+    feat = feature_series.loc[common]
+    lab = labels.loc[common].astype(int)
+    name = feature_name or getattr(feature_series, "name", "feature") or "feature"
+
+    fig, ax = plt.subplots(figsize=(14, 4))
+
+    # draw regime background bands
+    unique_regimes = sorted(lab.unique())
+    for i in range(len(common)):
+        dt = common[i]
+        cid = lab.iloc[i]
+        # quarter width: approximate as 90 days
+        left = dt - pd.Timedelta(days=45)
+        right = dt + pd.Timedelta(days=45)
+        ax.axvspan(left, right, color=_regime_color(cid), alpha=0.15)
+
+    ax.plot(feat.index, feat.values, color="black", linewidth=1.2)
+    ax.set_title(f"{name} with Regime Overlay", fontsize=12)
+    ax.set_xlabel("Date")
+    ax.set_ylabel(name)
+    ax.grid(alpha=0.3)
+
+    # legend for regimes
+    from matplotlib.patches import Patch
+    handles = [Patch(facecolor=_regime_color(r), alpha=0.4,
+                     label=regime_names.get(r, f"R{r}")) for r in unique_regimes]
+    ax.legend(handles=handles, loc="upper left", fontsize=8, ncol=min(len(unique_regimes), 5))
+
+    fig.tight_layout()
+    fname = filename or f"04_feature_overlay_{name}.png"
+    _save_or_show(fig, fname, run_cfg)
+
+
+def plot_forward_prob_evolution(
+    forward_probs: dict[int, pd.DataFrame],
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "04_forward_prob_evolution.png",
+) -> None:
+    """Heatmap: regime x horizon showing P(transition) over 1Q/2Q/4Q/8Q.
+
+    Parameters
+    ----------
+    forward_probs : dict
+        ``{horizon: DataFrame}`` where each DataFrame has shape (n_regimes, n_regimes),
+        rows = source regime, columns = target regime.  From ``compute_forward_probabilities()``.
+    """
+    import seaborn as sns
+
+    if not forward_probs:
+        return
+
+    horizons = sorted(forward_probs.keys())
+    n_h = len(horizons)
+    fig, axes = plt.subplots(1, n_h, figsize=(5 * n_h, 4), squeeze=False)
+
+    for i, h in enumerate(horizons):
+        ax = axes[0][i]
+        df = forward_probs[h]
+        row_labels = [regime_names.get(r, f"R{r}") for r in df.index]
+        col_labels = [regime_names.get(c, f"R{c}") for c in df.columns]
+        sns.heatmap(
+            df.values, ax=ax, annot=True, fmt=".2f", cmap="YlOrRd",
+            vmin=0, vmax=1, xticklabels=col_labels, yticklabels=row_labels,
+            linewidths=0.5, cbar=i == n_h - 1,
+        )
+        ax.set_title(f"{h}Q Forward", fontsize=10)
+        ax.set_xlabel("Target Regime")
+        if i == 0:
+            ax.set_ylabel("Current Regime")
+
+    fig.suptitle("Forward Transition Probabilities by Horizon", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_gap_fill_before_after(
+    raw_series: pd.Series,
+    filled_series: pd.Series,
+    run_cfg: RunConfig,
+    *,
+    series_name: str | None = None,
+    filename: str | None = None,
+) -> None:
+    """Overlay of raw (with gaps) vs filled series, gaps highlighted."""
+    name = series_name or getattr(raw_series, "name", "series") or "series"
+
+    fig, ax = plt.subplots(figsize=(14, 4))
+
+    # identify gap locations (NaN in raw, filled in result)
+    gap_mask = raw_series.isna() & filled_series.notna()
+
+    ax.plot(raw_series.index, raw_series.values, "o-", color=CUSTOM_COLORS[0],
+            markersize=3, linewidth=1, label="Raw (with gaps)", alpha=0.7)
+    ax.plot(filled_series.index, filled_series.values, "-", color=CUSTOM_COLORS[1],
+            linewidth=1.5, label="After gap fill", alpha=0.8)
+
+    # highlight filled gaps
+    if gap_mask.any():
+        gap_vals = filled_series[gap_mask]
+        ax.scatter(gap_vals.index, gap_vals.values, color=CUSTOM_COLORS[2],
+                   s=25, zorder=5, label="Filled gaps", edgecolors="black", linewidths=0.5)
+
+    ax.set_title(f"Gap Fill: {name}", fontsize=12)
+    ax.set_xlabel("Date")
+    ax.set_ylabel(name)
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fname = filename or f"02_gap_fill_{name}.png"
+    _save_or_show(fig, fname, run_cfg)
+
+
+def plot_regime_colored_pca_3d(
+    pca_df: pd.DataFrame,
+    labels: pd.Series,
+    regime_names: dict[int, str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "03_pca_3d.png",
+) -> None:
+    """3D scatter of PC1 x PC2 x PC3 with regime colors."""
+    cols = [c for c in pca_df.columns if c.startswith("PC")]
+    if len(cols) < 3:
+        log.warning("plot_regime_colored_pca_3d: need >= 3 PC columns, got %d", len(cols))
+        return
+
+    common = pca_df.index.intersection(labels.index)
+    pca = pca_df.loc[common]
+    lab = labels.loc[common].astype(int)
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    unique_regimes = sorted(lab.unique())
+    for cid in unique_regimes:
+        mask = lab == cid
+        subset = pca.loc[mask]
+        ax.scatter(
+            subset[cols[0]], subset[cols[1]], subset[cols[2]],
+            c=_regime_color(cid), label=regime_names.get(cid, f"R{cid}"),
+            s=20, alpha=0.7,
+        )
+
+    ax.set_xlabel(cols[0])
+    ax.set_ylabel(cols[1])
+    ax.set_zlabel(cols[2])
+    ax.set_title("PCA 3D — Regime Clustering", fontsize=12)
+    ax.legend(fontsize=8, loc="upper left")
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
