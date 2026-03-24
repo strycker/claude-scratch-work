@@ -347,6 +347,84 @@ class TestPlotFeatureVarianceRanking:
         plotting.plot_feature_variance_ranking(pd.DataFrame(), run_cfg)
 
 
+# ── Phase A5: Feature Engineering & Selection Plots ──────────────────────────
+
+class TestPlotFeatureSelectionCurve:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        importances = [("f1", 0.3), ("f2", 0.2), ("f3", 0.15), ("f4", 0.1),
+                       ("f5", 0.08), ("f6", 0.07), ("f7", 0.05), ("f8", 0.05)]
+        plotting.plot_feature_selection_curve(importances, run_cfg)
+        assert (tmp_path / "05_feature_selection_curve.png").exists()
+
+    def test_series_input(self, run_cfg, tmp_path):
+        s = pd.Series({"a": 0.4, "b": 0.3, "c": 0.2, "d": 0.1})
+        plotting.plot_feature_selection_curve(s, run_cfg)
+        assert (tmp_path / "05_feature_selection_curve.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_feature_selection_curve([], run_cfg)
+
+
+class TestPlotDivergenceTimeseries:
+    def test_does_not_crash(self, labels, run_cfg, tmp_path):
+        idx = labels.index
+        rng = np.random.default_rng(42)
+        div = pd.DataFrame({
+            "div_spy_tlt_z_4q": rng.standard_normal(len(idx)),
+            "div_cred_vix_z_4q": rng.standard_normal(len(idx)),
+        }, index=idx)
+        plotting.plot_divergence_timeseries(div, labels, run_cfg)
+        assert (tmp_path / "02_divergence_timeseries.png").exists()
+
+    def test_no_z_cols_no_crash(self, labels, run_cfg):
+        idx = labels.index
+        div = pd.DataFrame({"other": range(len(idx))}, index=idx)
+        plotting.plot_divergence_timeseries(div, labels, run_cfg)
+
+
+class TestPlotMomentumDashboard:
+    def test_does_not_crash(self, labels, run_cfg, tmp_path):
+        idx = labels.index
+        rng = np.random.default_rng(42)
+        mom = pd.DataFrame({
+            "sp500_mom_4q": rng.standard_normal(len(idx)),
+            "sp500_mom_8q": rng.standard_normal(len(idx)),
+        }, index=idx)
+        plotting.plot_momentum_dashboard(mom, labels, run_cfg)
+        assert (tmp_path / "02_momentum_dashboard.png").exists()
+
+
+class TestPlotNanHeatmap:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        idx = pd.date_range("2000-03-31", periods=20, freq="QE")
+        rng = np.random.default_rng(42)
+        data = rng.standard_normal((20, 5))
+        data[3:5, 1] = np.nan
+        data[10:14, 3] = np.nan
+        df = pd.DataFrame(data, index=idx, columns=[f"f{i}" for i in range(5)])
+        plotting.plot_nan_heatmap(df, run_cfg)
+        assert (tmp_path / "01_nan_heatmap.png").exists()
+
+    def test_empty_no_crash(self, run_cfg):
+        plotting.plot_nan_heatmap(pd.DataFrame(), run_cfg)
+
+
+class TestPlotCenteredVsCausalComparison:
+    def test_does_not_crash(self, run_cfg, tmp_path):
+        idx = pd.date_range("2000-03-31", periods=20, freq="QE")
+        rng = np.random.default_rng(42)
+        centered = pd.DataFrame({"f1": rng.standard_normal(20),
+                                  "f2": rng.standard_normal(20)}, index=idx)
+        causal = pd.DataFrame({"f1": rng.standard_normal(20),
+                                "f2": rng.standard_normal(20)}, index=idx)
+        plotting.plot_centered_vs_causal_comparison(centered, causal, ["f1", "f2"], run_cfg)
+        assert (tmp_path / "02_centered_vs_causal.png").exists()
+
+    def test_no_matching_cols_no_crash(self, run_cfg):
+        df = pd.DataFrame({"a": [1]})
+        plotting.plot_centered_vs_causal_comparison(df, df, ["nonexistent"], run_cfg)
+
+
 # ── Phase A2: PCA & Clustering Plots ─────────────────────────────────────────
 
 class TestPlotScree:

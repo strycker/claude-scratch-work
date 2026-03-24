@@ -1663,3 +1663,227 @@ def plot_feature_variance_ranking(
     ax.grid(axis="x", alpha=0.3)
     fig.tight_layout()
     _save_or_show(fig, filename, run_cfg)
+
+
+# ── Feature Engineering & Selection Plots (Phase A5) ──────────────────────────
+
+
+def plot_feature_selection_curve(
+    importances: list[tuple[str, float]] | pd.Series,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "05_feature_selection_curve.png",
+) -> None:
+    """Cumulative importance vs # features — find diminishing returns.
+
+    Parameters
+    ----------
+    importances : list of (name, importance) or pd.Series
+        Feature importances sorted descending. If a Series, index=feature names.
+    """
+    if isinstance(importances, pd.Series):
+        vals = importances.sort_values(ascending=False).values
+    else:
+        if not importances:
+            return
+        vals = np.array([v for _, v in importances])
+
+    cum = np.cumsum(vals) / vals.sum()
+    x = np.arange(1, len(cum) + 1)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(x, cum, "o-", color=CUSTOM_COLORS[0], markersize=3, linewidth=1.5)
+    ax.axhline(0.9, color="gray", linestyle="--", alpha=0.5, label="90% threshold")
+    ax.axhline(0.95, color="gray", linestyle=":", alpha=0.4, label="95% threshold")
+
+    # mark where 90% is reached
+    idx_90 = np.searchsorted(cum, 0.9)
+    if idx_90 < len(cum):
+        ax.axvline(idx_90 + 1, color=CUSTOM_COLORS[1], linestyle="--", alpha=0.6)
+        ax.text(idx_90 + 1.5, 0.85, f"{idx_90 + 1} features\nfor 90%",
+                fontsize=9, color=CUSTOM_COLORS[1])
+
+    ax.set_xlabel("Number of Features")
+    ax.set_ylabel("Cumulative Importance (fraction)")
+    ax.set_title("Feature Selection — Cumulative Importance", fontsize=12)
+    ax.set_ylim(0, 1.05)
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_divergence_timeseries(
+    div_features: pd.DataFrame,
+    labels: pd.Series,
+    run_cfg: RunConfig,
+    *,
+    cols: list[str] | None = None,
+    filename: str = "02_divergence_timeseries.png",
+) -> None:
+    """Z-score divergence features over time with regime-transition markers.
+
+    Parameters
+    ----------
+    div_features : DataFrame
+        Must contain z-score divergence columns (e.g. ``div_spy_tlt_z_4q``).
+    labels : Series
+        Regime labels for detecting transitions.
+    cols : list[str], optional
+        Columns to plot. If None, auto-detect columns containing ``_z_``.
+    """
+    if cols is None:
+        cols = [c for c in div_features.columns if "_z_" in c]
+    cols = [c for c in cols if c in div_features.columns]
+    if not cols:
+        return
+
+    common = div_features.index.intersection(labels.index)
+    div = div_features.loc[common, cols]
+    lab = labels.loc[common].astype(int)
+
+    # find transition points
+    transitions = lab.index[lab.diff().fillna(0) != 0]
+
+    n = len(cols)
+    fig, axes = plt.subplots(n, 1, figsize=(14, 3 * n), sharex=True, squeeze=False)
+
+    for i, col in enumerate(cols):
+        ax = axes[i][0]
+        ax.plot(div.index, div[col].values, color=CUSTOM_COLORS[0], linewidth=1)
+        ax.axhline(0, color="gray", linewidth=0.5)
+        ax.axhline(2, color=CUSTOM_COLORS[1], linestyle="--", alpha=0.5, linewidth=0.8)
+        ax.axhline(-2, color=CUSTOM_COLORS[1], linestyle="--", alpha=0.5, linewidth=0.8)
+        for t in transitions:
+            ax.axvline(t, color=CUSTOM_COLORS[3], alpha=0.3, linewidth=0.8)
+        ax.set_ylabel(col, fontsize=8)
+        ax.grid(alpha=0.2)
+
+    axes[0][0].set_title("Divergence Z-Scores with Regime Transitions", fontsize=12)
+    axes[-1][0].set_xlabel("Date")
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_momentum_dashboard(
+    momentum_features: pd.DataFrame,
+    labels: pd.Series,
+    run_cfg: RunConfig,
+    *,
+    cols: list[str] | None = None,
+    filename: str = "02_momentum_dashboard.png",
+) -> None:
+    """Grid of trailing momentum + relative strength for key series.
+
+    Parameters
+    ----------
+    momentum_features : DataFrame
+        Must contain momentum columns (e.g. ``sp500_mom_4q``).
+    cols : list[str], optional
+        Columns to plot. If None, auto-detect columns containing ``_mom_`` or ``_rs_``.
+    """
+    if cols is None:
+        cols = [c for c in momentum_features.columns
+                if "_mom_" in c or "_rs_" in c or "acceleration" in c]
+    cols = [c for c in cols if c in momentum_features.columns]
+    if not cols:
+        return
+
+    common = momentum_features.index.intersection(labels.index)
+    mom = momentum_features.loc[common, cols]
+    lab = labels.loc[common].astype(int)
+
+    n = len(cols)
+    ncols_grid = min(3, n)
+    nrows = (n + ncols_grid - 1) // ncols_grid
+    fig, axes = plt.subplots(nrows, ncols_grid, figsize=(5 * ncols_grid, 3.5 * nrows),
+                             squeeze=False)
+
+    for i, col in enumerate(cols):
+        ax = axes[i // ncols_grid][i % ncols_grid]
+        for cid in sorted(lab.unique()):
+            mask = lab == cid
+            ax.scatter(mom.index[mask], mom.loc[mask, col],
+                       c=_regime_color(cid), s=10, alpha=0.6)
+        ax.plot(mom.index, mom[col].values, color="black", linewidth=0.7, alpha=0.5)
+        ax.axhline(0, color="gray", linewidth=0.5)
+        ax.set_title(col, fontsize=9)
+        ax.grid(alpha=0.2)
+        ax.tick_params(labelsize=7)
+
+    for i in range(n, nrows * ncols_grid):
+        axes[i // ncols_grid][i % ncols_grid].set_visible(False)
+
+    fig.suptitle("Momentum & Relative Strength Dashboard", fontsize=13)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_nan_heatmap(
+    df: pd.DataFrame,
+    run_cfg: RunConfig,
+    *,
+    filename: str = "01_nan_heatmap.png",
+) -> None:
+    """Binary heatmap: which cells are NaN (data coverage map)."""
+    if df.empty:
+        return
+
+    nan_matrix = df.isna().astype(int)
+
+    fig, ax = plt.subplots(figsize=(max(8, len(df.columns) * 0.25), max(4, len(df) * 0.04)))
+    ax.imshow(nan_matrix.values, aspect="auto", cmap="Reds", interpolation="nearest",
+              vmin=0, vmax=1)
+    ax.set_xlabel("Features")
+    ax.set_ylabel("Quarter")
+
+    # x-axis labels
+    if len(df.columns) <= 40:
+        ax.set_xticks(range(len(df.columns)))
+        ax.set_xticklabels(df.columns, rotation=90, fontsize=6)
+    else:
+        ax.set_xticks([])
+
+    # y-axis: show decade markers
+    if hasattr(df.index, "year"):
+        years = df.index.year
+        decade_idx = [i for i in range(len(years)) if years[i] % 10 == 0 and
+                      (i == 0 or years[i] != years[i - 1])]
+        ax.set_yticks(decade_idx)
+        ax.set_yticklabels([str(years[i]) for i in decade_idx], fontsize=8)
+
+    ax.set_title("NaN Heatmap (red = missing)", fontsize=12)
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
+
+
+def plot_centered_vs_causal_comparison(
+    features_centered: pd.DataFrame,
+    features_causal: pd.DataFrame,
+    cols: list[str],
+    run_cfg: RunConfig,
+    *,
+    filename: str = "02_centered_vs_causal.png",
+) -> None:
+    """Side-by-side: centered vs causal for same features (shows look-ahead effect)."""
+    cols = [c for c in cols if c in features_centered.columns and c in features_causal.columns]
+    if not cols:
+        return
+
+    n = len(cols)
+    fig, axes = plt.subplots(n, 1, figsize=(14, 3 * n), sharex=True, squeeze=False)
+
+    for i, col in enumerate(cols):
+        ax = axes[i][0]
+        ax.plot(features_centered.index, features_centered[col].values,
+                color=CUSTOM_COLORS[0], linewidth=1, label="Centered", alpha=0.8)
+        ax.plot(features_causal.index, features_causal[col].values,
+                color=CUSTOM_COLORS[1], linewidth=1, label="Causal", alpha=0.8)
+        ax.set_ylabel(col, fontsize=8)
+        ax.legend(fontsize=7, loc="upper right")
+        ax.grid(alpha=0.2)
+
+    axes[0][0].set_title("Centered vs Causal Feature Comparison", fontsize=12)
+    axes[-1][0].set_xlabel("Date")
+    fig.tight_layout()
+    _save_or_show(fig, filename, run_cfg)
