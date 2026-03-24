@@ -551,3 +551,222 @@ class TestConstants:
 
     def test_regime_cmap_is_colormap(self):
         assert isinstance(plotting.REGIME_CMAP, matplotlib.colors.ListedColormap)
+
+
+# ── Plot Reuse Infrastructure ────────────────────────────────────────────────
+
+
+class TestPlotIsFresh:
+    """Tests for _plot_is_fresh() freshness check."""
+
+    def test_missing_png_returns_false(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        assert plotting._plot_is_fresh("nonexistent.png") is False
+
+    def test_existing_png_no_checkpoint_returns_true(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        (tmp_path / "test.png").write_bytes(b"PNG")
+        assert plotting._plot_is_fresh("test.png") is True
+
+    def test_existing_png_no_checkpoint_name_returns_true(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        (tmp_path / "test.png").write_bytes(b"PNG")
+        assert plotting._plot_is_fresh("test.png", checkpoint_name=None) is True
+
+    def test_png_newer_than_checkpoint_is_fresh(self, tmp_path, monkeypatch):
+        import json, time
+        from datetime import datetime, timedelta
+
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        ckpt_dir = tmp_path / "checkpoints"
+        ckpt_dir.mkdir()
+        monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
+
+        # Create checkpoint meta with a timestamp in the past
+        meta = {"created": (datetime.now() - timedelta(hours=2)).isoformat()}
+        (ckpt_dir / "features.meta.json").write_text(json.dumps(meta))
+
+        # Create PNG (mtime = now, which is after checkpoint)
+        (tmp_path / "test.png").write_bytes(b"PNG")
+
+        assert plotting._plot_is_fresh("test.png", checkpoint_name="features") is True
+
+    def test_png_older_than_checkpoint_is_stale(self, tmp_path, monkeypatch):
+        import json, os, time
+        from datetime import datetime, timedelta
+
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        ckpt_dir = tmp_path / "checkpoints"
+        ckpt_dir.mkdir()
+        monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
+
+        # Create PNG with old mtime
+        png = tmp_path / "test.png"
+        png.write_bytes(b"PNG")
+        old_time = time.time() - 7200  # 2 hours ago
+        os.utime(png, (old_time, old_time))
+
+        # Create checkpoint meta with a recent timestamp
+        meta = {"created": datetime.now().isoformat()}
+        (ckpt_dir / "features.meta.json").write_text(json.dumps(meta))
+
+        assert plotting._plot_is_fresh("test.png", checkpoint_name="features") is False
+
+    def test_missing_checkpoint_meta_treated_as_fresh(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        ckpt_dir = tmp_path / "checkpoints"
+        ckpt_dir.mkdir()
+        monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
+
+        (tmp_path / "test.png").write_bytes(b"PNG")
+        # No meta.json file exists
+        assert plotting._plot_is_fresh("test.png", checkpoint_name="features") is True
+
+    def test_corrupt_checkpoint_meta_treated_as_fresh(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        ckpt_dir = tmp_path / "checkpoints"
+        ckpt_dir.mkdir()
+        monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
+
+        (tmp_path / "test.png").write_bytes(b"PNG")
+        (ckpt_dir / "features.meta.json").write_text("not valid json{{{")
+
+        assert plotting._plot_is_fresh("test.png", checkpoint_name="features") is True
+
+
+class TestLoadOrGenerate:
+    """Tests for load_or_generate() plot caching."""
+
+    def _dummy_plot(self, run_cfg, *, filename="dummy.png"):
+        """Minimal plot function matching the standard signature."""
+        fig, ax = plt.subplots()
+        ax.plot([1, 2, 3], [1, 2, 3])
+        plotting._save_or_show(fig, filename, run_cfg)
+
+    def test_regenerates_when_no_cached_png(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        cfg = RunConfig(save_plots=True, show_plots=False)
+
+        plotting.load_or_generate(
+            self._dummy_plot,
+            filename="dummy.png",
+            run_cfg=cfg,
+        )
+        assert (tmp_path / "dummy.png").exists()
+
+    def test_uses_cache_when_fresh(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        # Pre-create a cached PNG
+        (tmp_path / "dummy.png").write_bytes(b"CACHED_PNG")
+        cfg = RunConfig(save_plots=True, show_plots=False)
+
+        call_count = 0
+        original = self._dummy_plot
+
+        def counting_plot(*a, **kw):
+            nonlocal call_count
+            call_count += 1
+            return original(*a, **kw)
+
+        # _in_jupyter() is False in test env, so it should log and return
+        plotting.load_or_generate(
+            counting_plot,
+            filename="dummy.png",
+            run_cfg=cfg,
+        )
+        # Plot function should NOT have been called
+        assert call_count == 0
+        # Original cached content should be unchanged
+        assert (tmp_path / "dummy.png").read_bytes() == b"CACHED_PNG"
+
+    def test_regenerates_when_stale(self, tmp_path, monkeypatch):
+        import json, os, time
+        from datetime import datetime
+
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        ckpt_dir = tmp_path / "checkpoints"
+        ckpt_dir.mkdir()
+        monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
+
+        # Create old PNG
+        png = tmp_path / "dummy.png"
+        png.write_bytes(b"OLD")
+        old_time = time.time() - 7200
+        os.utime(png, (old_time, old_time))
+
+        # Create newer checkpoint
+        meta = {"created": datetime.now().isoformat()}
+        (ckpt_dir / "features.meta.json").write_text(json.dumps(meta))
+
+        cfg = RunConfig(save_plots=True, show_plots=False)
+        plotting.load_or_generate(
+            self._dummy_plot,
+            filename="dummy.png",
+            run_cfg=cfg,
+            checkpoint_name="features",
+        )
+        # PNG should be regenerated (larger than "OLD")
+        assert (tmp_path / "dummy.png").stat().st_size > 3
+
+    def test_forwards_extra_kwargs(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        cfg = RunConfig(save_plots=True, show_plots=False)
+
+        received = {}
+
+        def capture_plot(*args, run_cfg, filename="x.png", title="default"):
+            received["title"] = title
+
+        plotting.load_or_generate(
+            capture_plot,
+            filename="capture.png",
+            run_cfg=cfg,
+            title="Custom Title",
+        )
+        assert received["title"] == "Custom Title"
+
+
+class TestListAvailablePlots:
+    """Tests for list_available_plots() utility."""
+
+    def test_empty_directory(self, tmp_path):
+        result = plotting.list_available_plots(tmp_path)
+        assert "No plots found" in result
+
+    def test_nonexistent_directory(self, tmp_path):
+        result = plotting.list_available_plots(tmp_path / "nonexistent")
+        assert "No plots directory found" in result
+
+    def test_lists_png_files(self, tmp_path):
+        (tmp_path / "01_raw_coverage.png").write_bytes(b"x" * 2048)
+        (tmp_path / "03_pca_scatter.png").write_bytes(b"x" * 1024)
+        (tmp_path / "not_a_png.txt").write_text("ignore me")
+
+        result = plotting.list_available_plots(tmp_path)
+        assert "01_raw_coverage.png" in result
+        assert "03_pca_scatter.png" in result
+        assert "not_a_png.txt" not in result
+        assert "Total: 2 plots" in result
+
+    def test_shows_file_sizes(self, tmp_path):
+        (tmp_path / "small.png").write_bytes(b"x" * 512)
+        result = plotting.list_available_plots(tmp_path)
+        assert "KB" in result
+
+    def test_shows_modification_times(self, tmp_path):
+        (tmp_path / "test.png").write_bytes(b"x" * 100)
+        result = plotting.list_available_plots(tmp_path)
+        # Should contain a date-like string
+        assert "202" in result  # year prefix
+
+    def test_default_plot_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        (tmp_path / "test.png").write_bytes(b"PNG")
+        result = plotting.list_available_plots()
+        assert "test.png" in result
+        assert "Total: 1 plots" in result
+
+    def test_large_file_shows_mb(self, tmp_path):
+        (tmp_path / "big.png").write_bytes(b"x" * (2 * 1024 * 1024))
+        result = plotting.list_available_plots(tmp_path)
+        assert "MB" in result
