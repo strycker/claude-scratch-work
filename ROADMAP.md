@@ -278,6 +278,20 @@ freely available. Construct a proxy from FRED components:
 
 ---
 
+## Phase 4 — Pipeline Monitoring & Notebook Expansion
+
+**Plan document:** `MONITORING_EXPANSION_PLAN.md` (40 work items across 5 phases)
+
+| Phase | Items | Summary |
+|-------|-------|---------|
+| A | 15 | New plotting functions in `plotting.py` (decision tree, CV folds, soft probs, PCA loadings, scree, silhouette, GMM BIC, RRG scatter, calibration, etc.) |
+| B | 2 | Plot reuse infrastructure — notebooks load pre-generated PNGs |
+| C | 12 | Pipeline monitoring — validation summaries + diagnostic plots at each step |
+| D | 8 | Notebook expansion — each notebook becomes a comprehensive diagnostic workbench |
+| E | 3 | Email plot attachments — key plots embedded in weekly email |
+
+---
+
 ## Tier 3 — Longer-term Vision
 
 ### 3.1  Weekly automated report with AI narrative  `XL`
