@@ -1264,3 +1264,27 @@ New `src/trading_crab_lib/monitoring.py` module with pipeline validation helpers
 
 All monitoring wired into `run_pipeline.py` (steps 1-2) and standalone pipeline scripts.
 23 tests in `tests/unit/test_monitoring.py`. Total: 556 collected, all passing.
+
+### D24. Phase C5 — Email config alignment + env var support (2026-03-25)
+
+Fixed email.py key mismatch: code now uses `from_address`/`to_address` (matching
+`config/email.example.yaml` and GSD convention) instead of `sender`/`recipients`.
+
+**Env var support**: Email config can now be set entirely via `TC_*` environment
+variables without any YAML file. Env vars override YAML values when both are present.
+Supported: `TC_SMTP_HOST`, `TC_SMTP_PORT`, `TC_SMTP_USER`, `TC_SMTP_PASSWORD`,
+`TC_EMAIL_FROM`, `TC_EMAIL_TO`, `TC_EMAIL_USE_TLS`, `TC_EMAIL_USE_SSL`.
+
+**Strict validation**: `load_email_config()` now validates required keys at load time
+(fail-fast) instead of waiting until `send_weekly_email()` is called.
+
+**Weekly report guard**: `scripts/run_weekly_report.py` now skips the email send
+entirely when `weekly_report.md` doesn't exist, preventing the confusing error cascade.
+
+**Secrets protection**: Added `portfolio.local.yaml` to `.gitignore`;
+`trading-crab-lib-repo-copy` added to `MANIFEST.in` prune list.
+
+**Setup automation**: `scripts/setup.sh` now copies `email.example.yaml` →
+`email.local.yaml` as part of setup (GSD pattern).
+
+21 tests in `tests/test_email_weekly.py` (8 new for env vars + validation).

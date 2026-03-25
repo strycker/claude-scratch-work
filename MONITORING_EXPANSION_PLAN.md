@@ -359,6 +359,9 @@ A1 → A2 → A3 → A4 → A5     (plot functions, independent batches)
          B                    (plot reuse infrastructure)
          ↓
 C1 → C2 → C3 → C4            (pipeline monitoring, sequential by step)
+C5                             (bug fixes + email config — independent)
+C6                             (env var paths + convenience imports)
+C7                             (preservation checkpoints)
          ↓
 D1 → D2                      (data notebooks)
 D3a → D3b → D3c              (clustering notebook, 3 parts)
@@ -378,6 +381,7 @@ D10                           (divergence/momentum notebook)
 2. A4, A5 (more plot functions — 2 sessions)
 3. B (infrastructure — 1 session)
 4. C1, C2, C3, C4 (pipeline monitoring — 4 sessions)
+4b. C5 (email bug fixes — 1 session), C6 (env vars — 1 session), C7 (preservation — 1 session)
 5. D1, D2 (data notebooks — 2 sessions)
 6. D3a, D3b, D3c (clustering notebook — 3 sessions)
 7. D4, D5a, D5b (regime + prediction — 3 sessions)
@@ -385,7 +389,52 @@ D10                           (divergence/momentum notebook)
 9. D8a, D8b, D9, D10 (new notebooks — 4 sessions)
 10. E (email — 1 session)
 
-**Total: ~25 sessions, each completing one phase.**
+**Total: ~28 sessions, each completing one phase.**
+
+---
+
+## Phase C5 — Bug Fixes + Email Config Alignment (5 items) ✅ DONE
+
+| Item | Description | Status |
+|------|-------------|--------|
+| C5.1 | Align `email.py` to use `from_address`/`to_address` (GSD convention), matching `email.example.yaml`; add `portfolio.local.yaml` to `.gitignore`; add `trading-crab-lib-repo-copy` to `MANIFEST.in` prune list | ✅ |
+| C5.2 | Add env var fallback for email config: `TC_SMTP_HOST`, `TC_SMTP_PORT`, `TC_SMTP_USER`, `TC_SMTP_PASSWORD`, `TC_EMAIL_FROM`, `TC_EMAIL_TO`, `TC_EMAIL_USE_TLS`, `TC_EMAIL_USE_SSL` — env vars override YAML values | ✅ |
+| C5.3 | Guard weekly report email flow: skip `send_weekly_email()` when `weekly_report.md` is missing (don't attempt email at all) | ✅ |
+| C5.4 | Add strict validation to `load_email_config()` — fail-fast at load time when required keys are missing, return empty dict with clear error | ✅ |
+| C5.5 | Update `.env.example` with all `TC_*` email env vars + comments; add email scaffolding step to `setup.sh` (copies `email.example.yaml` → `email.local.yaml`) | ✅ |
+
+**Implementation:** Rewrote `src/trading_crab_lib/email.py` (~210 lines). Updated
+`scripts/run_weekly_report.py`, `.env.example`, `scripts/setup.sh`, `.gitignore`,
+`MANIFEST.in`. 21 tests in `tests/test_email_weekly.py` (8 new, 13 updated), all passing.
+
+---
+
+## Phase C6 — Env Var Path Overrides + Convenience Imports (5 items)
+
+| Item | Description |
+|------|-------------|
+| C6.1 | Add env var overrides for paths in `__init__.py`: `TC_ROOT_DIR`, `TC_CONFIG_DIR`, `TC_DATA_DIR`, `TC_OUTPUT_DIR` (env var wins if set, else relative path) |
+| C6.2 | Add GSD-style convenience re-exports to `__init__.py`: `load`, `RunConfig`, `CheckpointManager` — enables `import trading_crab_lib as crab; crab.load()` |
+| C6.3 | Enrich `pyproject.toml` metadata: authors, URLs, classifiers, keywords (GSD pattern) |
+| C6.4 | *(Nice-to-have, deferred)*: `[project.scripts]` entry point for a `trading-crab` CLI command. For now `python run_pipeline.py` is sufficient |
+| C6.5 | Tests for env var path overrides + convenience import aliases |
+
+---
+
+## Phase C7 — Preservation Checkpoints (`--refresh-preservation`) (5 items)
+
+Ported from GSD submodule. Preservation checkpoints are wide parquet snapshots
+(`macro_raw_secondary`, `features_secondary`, `features_supervised_secondary`) that
+survive `clear_all()`. Purpose: downstream steps that drop sparse columns via
+`dropna(axis=1)` don't erase the full column audit trail.
+
+| Item | Description |
+|------|-------------|
+| C7.1 | Add `PRESERVATION_CHECKPOINT_NAMES` frozenset and `preservation_checkpoint_should_write()` decision function to `checkpoints.py` |
+| C7.2 | Add `refresh_preservation_checkpoints: bool` field to `RunConfig` + `--refresh-preservation` argparse flag in `run_pipeline.py` |
+| C7.3 | Wire preservation saves into step 1: save `macro_raw_secondary` after ingestion |
+| C7.4 | Wire preservation saves into step 2: save `features_secondary` and `features_supervised_secondary` after feature engineering |
+| C7.5 | Update `clear_all()` to skip preservation files; add tests for all preservation logic |
 
 ---
 

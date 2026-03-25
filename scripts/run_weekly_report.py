@@ -92,16 +92,20 @@ def main() -> int:
         print(f"No {WEEKLY_REPORT} at {report_path} — skip archive/email body.")
 
     if args.send_email:
-        cfg = load_email_config()
-        if not cfg:
-            print("Email config not found or invalid; skipping send.")
+        report_path = REPORTS_DIR / WEEKLY_REPORT
+        if not report_path.exists():
+            print(f"No {WEEKLY_REPORT} at {report_path} — skipping email send.")
         else:
-            subject, body = build_weekly_email_body(REPORTS_DIR)
-            ok = send_weekly_email(cfg, subject, body)
-            if ok:
-                print("Weekly report email sent.")
+            cfg = load_email_config()
+            if not cfg:
+                print("Email config not found or invalid; skipping send.")
             else:
-                print("Weekly report email failed to send (see logs).")
+                subject, body = build_weekly_email_body(REPORTS_DIR)
+                ok = send_weekly_email(cfg, subject, body)
+                if ok:
+                    print("Weekly report email sent.")
+                else:
+                    print("Weekly report email failed to send (see logs).")
 
     return 0
 
