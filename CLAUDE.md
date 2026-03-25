@@ -1314,3 +1314,32 @@ New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
   wired into `step4_regime_label()` when `--plots` is passed.
 
 10 new tests in `tests/unit/test_monitoring.py` (total: 33). Total: 566 collected, all passing.
+
+### D26. Phase C3 — Pipeline monitoring for steps 5-7 (2026-03-25)
+
+New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
+
+- **C3.1 — Per-fold CV accuracy table**: `CVFoldReport` dataclass and
+  `compute_cv_fold_scores()` run TimeSeriesSplit CV on fitted models (via
+  `sklearn.base.clone`) and return per-fold accuracies. Wired into `step5_predict()`
+  for RF, DT, and LGBM (when available). Logged as formatted table with mean ± std.
+
+- **C3.2 — CV fold accuracy + decision tree plots**: `plot_cv_fold_accuracy()` for
+  both RF and DT, plus `plot_decision_tree()` wired into `step5_predict()` when
+  `--plots` is passed.
+
+- **C3.3 — Calibration curve + model comparison bar**: `plot_calibration_curve()`
+  using RF's `predict_proba()` output, and `plot_model_comparison_bar()` comparing
+  RF vs DT (vs LGBM) mean CV accuracy. Wired into `step5_predict()` when `--plots`.
+
+- **C3.4 — Forward probability evolution plot**: `plot_forward_prob_evolution()`
+  wired into `step7_dashboard()` when `--plots`. Uses `compute_forward_probabilities()`
+  from `regime.py` to compute empirical forward transition matrices at horizons
+  [1Q, 4Q, 8Q].
+
+- **C3.5 — Dashboard QA gate**: `check_regime_probabilities()` in `monitoring.py`
+  warns if any regime has <5% predicted probability (suspiciously low — may indicate
+  model overconfidence or degenerate clustering). Wired into `step7_dashboard()`
+  before `print_dashboard()`.
+
+9 new tests in `tests/unit/test_monitoring.py` (total: 42, 2 skipped without sklearn).

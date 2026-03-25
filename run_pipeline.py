@@ -761,6 +761,19 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 
     forward_models = train_forward_classifiers(X, y, cfg)
 
+    # ── C3.1: Per-fold CV accuracy summary ───────────────────────────────
+    from trading_crab_lib.monitoring import compute_cv_fold_scores, CVFoldReport
+    cv_report = CVFoldReport()
+    n_splits = cfg.get("prediction", {}).get("cv_splits", 5)
+    rf_scores = compute_cv_fold_scores(current_model, X, y, n_splits=n_splits)
+    cv_report.add("RF", rf_scores)
+    dt_scores = compute_cv_fold_scores(dt_model, X, y, n_splits=n_splits)
+    cv_report.add("DT", dt_scores)
+    if lgbm_model is not None:
+        lgbm_scores = compute_cv_fold_scores(lgbm_model, X, y, n_splits=n_splits)
+        cv_report.add("LGBM", lgbm_scores)
+    log.info("Step 5 CV summary:\n%s", cv_report.summary())
+
     model_dir = OUTPUT_DIR / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -793,6 +806,29 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
             plotting.plot_feature_importance(current_model, X.columns.tolist(), run_cfg)
             plotting.plot_forward_probabilities(latest, regime_names, run_cfg)
             plotting.plot_predicted_vs_actual(X, y, current_model, regime_names, run_cfg)
+
+            # ── C3.2: CV fold accuracy + decision tree plots ─────────
+            plotting.plot_cv_fold_accuracy(rf_scores, run_cfg, model_name="RF")
+            plotting.plot_cv_fold_accuracy(
+                dt_scores, run_cfg, model_name="DT",
+                filename="05_cv_fold_accuracy_dt.png",
+            )
+            plotting.plot_decision_tree(
+                dt_model, X.columns.tolist(), regime_names, run_cfg,
+            )
+
+            # ── C3.3: Calibration curve + model comparison bar ───────
+            import numpy as _np
+            y_proba_rf = current_model.predict_proba(X)
+            plotting.plot_calibration_curve(y, y_proba_rf, regime_names, run_cfg)
+
+            model_metrics: dict[str, dict[str, float]] = {
+                "RF": {"accuracy": float(_np.mean(rf_scores))},
+                "DT": {"accuracy": float(_np.mean(dt_scores))},
+            }
+            if lgbm_model is not None:
+                model_metrics["LGBM"] = {"accuracy": float(_np.mean(lgbm_scores))}
+            plotting.plot_model_comparison_bar(model_metrics, run_cfg)
         except Exception as exc:
             log.warning("Could not generate prediction plots: %s", exc)
 
@@ -957,6 +993,24 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
         profile = pd.read_parquet(profile_path)
         ranked = rank_assets_by_regime(profile)
         asset_signals_df = asset_signals(ranked, prediction["regime"], thresholds=thresholds)
+
+    # ── C3.5: QA gate — warn if any regime has suspiciously low probability ──
+    from trading_crab_lib.monitoring import check_regime_probabilities
+    qa_warnings = check_regime_probabilities(prediction["probabilities"])
+    for w in qa_warnings:
+        log.warning("Step 7 QA: %s", w)
+    if not qa_warnings:
+        log.info("Step 7 QA: all regime probabilities >= 5%% — OK")
+
+    # ── C3.4: Forward probability evolution plot ─────────────────────────────
+    from trading_crab_lib.regime import compute_forward_probabilities
+    labels = _load_parquet(
+        DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels"
+    )["balanced_cluster"]
+    forward_probs = compute_forward_probabilities(labels)
+    if run_cfg.generate_plots and forward_probs:
+        from trading_crab_lib import plotting
+        plotting.plot_forward_prob_evolution(forward_probs, regime_names, run_cfg)
 
     print_dashboard(prediction, regime_names, asset_signals_df, tm)
 

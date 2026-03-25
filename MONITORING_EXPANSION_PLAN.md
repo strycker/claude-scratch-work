@@ -123,15 +123,15 @@ Wired into `run_pipeline.py` steps 1-2 and `pipelines/01_ingest.py`, `pipelines/
 
 ---
 
-## Phase C3 — Pipeline Monitoring: Steps 5–7 (5 items)
+## Phase C3 — Pipeline Monitoring: Steps 5–7 (5 items) ✅ DONE
 
-| Item | Step | Enhancement |
-|------|------|-------------|
-| C3.1 | Step 5 | Print per-fold CV accuracy table + mean ± std for RF and DT |
-| C3.2 | Step 5 | Generate `plot_cv_fold_accuracy()` and `plot_decision_tree()` when `--plots` |
-| C3.3 | Step 5 | Generate `plot_calibration_curve()` and `plot_model_comparison_bar()` when `--plots` |
-| C3.4 | Step 7 | Generate `plot_forward_prob_evolution()` when `--plots` |
-| C3.5 | Step 7 | Print QA gate: warn if any regime has <5% probability (suspiciously low) |
+| Item | Step | Enhancement | Status |
+|------|------|-------------|--------|
+| C3.1 | Step 5 | Print per-fold CV accuracy table + mean ± std for RF, DT, LGBM | ✅ Done |
+| C3.2 | Step 5 | Generate `plot_cv_fold_accuracy()` and `plot_decision_tree()` when `--plots` | ✅ Done |
+| C3.3 | Step 5 | Generate `plot_calibration_curve()` and `plot_model_comparison_bar()` when `--plots` | ✅ Done |
+| C3.4 | Step 7 | Generate `plot_forward_prob_evolution()` when `--plots` | ✅ Done |
+| C3.5 | Step 7 | Print QA gate: warn if any regime has <5% probability (suspiciously low) | ✅ Done |
 
 ---
 

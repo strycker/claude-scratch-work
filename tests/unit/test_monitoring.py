@@ -18,6 +18,9 @@ from trading_crab_lib.monitoring import (
     format_method_comparison,
     compute_regime_stability,
     RegimeStabilityReport,
+    compute_cv_fold_scores,
+    CVFoldReport,
+    check_regime_probabilities,
 )
 
 
@@ -429,3 +432,86 @@ class TestComputeRegimeStability:
         report = RegimeStabilityReport()
         text = report.summary()
         assert "no persistence data" in text
+
+
+# ── C3.1: compute_cv_fold_scores + CVFoldReport ─────────────────────────
+
+
+_has_sklearn = True
+try:
+    import sklearn  # noqa: F401
+except ImportError:
+    _has_sklearn = False
+
+
+@pytest.mark.skipif(not _has_sklearn, reason="sklearn not installed")
+class TestComputeCVFoldScores:
+    def test_returns_correct_number_of_folds(self):
+        from sklearn.ensemble import RandomForestClassifier
+        rng = np.random.default_rng(42)
+        X = pd.DataFrame(rng.random((50, 5)), columns=[f"f{i}" for i in range(5)])
+        y = pd.Series(rng.integers(0, 3, 50))
+        model = RandomForestClassifier(n_estimators=10, random_state=42)
+        model.fit(X, y)
+        scores = compute_cv_fold_scores(model, X, y, n_splits=3)
+        assert len(scores) == 3
+        assert all(0 <= s <= 1 for s in scores)
+
+    def test_does_not_mutate_original_model(self):
+        from sklearn.tree import DecisionTreeClassifier
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(rng.random((30, 3)), columns=["a", "b", "c"])
+        y = pd.Series(rng.integers(0, 2, 30))
+        model = DecisionTreeClassifier(max_depth=3, random_state=0)
+        model.fit(X, y)
+        orig_pred = model.predict(X).copy()
+        compute_cv_fold_scores(model, X, y, n_splits=3)
+        np.testing.assert_array_equal(model.predict(X), orig_pred)
+
+
+class TestCVFoldReport:
+    def test_add_and_summary(self):
+        report = CVFoldReport()
+        report.add("RF", [0.5, 0.6, 0.7])
+        report.add("DT", [0.4, 0.5, 0.6])
+        text = report.summary()
+        assert "RF" in text
+        assert "DT" in text
+        assert "mean=" in text
+
+    def test_empty_report(self):
+        report = CVFoldReport()
+        text = report.summary()
+        assert "Cross-validation" in text
+
+
+# ── C3.5: check_regime_probabilities ─────────────────────────────────────
+
+
+class TestCheckRegimeProbabilities:
+    def test_all_ok(self):
+        probs = {0: 0.3, 1: 0.4, 2: 0.3}
+        warnings = check_regime_probabilities(probs)
+        assert warnings == []
+
+    def test_low_probability_detected(self):
+        probs = {0: 0.9, 1: 0.08, 2: 0.02}
+        warnings = check_regime_probabilities(probs)
+        assert len(warnings) == 1
+        assert "Regime 2" in warnings[0]
+
+    def test_custom_threshold(self):
+        probs = {0: 0.5, 1: 0.4, 2: 0.1}
+        warnings = check_regime_probabilities(probs, min_threshold=0.15)
+        assert len(warnings) == 1
+        assert "Regime 2" in warnings[0]
+
+    def test_multiple_warnings(self):
+        probs = {0: 0.9, 1: 0.04, 2: 0.03, 3: 0.03}
+        warnings = check_regime_probabilities(probs)
+        assert len(warnings) == 3
+
+    def test_exact_threshold_passes(self):
+        probs = {0: 0.5, 1: 0.45, 2: 0.05}
+        warnings = check_regime_probabilities(probs)
+        assert warnings == []
