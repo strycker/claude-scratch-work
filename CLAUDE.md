@@ -1288,3 +1288,29 @@ entirely when `weekly_report.md` doesn't exist, preventing the confusing error c
 `email.local.yaml` as part of setup (GSD pattern).
 
 21 tests in `tests/test_email_weekly.py` (8 new for env vars + validation).
+
+### D25. Phase C2 — Pipeline monitoring for steps 3-4 (2026-03-25)
+
+New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
+
+- **C2.1 — Scree + PCA loadings plots**: `plot_scree()` and `plot_pca_loadings()`
+  wired into `step3_cluster()` when `--plots` is passed.
+
+- **C2.2 — Silhouette samples plot**: `plot_silhouette_samples()` wired into
+  `step3_cluster()` when `--plots` is passed.
+
+- **C2.3 — Method comparison table**: `format_method_comparison()` in `monitoring.py`
+  formats a clustering comparison DataFrame (method, k, silhouette, DB, CH) as a
+  readable table. Compares KMeans (best-k) vs KMeans (balanced) via
+  `compare_all_methods()`. Logged at INFO + `plot_method_comparison_table()` on `--plots`.
+
+- **C2.4 — Regime stability summary**: `compute_regime_stability()` in `monitoring.py`
+  extracts persistence probabilities from transition matrix diagonal, identifies
+  most/least stable regimes, and computes average consecutive run length per regime.
+  Returns `RegimeStabilityReport` dataclass. Wired into `step4_regime_label()`.
+
+- **C2.5 — Feature-regime overlay plots**: `plot_feature_regime_overlay()` for 4 key
+  indicators (`log_sp500_d1`, `log_us_cpi_d1`, `credit_spread`, `10yr_ustreas_d1`)
+  wired into `step4_regime_label()` when `--plots` is passed.
+
+10 new tests in `tests/unit/test_monitoring.py` (total: 33). Total: 566 collected, all passing.

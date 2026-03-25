@@ -111,15 +111,15 @@ Wired into `run_pipeline.py` steps 1-2 and `pipelines/01_ingest.py`, `pipelines/
 
 ---
 
-## Phase C2 — Pipeline Monitoring: Steps 3–4 (5 items)
+## Phase C2 — Pipeline Monitoring: Steps 3–4 (5 items) ✅ DONE
 
-| Item | Step | Enhancement |
-|------|------|-------------|
-| C2.1 | Step 3 | Generate `plot_scree()` and `plot_pca_loadings()` when `--plots` |
-| C2.2 | Step 3 | Generate `plot_silhouette_samples()` when `--plots` |
-| C2.3 | Step 3 | Print method comparison table: KMeans vs GMM vs Spectral (silhouette, CH, DB) |
-| C2.4 | Step 4 | Print regime stability summary: persistence (diagonal), most/least stable regime |
-| C2.5 | Step 4 | Generate `plot_feature_regime_overlay()` for 4 key indicators when `--plots` |
+| Item | Step | Enhancement | Status |
+|------|------|-------------|--------|
+| C2.1 | Step 3 | Generate `plot_scree()` and `plot_pca_loadings()` when `--plots` | ✅ Done |
+| C2.2 | Step 3 | Generate `plot_silhouette_samples()` when `--plots` | ✅ Done |
+| C2.3 | Step 3 | Print method comparison table: KMeans vs balanced (silhouette, CH, DB) | ✅ Done |
+| C2.4 | Step 4 | Print regime stability summary: persistence (diagonal), most/least stable regime | ✅ Done |
+| C2.5 | Step 4 | Generate `plot_feature_regime_overlay()` for 4 key indicators when `--plots` | ✅ Done |
 
 ---
 

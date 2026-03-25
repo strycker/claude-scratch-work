@@ -1,4 +1,4 @@
-"""Tests for pipeline monitoring helpers (Phase C1)."""
+"""Tests for pipeline monitoring helpers (Phases C1 + C2)."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,6 +15,9 @@ from trading_crab_lib.monitoring import (
     SourceRowCounts,
     compute_feature_quality,
     FeatureQualityReport,
+    format_method_comparison,
+    compute_regime_stability,
+    RegimeStabilityReport,
 )
 
 
@@ -316,3 +319,113 @@ class TestComputeFeatureQuality:
         report = compute_feature_quality(df)
         assert report.n_rows == 0
         assert report.n_cols == 0
+
+
+# ── C2.3: format_method_comparison ───────────────────────────────────────
+
+
+class TestFormatMethodComparison:
+    def test_basic_formatting(self):
+        df = pd.DataFrame({
+            "method": ["KMeans", "GMM"],
+            "n_clusters": [5, 4],
+            "silhouette": [0.35, 0.28],
+            "davies_bouldin": [1.2, 1.5],
+            "calinski": [120.5, 98.3],
+        })
+        text = format_method_comparison(df)
+        assert "Clustering method comparison" in text
+        assert "KMeans" in text
+        assert "GMM" in text
+        assert "Best by silhouette: KMeans" in text
+
+    def test_empty_dataframe(self):
+        df = pd.DataFrame()
+        text = format_method_comparison(df)
+        assert "no methods to compare" in text
+
+    def test_single_method(self):
+        df = pd.DataFrame({
+            "method": ["KMeans"],
+            "n_clusters": [5],
+            "silhouette": [0.30],
+            "davies_bouldin": [1.1],
+            "calinski": [100.0],
+        })
+        text = format_method_comparison(df)
+        assert "Best by silhouette: KMeans" in text
+
+    def test_best_method_identified(self):
+        df = pd.DataFrame({
+            "method": ["Bad", "Good", "Medium"],
+            "n_clusters": [3, 4, 5],
+            "silhouette": [0.10, 0.50, 0.30],
+            "davies_bouldin": [2.0, 1.0, 1.5],
+            "calinski": [50.0, 200.0, 100.0],
+        })
+        text = format_method_comparison(df)
+        assert "Best by silhouette: Good" in text
+
+
+# ── C2.4: compute_regime_stability ───────────────────────────────────────
+
+
+class TestComputeRegimeStability:
+    @pytest.fixture
+    def transition_matrix(self):
+        """3-regime transition matrix with known persistence."""
+        return pd.DataFrame(
+            [[0.8, 0.1, 0.1], [0.2, 0.6, 0.2], [0.15, 0.15, 0.7]],
+            index=[0, 1, 2],
+            columns=[0, 1, 2],
+        )
+
+    @pytest.fixture
+    def regime_labels(self):
+        """Labels: 0,0,0,1,1,2,2,2,2,0,0"""
+        return pd.Series(
+            [0, 0, 0, 1, 1, 2, 2, 2, 2, 0, 0],
+            index=pd.date_range("2000-03-31", periods=11, freq="QE"),
+        )
+
+    def test_persistence_extracted(self, transition_matrix, regime_labels):
+        report = compute_regime_stability(transition_matrix, regime_labels)
+        assert report.persistence[0] == pytest.approx(0.8)
+        assert report.persistence[1] == pytest.approx(0.6)
+        assert report.persistence[2] == pytest.approx(0.7)
+
+    def test_most_least_stable(self, transition_matrix, regime_labels):
+        report = compute_regime_stability(transition_matrix, regime_labels)
+        assert report.most_stable[0] == 0
+        assert report.most_stable[1] == pytest.approx(0.8)
+        assert report.least_stable[0] == 1
+        assert report.least_stable[1] == pytest.approx(0.6)
+
+    def test_avg_duration(self, transition_matrix, regime_labels):
+        report = compute_regime_stability(transition_matrix, regime_labels)
+        # Regime 0: runs of 3 and 2 → avg 2.5
+        assert report.avg_duration[0] == pytest.approx(2.5)
+        # Regime 1: run of 2 → avg 2.0
+        assert report.avg_duration[1] == pytest.approx(2.0)
+        # Regime 2: run of 4 → avg 4.0
+        assert report.avg_duration[2] == pytest.approx(4.0)
+
+    def test_summary_format(self, transition_matrix, regime_labels):
+        report = compute_regime_stability(transition_matrix, regime_labels)
+        text = report.summary()
+        assert "Regime stability" in text
+        assert "persist=" in text
+        assert "avg_run=" in text
+        assert "Most stable" in text
+        assert "Least stable" in text
+
+    def test_empty_labels(self, transition_matrix):
+        labels = pd.Series([], dtype=int)
+        report = compute_regime_stability(transition_matrix, labels)
+        assert report.persistence[0] == pytest.approx(0.8)
+        assert report.avg_duration == {}
+
+    def test_empty_persistence_summary(self):
+        report = RegimeStabilityReport()
+        text = report.summary()
+        assert "no persistence data" in text

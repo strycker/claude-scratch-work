@@ -626,6 +626,29 @@ def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False)
         plotting.plot_elbow_curve(scores, best_k, run_cfg)
         plotting.plot_cluster_sizes(clustered["balanced_cluster"], regime_names, run_cfg)
 
+        # ── C2.1: Scree + PCA loadings plots ─────────────────────────
+        plotting.plot_scree(pca_model, run_cfg)
+        feature_names = list(X.columns)
+        plotting.plot_pca_loadings(pca_model, feature_names, run_cfg)
+
+        # ── C2.2: Silhouette samples plot ─────────────────────────────
+        plotting.plot_silhouette_samples(
+            X_scaled, clustered["balanced_cluster"].loc[X.index], run_cfg,
+        )
+
+    # ── C2.3: Method comparison table ─────────────────────────────────
+    # Compare KMeans balanced clustering against standard KMeans
+    from trading_crab_lib.cluster_comparison import compare_all_methods
+    from trading_crab_lib.monitoring import format_method_comparison
+    labels_dict = {
+        "KMeans (best-k)": clustered["cluster"].loc[X.index],
+        "KMeans (balanced)": clustered["balanced_cluster"].loc[X.index],
+    }
+    comparison = compare_all_methods(pca_df, labels_dict)
+    log.info("Step 3 method comparison:\n%s", format_method_comparison(comparison))
+    if run_cfg.generate_plots:
+        plotting.plot_method_comparison_table(comparison, run_cfg)
+
     log.info("Step 3 done: balanced_k=%d", clust_cfg["balanced_k"])
 
 
@@ -662,6 +685,11 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
     tm = build_transition_matrix(labels)
     tm.to_parquet(DATA_DIR / "regimes" / "transition_matrix.parquet")
 
+    # ── C2.4: Regime stability summary ───────────────────────────────
+    from trading_crab_lib.monitoring import compute_regime_stability
+    stability = compute_regime_stability(tm, labels)
+    log.info("Step 4 regime stability:\n%s", stability.summary())
+
     if run_cfg.generate_plots:
         plotting.plot_transition_matrix(tm, regime_names, run_cfg)
         plotting.plot_regime_timeline(labels, regime_names, run_cfg)
@@ -673,6 +701,14 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
         ]
         if key_cols:
             plotting.plot_regime_profiles(features, labels, regime_names, key_cols, run_cfg)
+
+        # ── C2.5: Feature-regime overlay for key indicators ──────────
+        overlay_cols = [
+            c for c in ["log_sp500_d1", "log_us_cpi_d1", "credit_spread", "10yr_ustreas_d1"]
+            if c in features.columns
+        ]
+        for col in overlay_cols:
+            plotting.plot_feature_regime_overlay(features[col], labels, regime_names, run_cfg)
 
     for rid, name in sorted(regime_names.items()):
         n = (labels == rid).sum()
