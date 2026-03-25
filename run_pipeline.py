@@ -456,10 +456,10 @@ def _generate_gap_fill_plots(raw, features, cfg, run_cfg, plotting) -> None:
     """
     from trading_crab_lib.transforms import (
         add_cross_ratios,
+        add_yield_curve_features,
         apply_log_transforms,
         select_features,
     )
-    from trading_crab_lib.yield_curve_features import add_yield_curve_features
 
     feat_cfg = cfg["features"]
 
