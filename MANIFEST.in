@@ -8,6 +8,7 @@ exclude config/email.local.yaml
 
 prune claude-scratch-work-repo-copy
 prune gsd-scratch-work-repo-copy
+prune trading-crab-lib-repo-copy
 prune trading-crab-repo-copy
 
 prune pipelines

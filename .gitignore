@@ -29,6 +29,7 @@ outputs/reports/
 config/secrets.yaml
 config/email.yaml
 config/email.local.yaml
+config/portfolio.local.yaml
 
 # OS
 .DS_Store

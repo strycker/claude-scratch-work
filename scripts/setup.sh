@@ -123,6 +123,26 @@ else
   yellow "    Get a free key at: https://fred.stlouisfed.org/docs/api/api_key.html"
 fi
 
+# ── 5b. Email config (optional) ───────────────────────────────────────────────
+
+step "Setting up email config (optional)"
+
+EMAIL_EXAMPLE="$REPO_ROOT/config/email.example.yaml"
+EMAIL_LOCAL="$REPO_ROOT/config/email.local.yaml"
+
+if [[ -f "$EMAIL_LOCAL" ]]; then
+  yellow "  config/email.local.yaml already exists — skipping"
+elif [[ -f "$EMAIL_EXAMPLE" ]]; then
+  cp "$EMAIL_EXAMPLE" "$EMAIL_LOCAL"
+  green "  Copied email.example.yaml → email.local.yaml"
+  yellow "  ACTION REQUIRED: edit config/email.local.yaml with your SMTP settings"
+  yellow "    (for Gmail, use an App Password — see comments in the file)"
+  yellow "    OR set TC_SMTP_* env vars in .env instead (see .env.example)"
+else
+  yellow "  No email.example.yaml found — skipping email setup"
+  yellow "  Set TC_SMTP_* env vars in .env for email support (see .env.example)"
+fi
+
 # ── 6. Runtime directories ────────────────────────────────────────────────────
 
 step "Creating runtime directories"

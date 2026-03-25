@@ -2,10 +2,10 @@
 Weekly email delivery for market regime reports.
 
 Loads SMTP configuration from config/email.yaml (with fallback to
-config/email.local.yaml), composes an email body from the most recent
-weekly report, and sends via SMTP (TLS or SSL).
+config/email.local.yaml, then environment variables), composes an email
+body from the most recent weekly report, and sends via SMTP (TLS or SSL).
 
-  load_email_config()        — parse config/email.yaml or email.local.yaml
+  load_email_config()        — parse YAML or env vars → config dict
   build_weekly_email_body()  — compose subject + body from report files
   send_weekly_email()        — send via SMTP with TLS/SSL support
 """
@@ -13,6 +13,7 @@ weekly report, and sends via SMTP (TLS or SSL).
 from __future__ import annotations
 
 import logging
+import os
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
@@ -23,42 +24,103 @@ import yaml
 
 log = logging.getLogger(__name__)
 
+# Keys expected in the config dict (matching email.example.yaml).
+# Code uses from_address / to_address (GSD convention).
+REQUIRED_KEYS = frozenset(
+    {"smtp_host", "smtp_port", "username", "password", "from_address", "to_address"}
+)
+
+# Env var prefix for email config overrides.
+_ENV_MAP: dict[str, str] = {
+    "TC_SMTP_HOST": "smtp_host",
+    "TC_SMTP_PORT": "smtp_port",
+    "TC_SMTP_USER": "username",
+    "TC_SMTP_PASSWORD": "password",
+    "TC_EMAIL_FROM": "from_address",
+    "TC_EMAIL_TO": "to_address",
+    "TC_EMAIL_USE_TLS": "use_tls",
+    "TC_EMAIL_USE_SSL": "use_ssl",
+}
+
+
+def _env_overrides() -> dict:
+    """Read email config values from TC_* environment variables."""
+    cfg: dict = {}
+    for env_key, cfg_key in _ENV_MAP.items():
+        val = os.getenv(env_key)
+        if val is not None:
+            # Coerce port to int, booleans for tls/ssl
+            if cfg_key == "smtp_port":
+                try:
+                    cfg[cfg_key] = int(val)
+                except ValueError:
+                    log.warning("TC_SMTP_PORT=%r is not an integer, ignoring", val)
+            elif cfg_key in ("use_tls", "use_ssl"):
+                cfg[cfg_key] = val.lower() in ("true", "1", "yes")
+            else:
+                cfg[cfg_key] = val
+    return cfg
+
 
 def load_email_config(config_path: Path | None = None) -> dict:
     """
-    Load email configuration from a YAML file.
+    Load email configuration from a YAML file or environment variables.
 
-    Expected keys:
-        smtp_host:     SMTP server hostname
-        smtp_port:     port (587 for TLS, 465 for SSL)
-        username:      SMTP username
-        password:      SMTP password (or app-specific password)
-        sender:        sender email address
-        recipients:    list of recipient email addresses
-        use_ssl:       true for SSL (port 465), false for STARTTLS (port 587)
+    Resolution order (later wins):
+      1. config/email.yaml (or config/email.local.yaml as fallback)
+      2. TC_* environment variables override individual keys
 
-    Returns empty dict if file is missing or malformed.
+    Expected keys (matching config/email.example.yaml):
+        smtp_host:      SMTP server hostname
+        smtp_port:      port (587 for TLS, 465 for SSL)
+        username:       SMTP username
+        password:       SMTP password (or app-specific password)
+        from_address:   sender email address
+        to_address:     recipient email address (or comma-separated list)
+        use_tls:        true for STARTTLS (port 587)
+        use_ssl:        true for implicit SSL (port 465)
+
+    Returns empty dict if file is missing/malformed AND no env vars set.
     """
+    cfg: dict = {}
+
+    # ── YAML file ──────────────────────────────────────────────────────
     if config_path is None:
         from trading_crab_lib import CONFIG_DIR
         config_path = CONFIG_DIR / "email.yaml"
         if not config_path.exists():
             config_path = CONFIG_DIR / "email.local.yaml"
 
-    if not config_path.exists():
-        log.warning("Email config not found at %s (also tried email.local.yaml)", config_path)
-        return {}
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                loaded = yaml.safe_load(f)
+            if isinstance(loaded, dict):
+                cfg = loaded
+            else:
+                log.warning("Email config is not a dict: %s", config_path)
+        except Exception as exc:
+            log.warning("Failed to load email config: %s", exc)
 
-    try:
-        with open(config_path) as f:
-            cfg = yaml.safe_load(f)
-        if not isinstance(cfg, dict):
-            log.warning("Email config is not a dict: %s", config_path)
+    # ── Env var overrides ──────────────────────────────────────────────
+    env_cfg = _env_overrides()
+    if env_cfg:
+        cfg.update(env_cfg)
+        log.debug("Email config: applied %d env var override(s)", len(env_cfg))
+
+    # ── Strict validation (fail-fast) ─────────────────────────────────
+    if cfg:
+        missing = sorted(REQUIRED_KEYS - set(cfg))
+        if missing:
+            log.error("Email config missing required keys: %s", missing)
             return {}
-        return cfg
-    except Exception as exc:
-        log.warning("Failed to load email config: %s", exc)
-        return {}
+
+    if not cfg:
+        log.warning(
+            "Email config not found at %s and no TC_* env vars set", config_path
+        )
+
+    return cfg
 
 
 def build_weekly_email_body(
@@ -118,22 +180,29 @@ def send_weekly_email(
     Returns:
         True if sent successfully, False otherwise.
     """
-    required = ["smtp_host", "smtp_port", "username", "password", "sender", "recipients"]
-    missing = [k for k in required if k not in config or not config[k]]
+    # Validate required keys
+    missing = sorted(REQUIRED_KEYS - set(config))
     if missing:
         log.error("Email config missing required keys: %s", missing)
         return False
 
-    recipients = config["recipients"]
-    if isinstance(recipients, str):
-        recipients = [recipients]
+    from_addr = config["from_address"]
+    to_addr = config["to_address"]
+
+    # Normalize to_address to a list
+    if isinstance(to_addr, str):
+        recipients = [a.strip() for a in to_addr.split(",") if a.strip()]
+    elif isinstance(to_addr, list):
+        recipients = to_addr
+    else:
+        recipients = [str(to_addr)]
 
     if not recipients:
         log.error("No recipients configured")
         return False
 
     msg = MIMEMultipart()
-    msg["From"] = config["sender"]
+    msg["From"] = from_addr
     msg["To"] = ", ".join(recipients)
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
@@ -151,7 +220,7 @@ def send_weekly_email(
             server.starttls()
 
         server.login(config["username"], config["password"])
-        server.sendmail(config["sender"], recipients, msg.as_string())
+        server.sendmail(from_addr, recipients, msg.as_string())
         server.quit()
         log.info("Weekly email sent to %s", recipients)
         return True
