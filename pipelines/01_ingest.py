@@ -116,8 +116,12 @@ def main(argv: list[str] | None = None) -> None:
     combined.to_parquet(out_path)
     print(f"Wrote {len(combined)} rows × {len(combined.columns)} cols → {out_path}")
 
-    # ── Completeness report ─────────────────────────────────────────────
-    # Build expected column list from config
+    # ── Completeness report (C1.1) ──────────────────────────────────────
+    from trading_crab_lib.monitoring import (
+        format_completeness_table,
+        validate_date_range,
+        count_source_columns,
+    )
     expected_cols: list[str] = []
     for series_id, meta in cfg.get("fred", {}).get("series", {}).items():
         expected_cols.append(meta.get("name", series_id.lower()))
@@ -127,7 +131,15 @@ def main(argv: list[str] | None = None) -> None:
         expected_cols.append(ds["name"] if isinstance(ds, dict) else ds[0])
 
     report = ingestion_completeness_report(combined, expected_columns=expected_cols)
-    print(report.summary())
+    print(format_completeness_table(report))
+
+    # ── Date-range validation (C1.2) ─────────────────────────────────
+    date_report = validate_date_range(combined)
+    print(date_report.summary())
+
+    # ── Per-source column counts (C1.3) ──────────────────────────────
+    source_counts = count_source_columns(combined, cfg)
+    print(source_counts.summary())
 
 
 if __name__ == "__main__":

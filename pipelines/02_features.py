@@ -48,6 +48,11 @@ def main() -> None:
     features_sup.to_parquet(out_path_sup)
     print(f"Wrote {features_sup.shape} → {out_path_sup}  (causal/backward)")
 
+    # ── Feature quality report (C1.4) ────────────────────────────────
+    from trading_crab_lib.monitoring import compute_feature_quality
+    quality = compute_feature_quality(features)
+    print(quality.summary())
+
 
 if __name__ == "__main__":
     main()

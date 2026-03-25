@@ -12,7 +12,7 @@ Updated: March 2026.
 | 1     | Data and Constraints Foundations              | 3/3            | Complete    | -          |
 | 2     | Regime Clustering and Interpretation          | 2/2            | Complete    | 2026-03-16 |
 | 3     | Supervised Regime and Behavior Models         | 3/3            | Complete    | 2026-03-18 |
-| 4     | Regime-Conditional ETF and Portfolio Behavior | 0/0            | Not started | -          |
+| 4     | Pipeline Monitoring & Notebook Expansion      | C1 done        | In progress | -          |
 | 5     | Recommendations and Machine-Readable Outputs  | 0/0            | Not started | -          |
 | 6     | Weekly Report Pipeline                        | 0/0            | Not started | -          |
 

@@ -127,6 +127,7 @@ trading-crab/
 │       ├── test_regime.py             ← regime profiling + transition matrix
 │       ├── test_fred_series_config.py ← FRED settings.yaml validation
 │       ├── test_yield_curve_features.py ← yield curve spread features
+│       ├── test_monitoring.py          ← pipeline monitoring (date-range, source counts, feature quality)
 │       ├── test_reporting.py          ← dashboard signals, portfolio, recommendations
 │       ├── test_plotting.py           ← all plot functions (steps 01–06)
 │       ├── test_runtime.py            ← RunConfig defaults, from_args, str, logging
@@ -157,6 +158,7 @@ trading-crab/
     ├── asset_returns.py           ← compute_quarterly_returns, returns_by_regime, rank_assets_by_regime
     ├── reporting.py               ← asset_signals, print_dashboard, save_dashboard_csv, portfolio helpers
     ├── plotting.py                ← ALL visualization helpers (used by notebooks + pipelines)
+    ├── monitoring.py              ← pipeline monitoring: date-range validation, source counts, feature quality
     ├── diagnostics.py             ← RRG analysis: rolling_zscore, percentile_rank, normalize_100, compute_rrg
     ├── tactics.py                 ← tactical classification: compute_tactics_metrics, classify_tactics
     ├── email.py                   ← weekly email: load_email_config, build_weekly_email_body, send_weekly_email
@@ -488,7 +490,7 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `STATE.md` for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
-**Summary:** all 9 pipeline steps run end-to-end on real data. **533 tests collected**
+**Summary:** all 9 pipeline steps run end-to-end on real data. **556 tests collected**
 (10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
 Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
 implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
@@ -1232,3 +1234,33 @@ Tests skip via `pytest.mark.skipif` when libraries unavailable.
 New dependencies: `hmmlearn>=0.3`, `statsmodels>=0.14` (added to requirements.txt
 and pyproject.toml).
 37 new tests (19 HMM + 18 Markov). Total: 533 collected, all passing.
+
+### D23. Phase C1 — Pipeline monitoring for steps 1-2 (2026-03-25)
+
+New `src/trading_crab_lib/monitoring.py` module with pipeline validation helpers:
+
+- **C1.1 — `format_completeness_table(report)`**: Enhanced formatting of the existing
+  `CompletenessReport` with a per-column NaN bar chart showing the worst offenders.
+  Replaces plain `report.summary()` in step 1 logging.
+
+- **C1.2 — `validate_date_range(df)`**: Checks whether the DataFrame extends to the
+  current quarter. Returns `DateRangeReport` with `quarters_behind`, per-column staleness
+  detection, and pass/fail status. Warns if data is >1 quarter behind or if individual
+  series have stopped updating.
+
+- **C1.3 — `count_source_columns(df, cfg)`**: Counts columns grouped by data source
+  (FRED, multpl, macrotrends, ETF, other) using config to identify provenance. Returns
+  `SourceRowCounts` dataclass with formatted summary.
+
+- **C1.4 — `compute_feature_quality(df)`**: Computes NaN counts per column, top-5
+  highest-variance features, and top-5 highest-correlation pairs. Returns
+  `FeatureQualityReport` with formatted summary. Wired into step 2 in both
+  `run_pipeline.py` and `pipelines/02_features.py`.
+
+- **C1.5 — Gap-fill before/after plots**: `_generate_gap_fill_plots()` helper in
+  `run_pipeline.py` generates `plot_gap_fill_before_after()` for 3 sample columns
+  (`log_sp500`, `log_us_cpi`, `log_10yr_ustreas`) when `--plots` is passed. Builds
+  a pre-gap-fill snapshot by replaying cross-ratios → log → select without gap fill.
+
+All monitoring wired into `run_pipeline.py` (steps 1-2) and standalone pipeline scripts.
+23 tests in `tests/unit/test_monitoring.py`. Total: 556 collected, all passing.
