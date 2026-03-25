@@ -46,6 +46,7 @@ tests/unit/test_reporting.py                15 tests — ✅ all passing (dashbo
 tests/unit/test_plotting.py                 20 tests — ✅ all passing (all plot functions, save/show, constants)
 tests/unit/test_runtime.py                  25 tests — ✅ all passing (RunConfig defaults, from_args, str, logging)
 tests/unit/test_ingestion_completeness.py    8 tests — ✅ all passing (completeness report P23)
+tests/unit/test_monitoring.py               23 tests — ✅ all passing (pipeline monitoring C1: date-range, source counts, feature quality)
 tests/test_models_regime.py                  3 tests — ✅ all passing (classifier bundle API + TSCV ordering)
 tests/test_models_boosting.py                2 tests — ✅ all passing (GradientBoosting in bundle API)
 tests/test_models_interpret_tree.py          2 tests — ✅ all passing (interpretability helpers)
@@ -57,7 +58,7 @@ tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeli
 tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
 tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 533 collected — ✅ all passing (Python 3.11; 11 skipped: HDBSCAN + cssselect optional)
+Total: 556 collected — ✅ all passing (Python 3.11; 11 skipped: HDBSCAN + cssselect optional)
 ```
 
 **Coverage gaps:** All previously untested modules now have test coverage.

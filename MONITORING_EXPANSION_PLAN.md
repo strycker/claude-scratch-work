@@ -95,15 +95,19 @@ New functions in `plotting.py` + smoke tests in `test_plotting.py`.
 
 ---
 
-## Phase C1 — Pipeline Monitoring: Steps 1–2 (5 items)
+## Phase C1 — Pipeline Monitoring: Steps 1–2 (5 items) ✅ DONE
 
-| Item | Step | Enhancement |
-|------|------|-------------|
-| C1.1 | Step 1 | Wire `ingestion_completeness_report()` into logging; print table of missing/extra/high-NaN columns |
-| C1.2 | Step 1 | Add date-range validation: warn if data doesn't extend to current quarter |
-| C1.3 | Step 1 | Add per-source row count summary: multpl (N rows), FRED (N rows), macrotrends (N rows), ETFs (N rows) |
-| C1.4 | Step 2 | Print feature quality report: NaN count per col, top-5 highest-variance, top-5 highest-correlation pairs |
-| C1.5 | Step 2 | Generate `plot_gap_fill_before_after()` for 3 sample columns when `--plots` |
+| Item | Step | Enhancement | Status |
+|------|------|-------------|--------|
+| C1.1 | Step 1 | Wire `ingestion_completeness_report()` into logging; print table of missing/extra/high-NaN columns | ✅ |
+| C1.2 | Step 1 | Add date-range validation: warn if data doesn't extend to current quarter | ✅ |
+| C1.3 | Step 1 | Add per-source row count summary: multpl (N cols), FRED (N cols), macrotrends (N cols), ETFs (N cols) | ✅ |
+| C1.4 | Step 2 | Print feature quality report: NaN count per col, top-5 highest-variance, top-5 highest-correlation pairs | ✅ |
+| C1.5 | Step 2 | Generate `plot_gap_fill_before_after()` for 3 sample columns when `--plots` | ✅ |
+
+**Implementation:** `src/trading_crab_lib/monitoring.py` (new module, ~250 lines).
+Wired into `run_pipeline.py` steps 1-2 and `pipelines/01_ingest.py`, `pipelines/02_features.py`.
+23 tests in `tests/unit/test_monitoring.py`.
 
 ---
 

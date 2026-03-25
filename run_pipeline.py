@@ -417,8 +417,13 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
         if sample_series:
             plotting.plot_raw_series_sample(combined, sample_series, run_cfg)
 
-    # ── Completeness report (P23) ───────────────────────────────────────
+    # ── Completeness report (P23 + C1.1) ────────────────────────────────
     from trading_crab_lib.ingestion import ingestion_completeness_report
+    from trading_crab_lib.monitoring import (
+        format_completeness_table,
+        validate_date_range,
+        count_source_columns,
+    )
     expected_cols: list[str] = []
     for series_id, meta in cfg.get("fred", {}).get("series", {}).items():
         expected_cols.append(meta.get("name", series_id.lower()))
@@ -429,9 +434,53 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
     for ticker in cfg.get("features", {}).get("asset_price_columns", []):
         expected_cols.append(f"etf_{ticker.lower()}")
     report = ingestion_completeness_report(combined, expected_columns=expected_cols)
-    log.info("Ingestion completeness:\n%s", report.summary())
+    log.info("Ingestion completeness:\n%s", format_completeness_table(report))
+
+    # ── Date-range validation (C1.2) ──────────────────────────────────
+    date_report = validate_date_range(combined)
+    log.info("Date-range check:\n%s", date_report.summary())
+
+    # ── Per-source column count summary (C1.3) ────────────────────────
+    source_counts = count_source_columns(combined, cfg)
+    log.info("Source breakdown:\n%s", source_counts.summary())
 
     log.info("Step 1 done: %d rows × %d cols", len(combined), len(combined.columns))
+
+
+def _generate_gap_fill_plots(raw, features, cfg, run_cfg, plotting) -> None:
+    """Generate gap-fill before/after plots for 3 sample columns (C1.5).
+
+    Compares raw data (after log transform but before gap fill) against
+    the fully-engineered features to visualize where Bernstein interpolation
+    and Taylor extrapolation filled gaps.
+    """
+    from trading_crab_lib.transforms import (
+        add_cross_ratios,
+        apply_log_transforms,
+        select_features,
+    )
+    from trading_crab_lib.yield_curve_features import add_yield_curve_features
+
+    feat_cfg = cfg["features"]
+
+    # Build pre-gap-fill snapshot: cross-ratios → log → select initial features
+    pre_fill = add_cross_ratios(raw.copy())
+    pre_fill = add_yield_curve_features(pre_fill)
+    pre_fill = apply_log_transforms(pre_fill, feat_cfg["log_columns"])
+    pre_fill = select_features(pre_fill, feat_cfg["initial_features"])
+
+    # Columns to visualize — economically meaningful, likely to have gaps
+    sample_cols = ["log_sp500", "log_us_cpi", "log_10yr_ustreas"]
+    for col in sample_cols:
+        if col not in pre_fill.columns or col not in features.columns:
+            continue
+        plotting.plot_gap_fill_before_after(
+            pre_fill[col],
+            features[col],
+            run_cfg,
+            series_name=col,
+        )
+    log.info("Step 2: generated gap-fill before/after plots for %s", sample_cols)
 
 
 def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
@@ -475,10 +524,19 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
         "Step 2: wrote features.parquet (centered) and features_supervised.parquet (causal)"
     )
 
+    # ── Feature quality report (C1.4) ────────────────────────────────────
+    from trading_crab_lib.monitoring import compute_feature_quality
+    quality = compute_feature_quality(features)
+    log.info("Step 2 quality:\n%s", quality.summary())
+
     if run_cfg.generate_plots:
         feat_only = features.drop(columns=["market_code"], errors="ignore")
         plotting.plot_feature_distributions(feat_only, run_cfg)
         plotting.plot_feature_correlations(feat_only, run_cfg)
+
+        # ── Gap-fill before/after plots (C1.5) ────────────────────────
+        # Compare raw (pre-gap-fill) vs filled for 3 sample columns
+        _generate_gap_fill_plots(raw, features, cfg, run_cfg, plotting)
 
     log.info("Step 2 done: %d rows × %d feature cols", len(features), len(features.columns))
 
