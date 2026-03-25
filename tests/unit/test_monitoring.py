@@ -21,6 +21,10 @@ from trading_crab_lib.monitoring import (
     compute_cv_fold_scores,
     CVFoldReport,
     check_regime_probabilities,
+    format_tactics_summary,
+    validate_step_output,
+    StepValidation,
+    PipelineHealthSummary,
 )
 
 
@@ -515,3 +519,116 @@ class TestCheckRegimeProbabilities:
         probs = {0: 0.5, 1: 0.45, 2: 0.05}
         warnings = check_regime_probabilities(probs)
         assert warnings == []
+
+
+# ── C4.2: format_tactics_summary ─────────────────────────────────────────
+
+
+class TestFormatTacticsSummary:
+    def test_basic_summary(self):
+        df = pd.DataFrame({
+            "ticker": ["SPY", "TLT", "GLD", "VNQ"],
+            "classification": ["buy_hold", "swing", "swing", "stand_aside"],
+        })
+        text = format_tactics_summary(df)
+        assert "buy_hold" in text
+        assert "swing" in text
+        assert "stand_aside" in text
+        assert "TOTAL" in text
+        assert "4 assets" in text
+
+    def test_empty_df(self):
+        df = pd.DataFrame()
+        text = format_tactics_summary(df)
+        assert "no tactics data" in text
+
+    def test_missing_classification_column(self):
+        df = pd.DataFrame({"ticker": ["SPY"], "signal": ["green"]})
+        text = format_tactics_summary(df)
+        assert "no tactics data" in text
+
+    def test_all_one_category(self):
+        df = pd.DataFrame({
+            "classification": ["buy_hold"] * 5,
+        })
+        text = format_tactics_summary(df)
+        assert "5 assets" in text
+
+
+# ── C4.3: validate_step_output ───────────────────────────────────────────
+
+
+class TestValidateStepOutput:
+    def test_valid_output(self):
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
+        result = validate_step_output(1, {"features": df})
+        assert result.passed
+        assert result.step_num == 1
+
+    def test_missing_output(self):
+        result = validate_step_output(2, {"missing": None})
+        assert not result.passed
+
+    def test_empty_output(self):
+        result = validate_step_output(3, {"empty": pd.DataFrame()})
+        assert not result.passed
+
+    def test_high_nan_detected(self):
+        df = pd.DataFrame({
+            "clean": [1, 2, 3, 4, 5],
+            "dirty": [np.nan, np.nan, np.nan, np.nan, 5],
+        })
+        result = validate_step_output(1, {"data": df}, max_nan_pct=0.5)
+        # dirty is 80% NaN, should fail
+        nan_checks = [c for c in result.checks if "NaN" in c[0]]
+        assert any(not ok for _, ok, _ in nan_checks)
+
+    def test_summary_format(self):
+        df = pd.DataFrame({"x": [1, 2]})
+        result = validate_step_output(5, {"output": df})
+        text = result.summary()
+        assert "Step 5" in text
+        assert "OK" in text
+
+    def test_multiple_outputs(self):
+        df1 = pd.DataFrame({"a": [1, 2]})
+        df2 = pd.DataFrame({"b": [3.0, 4.0]})
+        result = validate_step_output(1, {"first": df1, "second": df2})
+        assert result.passed
+        assert len(result.checks) >= 4  # shape + NaN for each
+
+
+# ── C4.4 + C4.5: PipelineHealthSummary ───────────────────────────────────
+
+
+class TestPipelineHealthSummary:
+    def test_record_and_summary(self):
+        health = PipelineHealthSummary()
+        health.record_step(1, 2.5)
+        health.record_step(2, 5.0)
+        health.record_step(3, 1.0, failed=True)
+        text = health.summary()
+        assert "Step 1" in text
+        assert "2.5s" in text
+        assert "FAIL" in text
+        assert "TOTAL" in text
+
+    def test_steps_tracking(self):
+        health = PipelineHealthSummary()
+        health.record_step(1, 1.0)
+        health.record_step(2, 2.0)
+        assert health.steps_run == [1, 2]
+        assert health.steps_failed == []
+
+    def test_failed_steps(self):
+        health = PipelineHealthSummary()
+        health.record_step(1, 1.0)
+        health.record_step(2, 0.5, failed=True)
+        assert 2 in health.steps_failed
+        assert 1 not in health.steps_failed
+
+    def test_empty_summary(self):
+        health = PipelineHealthSummary()
+        text = health.summary()
+        assert "Pipeline Health Summary" in text
+        assert "TOTAL" in text

@@ -1343,3 +1343,28 @@ New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
   before `print_dashboard()`.
 
 9 new tests in `tests/unit/test_monitoring.py` (total: 42, 2 skipped without sklearn).
+
+### D27. Phase C4 — Pipeline monitoring for steps 8-9 + QA gates (2026-03-25)
+
+New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
+
+- **C4.1 — RRG scatter plot**: `plot_rrg_scatter()` wired into `step8_diagnostics()`
+  when `--plots` is passed and RRG data is available.
+
+- **C4.2 — Tactics summary**: `format_tactics_summary()` in `monitoring.py` formats
+  a count of buy_hold/swing/stand_aside per asset with percentage bars. Wired into
+  `step9_tactics()`.
+
+- **C4.3 — Step output validation**: `validate_step_output(step_num, outputs)` checks
+  DataFrame shape, NaN fraction per column (warns if >50%), and dtype presence.
+  Returns `StepValidation` dataclass with pass/fail per check. Available as a library
+  function for pipeline steps to call on their outputs.
+
+- **C4.4 — Step timing**: Main loop in `main()` now tracks elapsed time per step
+  using `time.monotonic()`. Each step prints elapsed seconds on completion.
+
+- **C4.5 — Pipeline health summary**: `PipelineHealthSummary` dataclass tracks step
+  timings, completed vs failed steps. Printed at the end of the pipeline run with
+  a formatted table showing per-step timing and pass/fail status.
+
+14 new tests in `tests/unit/test_monitoring.py` (total: 56, all passing).

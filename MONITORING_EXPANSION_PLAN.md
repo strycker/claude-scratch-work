@@ -135,15 +135,15 @@ Wired into `run_pipeline.py` steps 1-2 and `pipelines/01_ingest.py`, `pipelines/
 
 ---
 
-## Phase C4 — Pipeline Monitoring: Steps 8–9 + QA Gates (5 items)
+## Phase C4 — Pipeline Monitoring: Steps 8–9 + QA Gates (5 items) ✅ DONE
 
-| Item | Step | Enhancement |
-|------|------|-------------|
-| C4.1 | Step 8 | Generate `plot_rrg_scatter()` when `--plots` |
-| C4.2 | Step 9 | Print tactics summary: count of buy_hold/swing/stand_aside per asset |
-| C4.3 | All | Add `validate_step_output(step_num, outputs)` function that checks shape, NaN%, dtype |
-| C4.4 | All | Print step timing: elapsed seconds per step in final summary |
-| C4.5 | All | Print pipeline health summary at end: steps run, plots generated, warnings raised |
+| Item | Step | Enhancement | Status |
+|------|------|-------------|--------|
+| C4.1 | Step 8 | Generate `plot_rrg_scatter()` when `--plots` | ✅ Done |
+| C4.2 | Step 9 | Print tactics summary: count of buy_hold/swing/stand_aside per asset | ✅ Done |
+| C4.3 | All | Add `validate_step_output(step_num, outputs)` function that checks shape, NaN%, dtype | ✅ Done |
+| C4.4 | All | Print step timing: elapsed seconds per step in final summary | ✅ Done |
+| C4.5 | All | Print pipeline health summary at end: steps run, plots generated, warnings raised | ✅ Done |
 
 ---
 

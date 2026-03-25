@@ -1106,9 +1106,15 @@ def step8_diagnostics(cfg: dict, run_cfg: RunConfig) -> None:
         if not df_b.empty:
             all_rrg.append(df_b)
     if all_rrg:
+        rrg_combined = pd.concat(all_rrg, ignore_index=True)
         rrg_path = diag_dir / "rrg_current.parquet"
-        pd.concat(all_rrg, ignore_index=True).to_parquet(rrg_path, index=False)
+        rrg_combined.to_parquet(rrg_path, index=False)
         log.info("Step 8: wrote RRG diagnostics to %s", rrg_path)
+
+        # ── C4.1: RRG scatter plot ───────────────────────────────────
+        if run_cfg.generate_plots:
+            from trading_crab_lib import plotting
+            plotting.plot_rrg_scatter(rrg_combined, run_cfg)
 
     log.info("Step 8 done")
 
@@ -1140,6 +1146,11 @@ def step9_tactics(cfg: dict, run_cfg: RunConfig) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "tactics_signals.parquet"
     tactics_df.to_parquet(out_path, index=False)
+
+    # ── C4.2: Tactics summary ────────────────────────────────────────
+    from trading_crab_lib.monitoring import format_tactics_summary
+    log.info("Step 9 tactics summary:\n%s", format_tactics_summary(tactics_df))
+
     log.info("Step 9: tactics signals written to %s", out_path)
 
 
@@ -1290,17 +1301,27 @@ def main() -> None:
     (OUTPUT_DIR / "models").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIR / "reports").mkdir(parents=True, exist_ok=True)
 
+    # ── C4.4 + C4.5: Pipeline timing and health tracking ────────────────────
+    import time as _time
+    from trading_crab_lib.monitoring import PipelineHealthSummary
+    health = PipelineHealthSummary()
+
     for step_num in sorted(requested):
         label, fn = STEPS[step_num]
         print(f"── Step {step_num}: {label} ──")
+        t0 = _time.monotonic()
         try:
             # step3 needs the save_market_code flag
             if step_num == 3:
                 fn(cfg, run_cfg, save_market_code=save_market_code)
             else:
                 fn(cfg, run_cfg)
-            print(f"   ✓ done\n")
+            elapsed = _time.monotonic() - t0
+            health.record_step(step_num, elapsed)
+            print(f"   ✓ done ({elapsed:.1f}s)\n")
         except Exception as exc:
+            elapsed = _time.monotonic() - t0
+            health.record_step(step_num, elapsed, failed=True)
             log.exception("Step %d failed: %s", step_num, exc)
             print(f"   ✗ FAILED: {exc}\n")
             sys.exit(1)
@@ -1321,6 +1342,8 @@ def main() -> None:
             else:
                 print("Weekly report email failed to send (see logs).")
 
+    # ── C4.5: Pipeline health summary ────────────────────────────────────
+    print(health.summary())
     print("Pipeline complete.")
 
 
