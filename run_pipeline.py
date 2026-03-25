@@ -626,6 +626,29 @@ def step3_cluster(cfg: dict, run_cfg: RunConfig, save_market_code: bool = False)
         plotting.plot_elbow_curve(scores, best_k, run_cfg)
         plotting.plot_cluster_sizes(clustered["balanced_cluster"], regime_names, run_cfg)
 
+        # ── C2.1: Scree + PCA loadings plots ─────────────────────────
+        plotting.plot_scree(pca_model, run_cfg)
+        feature_names = list(X.columns)
+        plotting.plot_pca_loadings(pca_model, feature_names, run_cfg)
+
+        # ── C2.2: Silhouette samples plot ─────────────────────────────
+        plotting.plot_silhouette_samples(
+            X_scaled, clustered["balanced_cluster"].loc[X.index], run_cfg,
+        )
+
+    # ── C2.3: Method comparison table ─────────────────────────────────
+    # Compare KMeans balanced clustering against standard KMeans
+    from trading_crab_lib.cluster_comparison import compare_all_methods
+    from trading_crab_lib.monitoring import format_method_comparison
+    labels_dict = {
+        "KMeans (best-k)": clustered["cluster"].loc[X.index],
+        "KMeans (balanced)": clustered["balanced_cluster"].loc[X.index],
+    }
+    comparison = compare_all_methods(pca_df, labels_dict)
+    log.info("Step 3 method comparison:\n%s", format_method_comparison(comparison))
+    if run_cfg.generate_plots:
+        plotting.plot_method_comparison_table(comparison, run_cfg)
+
     log.info("Step 3 done: balanced_k=%d", clust_cfg["balanced_k"])
 
 
@@ -662,6 +685,11 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
     tm = build_transition_matrix(labels)
     tm.to_parquet(DATA_DIR / "regimes" / "transition_matrix.parquet")
 
+    # ── C2.4: Regime stability summary ───────────────────────────────
+    from trading_crab_lib.monitoring import compute_regime_stability
+    stability = compute_regime_stability(tm, labels)
+    log.info("Step 4 regime stability:\n%s", stability.summary())
+
     if run_cfg.generate_plots:
         plotting.plot_transition_matrix(tm, regime_names, run_cfg)
         plotting.plot_regime_timeline(labels, regime_names, run_cfg)
@@ -673,6 +701,14 @@ def step4_regime_label(cfg: dict, run_cfg: RunConfig) -> None:
         ]
         if key_cols:
             plotting.plot_regime_profiles(features, labels, regime_names, key_cols, run_cfg)
+
+        # ── C2.5: Feature-regime overlay for key indicators ──────────
+        overlay_cols = [
+            c for c in ["log_sp500_d1", "log_us_cpi_d1", "credit_spread", "10yr_ustreas_d1"]
+            if c in features.columns
+        ]
+        for col in overlay_cols:
+            plotting.plot_feature_regime_overlay(features[col], labels, regime_names, run_cfg)
 
     for rid, name in sorted(regime_names.items()):
         n = (labels == rid).sum()
@@ -725,6 +761,19 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
 
     forward_models = train_forward_classifiers(X, y, cfg)
 
+    # ── C3.1: Per-fold CV accuracy summary ───────────────────────────────
+    from trading_crab_lib.monitoring import compute_cv_fold_scores, CVFoldReport
+    cv_report = CVFoldReport()
+    n_splits = cfg.get("prediction", {}).get("cv_splits", 5)
+    rf_scores = compute_cv_fold_scores(current_model, X, y, n_splits=n_splits)
+    cv_report.add("RF", rf_scores)
+    dt_scores = compute_cv_fold_scores(dt_model, X, y, n_splits=n_splits)
+    cv_report.add("DT", dt_scores)
+    if lgbm_model is not None:
+        lgbm_scores = compute_cv_fold_scores(lgbm_model, X, y, n_splits=n_splits)
+        cv_report.add("LGBM", lgbm_scores)
+    log.info("Step 5 CV summary:\n%s", cv_report.summary())
+
     model_dir = OUTPUT_DIR / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -757,6 +806,29 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
             plotting.plot_feature_importance(current_model, X.columns.tolist(), run_cfg)
             plotting.plot_forward_probabilities(latest, regime_names, run_cfg)
             plotting.plot_predicted_vs_actual(X, y, current_model, regime_names, run_cfg)
+
+            # ── C3.2: CV fold accuracy + decision tree plots ─────────
+            plotting.plot_cv_fold_accuracy(rf_scores, run_cfg, model_name="RF")
+            plotting.plot_cv_fold_accuracy(
+                dt_scores, run_cfg, model_name="DT",
+                filename="05_cv_fold_accuracy_dt.png",
+            )
+            plotting.plot_decision_tree(
+                dt_model, X.columns.tolist(), regime_names, run_cfg,
+            )
+
+            # ── C3.3: Calibration curve + model comparison bar ───────
+            import numpy as _np
+            y_proba_rf = current_model.predict_proba(X)
+            plotting.plot_calibration_curve(y, y_proba_rf, regime_names, run_cfg)
+
+            model_metrics: dict[str, dict[str, float]] = {
+                "RF": {"accuracy": float(_np.mean(rf_scores))},
+                "DT": {"accuracy": float(_np.mean(dt_scores))},
+            }
+            if lgbm_model is not None:
+                model_metrics["LGBM"] = {"accuracy": float(_np.mean(lgbm_scores))}
+            plotting.plot_model_comparison_bar(model_metrics, run_cfg)
         except Exception as exc:
             log.warning("Could not generate prediction plots: %s", exc)
 
@@ -922,6 +994,24 @@ def step7_dashboard(cfg: dict, run_cfg: RunConfig) -> None:
         ranked = rank_assets_by_regime(profile)
         asset_signals_df = asset_signals(ranked, prediction["regime"], thresholds=thresholds)
 
+    # ── C3.5: QA gate — warn if any regime has suspiciously low probability ──
+    from trading_crab_lib.monitoring import check_regime_probabilities
+    qa_warnings = check_regime_probabilities(prediction["probabilities"])
+    for w in qa_warnings:
+        log.warning("Step 7 QA: %s", w)
+    if not qa_warnings:
+        log.info("Step 7 QA: all regime probabilities >= 5%% — OK")
+
+    # ── C3.4: Forward probability evolution plot ─────────────────────────────
+    from trading_crab_lib.regime import compute_forward_probabilities
+    labels = _load_parquet(
+        DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels"
+    )["balanced_cluster"]
+    forward_probs = compute_forward_probabilities(labels)
+    if run_cfg.generate_plots and forward_probs:
+        from trading_crab_lib import plotting
+        plotting.plot_forward_prob_evolution(forward_probs, regime_names, run_cfg)
+
     print_dashboard(prediction, regime_names, asset_signals_df, tm)
 
     if not asset_signals_df.empty:
@@ -1016,9 +1106,15 @@ def step8_diagnostics(cfg: dict, run_cfg: RunConfig) -> None:
         if not df_b.empty:
             all_rrg.append(df_b)
     if all_rrg:
+        rrg_combined = pd.concat(all_rrg, ignore_index=True)
         rrg_path = diag_dir / "rrg_current.parquet"
-        pd.concat(all_rrg, ignore_index=True).to_parquet(rrg_path, index=False)
+        rrg_combined.to_parquet(rrg_path, index=False)
         log.info("Step 8: wrote RRG diagnostics to %s", rrg_path)
+
+        # ── C4.1: RRG scatter plot ───────────────────────────────────
+        if run_cfg.generate_plots:
+            from trading_crab_lib import plotting
+            plotting.plot_rrg_scatter(rrg_combined, run_cfg)
 
     log.info("Step 8 done")
 
@@ -1050,6 +1146,11 @@ def step9_tactics(cfg: dict, run_cfg: RunConfig) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "tactics_signals.parquet"
     tactics_df.to_parquet(out_path, index=False)
+
+    # ── C4.2: Tactics summary ────────────────────────────────────────
+    from trading_crab_lib.monitoring import format_tactics_summary
+    log.info("Step 9 tactics summary:\n%s", format_tactics_summary(tactics_df))
+
     log.info("Step 9: tactics signals written to %s", out_path)
 
 
@@ -1200,17 +1301,27 @@ def main() -> None:
     (OUTPUT_DIR / "models").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIR / "reports").mkdir(parents=True, exist_ok=True)
 
+    # ── C4.4 + C4.5: Pipeline timing and health tracking ────────────────────
+    import time as _time
+    from trading_crab_lib.monitoring import PipelineHealthSummary
+    health = PipelineHealthSummary()
+
     for step_num in sorted(requested):
         label, fn = STEPS[step_num]
         print(f"── Step {step_num}: {label} ──")
+        t0 = _time.monotonic()
         try:
             # step3 needs the save_market_code flag
             if step_num == 3:
                 fn(cfg, run_cfg, save_market_code=save_market_code)
             else:
                 fn(cfg, run_cfg)
-            print(f"   ✓ done\n")
+            elapsed = _time.monotonic() - t0
+            health.record_step(step_num, elapsed)
+            print(f"   ✓ done ({elapsed:.1f}s)\n")
         except Exception as exc:
+            elapsed = _time.monotonic() - t0
+            health.record_step(step_num, elapsed, failed=True)
             log.exception("Step %d failed: %s", step_num, exc)
             print(f"   ✗ FAILED: {exc}\n")
             sys.exit(1)
@@ -1231,6 +1342,8 @@ def main() -> None:
             else:
                 print("Weekly report email failed to send (see logs).")
 
+    # ── C4.5: Pipeline health summary ────────────────────────────────────
+    print(health.summary())
     print("Pipeline complete.")
 
 

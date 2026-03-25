@@ -1288,3 +1288,83 @@ entirely when `weekly_report.md` doesn't exist, preventing the confusing error c
 `email.local.yaml` as part of setup (GSD pattern).
 
 21 tests in `tests/test_email_weekly.py` (8 new for env vars + validation).
+
+### D25. Phase C2 — Pipeline monitoring for steps 3-4 (2026-03-25)
+
+New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
+
+- **C2.1 — Scree + PCA loadings plots**: `plot_scree()` and `plot_pca_loadings()`
+  wired into `step3_cluster()` when `--plots` is passed.
+
+- **C2.2 — Silhouette samples plot**: `plot_silhouette_samples()` wired into
+  `step3_cluster()` when `--plots` is passed.
+
+- **C2.3 — Method comparison table**: `format_method_comparison()` in `monitoring.py`
+  formats a clustering comparison DataFrame (method, k, silhouette, DB, CH) as a
+  readable table. Compares KMeans (best-k) vs KMeans (balanced) via
+  `compare_all_methods()`. Logged at INFO + `plot_method_comparison_table()` on `--plots`.
+
+- **C2.4 — Regime stability summary**: `compute_regime_stability()` in `monitoring.py`
+  extracts persistence probabilities from transition matrix diagonal, identifies
+  most/least stable regimes, and computes average consecutive run length per regime.
+  Returns `RegimeStabilityReport` dataclass. Wired into `step4_regime_label()`.
+
+- **C2.5 — Feature-regime overlay plots**: `plot_feature_regime_overlay()` for 4 key
+  indicators (`log_sp500_d1`, `log_us_cpi_d1`, `credit_spread`, `10yr_ustreas_d1`)
+  wired into `step4_regime_label()` when `--plots` is passed.
+
+10 new tests in `tests/unit/test_monitoring.py` (total: 33). Total: 566 collected, all passing.
+
+### D26. Phase C3 — Pipeline monitoring for steps 5-7 (2026-03-25)
+
+New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
+
+- **C3.1 — Per-fold CV accuracy table**: `CVFoldReport` dataclass and
+  `compute_cv_fold_scores()` run TimeSeriesSplit CV on fitted models (via
+  `sklearn.base.clone`) and return per-fold accuracies. Wired into `step5_predict()`
+  for RF, DT, and LGBM (when available). Logged as formatted table with mean ± std.
+
+- **C3.2 — CV fold accuracy + decision tree plots**: `plot_cv_fold_accuracy()` for
+  both RF and DT, plus `plot_decision_tree()` wired into `step5_predict()` when
+  `--plots` is passed.
+
+- **C3.3 — Calibration curve + model comparison bar**: `plot_calibration_curve()`
+  using RF's `predict_proba()` output, and `plot_model_comparison_bar()` comparing
+  RF vs DT (vs LGBM) mean CV accuracy. Wired into `step5_predict()` when `--plots`.
+
+- **C3.4 — Forward probability evolution plot**: `plot_forward_prob_evolution()`
+  wired into `step7_dashboard()` when `--plots`. Uses `compute_forward_probabilities()`
+  from `regime.py` to compute empirical forward transition matrices at horizons
+  [1Q, 4Q, 8Q].
+
+- **C3.5 — Dashboard QA gate**: `check_regime_probabilities()` in `monitoring.py`
+  warns if any regime has <5% predicted probability (suspiciously low — may indicate
+  model overconfidence or degenerate clustering). Wired into `step7_dashboard()`
+  before `print_dashboard()`.
+
+9 new tests in `tests/unit/test_monitoring.py` (total: 42, 2 skipped without sklearn).
+
+### D27. Phase C4 — Pipeline monitoring for steps 8-9 + QA gates (2026-03-25)
+
+New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
+
+- **C4.1 — RRG scatter plot**: `plot_rrg_scatter()` wired into `step8_diagnostics()`
+  when `--plots` is passed and RRG data is available.
+
+- **C4.2 — Tactics summary**: `format_tactics_summary()` in `monitoring.py` formats
+  a count of buy_hold/swing/stand_aside per asset with percentage bars. Wired into
+  `step9_tactics()`.
+
+- **C4.3 — Step output validation**: `validate_step_output(step_num, outputs)` checks
+  DataFrame shape, NaN fraction per column (warns if >50%), and dtype presence.
+  Returns `StepValidation` dataclass with pass/fail per check. Available as a library
+  function for pipeline steps to call on their outputs.
+
+- **C4.4 — Step timing**: Main loop in `main()` now tracks elapsed time per step
+  using `time.monotonic()`. Each step prints elapsed seconds on completion.
+
+- **C4.5 — Pipeline health summary**: `PipelineHealthSummary` dataclass tracks step
+  timings, completed vs failed steps. Printed at the end of the pipeline run with
+  a formatted table showing per-step timing and pass/fail status.
+
+14 new tests in `tests/unit/test_monitoring.py` (total: 56, all passing).

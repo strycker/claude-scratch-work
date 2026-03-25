@@ -2,6 +2,8 @@
 Pipeline monitoring helpers — validation summaries, diagnostic reports, QA gates.
 
 Phase C1: Steps 1-2 monitoring (ingestion + feature engineering).
+Phase C2: Steps 3-4 monitoring (clustering + regime labeling).
+Phase C3: Steps 5-7 monitoring (prediction + dashboard).
 """
 from __future__ import annotations
 
@@ -301,3 +303,346 @@ def compute_feature_quality(df: pd.DataFrame) -> FeatureQualityReport:
 
     log.info("Feature quality report:\n%s", report.summary())
     return report
+
+
+# ── C2.3: Clustering method comparison summary ───────────────────────────
+
+
+def format_method_comparison(comparison_df: pd.DataFrame) -> str:
+    """Format a clustering comparison DataFrame for logging.
+
+    Parameters
+    ----------
+    comparison_df :
+        Output of ``cluster_comparison.compare_all_methods()`` with columns:
+        method, n_clusters, silhouette, davies_bouldin, calinski.
+    """
+    if comparison_df.empty:
+        return "  (no methods to compare)"
+
+    lines = ["  Clustering method comparison:"]
+    header = f"    {'Method':<20} {'k':>3}  {'Silhouette':>10}  {'DB':>8}  {'CH':>10}"
+    lines.append(header)
+    lines.append("    " + "-" * (len(header) - 4))
+    for _, row in comparison_df.iterrows():
+        lines.append(
+            f"    {row.get('method', '?'):<20} {int(row.get('n_clusters', 0)):>3}"
+            f"  {row.get('silhouette', float('nan')):>10.4f}"
+            f"  {row.get('davies_bouldin', float('nan')):>8.3f}"
+            f"  {row.get('calinski', float('nan')):>10.1f}"
+        )
+    # Identify best method by silhouette
+    best_idx = comparison_df["silhouette"].idxmax()
+    best = comparison_df.loc[best_idx]
+    lines.append(f"  Best by silhouette: {best['method']} ({best['silhouette']:.4f})")
+    return "\n".join(lines)
+
+
+# ── C2.4: Regime stability summary ───────────────────────────────────────
+
+
+@dataclass
+class RegimeStabilityReport:
+    """Result of a regime stability analysis from the transition matrix."""
+
+    persistence: dict[int, float] = field(default_factory=dict)
+    most_stable: tuple[int, float] | None = None
+    least_stable: tuple[int, float] | None = None
+    avg_duration: dict[int, float] = field(default_factory=dict)
+
+    def summary(self) -> str:
+        lines = ["  Regime stability (transition matrix diagonal):"]
+        if not self.persistence:
+            return "  (no persistence data)"
+        max_id_len = max(len(str(r)) for r in self.persistence)
+        for rid, pval in sorted(self.persistence.items()):
+            bar = "#" * int(pval * 20)
+            dur = self.avg_duration.get(rid, 0)
+            lines.append(
+                f"    Regime {rid:<{max_id_len}}:  persist={pval:5.1%}  "
+                f"avg_run={dur:.1f}Q  {bar}"
+            )
+        if self.most_stable:
+            lines.append(
+                f"  Most stable:  regime {self.most_stable[0]} "
+                f"({self.most_stable[1]:.1%} self-transition)"
+            )
+        if self.least_stable:
+            lines.append(
+                f"  Least stable: regime {self.least_stable[0]} "
+                f"({self.least_stable[1]:.1%} self-transition)"
+            )
+        return "\n".join(lines)
+
+
+def compute_regime_stability(
+    transition_matrix: pd.DataFrame,
+    labels: pd.Series,
+) -> RegimeStabilityReport:
+    """Compute regime stability metrics from a transition matrix and labels.
+
+    Parameters
+    ----------
+    transition_matrix :
+        Square DataFrame where entry (i, j) is P(regime j at t+1 | regime i at t).
+        Rows and columns are regime IDs.
+    labels :
+        Time-ordered Series of regime assignments (one per quarter).
+
+    Returns
+    -------
+    RegimeStabilityReport with persistence probabilities and average durations.
+    """
+    report = RegimeStabilityReport()
+
+    # Diagonal = persistence probability
+    for rid in transition_matrix.index:
+        if rid in transition_matrix.columns:
+            report.persistence[rid] = float(transition_matrix.loc[rid, rid])
+
+    if report.persistence:
+        best = max(report.persistence.items(), key=lambda x: x[1])
+        worst = min(report.persistence.items(), key=lambda x: x[1])
+        report.most_stable = best
+        report.least_stable = worst
+
+    # Average consecutive run length per regime
+    if not labels.empty:
+        labels_arr = labels.values
+        for rid in sorted(set(labels_arr)):
+            runs: list[int] = []
+            current_run = 0
+            for val in labels_arr:
+                if val == rid:
+                    current_run += 1
+                else:
+                    if current_run > 0:
+                        runs.append(current_run)
+                    current_run = 0
+            if current_run > 0:
+                runs.append(current_run)
+            report.avg_duration[rid] = sum(runs) / len(runs) if runs else 0.0
+
+    log.info("Regime stability:\n%s", report.summary())
+    return report
+
+
+# ── C3.1: Per-fold CV accuracy summary ───────────────────────────────────
+
+
+@dataclass
+class CVFoldReport:
+    """Per-fold cross-validation results for one or more models."""
+
+    model_scores: dict[str, list[float]] = field(default_factory=dict)
+
+    def add(self, model_name: str, fold_scores: list[float]) -> None:
+        self.model_scores[model_name] = fold_scores
+
+    def summary(self) -> str:
+        lines = ["  Cross-validation fold accuracy:"]
+        for name, scores in self.model_scores.items():
+            mean = np.mean(scores) if scores else 0.0
+            std = np.std(scores) if scores else 0.0
+            fold_str = "  ".join(f"{s:.1%}" for s in scores)
+            lines.append(f"    {name:<10}  folds: [{fold_str}]  mean={mean:.1%} ± {std:.1%}")
+        return "\n".join(lines)
+
+
+def compute_cv_fold_scores(
+    model,
+    X: pd.DataFrame,
+    y: pd.Series,
+    *,
+    n_splits: int = 5,
+) -> list[float]:
+    """Run TimeSeriesSplit CV on a fitted model's class and return per-fold accuracies.
+
+    Clones the model via sklearn's clone() to avoid mutating the original.
+    """
+    from sklearn.base import clone
+    from sklearn.model_selection import TimeSeriesSplit
+
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    scores: list[float] = []
+    for train_idx, test_idx in tscv.split(X):
+        m = clone(model)
+        m.fit(X.iloc[train_idx], y.iloc[train_idx])
+        scores.append(float(m.score(X.iloc[test_idx], y.iloc[test_idx])))
+    return scores
+
+
+# ── C3.5: Dashboard QA gate ──────────────────────────────────────────────
+
+
+def check_regime_probabilities(
+    probabilities: dict[int, float],
+    *,
+    min_threshold: float = 0.05,
+) -> list[str]:
+    """Check if any regime has suspiciously low probability.
+
+    Returns a list of warning messages (empty if all OK).
+    """
+    warnings: list[str] = []
+    for regime_id, prob in sorted(probabilities.items()):
+        if prob < min_threshold:
+            warnings.append(
+                f"Regime {regime_id} has very low probability ({prob:.1%} < {min_threshold:.0%})"
+            )
+    return warnings
+
+
+# ── C4.2: Tactics summary ────────────────────────────────────────────────
+
+
+def format_tactics_summary(tactics_df: pd.DataFrame) -> str:
+    """Format a tactics DataFrame as a count summary by classification.
+
+    Parameters
+    ----------
+    tactics_df :
+        Output of ``classify_tactics()`` with a ``classification`` column.
+    """
+    if tactics_df.empty or "classification" not in tactics_df.columns:
+        return "  (no tactics data)"
+
+    counts = tactics_df["classification"].value_counts()
+    total = len(tactics_df)
+    lines = ["  Tactics classification summary:"]
+    for cls in ["buy_hold", "swing", "stand_aside"]:
+        n = counts.get(cls, 0)
+        pct = n / total * 100 if total else 0
+        bar = "#" * int(pct / 5)
+        lines.append(f"    {cls:<14}  {n:3d} assets  ({pct:5.1f}%)  {bar}")
+    # Any other classifications
+    other = [c for c in counts.index if c not in {"buy_hold", "swing", "stand_aside"}]
+    for cls in other:
+        n = counts[cls]
+        pct = n / total * 100 if total else 0
+        lines.append(f"    {cls:<14}  {n:3d} assets  ({pct:5.1f}%)")
+    lines.append(f"    TOTAL          {total:3d} assets")
+    return "\n".join(lines)
+
+
+# ── C4.3: Step output validation ─────────────────────────────────────────
+
+
+@dataclass
+class StepValidation:
+    """Result of validating a step's output."""
+
+    step_num: int = 0
+    checks: list[tuple[str, bool, str]] = field(default_factory=list)
+
+    @property
+    def passed(self) -> bool:
+        return all(ok for _, ok, _ in self.checks)
+
+    def summary(self) -> str:
+        lines = [f"  Step {self.step_num} output validation:"]
+        for name, ok, detail in self.checks:
+            status = "OK" if ok else "WARN"
+            lines.append(f"    [{status:>4}] {name}: {detail}")
+        return "\n".join(lines)
+
+
+def validate_step_output(
+    step_num: int,
+    outputs: dict[str, pd.DataFrame | None],
+    *,
+    max_nan_pct: float = 0.5,
+) -> StepValidation:
+    """Validate step outputs: check shape, NaN%, and dtypes.
+
+    Parameters
+    ----------
+    step_num :
+        Pipeline step number for reporting.
+    outputs :
+        ``{name: DataFrame}`` of the step's outputs.
+    max_nan_pct :
+        Maximum acceptable NaN fraction (0.0–1.0) per column before warning.
+
+    Returns
+    -------
+    StepValidation with per-output checks.
+    """
+    validation = StepValidation(step_num=step_num)
+
+    for name, df in outputs.items():
+        if df is None or (hasattr(df, "empty") and df.empty):
+            validation.checks.append((f"{name} exists", False, "missing or empty"))
+            continue
+
+        # Shape check
+        validation.checks.append(
+            (f"{name} shape", True, f"{df.shape[0]} rows × {df.shape[1]} cols")
+        )
+
+        # NaN check
+        if hasattr(df, "isna"):
+            nan_frac = df.isna().mean()
+            bad_cols = nan_frac[nan_frac > max_nan_pct]
+            if len(bad_cols) > 0:
+                worst = bad_cols.idxmax()
+                validation.checks.append(
+                    (f"{name} NaN%", False,
+                     f"{len(bad_cols)} cols > {max_nan_pct:.0%} NaN (worst: {worst} at {bad_cols[worst]:.1%})")
+                )
+            else:
+                validation.checks.append(
+                    (f"{name} NaN%", True, f"all cols below {max_nan_pct:.0%}")
+                )
+
+        # Dtype check — warn if all object columns (no numeric)
+        if hasattr(df, "select_dtypes"):
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) == 0 and len(df.columns) > 0:
+                validation.checks.append(
+                    (f"{name} dtypes", False, "no numeric columns found")
+                )
+
+    log.info("Step %d validation:\n%s", step_num, validation.summary())
+    return validation
+
+
+# ── C4.4 + C4.5: Pipeline timing and health summary ─────────────────────
+
+
+@dataclass
+class PipelineHealthSummary:
+    """Tracks step timings, plot counts, and warning counts."""
+
+    step_timings: dict[int, float] = field(default_factory=dict)
+    steps_run: list[int] = field(default_factory=list)
+    steps_failed: list[int] = field(default_factory=list)
+    total_warnings: int = 0
+
+    def record_step(self, step_num: int, elapsed: float, *, failed: bool = False) -> None:
+        self.step_timings[step_num] = elapsed
+        if failed:
+            self.steps_failed.append(step_num)
+        else:
+            self.steps_run.append(step_num)
+
+    def summary(self) -> str:
+        total_elapsed = sum(self.step_timings.values())
+        lines = [
+            "═" * 60,
+            "  Pipeline Health Summary",
+            "═" * 60,
+            f"  Steps completed: {len(self.steps_run)}/{len(self.steps_run) + len(self.steps_failed)}",
+        ]
+        if self.steps_failed:
+            lines.append(f"  Steps FAILED:    {self.steps_failed}")
+
+        lines.append("")
+        lines.append("  Step timings:")
+        for step_num in sorted(self.step_timings):
+            elapsed = self.step_timings[step_num]
+            status = "FAIL" if step_num in self.steps_failed else "OK"
+            lines.append(f"    Step {step_num}: {elapsed:6.1f}s  [{status}]")
+        lines.append(f"    TOTAL: {total_elapsed:6.1f}s")
+        lines.append("═" * 60)
+        return "\n".join(lines)
