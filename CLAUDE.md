@@ -1462,3 +1462,24 @@ statistic, SVD). New cells add standardized `plotting.py` function calls and fil
 - **D3c.2**: 3D PCA scatter via `plot_regime_colored_pca_3d()` — PC1×PC2×PC3 with regime colors
 - **D3c.3**: Regime duration histogram via `plot_regime_duration_histogram()` + run-length summary stats
 - **D3c.4**: Already existed (cell 38 for pairwise ARI heatmap)
+
+### D32. Phase D4 — Notebook 04 regime profiling diagnostics (2026-03-26)
+
+Added 10 new cells (5 markdown + 5 code) to `notebooks/04_regimes.ipynb`:
+
+- **D4.1**: Feature-regime overlay for `log_sp500_d1`, `log_us_cpi_d1`, `credit_spread`,
+  `10yr_ustreas_d1` via `plot_feature_regime_overlay()` — time-series with regime-colored bands.
+
+- **D4.2**: Regime stability metrics via `compute_regime_stability()` from `monitoring.py`.
+  Dual bar chart: persistence probability (P of staying) and average consecutive duration.
+
+- **D4.3**: Forward transition probability heatmaps for 1Q/4Q/8Q horizons via
+  `compute_forward_probabilities()` and `plot_forward_prob_evolution()`. Prints highest
+  off-diagonal transition per horizon.
+
+- **D4.4**: Per-regime feature correlation heatmap via `plot_correlation_change_heatmap(top_n=12)`.
+  Shows structural changes in feature relationships across regimes.
+
+- **D4.5**: Empirical vs HMM transition matrix comparison (optional, requires `hmmlearn`).
+  Fits GaussianHMM with same k as KMeans, shows side-by-side heatmaps + absolute difference.
+  Graceful skip with install instructions if hmmlearn unavailable.

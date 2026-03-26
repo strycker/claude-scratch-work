@@ -227,17 +227,25 @@ D3c.3 includes run-length summary statistics per regime.
 
 ---
 
-## Phase D4 — Notebook 04: Regime Profiling Diagnostics (5 items)
+## Phase D4 — Notebook 04: Regime Profiling Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/04_regimes.ipynb`.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D4.1 | Feature-regime overlay for 4 key indicators (`plot_feature_regime_overlay`) |
-| D4.2 | Regime stability metrics: persistence %, avg consecutive quarters, stability ranking |
-| D4.3 | Forward probability heatmap (`plot_forward_prob_evolution`) |
-| D4.4 | Per-regime correlation heatmap (`plot_correlation_change_heatmap`) — structure changes |
-| D4.5 | Empirical vs learned transition matrix comparison (if HMM available) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D4.1 | Feature-regime overlay for 4 key indicators (`plot_feature_regime_overlay`) | ✅ Done |
+| D4.2 | Regime stability metrics: persistence %, avg consecutive quarters, stability ranking | ✅ Done |
+| D4.3 | Forward probability heatmap (`plot_forward_prob_evolution`) | ✅ Done |
+| D4.4 | Per-regime correlation heatmap (`plot_correlation_change_heatmap`) — structure changes | ✅ Done |
+| D4.5 | Empirical vs learned transition matrix comparison (if HMM available) | ✅ Done |
+
+**Implementation:** 10 new cells (5 markdown + 5 code) appended to `notebooks/04_regimes.ipynb`.
+D4.1 overlays `log_sp500_d1`, `log_us_cpi_d1`, `credit_spread`, `10yr_ustreas_d1` with regime
+bands. D4.2 uses `compute_regime_stability()` from monitoring.py + dual bar chart (persistence
+probability and average duration). D4.3 uses `compute_forward_probabilities()` for 1Q/4Q/8Q
+horizons. D4.4 uses `plot_correlation_change_heatmap(top_n=12)`. D4.5 fits GaussianHMM (if
+hmmlearn installed) and shows side-by-side empirical vs learned transition matrices with
+absolute difference heatmap.
 
 ---
 
