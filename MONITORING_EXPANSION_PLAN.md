@@ -320,30 +320,30 @@ Created `notebooks/09_diagnostics.ipynb` (13 cells).
 
 ---
 
-## Phase D8a — New Notebook 10: Model Comparison — Clustering (5 items)
+## Phase D8a — New Notebook 10: Model Comparison — Clustering (5 items) ✅ DONE
 
-Create `notebooks/10_model_comparison.ipynb` — clustering comparison section.
+Created `notebooks/10_model_comparison.ipynb` — clustering comparison section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D8a.1 | Setup + load PCA data + fit KMeans/GMM/HMM/Spectral (or load from cache) |
-| D8a.2 | Side-by-side PCA scatter: 4 panels (KMeans, GMM, HMM, Spectral) same color scale |
-| D8a.3 | ARI pairwise matrix heatmap — which methods agree most? |
-| D8a.4 | Temporal label agreement: % of quarters where KMeans == GMM == HMM |
-| D8a.5 | Regime timeline comparison: 4 stacked horizontal timelines (one per method) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D8a.1 | Setup + load PCA data + fit KMeans/GMM/HMM/Spectral (or load from cache) | ✅ 4 cells: imports, run_step_if_needed, PCA+labels loading, fit all methods |
+| D8a.2 | Side-by-side PCA scatter: 4 panels (KMeans, GMM, HMM, Spectral) same color scale | ✅ Dynamic N-panel scatter with consistent palette |
+| D8a.3 | ARI pairwise matrix heatmap — which methods agree most? | ✅ Uses pairwise_rand_index() + seaborn heatmap |
+| D8a.4 | Temporal label agreement: % of quarters where KMeans == GMM == HMM | ✅ Rolling unique-label diversity + pairwise ARI summary |
+| D8a.5 | Regime timeline comparison: 4 stacked horizontal timelines (one per method) | ✅ N stacked timelines with per-method legend |
 
 ---
 
-## Phase D8b — New Notebook 10: Model Comparison — Soft Probabilities (4 items)
+## Phase D8b — New Notebook 10: Model Comparison — Soft Probabilities (4 items) ✅ DONE
 
 Continue `notebooks/10_model_comparison.ipynb` — soft probability section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D8b.1 | GMM soft probabilities stacked area (`plot_soft_probabilities`) |
-| D8b.2 | HMM soft probabilities stacked area (`plot_soft_probabilities`) |
-| D8b.3 | Side-by-side: GMM vs HMM — which gives sharper/more uncertain assignments? |
-| D8b.4 | Markov 2-state recession probability overlay on regime timeline |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D8b.1 | GMM soft probabilities stacked area (`plot_soft_probabilities`) | ✅ Uses gmm_probabilities() + plot_soft_probabilities() with custom title/filename |
+| D8b.2 | HMM soft probabilities stacked area (`plot_soft_probabilities`) | ✅ Uses hmm_probabilities() + plot_soft_probabilities(), graceful skip if hmmlearn missing |
+| D8b.3 | Side-by-side: GMM vs HMM — which gives sharper/more uncertain assignments? | ✅ Entropy time-series + max-probability distribution + summary table |
+| D8b.4 | Markov 2-state recession probability overlay on regime timeline | ✅ fit_markov_switching on GDP/CPI derivative, recession prob overlay on KMeans timeline, cross-tabulation |
 
 ---
 

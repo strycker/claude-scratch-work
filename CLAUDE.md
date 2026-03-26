@@ -1546,3 +1546,44 @@ diagnostics and Relative Rotation Graph analysis.
 - **D7.5**: Percentile rank dashboard — per-ratio histogram with current value marked,
   plus summary table with HIGH (>80th) / LOW (<20th) / NORMAL signal classification.
   Uses `percentile_rank()` from `diagnostics.py`.
+
+### D36. Phase D8 — New notebook 10: Model Comparison (2026-03-26)
+
+Created `notebooks/10_model_comparison.ipynb` (23 cells: 11 markdown + 12 code) — new
+notebook comparing clustering methods and their soft probability outputs.
+
+**Part A — Hard Clustering Comparison (D8a):**
+
+- **D8a.1**: Setup + data loading (4 cells). Loads features, computes PCA, loads KMeans
+  labels, fits GMM/HMM/Spectral on same PCA space. HMM and Spectral gracefully skip
+  if dependencies missing.
+
+- **D8a.2**: Side-by-side PCA scatter — dynamic N-panel layout (one per fitted method),
+  PC1 vs PC2 colored by cluster assignment. Same palette across panels.
+
+- **D8a.3**: ARI pairwise matrix heatmap via `pairwise_rand_index()` from
+  `cluster_comparison.py`. Seaborn heatmap with YlOrRd colormap.
+
+- **D8a.4**: Temporal label agreement — rolling 8Q window of unique-label diversity
+  across methods. Pairwise ARI summary. Notes that raw label matching ignores ID
+  permutation.
+
+- **D8a.5**: Regime timeline comparison — N stacked horizontal timelines with per-method
+  legend and shared x-axis.
+
+**Part B — Soft Probabilities (D8b):**
+
+- **D8b.1**: GMM soft probabilities stacked area via `plot_soft_probabilities()`.
+  Reports mean max probability as sharpness metric.
+
+- **D8b.2**: HMM soft probabilities stacked area via `plot_soft_probabilities()`.
+  Graceful skip if `hmmlearn` not installed.
+
+- **D8b.3**: GMM vs HMM sharpness comparison — dual panel: Shannon entropy time-series
+  + max-probability histogram. Summary table with mean/median max prob, mean entropy,
+  and % confident (>0.8).
+
+- **D8b.4**: Markov 2-state recession overlay — fits `fit_markov_switching()` on best
+  available macro derivative (GDP/CPI d1), identifies recession state by lower mean,
+  overlays recession probability on KMeans regime timeline. Cross-tabulation table via
+  `compare_markov_kmeans()`.
