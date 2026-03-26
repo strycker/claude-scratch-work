@@ -306,17 +306,17 @@ summary table.
 
 ---
 
-## Phase D7 — New Notebook 09: Diagnostics & RRG (5 items)
+## Phase D7 — New Notebook 09: Diagnostics & RRG (5 items) ✅ DONE
 
-Create `notebooks/09_diagnostics.ipynb`.
+Created `notebooks/09_diagnostics.ipynb` (13 cells).
 
-| Item | New Cell(s) |
-|------|-------------|
-| D7.1 | Setup + load ratio diagnostics and RRG data from `outputs/reports/diagnostics/` |
-| D7.2 | RRG 4-quadrant scatter plot (`plot_rrg_scatter`) |
-| D7.3 | Rolling z-score time-series for 4 key ratios |
-| D7.4 | Quadrant rotation history: how often each asset moves between quadrants |
-| D7.5 | Ratio percentile rank dashboard: current values vs historical distribution |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D7.1 | Setup + load ratio diagnostics and RRG data from `outputs/reports/diagnostics/` | ✅ 3 cells: setup, run_step_if_needed helper, data loading with fallback |
+| D7.2 | RRG 4-quadrant scatter plot (`plot_rrg_scatter`) | ✅ Column rename rs_ratio→rs, rs_momentum→rm; fallback on-the-fly computation from prices |
+| D7.3 | Rolling z-score time-series for 4 key ratios | ✅ Config-driven ratios with ±2σ bands and shaded extremes |
+| D7.4 | Quadrant rotation history: how often each asset moves between quadrants | ✅ Stacked horizontal bar chart with quadrant frequency per asset |
+| D7.5 | Ratio percentile rank dashboard: current values vs historical distribution | ✅ Per-ratio histogram with current value marked + summary table with HIGH/LOW/NORMAL signal |
 
 ---
 

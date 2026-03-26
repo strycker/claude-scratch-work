@@ -1522,3 +1522,27 @@ Added 10 new cells (5 markdown + 5 code) to `notebooks/06_assets.ipynb`:
 
 - **D6.5**: ETF data coverage timeline — binary heatmap (green = data available) with
   decade markers and first-available-date summary per ETF.
+
+### D35. Phase D7 — New notebook 09: Diagnostics & RRG (2026-03-26)
+
+Created `notebooks/09_diagnostics.ipynb` (13 cells) — new notebook for pipeline step 8
+diagnostics and Relative Rotation Graph analysis.
+
+- **D7.1**: Setup + data loading (3 cells). Loads RRG data from `outputs/reports/diagnostics/`,
+  asset prices from `data/raw/`, with `run_step_if_needed()` helper for prerequisites.
+
+- **D7.2**: RRG 4-quadrant scatter via `plot_rrg_scatter()`. Handles column name mismatch
+  between `rrg_for_benchmark()` output (rs_ratio/rs_momentum) and plot function input (rs/rm)
+  with rename. Falls back to on-the-fly computation from prices if saved data unavailable.
+
+- **D7.3**: Rolling z-score time-series for config-driven ratios (Oil:Gold, Oil:Bonds,
+  Bonds:Gold, Lumber:Gold). ±2σ bands with shaded extreme regions. Uses `rolling_zscore()`
+  from `diagnostics.py`.
+
+- **D7.4**: Quadrant rotation history — stacked horizontal bar chart showing fraction of
+  quarters each asset spends in LEADING/IMPROVING/WEAKENING/LAGGING quadrants. Sorted by
+  LEADING frequency. Computes RRG quadrants per quarter using `normalize_100()`.
+
+- **D7.5**: Percentile rank dashboard — per-ratio histogram with current value marked,
+  plus summary table with HIGH (>80th) / LOW (<20th) / NORMAL signal classification.
+  Uses `percentile_rank()` from `diagnostics.py`.
