@@ -63,6 +63,37 @@ log = logging.getLogger(__name__)
 
 CHECKPOINT_DIR = DATA_DIR / "checkpoints"
 
+# ── Preservation checkpoints ─────────────────────────────────────────
+# Wide parquet snapshots that survive clear_all().  Purpose: downstream
+# steps drop sparse columns via dropna(axis=1), erasing the full column
+# audit trail.  Preservation checkpoints retain every column so you can
+# always inspect what was available before narrowing.
+PRESERVATION_CHECKPOINT_NAMES: frozenset[str] = frozenset({
+    "macro_raw_secondary",
+    "features_secondary",
+    "features_supervised_secondary",
+})
+
+
+def preservation_checkpoint_should_write(
+    name: str,
+    cm: "CheckpointManager",
+    *,
+    force: bool = False,
+) -> bool:
+    """Return True if preservation checkpoint *name* should be (re)written.
+
+    Rules:
+    - If *force* is True (``--refresh-preservation``), always write.
+    - Otherwise write only when the checkpoint does not yet exist.
+    """
+    if name not in PRESERVATION_CHECKPOINT_NAMES:
+        return False
+    if force:
+        return True
+    parquet_path = cm.dir / f"{name}.parquet"
+    return not parquet_path.exists()
+
 
 def _config_hash() -> str:
     """MD5 of settings.yaml — used to detect config changes that invalidate checkpoints."""
@@ -179,11 +210,26 @@ class CheckpointManager:
                 p.unlink()
                 log.info("Cleared checkpoint: %s", p.name)
 
-    def clear_all(self) -> None:
-        """Delete all checkpoints in the checkpoint directory."""
+    def clear_all(self, *, include_preservation: bool = False) -> None:
+        """Delete all checkpoints in the checkpoint directory.
+
+        Preservation checkpoints (``*_secondary``) are kept by default.
+        Pass ``include_preservation=True`` to remove them as well.
+        """
         for f in self.dir.iterdir():
+            if not include_preservation:
+                stem = f.stem
+                # .meta.json has stem like "foo.meta" — strip the ".meta" part
+                if stem.endswith(".meta"):
+                    stem = stem[: -len(".meta")]
+                if stem in PRESERVATION_CHECKPOINT_NAMES:
+                    log.debug("clear_all: preserving %s", f.name)
+                    continue
             f.unlink()
-        log.info("All checkpoints cleared")
+        log.info(
+            "All checkpoints cleared%s",
+            "" if include_preservation else " (preservation checkpoints kept)",
+        )
 
     def list(self) -> list[dict]:
         """Return a list of checkpoint metadata dicts, sorted by creation time."""

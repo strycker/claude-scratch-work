@@ -408,6 +408,15 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
     combined.to_parquet(raw_dir / "macro_raw.parquet")
     cm.save(combined, "macro_raw")
 
+    # ── Preservation checkpoint (C7.3) ────────────────────────────────
+    from trading_crab_lib.checkpoints import preservation_checkpoint_should_write
+    if preservation_checkpoint_should_write(
+        "macro_raw_secondary", cm,
+        force=run_cfg.refresh_preservation_checkpoints,
+    ):
+        cm.save(combined, "macro_raw_secondary")
+        log.info("Step 1: wrote preservation checkpoint macro_raw_secondary")
+
     if run_cfg.generate_plots:
         plotting.plot_raw_series_coverage(combined, run_cfg)
         # Sample a handful of economically meaningful raw series for a quick QC chart
@@ -523,6 +532,18 @@ def step2_features(cfg: dict, run_cfg: RunConfig) -> None:
     log.info(
         "Step 2: wrote features.parquet (centered) and features_supervised.parquet (causal)"
     )
+
+    # ── Preservation checkpoints (C7.4) ───────────────────────────────
+    from trading_crab_lib.checkpoints import preservation_checkpoint_should_write
+    force_pres = run_cfg.refresh_preservation_checkpoints
+    if preservation_checkpoint_should_write("features_secondary", cm, force=force_pres):
+        cm.save(features, "features_secondary")
+        log.info("Step 2: wrote preservation checkpoint features_secondary")
+    if preservation_checkpoint_should_write(
+        "features_supervised_secondary", cm, force=force_pres,
+    ):
+        cm.save(features_sup, "features_supervised_secondary")
+        log.info("Step 2: wrote preservation checkpoint features_supervised_secondary")
 
     # ── Feature quality report (C1.4) ────────────────────────────────────
     from trading_crab_lib.monitoring import compute_feature_quality
@@ -1216,6 +1237,11 @@ def build_parser() -> argparse.ArgumentParser:
                        "data/raw/asset_prices.parquet if it exists. "
                        "Useful behind firewalls: omit this flag to reuse "
                        "previously fetched prices without hitting the network."
+                   ))
+    p.add_argument("--refresh-preservation", action="store_true",
+                   help=(
+                       "Rewrite preservation checkpoints (*_secondary) even if they "
+                       "already exist. Normally these are write-once and survive clear_all()."
                    ))
     p.add_argument("--plots", action="store_true",
                    help="Generate and save matplotlib figures")

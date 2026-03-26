@@ -215,6 +215,7 @@ python pipelines/09_tactics.py
 | `--save-market-code` | After step 3, save `balanced_cluster` as `market_code_clustered` checkpoint |
 | `--show-plots` | Call `plt.show()` in addition to saving (avoid in headless/CI) |
 | `--weekly-report` | Archive weekly_report.md to dated copy + email_body.txt |
+| `--refresh-preservation` | Rewrite `*_secondary` preservation checkpoints even if they exist |
 | `--send-email` | Send weekly report via SMTP (requires config/email.local.yaml) |
 
 ### Jupyter notebooks (exploration / plotting)
@@ -1391,3 +1392,27 @@ to avoid circular imports at module load time.
 Covers: all 4 env var overrides, cascade behavior (TC_ROOT_DIR flows to DATA_DIR/OUTPUT_DIR
 when individual vars are unset), precedence (TC_CONFIG_DIR overrides TC_ROOT_DIR-derived path),
 `_resolve_dir()` helper, and all 4 convenience imports + invalid attribute error.
+
+### D29. Phase C7 — Preservation checkpoints (2026-03-26)
+
+**Preservation checkpoints** are wide parquet snapshots (`macro_raw_secondary`,
+`features_secondary`, `features_supervised_secondary`) that survive `clear_all()`.
+Purpose: downstream steps that drop sparse columns via `dropna(axis=1)` erase the
+full column audit trail. Preservation checkpoints retain every column so you can
+always inspect what was available before narrowing.
+
+**C7.1**: `PRESERVATION_CHECKPOINT_NAMES` frozenset and `preservation_checkpoint_should_write()`
+decision function in `checkpoints.py`. Write-once by default; only rewrites when
+`force=True` (from `--refresh-preservation` flag).
+
+**C7.2**: `RunConfig.refresh_preservation_checkpoints` field + `--refresh-preservation`
+argparse flag in `run_pipeline.py`.
+
+**C7.3**: Step 1 saves `macro_raw_secondary` after `macro_raw` checkpoint.
+
+**C7.4**: Step 2 saves `features_secondary` and `features_supervised_secondary` after
+the primary `features` and `features_supervised` checkpoints.
+
+**C7.5**: `clear_all()` updated to skip preservation files by default. New kwarg
+`include_preservation=True` removes them too. 10 new tests across `test_checkpoints.py`
+(7 preservation tests) and `test_runtime.py` (3 for new flag).

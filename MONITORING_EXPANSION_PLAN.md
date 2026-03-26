@@ -428,20 +428,27 @@ are thin wrappers with deferred imports. 15 tests in `tests/unit/test_init_modul
 
 ---
 
-## Phase C7 — Preservation Checkpoints (`--refresh-preservation`) (5 items)
+## Phase C7 — Preservation Checkpoints (`--refresh-preservation`) (5 items) ✅ DONE
 
 Ported from GSD submodule. Preservation checkpoints are wide parquet snapshots
 (`macro_raw_secondary`, `features_secondary`, `features_supervised_secondary`) that
 survive `clear_all()`. Purpose: downstream steps that drop sparse columns via
 `dropna(axis=1)` don't erase the full column audit trail.
 
-| Item | Description |
-|------|-------------|
-| C7.1 | Add `PRESERVATION_CHECKPOINT_NAMES` frozenset and `preservation_checkpoint_should_write()` decision function to `checkpoints.py` |
-| C7.2 | Add `refresh_preservation_checkpoints: bool` field to `RunConfig` + `--refresh-preservation` argparse flag in `run_pipeline.py` |
-| C7.3 | Wire preservation saves into step 1: save `macro_raw_secondary` after ingestion |
-| C7.4 | Wire preservation saves into step 2: save `features_secondary` and `features_supervised_secondary` after feature engineering |
-| C7.5 | Update `clear_all()` to skip preservation files; add tests for all preservation logic |
+| Item | Description | Status |
+|------|-------------|--------|
+| C7.1 | Add `PRESERVATION_CHECKPOINT_NAMES` frozenset and `preservation_checkpoint_should_write()` decision function to `checkpoints.py` | ✅ |
+| C7.2 | Add `refresh_preservation_checkpoints: bool` field to `RunConfig` + `--refresh-preservation` argparse flag in `run_pipeline.py` | ✅ |
+| C7.3 | Wire preservation saves into step 1: save `macro_raw_secondary` after ingestion | ✅ |
+| C7.4 | Wire preservation saves into step 2: save `features_secondary` and `features_supervised_secondary` after feature engineering | ✅ |
+| C7.5 | Update `clear_all()` to skip preservation files; add tests for all preservation logic | ✅ |
+
+**Implementation:** `PRESERVATION_CHECKPOINT_NAMES` frozenset in `checkpoints.py` with
+`preservation_checkpoint_should_write()` decision function (write-once unless `--refresh-preservation`).
+`clear_all()` updated with `include_preservation` kwarg (defaults False). `RunConfig` gains
+`refresh_preservation_checkpoints` field mapped to `--refresh-preservation` argparse flag.
+Steps 1 and 2 in `run_pipeline.py` save `*_secondary` checkpoints after primary saves.
+10 new tests across `test_checkpoints.py` (7) and `test_runtime.py` (3), all passing.
 
 ---
 
