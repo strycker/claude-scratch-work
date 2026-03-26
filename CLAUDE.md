@@ -1503,4 +1503,22 @@ Added 20 new cells (10 markdown + 10 code) to `notebooks/05_prediction.ipynb`:
   accuracy/F1 comparison via `plot_model_comparison_bar()`
 - **D5b.5**: Feature importance comparison via `plot_feature_importance_comparison()` — side-by-side
   top-20 importances from all available model types
-  Graceful skip with install instructions if hmmlearn unavailable.
+
+### D34. Phase D6 — Notebook 06 asset return analysis (2026-03-26)
+
+Added 10 new cells (5 markdown + 5 code) to `notebooks/06_assets.ipynb`:
+
+- **D6.1**: Per-regime violin plots for 6 key ETFs (SPY, TLT, GLD, QQQ, VNQ, AGG) showing
+  full return distributions, not just medians. Uses seaborn `violinplot` with regime palette.
+
+- **D6.2**: Regime-conditional Sharpe ratio table — annualized Sharpe (mean/std × sqrt(4))
+  per asset per regime. Styled DataFrame with RdYlGn color gradient.
+
+- **D6.3**: Best/worst asset per regime summary — shows highest and lowest median return
+  plus the spread between them. Quick reference for portfolio tilts.
+
+- **D6.4**: Per-regime asset correlation matrices — top-10 ETFs by coverage, side-by-side
+  heatmaps. Reveals crisis-regime correlation spikes vs normal diversification.
+
+- **D6.5**: ETF data coverage timeline — binary heatmap (green = data available) with
+  decade markers and first-available-date summary per ETF.

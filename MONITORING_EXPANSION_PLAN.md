@@ -285,17 +285,24 @@ evaluates via CV, and plots grouped bar comparison. Also removed trailing empty 
 
 ---
 
-## Phase D6 — Notebook 06: Asset Return Analysis (5 items)
+## Phase D6 — Notebook 06: Asset Return Analysis (5 items) ✅ DONE
 
 Add cells to `notebooks/06_assets.ipynb`.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D6.1 | Per-regime box/violin plots of asset returns (not just medians) |
-| D6.2 | Regime-conditional Sharpe ratio table (mean/std per regime per asset) |
-| D6.3 | Best/worst asset per regime summary table |
-| D6.4 | Return correlation matrix per regime (do assets diversify within each regime?) |
-| D6.5 | ETF coverage timeline: which ETFs have data in each quarter (sparse before 2000) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D6.1 | Per-regime box/violin plots of asset returns (not just medians) | ✅ Done |
+| D6.2 | Regime-conditional Sharpe ratio table (mean/std per regime per asset) | ✅ Done |
+| D6.3 | Best/worst asset per regime summary table | ✅ Done |
+| D6.4 | Return correlation matrix per regime (do assets diversify within each regime?) | ✅ Done |
+| D6.5 | ETF coverage timeline: which ETFs have data in each quarter (sparse before 2000) | ✅ Done |
+
+**Implementation:** 10 new cells (5 markdown + 5 code) appended to `notebooks/06_assets.ipynb`.
+D6.1 uses seaborn violin plots for 6 key ETFs (SPY, TLT, GLD, QQQ, VNQ, AGG). D6.2 computes
+annualized Sharpe ratios (mean/std × sqrt(4)) with styled DataFrame (RdYlGn gradient). D6.3
+shows best/worst asset per regime with spread. D6.4 plots per-regime correlation matrices for
+top-10 ETFs by coverage. D6.5 creates binary heatmap of ETF data availability plus first-date
+summary table.
 
 ---
 
