@@ -1416,3 +1416,26 @@ the primary `features` and `features_supervised` checkpoints.
 **C7.5**: `clear_all()` updated to skip preservation files by default. New kwarg
 `include_preservation=True` removes them too. 10 new tests across `test_checkpoints.py`
 (7 preservation tests) and `test_runtime.py` (3 for new flag).
+
+### D30. Phase D2 — Notebook 02 feature engineering diagnostics (2026-03-26)
+
+Added 10 new cells (5 markdown + 5 code) to `notebooks/02_features.ipynb`:
+
+- **D2.1**: Gap-fill before/after overlays for `log_sp500`, `log_us_cpi`, `log_10yr_ustreas`.
+  Replays cross-ratios → log → select pipeline to build pre-gap-fill snapshot, then
+  calls `plot_gap_fill_before_after()` for visual comparison.
+
+- **D2.2**: Feature variance ranking bar chart via `plot_feature_variance_ranking(top_n=30)`.
+  Identifies which features dominate PCA and which contribute little.
+
+- **D2.3**: Centered vs causal comparison via `plot_centered_vs_causal_comparison()` for
+  `log_sp500_d1`, `log_us_cpi_d1`, `credit_spread_d1`. Shows look-ahead effect at regime
+  transitions where centered smoothing blurs boundaries.
+
+- **D2.4**: Derivative magnitude distributions — 4×3 histogram grid (d1/d2/d3 for
+  `log_sp500`, `log_us_cpi`, `credit_spread`, `log_cape_shiller`). Shows std and kurtosis
+  per panel to identify features with heavy-tailed dynamics.
+
+- **D2.5**: Divergence & momentum feature correlation heatmap (seaborn). Flags pairs with
+  |r| > 0.8 as redundancy candidates. Covers `div_*`, `*_mom_*`, `corr_*`, `cpi_acceleration`
+  columns.

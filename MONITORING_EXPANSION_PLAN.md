@@ -161,17 +161,22 @@ Add cells to `notebooks/01_ingestion.ipynb`.
 
 ---
 
-## Phase D2 — Notebook 02: Feature Engineering Diagnostics (5 items)
+## Phase D2 — Notebook 02: Feature Engineering Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/02_features.ipynb`.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D2.1 | Gap-fill before/after overlays for 3 columns (sp500, us_cpi, 10yr_ustreas) |
-| D2.2 | Feature variance ranking bar chart (`plot_feature_variance_ranking`) |
-| D2.3 | Centered vs causal comparison panel (`plot_centered_vs_causal_comparison`) for 3 features |
-| D2.4 | Derivative magnitude distributions: histograms of d1/d2/d3 for key features |
-| D2.5 | Correlation heatmap limited to divergence + momentum features (are they redundant?) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D2.1 | Gap-fill before/after overlays for 3 columns (sp500, us_cpi, 10yr_ustreas) | ✅ Done |
+| D2.2 | Feature variance ranking bar chart (`plot_feature_variance_ranking`) | ✅ Done |
+| D2.3 | Centered vs causal comparison panel (`plot_centered_vs_causal_comparison`) for 3 features | ✅ Done |
+| D2.4 | Derivative magnitude distributions: histograms of d1/d2/d3 for key features | ✅ Done |
+| D2.5 | Correlation heatmap limited to divergence + momentum features (are they redundant?) | ✅ Done |
+
+**Implementation:** 10 new cells (5 markdown + 5 code) appended to `notebooks/02_features.ipynb`.
+Uses existing `plotting.py` functions: `plot_gap_fill_before_after()`, `plot_feature_variance_ranking()`,
+`plot_centered_vs_causal_comparison()`. D2.4 and D2.5 use inline matplotlib/seaborn with
+`_save_or_show()` for consistent plot output. All cells guarded with `if features is not None`.
 
 ---
 
