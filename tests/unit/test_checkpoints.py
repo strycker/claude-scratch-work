@@ -10,7 +10,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from trading_crab_lib.checkpoints import CheckpointManager
+from trading_crab_lib.checkpoints import (
+    CheckpointManager,
+    PRESERVATION_CHECKPOINT_NAMES,
+    preservation_checkpoint_should_write,
+)
 
 
 @pytest.fixture
@@ -82,10 +86,25 @@ class TestClear:
     def test_clear_nonexistent_does_not_raise(self, cm):
         cm.clear("nonexistent")  # should not raise
 
-    def test_clear_all(self, cm, sample_df):
+    def test_clear_all_removes_non_preservation(self, cm, sample_df):
         cm.save(sample_df, "a")
         cm.save(sample_df, "b")
         cm.clear_all()
+        assert list(cm.dir.iterdir()) == []
+
+    def test_clear_all_preserves_secondary(self, cm, sample_df):
+        cm.save(sample_df, "a")
+        cm.save(sample_df, "macro_raw_secondary")
+        cm.clear_all()
+        remaining = {f.name for f in cm.dir.iterdir()}
+        assert "macro_raw_secondary.parquet" in remaining
+        assert "macro_raw_secondary.meta.json" in remaining
+        assert "a.parquet" not in remaining
+
+    def test_clear_all_with_include_preservation(self, cm, sample_df):
+        cm.save(sample_df, "a")
+        cm.save(sample_df, "macro_raw_secondary")
+        cm.clear_all(include_preservation=True)
         assert list(cm.dir.iterdir()) == []
 
 
@@ -136,3 +155,47 @@ class TestModelCheckpoints:
         assert not cm.model_exists("rf")
         cm.save_model(RandomForestClassifier(), "rf")
         assert cm.model_exists("rf")
+
+
+# ── preservation checkpoints ──────────────────────────────────────────────
+
+class TestPreservationCheckpoints:
+    def test_names_frozenset(self):
+        assert isinstance(PRESERVATION_CHECKPOINT_NAMES, frozenset)
+        assert "macro_raw_secondary" in PRESERVATION_CHECKPOINT_NAMES
+        assert "features_secondary" in PRESERVATION_CHECKPOINT_NAMES
+        assert "features_supervised_secondary" in PRESERVATION_CHECKPOINT_NAMES
+
+    def test_should_write_when_missing(self, cm):
+        assert preservation_checkpoint_should_write("macro_raw_secondary", cm)
+
+    def test_should_not_write_when_exists(self, cm, sample_df):
+        cm.save(sample_df, "macro_raw_secondary")
+        assert not preservation_checkpoint_should_write("macro_raw_secondary", cm)
+
+    def test_should_write_when_force(self, cm, sample_df):
+        cm.save(sample_df, "macro_raw_secondary")
+        assert preservation_checkpoint_should_write(
+            "macro_raw_secondary", cm, force=True,
+        )
+
+    def test_non_preservation_name_returns_false(self, cm):
+        assert not preservation_checkpoint_should_write("macro_raw", cm)
+
+    def test_all_three_preservation_names_accepted(self, cm):
+        for name in PRESERVATION_CHECKPOINT_NAMES:
+            assert preservation_checkpoint_should_write(name, cm)
+
+    def test_clear_all_keeps_all_preservation_types(self, cm, sample_df):
+        for name in PRESERVATION_CHECKPOINT_NAMES:
+            cm.save(sample_df, name)
+        cm.save(sample_df, "regular_checkpoint")
+        cm.clear_all()
+        remaining_stems = set()
+        for f in cm.dir.iterdir():
+            stem = f.stem
+            if stem.endswith(".meta"):
+                stem = stem[: -len(".meta")]
+            remaining_stems.add(stem)
+        assert PRESERVATION_CHECKPOINT_NAMES == remaining_stems
+        assert "regular_checkpoint" not in remaining_stems

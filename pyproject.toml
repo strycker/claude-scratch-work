@@ -25,6 +25,8 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -64,6 +66,7 @@ dependencies = [
 Homepage = "https://github.com/strycker/claude-scratch-work"
 Repository = "https://github.com/strycker/claude-scratch-work"
 Issues = "https://github.com/strycker/claude-scratch-work/issues"
+Changelog = "https://github.com/strycker/claude-scratch-work/blob/main/STATE.md"
 
 [project.optional-dependencies]
 dev = [

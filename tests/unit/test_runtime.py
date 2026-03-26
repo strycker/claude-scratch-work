@@ -20,6 +20,7 @@ class TestRunConfigDefaults:
         assert cfg.refresh_source_datasets is False
         assert cfg.recompute_derived_datasets is False
         assert cfg.refresh_asset_prices is False
+        assert cfg.refresh_preservation_checkpoints is False
         assert cfg.market_code_source is None
 
     def test_save_plots_defaults_true(self):
@@ -102,6 +103,11 @@ class TestRunConfigFromArgs:
         cfg = RunConfig.from_args(args)
         assert cfg.refresh_asset_prices is True
 
+    def test_refresh_preservation_flag(self):
+        args = Namespace(refresh_preservation=True)
+        cfg = RunConfig.from_args(args)
+        assert cfg.refresh_preservation_checkpoints is True
+
 
 class TestRunConfigApplyLogging:
     def test_verbose_sets_debug(self):
@@ -138,6 +144,10 @@ class TestRunConfigStr:
     def test_market_code_in_str(self):
         cfg = RunConfig(market_code_source="grok")
         assert "market_code=grok" in str(cfg)
+
+    def test_refresh_preservation_in_str(self):
+        cfg = RunConfig(refresh_preservation_checkpoints=True)
+        assert "refresh-preservation" in str(cfg)
 
     def test_multiple_flags_in_str(self):
         cfg = RunConfig(verbose=True, generate_plots=True, refresh_source_datasets=True)

@@ -95,7 +95,7 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (533 tests)
+├── tests/                         ← pytest test suite (571 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/               ← integration tests (currently empty)
@@ -128,6 +128,7 @@ trading-crab/
 │       ├── test_fred_series_config.py ← FRED settings.yaml validation
 │       ├── test_yield_curve_features.py ← yield curve spread features
 │       ├── test_monitoring.py          ← pipeline monitoring (date-range, source counts, feature quality)
+│       ├── test_init_module.py        ← env var path overrides + convenience imports
 │       ├── test_reporting.py          ← dashboard signals, portfolio, recommendations
 │       ├── test_plotting.py           ← all plot functions (steps 01–06)
 │       ├── test_runtime.py            ← RunConfig defaults, from_args, str, logging
@@ -214,6 +215,7 @@ python pipelines/09_tactics.py
 | `--save-market-code` | After step 3, save `balanced_cluster` as `market_code_clustered` checkpoint |
 | `--show-plots` | Call `plt.show()` in addition to saving (avoid in headless/CI) |
 | `--weekly-report` | Archive weekly_report.md to dated copy + email_body.txt |
+| `--refresh-preservation` | Rewrite `*_secondary` preservation checkpoints even if they exist |
 | `--send-email` | Send weekly report via SMTP (requires config/email.local.yaml) |
 
 ### Jupyter notebooks (exploration / plotting)
@@ -1368,3 +1370,49 @@ New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
   a formatted table showing per-step timing and pass/fail status.
 
 14 new tests in `tests/unit/test_monitoring.py` (total: 56, all passing).
+
+### D28. Phase C6 — Env var path overrides + convenience imports (2026-03-26)
+
+**C6.1 — Env var path overrides**: `__init__.py` now checks `TC_ROOT_DIR`, `TC_CONFIG_DIR`,
+`TC_DATA_DIR`, `TC_OUTPUT_DIR` environment variables at import time. If set, the env var
+path wins; otherwise the default repo-relative path is used. Useful for Docker, CI, or
+custom data directory layouts.
+
+**C6.2 — Convenience re-exports**: `trading_crab_lib.load()`, `trading_crab_lib.load_portfolio()`,
+`trading_crab_lib.RunConfig`, and `trading_crab_lib.CheckpointManager` are now accessible
+directly from the package root. `RunConfig` and `CheckpointManager` use lazy `__getattr__`
+to avoid circular imports at module load time.
+
+**C6.3 — pyproject.toml metadata**: Added `License :: OSI Approved :: MIT License` and
+`Operating System :: OS Independent` classifiers; added `Changelog` URL pointing to STATE.md.
+
+**C6.4 — CLI entry point**: Deferred. `python run_pipeline.py` is sufficient for now.
+
+**C6.5 — Tests**: 15 tests in `tests/unit/test_init_module.py` (1 skipped without joblib).
+Covers: all 4 env var overrides, cascade behavior (TC_ROOT_DIR flows to DATA_DIR/OUTPUT_DIR
+when individual vars are unset), precedence (TC_CONFIG_DIR overrides TC_ROOT_DIR-derived path),
+`_resolve_dir()` helper, and all 4 convenience imports + invalid attribute error.
+
+### D29. Phase C7 — Preservation checkpoints (2026-03-26)
+
+**Preservation checkpoints** are wide parquet snapshots (`macro_raw_secondary`,
+`features_secondary`, `features_supervised_secondary`) that survive `clear_all()`.
+Purpose: downstream steps that drop sparse columns via `dropna(axis=1)` erase the
+full column audit trail. Preservation checkpoints retain every column so you can
+always inspect what was available before narrowing.
+
+**C7.1**: `PRESERVATION_CHECKPOINT_NAMES` frozenset and `preservation_checkpoint_should_write()`
+decision function in `checkpoints.py`. Write-once by default; only rewrites when
+`force=True` (from `--refresh-preservation` flag).
+
+**C7.2**: `RunConfig.refresh_preservation_checkpoints` field + `--refresh-preservation`
+argparse flag in `run_pipeline.py`.
+
+**C7.3**: Step 1 saves `macro_raw_secondary` after `macro_raw` checkpoint.
+
+**C7.4**: Step 2 saves `features_secondary` and `features_supervised_secondary` after
+the primary `features` and `features_supervised` checkpoints.
+
+**C7.5**: `clear_all()` updated to skip preservation files by default. New kwarg
+`include_preservation=True` removes them too. 10 new tests across `test_checkpoints.py`
+(7 preservation tests) and `test_runtime.py` (3 for new flag).
