@@ -409,15 +409,22 @@ D10                           (divergence/momentum notebook)
 
 ---
 
-## Phase C6 — Env Var Path Overrides + Convenience Imports (5 items)
+## Phase C6 — Env Var Path Overrides + Convenience Imports (5 items) ✅ DONE
 
-| Item | Description |
-|------|-------------|
-| C6.1 | Add env var overrides for paths in `__init__.py`: `TC_ROOT_DIR`, `TC_CONFIG_DIR`, `TC_DATA_DIR`, `TC_OUTPUT_DIR` (env var wins if set, else relative path) |
-| C6.2 | Add GSD-style convenience re-exports to `__init__.py`: `load`, `RunConfig`, `CheckpointManager` — enables `import trading_crab_lib as crab; crab.load()` |
-| C6.3 | Enrich `pyproject.toml` metadata: authors, URLs, classifiers, keywords (GSD pattern) |
-| C6.4 | *(Nice-to-have, deferred)*: `[project.scripts]` entry point for a `trading-crab` CLI command. For now `python run_pipeline.py` is sufficient |
-| C6.5 | Tests for env var path overrides + convenience import aliases |
+| Item | Description | Status |
+|------|-------------|--------|
+| C6.1 | Add env var overrides for paths in `__init__.py`: `TC_ROOT_DIR`, `TC_CONFIG_DIR`, `TC_DATA_DIR`, `TC_OUTPUT_DIR` (env var wins if set, else relative path) | ✅ |
+| C6.2 | Add GSD-style convenience re-exports to `__init__.py`: `load`, `load_portfolio`, `RunConfig`, `CheckpointManager` — enables `import trading_crab_lib as tcl; tcl.load()` | ✅ |
+| C6.3 | Enrich `pyproject.toml` metadata: License + OS classifiers, Changelog URL | ✅ |
+| C6.4 | *(Nice-to-have, deferred)*: `[project.scripts]` entry point for a `trading-crab` CLI command. For now `python run_pipeline.py` is sufficient | — |
+| C6.5 | Tests for env var path overrides + convenience import aliases | ✅ |
+
+**Implementation:** Updated `src/trading_crab_lib/__init__.py` (~55 lines). `_resolve_dir()`
+helper checks `TC_*` env vars at import time. Convenience re-exports use lazy `__getattr__`
+for `RunConfig` and `CheckpointManager` to avoid circular imports. `load()` and `load_portfolio()`
+are thin wrappers with deferred imports. 15 tests in `tests/unit/test_init_module.py`
+(1 skipped without joblib). `.env.example` updated with `TC_*` path vars.
+`pyproject.toml` enriched with License + OS classifiers and Changelog URL.
 
 ---
 

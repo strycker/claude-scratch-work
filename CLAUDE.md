@@ -95,7 +95,7 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (533 tests)
+├── tests/                         ← pytest test suite (571 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/               ← integration tests (currently empty)
@@ -128,6 +128,7 @@ trading-crab/
 │       ├── test_fred_series_config.py ← FRED settings.yaml validation
 │       ├── test_yield_curve_features.py ← yield curve spread features
 │       ├── test_monitoring.py          ← pipeline monitoring (date-range, source counts, feature quality)
+│       ├── test_init_module.py        ← env var path overrides + convenience imports
 │       ├── test_reporting.py          ← dashboard signals, portfolio, recommendations
 │       ├── test_plotting.py           ← all plot functions (steps 01–06)
 │       ├── test_runtime.py            ← RunConfig defaults, from_args, str, logging
@@ -1368,3 +1369,25 @@ New monitoring functions in `monitoring.py` + wiring into `run_pipeline.py`:
   a formatted table showing per-step timing and pass/fail status.
 
 14 new tests in `tests/unit/test_monitoring.py` (total: 56, all passing).
+
+### D28. Phase C6 — Env var path overrides + convenience imports (2026-03-26)
+
+**C6.1 — Env var path overrides**: `__init__.py` now checks `TC_ROOT_DIR`, `TC_CONFIG_DIR`,
+`TC_DATA_DIR`, `TC_OUTPUT_DIR` environment variables at import time. If set, the env var
+path wins; otherwise the default repo-relative path is used. Useful for Docker, CI, or
+custom data directory layouts.
+
+**C6.2 — Convenience re-exports**: `trading_crab_lib.load()`, `trading_crab_lib.load_portfolio()`,
+`trading_crab_lib.RunConfig`, and `trading_crab_lib.CheckpointManager` are now accessible
+directly from the package root. `RunConfig` and `CheckpointManager` use lazy `__getattr__`
+to avoid circular imports at module load time.
+
+**C6.3 — pyproject.toml metadata**: Added `License :: OSI Approved :: MIT License` and
+`Operating System :: OS Independent` classifiers; added `Changelog` URL pointing to STATE.md.
+
+**C6.4 — CLI entry point**: Deferred. `python run_pipeline.py` is sufficient for now.
+
+**C6.5 — Tests**: 15 tests in `tests/unit/test_init_module.py` (1 skipped without joblib).
+Covers: all 4 env var overrides, cascade behavior (TC_ROOT_DIR flows to DATA_DIR/OUTPUT_DIR
+when individual vars are unset), precedence (TC_CONFIG_DIR overrides TC_ROOT_DIR-derived path),
+`_resolve_dir()` helper, and all 4 convenience imports + invalid attribute error.
