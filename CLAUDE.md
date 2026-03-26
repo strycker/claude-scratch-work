@@ -1439,3 +1439,26 @@ Added 10 new cells (5 markdown + 5 code) to `notebooks/02_features.ipynb`:
 - **D2.5**: Divergence & momentum feature correlation heatmap (seaborn). Flags pairs with
   |r| > 0.8 as redundancy candidates. Covers `div_*`, `*_mom_*`, `corr_*`, `cpi_acceleration`
   columns.
+
+### D31. Phase D3 — Notebook 03 clustering diagnostics (2026-03-26)
+
+Added 16 new cells (8 markdown + 8 code) to `notebooks/03_clustering.ipynb`. The notebook
+already had 44 cells with extensive investigation (28 cells for GMM, DBSCAN, Spectral, gap
+statistic, SVD). New cells add standardized `plotting.py` function calls and fill gaps:
+
+**D3a — PCA Diagnostics:**
+- **D3a.1**: Scree plot via `plot_scree()` with 90% cumulative variance threshold
+- **D3a.2**: PCA loadings heatmap via `plot_pca_loadings(top_n=15)` — top features × 5 components
+- **D3a.3/D3a.4**: Already existed (cells 17-18 for component sweep, cells 20-21 for SVD comparison)
+- **D3a.5**: PC1×PC2 scatter with marginal KDE via seaborn `jointplot` — reveals per-regime separation
+
+**D3b — Alternative Clustering Methods:**
+- **D3b.1**: GMM BIC surface via `plot_gmm_bic_surface()` (official function vs inline plot in cell 27)
+- **D3b.2/D3b.3/D3b.5**: Already existed (cells 30-31 for DBSCAN, cell 34 for Spectral, cell 24 for gap stat)
+- **D3b.4**: Method comparison table via `plot_method_comparison_table()` — formatted table-as-figure
+
+**D3c — Cluster Quality Deep-Dive:**
+- **D3c.1**: Per-sample silhouette plot via `plot_silhouette_samples()` — negative bars = misassigned quarters
+- **D3c.2**: 3D PCA scatter via `plot_regime_colored_pca_3d()` — PC1×PC2×PC3 with regime colors
+- **D3c.3**: Regime duration histogram via `plot_regime_duration_histogram()` + run-length summary stats
+- **D3c.4**: Already existed (cell 38 for pairwise ARI heatmap)

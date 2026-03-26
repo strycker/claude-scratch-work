@@ -180,44 +180,50 @@ Uses existing `plotting.py` functions: `plot_gap_fill_before_after()`, `plot_fea
 
 ---
 
-## Phase D3a — Notebook 03: PCA Diagnostics (5 items)
+## Phase D3a — Notebook 03: PCA Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/03_clustering.ipynb` — PCA-focused section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D3a.1 | Scree plot with cumulative variance threshold line at 90% |
-| D3a.2 | PCA loadings heatmap: top-15 features × 5 components |
-| D3a.3 | PCA component sweep: silhouette score for n=3,4,5,6,7,8 (from `optimize_n_components()`) |
-| D3a.4 | SVD vs PCA loadings side-by-side (from `compare_svd_pca()`) |
-| D3a.5 | PC1 vs PC2 scatter with regime colors + marginal distributions (rugplot or KDE) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D3a.1 | Scree plot with cumulative variance threshold line at 90% | ✅ Done (new cell using `plot_scree()`) |
+| D3a.2 | PCA loadings heatmap: top-15 features × 5 components | ✅ Done (new cell using `plot_pca_loadings()`) |
+| D3a.3 | PCA component sweep: silhouette score for n=3,4,5,6,7,8 (from `optimize_n_components()`) | ✅ Already existed (cells 17-18) |
+| D3a.4 | SVD vs PCA loadings side-by-side (from `compare_svd_pca()`) | ✅ Already existed (cells 20-21) |
+| D3a.5 | PC1 vs PC2 scatter with regime colors + marginal distributions (rugplot or KDE) | ✅ Done (new cell using seaborn `jointplot` with marginal KDE) |
 
 ---
 
-## Phase D3b — Notebook 03: Alternative Clustering Methods (5 items)
+## Phase D3b — Notebook 03: Alternative Clustering Methods (5 items) ✅ DONE
 
 Add cells to `notebooks/03_clustering.ipynb` — alternative methods section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D3b.1 | GMM BIC surface heatmap (`plot_gmm_bic_surface`) |
-| D3b.2 | DBSCAN eps-sweep curve (from `fit_dbscan_sweep()`) + k-NN distance elbow plot |
-| D3b.3 | Spectral k-sweep: silhouette/CH/DB curves (from `fit_spectral_sweep()`) |
-| D3b.4 | Multi-method comparison table (`plot_method_comparison_table`) |
-| D3b.5 | Gap statistic curve with error bars + optimal k marker |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D3b.1 | GMM BIC surface heatmap (`plot_gmm_bic_surface`) | ✅ Done (new cell using `plot_gmm_bic_surface()`) |
+| D3b.2 | DBSCAN eps-sweep curve (from `fit_dbscan_sweep()`) + k-NN distance elbow plot | ✅ Already existed (cells 30-31) |
+| D3b.3 | Spectral k-sweep: silhouette/CH/DB curves (from `fit_spectral_sweep()`) | ✅ Already existed (cell 34) |
+| D3b.4 | Multi-method comparison table (`plot_method_comparison_table`) | ✅ Done (new cell using `plot_method_comparison_table()`) |
+| D3b.5 | Gap statistic curve with error bars + optimal k marker | ✅ Already existed (cell 24) |
 
 ---
 
-## Phase D3c — Notebook 03: Cluster Quality Deep-Dive (4 items)
+## Phase D3c — Notebook 03: Cluster Quality Deep-Dive (4 items) ✅ DONE
 
 Add cells to `notebooks/03_clustering.ipynb` — quality analysis section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D3c.1 | Per-sample silhouette plot (`plot_silhouette_samples`) |
-| D3c.2 | 3D PCA scatter (`plot_regime_colored_pca_3d`) |
-| D3c.3 | Regime duration histogram (`plot_regime_duration_histogram`) — how long regimes persist |
-| D3c.4 | Pairwise ARI matrix heatmap (from `pairwise_rand_index()`) — method agreement |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D3c.1 | Per-sample silhouette plot (`plot_silhouette_samples`) | ✅ Done (new cell) |
+| D3c.2 | 3D PCA scatter (`plot_regime_colored_pca_3d`) | ✅ Done (new cell) |
+| D3c.3 | Regime duration histogram (`plot_regime_duration_histogram`) — how long regimes persist | ✅ Done (new cell + run-length summary stats) |
+| D3c.4 | Pairwise ARI matrix heatmap (from `pairwise_rand_index()`) — method agreement | ✅ Already existed (cell 38) |
+
+**Implementation:** 16 new cells (8 markdown + 8 code) appended to `notebooks/03_clustering.ipynb`.
+D3a.3, D3a.4, D3b.2, D3b.3, D3b.5, and D3c.4 already existed as inline implementations in the
+notebook's 28 investigation cells. New cells call the official `plotting.py` functions for
+consistent, reusable output. D3a.5 uses seaborn `jointplot` for marginal KDE distributions.
+D3c.3 includes run-length summary statistics per regime.
 
 ---
 
