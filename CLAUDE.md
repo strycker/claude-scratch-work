@@ -1416,3 +1416,174 @@ the primary `features` and `features_supervised` checkpoints.
 **C7.5**: `clear_all()` updated to skip preservation files by default. New kwarg
 `include_preservation=True` removes them too. 10 new tests across `test_checkpoints.py`
 (7 preservation tests) and `test_runtime.py` (3 for new flag).
+
+### D30. Phase D2 — Notebook 02 feature engineering diagnostics (2026-03-26)
+
+Added 10 new cells (5 markdown + 5 code) to `notebooks/02_features.ipynb`:
+
+- **D2.1**: Gap-fill before/after overlays for `log_sp500`, `log_us_cpi`, `log_10yr_ustreas`.
+  Replays cross-ratios → log → select pipeline to build pre-gap-fill snapshot, then
+  calls `plot_gap_fill_before_after()` for visual comparison.
+
+- **D2.2**: Feature variance ranking bar chart via `plot_feature_variance_ranking(top_n=30)`.
+  Identifies which features dominate PCA and which contribute little.
+
+- **D2.3**: Centered vs causal comparison via `plot_centered_vs_causal_comparison()` for
+  `log_sp500_d1`, `log_us_cpi_d1`, `credit_spread_d1`. Shows look-ahead effect at regime
+  transitions where centered smoothing blurs boundaries.
+
+- **D2.4**: Derivative magnitude distributions — 4×3 histogram grid (d1/d2/d3 for
+  `log_sp500`, `log_us_cpi`, `credit_spread`, `log_cape_shiller`). Shows std and kurtosis
+  per panel to identify features with heavy-tailed dynamics.
+
+- **D2.5**: Divergence & momentum feature correlation heatmap (seaborn). Flags pairs with
+  |r| > 0.8 as redundancy candidates. Covers `div_*`, `*_mom_*`, `corr_*`, `cpi_acceleration`
+  columns.
+
+### D31. Phase D3 — Notebook 03 clustering diagnostics (2026-03-26)
+
+Added 16 new cells (8 markdown + 8 code) to `notebooks/03_clustering.ipynb`. The notebook
+already had 44 cells with extensive investigation (28 cells for GMM, DBSCAN, Spectral, gap
+statistic, SVD). New cells add standardized `plotting.py` function calls and fill gaps:
+
+**D3a — PCA Diagnostics:**
+- **D3a.1**: Scree plot via `plot_scree()` with 90% cumulative variance threshold
+- **D3a.2**: PCA loadings heatmap via `plot_pca_loadings(top_n=15)` — top features × 5 components
+- **D3a.3/D3a.4**: Already existed (cells 17-18 for component sweep, cells 20-21 for SVD comparison)
+- **D3a.5**: PC1×PC2 scatter with marginal KDE via seaborn `jointplot` — reveals per-regime separation
+
+**D3b — Alternative Clustering Methods:**
+- **D3b.1**: GMM BIC surface via `plot_gmm_bic_surface()` (official function vs inline plot in cell 27)
+- **D3b.2/D3b.3/D3b.5**: Already existed (cells 30-31 for DBSCAN, cell 34 for Spectral, cell 24 for gap stat)
+- **D3b.4**: Method comparison table via `plot_method_comparison_table()` — formatted table-as-figure
+
+**D3c — Cluster Quality Deep-Dive:**
+- **D3c.1**: Per-sample silhouette plot via `plot_silhouette_samples()` — negative bars = misassigned quarters
+- **D3c.2**: 3D PCA scatter via `plot_regime_colored_pca_3d()` — PC1×PC2×PC3 with regime colors
+- **D3c.3**: Regime duration histogram via `plot_regime_duration_histogram()` + run-length summary stats
+- **D3c.4**: Already existed (cell 38 for pairwise ARI heatmap)
+
+### D32. Phase D4 — Notebook 04 regime profiling diagnostics (2026-03-26)
+
+Added 10 new cells (5 markdown + 5 code) to `notebooks/04_regimes.ipynb`:
+
+- **D4.1**: Feature-regime overlay for `log_sp500_d1`, `log_us_cpi_d1`, `credit_spread`,
+  `10yr_ustreas_d1` via `plot_feature_regime_overlay()` — time-series with regime-colored bands.
+
+- **D4.2**: Regime stability metrics via `compute_regime_stability()` from `monitoring.py`.
+  Dual bar chart: persistence probability (P of staying) and average consecutive duration.
+
+- **D4.3**: Forward transition probability heatmaps for 1Q/4Q/8Q horizons via
+  `compute_forward_probabilities()` and `plot_forward_prob_evolution()`. Prints highest
+  off-diagonal transition per horizon.
+
+- **D4.4**: Per-regime feature correlation heatmap via `plot_correlation_change_heatmap(top_n=12)`.
+  Shows structural changes in feature relationships across regimes.
+
+- **D4.5**: Empirical vs HMM transition matrix comparison (optional, requires `hmmlearn`).
+  Fits GaussianHMM with same k as KMeans, shows side-by-side heatmaps + absolute difference.
+
+### D33. Phase D5 — Notebook 05 prediction diagnostics (2026-03-26)
+
+Added 20 new cells (10 markdown + 10 code) to `notebooks/05_prediction.ipynb`:
+
+**D5a — CV Diagnostics:**
+- **D5a.1**: CV fold accuracy bar chart via `plot_cv_fold_accuracy()` — clones RF per fold
+- **D5a.2**: Per-fold confusion matrix grid — 5 side-by-side heatmaps (seaborn)
+- **D5a.3**: Learning curve via `plot_learning_curve()` — train vs test accuracy vs N
+- **D5a.4**: Per-fold class distribution table — pivoted train/test counts, flags folds
+  with zero test samples for any regime
+- **D5a.5**: Temporal accuracy by decade — bar chart showing accuracy per decade (1950s–2020s)
+
+**D5b — Model Comparison & Interpretability:**
+- **D5b.1**: Decision tree rendering via `plot_decision_tree(max_depth=4)` — trained via flat API
+- **D5b.2**: Interpretability tree — shallow DT on top-10 RF features, prints `export_text()` rules
+- **D5b.3**: Calibration curve via `plot_calibration_curve()` — reliability diagram per regime
+- **D5b.4**: Model comparison bar — trains RF+DT+LGBM(optional), CV evaluates, plots grouped
+  accuracy/F1 comparison via `plot_model_comparison_bar()`
+- **D5b.5**: Feature importance comparison via `plot_feature_importance_comparison()` — side-by-side
+  top-20 importances from all available model types
+
+### D34. Phase D6 — Notebook 06 asset return analysis (2026-03-26)
+
+Added 10 new cells (5 markdown + 5 code) to `notebooks/06_assets.ipynb`:
+
+- **D6.1**: Per-regime violin plots for 6 key ETFs (SPY, TLT, GLD, QQQ, VNQ, AGG) showing
+  full return distributions, not just medians. Uses seaborn `violinplot` with regime palette.
+
+- **D6.2**: Regime-conditional Sharpe ratio table — annualized Sharpe (mean/std × sqrt(4))
+  per asset per regime. Styled DataFrame with RdYlGn color gradient.
+
+- **D6.3**: Best/worst asset per regime summary — shows highest and lowest median return
+  plus the spread between them. Quick reference for portfolio tilts.
+
+- **D6.4**: Per-regime asset correlation matrices — top-10 ETFs by coverage, side-by-side
+  heatmaps. Reveals crisis-regime correlation spikes vs normal diversification.
+
+- **D6.5**: ETF data coverage timeline — binary heatmap (green = data available) with
+  decade markers and first-available-date summary per ETF.
+
+### D35. Phase D7 — New notebook 09: Diagnostics & RRG (2026-03-26)
+
+Created `notebooks/09_diagnostics.ipynb` (13 cells) — new notebook for pipeline step 8
+diagnostics and Relative Rotation Graph analysis.
+
+- **D7.1**: Setup + data loading (3 cells). Loads RRG data from `outputs/reports/diagnostics/`,
+  asset prices from `data/raw/`, with `run_step_if_needed()` helper for prerequisites.
+
+- **D7.2**: RRG 4-quadrant scatter via `plot_rrg_scatter()`. Handles column name mismatch
+  between `rrg_for_benchmark()` output (rs_ratio/rs_momentum) and plot function input (rs/rm)
+  with rename. Falls back to on-the-fly computation from prices if saved data unavailable.
+
+- **D7.3**: Rolling z-score time-series for config-driven ratios (Oil:Gold, Oil:Bonds,
+  Bonds:Gold, Lumber:Gold). ±2σ bands with shaded extreme regions. Uses `rolling_zscore()`
+  from `diagnostics.py`.
+
+- **D7.4**: Quadrant rotation history — stacked horizontal bar chart showing fraction of
+  quarters each asset spends in LEADING/IMPROVING/WEAKENING/LAGGING quadrants. Sorted by
+  LEADING frequency. Computes RRG quadrants per quarter using `normalize_100()`.
+
+- **D7.5**: Percentile rank dashboard — per-ratio histogram with current value marked,
+  plus summary table with HIGH (>80th) / LOW (<20th) / NORMAL signal classification.
+  Uses `percentile_rank()` from `diagnostics.py`.
+
+### D36. Phase D8 — New notebook 10: Model Comparison (2026-03-26)
+
+Created `notebooks/10_model_comparison.ipynb` (23 cells: 11 markdown + 12 code) — new
+notebook comparing clustering methods and their soft probability outputs.
+
+**Part A — Hard Clustering Comparison (D8a):**
+
+- **D8a.1**: Setup + data loading (4 cells). Loads features, computes PCA, loads KMeans
+  labels, fits GMM/HMM/Spectral on same PCA space. HMM and Spectral gracefully skip
+  if dependencies missing.
+
+- **D8a.2**: Side-by-side PCA scatter — dynamic N-panel layout (one per fitted method),
+  PC1 vs PC2 colored by cluster assignment. Same palette across panels.
+
+- **D8a.3**: ARI pairwise matrix heatmap via `pairwise_rand_index()` from
+  `cluster_comparison.py`. Seaborn heatmap with YlOrRd colormap.
+
+- **D8a.4**: Temporal label agreement — rolling 8Q window of unique-label diversity
+  across methods. Pairwise ARI summary. Notes that raw label matching ignores ID
+  permutation.
+
+- **D8a.5**: Regime timeline comparison — N stacked horizontal timelines with per-method
+  legend and shared x-axis.
+
+**Part B — Soft Probabilities (D8b):**
+
+- **D8b.1**: GMM soft probabilities stacked area via `plot_soft_probabilities()`.
+  Reports mean max probability as sharpness metric.
+
+- **D8b.2**: HMM soft probabilities stacked area via `plot_soft_probabilities()`.
+  Graceful skip if `hmmlearn` not installed.
+
+- **D8b.3**: GMM vs HMM sharpness comparison — dual panel: Shannon entropy time-series
+  + max-probability histogram. Summary table with mean/median max prob, mean entropy,
+  and % confident (>0.8).
+
+- **D8b.4**: Markov 2-state recession overlay — fits `fit_markov_switching()` on best
+  available macro derivative (GDP/CPI d1), identifies recession state by lower mean,
+  overlays recession probability on KMeans regime timeline. Cross-tabulation table via
+  `compare_markov_kmeans()`.

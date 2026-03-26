@@ -166,155 +166,189 @@ with NaN% column, styled and sorted by coverage.
 
 ---
 
-## Phase D2 — Notebook 02: Feature Engineering Diagnostics (5 items)
+## Phase D2 — Notebook 02: Feature Engineering Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/02_features.ipynb`.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D2.1 | Gap-fill before/after overlays for 3 columns (sp500, us_cpi, 10yr_ustreas) |
-| D2.2 | Feature variance ranking bar chart (`plot_feature_variance_ranking`) |
-| D2.3 | Centered vs causal comparison panel (`plot_centered_vs_causal_comparison`) for 3 features |
-| D2.4 | Derivative magnitude distributions: histograms of d1/d2/d3 for key features |
-| D2.5 | Correlation heatmap limited to divergence + momentum features (are they redundant?) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D2.1 | Gap-fill before/after overlays for 3 columns (sp500, us_cpi, 10yr_ustreas) | ✅ Done |
+| D2.2 | Feature variance ranking bar chart (`plot_feature_variance_ranking`) | ✅ Done |
+| D2.3 | Centered vs causal comparison panel (`plot_centered_vs_causal_comparison`) for 3 features | ✅ Done |
+| D2.4 | Derivative magnitude distributions: histograms of d1/d2/d3 for key features | ✅ Done |
+| D2.5 | Correlation heatmap limited to divergence + momentum features (are they redundant?) | ✅ Done |
+
+**Implementation:** 10 new cells (5 markdown + 5 code) appended to `notebooks/02_features.ipynb`.
+Uses existing `plotting.py` functions: `plot_gap_fill_before_after()`, `plot_feature_variance_ranking()`,
+`plot_centered_vs_causal_comparison()`. D2.4 and D2.5 use inline matplotlib/seaborn with
+`_save_or_show()` for consistent plot output. All cells guarded with `if features is not None`.
 
 ---
 
-## Phase D3a — Notebook 03: PCA Diagnostics (5 items)
+## Phase D3a — Notebook 03: PCA Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/03_clustering.ipynb` — PCA-focused section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D3a.1 | Scree plot with cumulative variance threshold line at 90% |
-| D3a.2 | PCA loadings heatmap: top-15 features × 5 components |
-| D3a.3 | PCA component sweep: silhouette score for n=3,4,5,6,7,8 (from `optimize_n_components()`) |
-| D3a.4 | SVD vs PCA loadings side-by-side (from `compare_svd_pca()`) |
-| D3a.5 | PC1 vs PC2 scatter with regime colors + marginal distributions (rugplot or KDE) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D3a.1 | Scree plot with cumulative variance threshold line at 90% | ✅ Done (new cell using `plot_scree()`) |
+| D3a.2 | PCA loadings heatmap: top-15 features × 5 components | ✅ Done (new cell using `plot_pca_loadings()`) |
+| D3a.3 | PCA component sweep: silhouette score for n=3,4,5,6,7,8 (from `optimize_n_components()`) | ✅ Already existed (cells 17-18) |
+| D3a.4 | SVD vs PCA loadings side-by-side (from `compare_svd_pca()`) | ✅ Already existed (cells 20-21) |
+| D3a.5 | PC1 vs PC2 scatter with regime colors + marginal distributions (rugplot or KDE) | ✅ Done (new cell using seaborn `jointplot` with marginal KDE) |
 
 ---
 
-## Phase D3b — Notebook 03: Alternative Clustering Methods (5 items)
+## Phase D3b — Notebook 03: Alternative Clustering Methods (5 items) ✅ DONE
 
 Add cells to `notebooks/03_clustering.ipynb` — alternative methods section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D3b.1 | GMM BIC surface heatmap (`plot_gmm_bic_surface`) |
-| D3b.2 | DBSCAN eps-sweep curve (from `fit_dbscan_sweep()`) + k-NN distance elbow plot |
-| D3b.3 | Spectral k-sweep: silhouette/CH/DB curves (from `fit_spectral_sweep()`) |
-| D3b.4 | Multi-method comparison table (`plot_method_comparison_table`) |
-| D3b.5 | Gap statistic curve with error bars + optimal k marker |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D3b.1 | GMM BIC surface heatmap (`plot_gmm_bic_surface`) | ✅ Done (new cell using `plot_gmm_bic_surface()`) |
+| D3b.2 | DBSCAN eps-sweep curve (from `fit_dbscan_sweep()`) + k-NN distance elbow plot | ✅ Already existed (cells 30-31) |
+| D3b.3 | Spectral k-sweep: silhouette/CH/DB curves (from `fit_spectral_sweep()`) | ✅ Already existed (cell 34) |
+| D3b.4 | Multi-method comparison table (`plot_method_comparison_table`) | ✅ Done (new cell using `plot_method_comparison_table()`) |
+| D3b.5 | Gap statistic curve with error bars + optimal k marker | ✅ Already existed (cell 24) |
 
 ---
 
-## Phase D3c — Notebook 03: Cluster Quality Deep-Dive (4 items)
+## Phase D3c — Notebook 03: Cluster Quality Deep-Dive (4 items) ✅ DONE
 
 Add cells to `notebooks/03_clustering.ipynb` — quality analysis section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D3c.1 | Per-sample silhouette plot (`plot_silhouette_samples`) |
-| D3c.2 | 3D PCA scatter (`plot_regime_colored_pca_3d`) |
-| D3c.3 | Regime duration histogram (`plot_regime_duration_histogram`) — how long regimes persist |
-| D3c.4 | Pairwise ARI matrix heatmap (from `pairwise_rand_index()`) — method agreement |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D3c.1 | Per-sample silhouette plot (`plot_silhouette_samples`) | ✅ Done (new cell) |
+| D3c.2 | 3D PCA scatter (`plot_regime_colored_pca_3d`) | ✅ Done (new cell) |
+| D3c.3 | Regime duration histogram (`plot_regime_duration_histogram`) — how long regimes persist | ✅ Done (new cell + run-length summary stats) |
+| D3c.4 | Pairwise ARI matrix heatmap (from `pairwise_rand_index()`) — method agreement | ✅ Already existed (cell 38) |
+
+**Implementation:** 16 new cells (8 markdown + 8 code) appended to `notebooks/03_clustering.ipynb`.
+D3a.3, D3a.4, D3b.2, D3b.3, D3b.5, and D3c.4 already existed as inline implementations in the
+notebook's 28 investigation cells. New cells call the official `plotting.py` functions for
+consistent, reusable output. D3a.5 uses seaborn `jointplot` for marginal KDE distributions.
+D3c.3 includes run-length summary statistics per regime.
 
 ---
 
-## Phase D4 — Notebook 04: Regime Profiling Diagnostics (5 items)
+## Phase D4 — Notebook 04: Regime Profiling Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/04_regimes.ipynb`.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D4.1 | Feature-regime overlay for 4 key indicators (`plot_feature_regime_overlay`) |
-| D4.2 | Regime stability metrics: persistence %, avg consecutive quarters, stability ranking |
-| D4.3 | Forward probability heatmap (`plot_forward_prob_evolution`) |
-| D4.4 | Per-regime correlation heatmap (`plot_correlation_change_heatmap`) — structure changes |
-| D4.5 | Empirical vs learned transition matrix comparison (if HMM available) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D4.1 | Feature-regime overlay for 4 key indicators (`plot_feature_regime_overlay`) | ✅ Done |
+| D4.2 | Regime stability metrics: persistence %, avg consecutive quarters, stability ranking | ✅ Done |
+| D4.3 | Forward probability heatmap (`plot_forward_prob_evolution`) | ✅ Done |
+| D4.4 | Per-regime correlation heatmap (`plot_correlation_change_heatmap`) — structure changes | ✅ Done |
+| D4.5 | Empirical vs learned transition matrix comparison (if HMM available) | ✅ Done |
+
+**Implementation:** 10 new cells (5 markdown + 5 code) appended to `notebooks/04_regimes.ipynb`.
+D4.1 overlays `log_sp500_d1`, `log_us_cpi_d1`, `credit_spread`, `10yr_ustreas_d1` with regime
+bands. D4.2 uses `compute_regime_stability()` from monitoring.py + dual bar chart (persistence
+probability and average duration). D4.3 uses `compute_forward_probabilities()` for 1Q/4Q/8Q
+horizons. D4.4 uses `plot_correlation_change_heatmap(top_n=12)`. D4.5 fits GaussianHMM (if
+hmmlearn installed) and shows side-by-side empirical vs learned transition matrices with
+absolute difference heatmap.
 
 ---
 
-## Phase D5a — Notebook 05: CV Diagnostics (5 items)
+## Phase D5a — Notebook 05: CV Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/05_prediction.ipynb` — cross-validation section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D5a.1 | CV fold accuracy bar chart (`plot_cv_fold_accuracy`) for RF |
-| D5a.2 | Per-fold confusion matrix grid (small 5×5 heatmaps, one per fold) |
-| D5a.3 | Learning curve (`plot_learning_curve`) — train vs test accuracy vs N |
-| D5a.4 | Per-fold class distribution table (check for imbalanced folds) |
-| D5a.5 | Temporal accuracy plot: accuracy by decade (1950s, 1960s, ... 2020s) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D5a.1 | CV fold accuracy bar chart (`plot_cv_fold_accuracy`) for RF | ✅ Done |
+| D5a.2 | Per-fold confusion matrix grid (small 5×5 heatmaps, one per fold) | ✅ Done |
+| D5a.3 | Learning curve (`plot_learning_curve`) — train vs test accuracy vs N | ✅ Done |
+| D5a.4 | Per-fold class distribution table (check for imbalanced folds) | ✅ Done |
+| D5a.5 | Temporal accuracy plot: accuracy by decade (1950s, 1960s, ... 2020s) | ✅ Done |
 
 ---
 
-## Phase D5b — Notebook 05: Model Comparison & Interpretability (5 items)
+## Phase D5b — Notebook 05: Model Comparison & Interpretability (5 items) ✅ DONE
 
 Add cells to `notebooks/05_prediction.ipynb` — model comparison section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D5b.1 | Decision tree rendering (`plot_decision_tree`) for DT model |
-| D5b.2 | Interpretability tree: shallow DT on top-10 RF features, print rules as text |
-| D5b.3 | Calibration curve (`plot_calibration_curve`) for RF |
-| D5b.4 | RF vs DT vs GB accuracy comparison (`plot_model_comparison_bar`) |
-| D5b.5 | Feature importance comparison (`plot_feature_importance_comparison`) — RF vs DT vs GB |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D5b.1 | Decision tree rendering (`plot_decision_tree`) for DT model | ✅ Done |
+| D5b.2 | Interpretability tree: shallow DT on top-10 RF features, print rules as text | ✅ Done |
+| D5b.3 | Calibration curve (`plot_calibration_curve`) for RF | ✅ Done |
+| D5b.4 | RF vs DT vs GB accuracy comparison (`plot_model_comparison_bar`) | ✅ Done |
+| D5b.5 | Feature importance comparison (`plot_feature_importance_comparison`) — RF vs DT vs GB | ✅ Done |
+
+**Implementation:** 20 new cells (10 markdown + 10 code) appended to `notebooks/05_prediction.ipynb`.
+D5a cells use `TimeSeriesSplit` + `clone()` for proper temporal CV. D5a.2 builds a per-fold
+confusion matrix grid with seaborn heatmaps. D5a.4 pivots class counts per fold and flags
+folds with missing regimes. D5a.5 computes per-decade accuracy with bar chart. D5b.1 trains
+a DT via flat API and renders with `plot_decision_tree()`. D5b.2 trains a shallow DT on
+top-10 RF features and prints `export_text()` rules. D5b.4 trains RF+DT+LGBM (optional),
+evaluates via CV, and plots grouped bar comparison. Also removed trailing empty cell.
 
 ---
 
-## Phase D6 — Notebook 06: Asset Return Analysis (5 items)
+## Phase D6 — Notebook 06: Asset Return Analysis (5 items) ✅ DONE
 
 Add cells to `notebooks/06_assets.ipynb`.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D6.1 | Per-regime box/violin plots of asset returns (not just medians) |
-| D6.2 | Regime-conditional Sharpe ratio table (mean/std per regime per asset) |
-| D6.3 | Best/worst asset per regime summary table |
-| D6.4 | Return correlation matrix per regime (do assets diversify within each regime?) |
-| D6.5 | ETF coverage timeline: which ETFs have data in each quarter (sparse before 2000) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D6.1 | Per-regime box/violin plots of asset returns (not just medians) | ✅ Done |
+| D6.2 | Regime-conditional Sharpe ratio table (mean/std per regime per asset) | ✅ Done |
+| D6.3 | Best/worst asset per regime summary table | ✅ Done |
+| D6.4 | Return correlation matrix per regime (do assets diversify within each regime?) | ✅ Done |
+| D6.5 | ETF coverage timeline: which ETFs have data in each quarter (sparse before 2000) | ✅ Done |
+
+**Implementation:** 10 new cells (5 markdown + 5 code) appended to `notebooks/06_assets.ipynb`.
+D6.1 uses seaborn violin plots for 6 key ETFs (SPY, TLT, GLD, QQQ, VNQ, AGG). D6.2 computes
+annualized Sharpe ratios (mean/std × sqrt(4)) with styled DataFrame (RdYlGn gradient). D6.3
+shows best/worst asset per regime with spread. D6.4 plots per-regime correlation matrices for
+top-10 ETFs by coverage. D6.5 creates binary heatmap of ETF data availability plus first-date
+summary table.
 
 ---
 
-## Phase D7 — New Notebook 09: Diagnostics & RRG (5 items)
+## Phase D7 — New Notebook 09: Diagnostics & RRG (5 items) ✅ DONE
 
-Create `notebooks/09_diagnostics.ipynb`.
+Created `notebooks/09_diagnostics.ipynb` (13 cells).
 
-| Item | New Cell(s) |
-|------|-------------|
-| D7.1 | Setup + load ratio diagnostics and RRG data from `outputs/reports/diagnostics/` |
-| D7.2 | RRG 4-quadrant scatter plot (`plot_rrg_scatter`) |
-| D7.3 | Rolling z-score time-series for 4 key ratios |
-| D7.4 | Quadrant rotation history: how often each asset moves between quadrants |
-| D7.5 | Ratio percentile rank dashboard: current values vs historical distribution |
-
----
-
-## Phase D8a — New Notebook 10: Model Comparison — Clustering (5 items)
-
-Create `notebooks/10_model_comparison.ipynb` — clustering comparison section.
-
-| Item | New Cell(s) |
-|------|-------------|
-| D8a.1 | Setup + load PCA data + fit KMeans/GMM/HMM/Spectral (or load from cache) |
-| D8a.2 | Side-by-side PCA scatter: 4 panels (KMeans, GMM, HMM, Spectral) same color scale |
-| D8a.3 | ARI pairwise matrix heatmap — which methods agree most? |
-| D8a.4 | Temporal label agreement: % of quarters where KMeans == GMM == HMM |
-| D8a.5 | Regime timeline comparison: 4 stacked horizontal timelines (one per method) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D7.1 | Setup + load ratio diagnostics and RRG data from `outputs/reports/diagnostics/` | ✅ 3 cells: setup, run_step_if_needed helper, data loading with fallback |
+| D7.2 | RRG 4-quadrant scatter plot (`plot_rrg_scatter`) | ✅ Column rename rs_ratio→rs, rs_momentum→rm; fallback on-the-fly computation from prices |
+| D7.3 | Rolling z-score time-series for 4 key ratios | ✅ Config-driven ratios with ±2σ bands and shaded extremes |
+| D7.4 | Quadrant rotation history: how often each asset moves between quadrants | ✅ Stacked horizontal bar chart with quadrant frequency per asset |
+| D7.5 | Ratio percentile rank dashboard: current values vs historical distribution | ✅ Per-ratio histogram with current value marked + summary table with HIGH/LOW/NORMAL signal |
 
 ---
 
-## Phase D8b — New Notebook 10: Model Comparison — Soft Probabilities (4 items)
+## Phase D8a — New Notebook 10: Model Comparison — Clustering (5 items) ✅ DONE
+
+Created `notebooks/10_model_comparison.ipynb` — clustering comparison section.
+
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D8a.1 | Setup + load PCA data + fit KMeans/GMM/HMM/Spectral (or load from cache) | ✅ 4 cells: imports, run_step_if_needed, PCA+labels loading, fit all methods |
+| D8a.2 | Side-by-side PCA scatter: 4 panels (KMeans, GMM, HMM, Spectral) same color scale | ✅ Dynamic N-panel scatter with consistent palette |
+| D8a.3 | ARI pairwise matrix heatmap — which methods agree most? | ✅ Uses pairwise_rand_index() + seaborn heatmap |
+| D8a.4 | Temporal label agreement: % of quarters where KMeans == GMM == HMM | ✅ Rolling unique-label diversity + pairwise ARI summary |
+| D8a.5 | Regime timeline comparison: 4 stacked horizontal timelines (one per method) | ✅ N stacked timelines with per-method legend |
+
+---
+
+## Phase D8b — New Notebook 10: Model Comparison — Soft Probabilities (4 items) ✅ DONE
 
 Continue `notebooks/10_model_comparison.ipynb` — soft probability section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D8b.1 | GMM soft probabilities stacked area (`plot_soft_probabilities`) |
-| D8b.2 | HMM soft probabilities stacked area (`plot_soft_probabilities`) |
-| D8b.3 | Side-by-side: GMM vs HMM — which gives sharper/more uncertain assignments? |
-| D8b.4 | Markov 2-state recession probability overlay on regime timeline |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D8b.1 | GMM soft probabilities stacked area (`plot_soft_probabilities`) | ✅ Uses gmm_probabilities() + plot_soft_probabilities() with custom title/filename |
+| D8b.2 | HMM soft probabilities stacked area (`plot_soft_probabilities`) | ✅ Uses hmm_probabilities() + plot_soft_probabilities(), graceful skip if hmmlearn missing |
+| D8b.3 | Side-by-side: GMM vs HMM — which gives sharper/more uncertain assignments? | ✅ Entropy time-series + max-probability distribution + summary table |
+| D8b.4 | Markov 2-state recession probability overlay on regime timeline | ✅ fit_markov_switching on GDP/CPI derivative, recession prob overlay on KMeans timeline, cross-tabulation |
 
 ---
 
