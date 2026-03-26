@@ -147,17 +147,22 @@ Wired into `run_pipeline.py` steps 1-2 and `pipelines/01_ingest.py`, `pipelines/
 
 ---
 
-## Phase D1 — Notebook 01: Ingestion Diagnostics (5 items)
+## Phase D1 — Notebook 01: Ingestion Diagnostics (5 items) ✅ DONE
 
-Add cells to `notebooks/01_ingestion.ipynb`.
+Added 10 cells (5 markdown + 5 code) to `notebooks/01_ingestion.ipynb`.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D1.1 | Ingestion completeness table: expected vs actual columns, missing highlighted |
-| D1.2 | Per-source breakdown: multpl row count, FRED row count, macrotrends row count, ETF row count |
-| D1.3 | Date range validation: first/last date per series, flag series ending before current quarter |
-| D1.4 | NaN heatmap (`plot_nan_heatmap`) showing coverage gaps across all series |
-| D1.5 | Summary statistics table: per-column min/max/mean/std/NaN% (sorted by coverage) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D1.1 | Ingestion completeness table: expected vs actual columns, missing highlighted | ✅ |
+| D1.2 | Per-source breakdown: multpl row count, FRED row count, macrotrends row count, ETF row count | ✅ |
+| D1.3 | Date range validation: first/last date per series, flag series ending before current quarter | ✅ |
+| D1.4 | NaN heatmap (`plot_nan_heatmap`) showing coverage gaps across all series | ✅ |
+| D1.5 | Summary statistics table: per-column min/max/mean/std/NaN% (sorted by coverage) | ✅ |
+
+**Implementation:** All cells use existing monitoring functions (`format_completeness_table`,
+`count_source_columns`, `validate_date_range`) and plotting functions (`plot_nan_heatmap`).
+D1.3 also includes a per-series first/last valid date table. D1.5 uses `df.describe().T`
+with NaN% column, styled and sorted by coverage.
 
 ---
 
