@@ -1482,4 +1482,25 @@ Added 10 new cells (5 markdown + 5 code) to `notebooks/04_regimes.ipynb`:
 
 - **D4.5**: Empirical vs HMM transition matrix comparison (optional, requires `hmmlearn`).
   Fits GaussianHMM with same k as KMeans, shows side-by-side heatmaps + absolute difference.
+
+### D33. Phase D5 — Notebook 05 prediction diagnostics (2026-03-26)
+
+Added 20 new cells (10 markdown + 10 code) to `notebooks/05_prediction.ipynb`:
+
+**D5a — CV Diagnostics:**
+- **D5a.1**: CV fold accuracy bar chart via `plot_cv_fold_accuracy()` — clones RF per fold
+- **D5a.2**: Per-fold confusion matrix grid — 5 side-by-side heatmaps (seaborn)
+- **D5a.3**: Learning curve via `plot_learning_curve()` — train vs test accuracy vs N
+- **D5a.4**: Per-fold class distribution table — pivoted train/test counts, flags folds
+  with zero test samples for any regime
+- **D5a.5**: Temporal accuracy by decade — bar chart showing accuracy per decade (1950s–2020s)
+
+**D5b — Model Comparison & Interpretability:**
+- **D5b.1**: Decision tree rendering via `plot_decision_tree(max_depth=4)` — trained via flat API
+- **D5b.2**: Interpretability tree — shallow DT on top-10 RF features, prints `export_text()` rules
+- **D5b.3**: Calibration curve via `plot_calibration_curve()` — reliability diagram per regime
+- **D5b.4**: Model comparison bar — trains RF+DT+LGBM(optional), CV evaluates, plots grouped
+  accuracy/F1 comparison via `plot_model_comparison_bar()`
+- **D5b.5**: Feature importance comparison via `plot_feature_importance_comparison()` — side-by-side
+  top-20 importances from all available model types
   Graceful skip with install instructions if hmmlearn unavailable.

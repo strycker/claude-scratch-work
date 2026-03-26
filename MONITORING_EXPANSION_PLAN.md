@@ -249,31 +249,39 @@ absolute difference heatmap.
 
 ---
 
-## Phase D5a — Notebook 05: CV Diagnostics (5 items)
+## Phase D5a — Notebook 05: CV Diagnostics (5 items) ✅ DONE
 
 Add cells to `notebooks/05_prediction.ipynb` — cross-validation section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D5a.1 | CV fold accuracy bar chart (`plot_cv_fold_accuracy`) for RF |
-| D5a.2 | Per-fold confusion matrix grid (small 5×5 heatmaps, one per fold) |
-| D5a.3 | Learning curve (`plot_learning_curve`) — train vs test accuracy vs N |
-| D5a.4 | Per-fold class distribution table (check for imbalanced folds) |
-| D5a.5 | Temporal accuracy plot: accuracy by decade (1950s, 1960s, ... 2020s) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D5a.1 | CV fold accuracy bar chart (`plot_cv_fold_accuracy`) for RF | ✅ Done |
+| D5a.2 | Per-fold confusion matrix grid (small 5×5 heatmaps, one per fold) | ✅ Done |
+| D5a.3 | Learning curve (`plot_learning_curve`) — train vs test accuracy vs N | ✅ Done |
+| D5a.4 | Per-fold class distribution table (check for imbalanced folds) | ✅ Done |
+| D5a.5 | Temporal accuracy plot: accuracy by decade (1950s, 1960s, ... 2020s) | ✅ Done |
 
 ---
 
-## Phase D5b — Notebook 05: Model Comparison & Interpretability (5 items)
+## Phase D5b — Notebook 05: Model Comparison & Interpretability (5 items) ✅ DONE
 
 Add cells to `notebooks/05_prediction.ipynb` — model comparison section.
 
-| Item | New Cell(s) |
-|------|-------------|
-| D5b.1 | Decision tree rendering (`plot_decision_tree`) for DT model |
-| D5b.2 | Interpretability tree: shallow DT on top-10 RF features, print rules as text |
-| D5b.3 | Calibration curve (`plot_calibration_curve`) for RF |
-| D5b.4 | RF vs DT vs GB accuracy comparison (`plot_model_comparison_bar`) |
-| D5b.5 | Feature importance comparison (`plot_feature_importance_comparison`) — RF vs DT vs GB |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D5b.1 | Decision tree rendering (`plot_decision_tree`) for DT model | ✅ Done |
+| D5b.2 | Interpretability tree: shallow DT on top-10 RF features, print rules as text | ✅ Done |
+| D5b.3 | Calibration curve (`plot_calibration_curve`) for RF | ✅ Done |
+| D5b.4 | RF vs DT vs GB accuracy comparison (`plot_model_comparison_bar`) | ✅ Done |
+| D5b.5 | Feature importance comparison (`plot_feature_importance_comparison`) — RF vs DT vs GB | ✅ Done |
+
+**Implementation:** 20 new cells (10 markdown + 10 code) appended to `notebooks/05_prediction.ipynb`.
+D5a cells use `TimeSeriesSplit` + `clone()` for proper temporal CV. D5a.2 builds a per-fold
+confusion matrix grid with seaborn heatmaps. D5a.4 pivots class counts per fold and flags
+folds with missing regimes. D5a.5 computes per-decade accuracy with bar chart. D5b.1 trains
+a DT via flat API and renders with `plot_decision_tree()`. D5b.2 trains a shallow DT on
+top-10 RF features and prints `export_text()` rules. D5b.4 trains RF+DT+LGBM (optional),
+evaluates via CV, and plots grouped bar comparison. Also removed trailing empty cell.
 
 ---
 
