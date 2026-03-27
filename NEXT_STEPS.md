@@ -1,46 +1,45 @@
-# NEXT_STEPS.md — Phase 5+ Planning Document
+# NEXT_STEPS.md — Unified Phase Plan
 
 Created: 2026-03-27
-Updated: 2026-03-27 (revised: monorepo 2-package architecture)
+Updated: 2026-03-27 (unified with Phase letter notation; monorepo 2-package architecture)
 Branch: `claude/refresh-submodule-analysis-1Icoo`
 
 ---
 
 ## Current State Summary
 
-**What's done (Phases 1–4):**
+**What's done (prior Phases 1–4):**
 - 9,899 lines of library code across 31 modules in `src/trading_crab_lib/`
 - 573 tests (all passing, 11 skipped for optional deps)
-- 9 pipeline steps running end-to-end
+- 9 pipeline steps running end-to-end on real data
 - 12 Jupyter notebooks with full diagnostic cells
-- 85 monitoring/plotting items delivered (Phase 4 complete)
+- 85 monitoring/plotting items delivered
 - Package renamed to `trading_crab_lib`, pyproject.toml ready
 - HMM, Markov, GMM, DBSCAN, Spectral clustering all implemented
 - Divergence + momentum features integrated
 - Email + weekly report automation
 - Preservation checkpoints, env var overrides, convenience imports
 
-**Three submodules in play (all read-only references):**
-| Submodule path | Remote repo | Purpose |
+**Three submodules (all read-only references):**
+| Submodule | Remote | Purpose |
 |---|---|---|
-| `gsd-scratch-work/` | strycker/gsd-scratch-work | GSD framework workspace — earlier canonical checkpoint with extensive planning docs |
-| `trading-crab-lib/` | strycker/trading-crab-lib | Earlier PyPI library snapshot (missing: HMM, Markov, momentum, divergence, monitoring, macrotrends) |
-| `trading-crab/` | strycker/trading-crab | Historical notebook-era reference; no Python package |
+| `gsd-scratch-work/` | strycker/gsd-scratch-work | GSD framework workspace — earlier canonical checkpoint |
+| `trading-crab-lib/` | strycker/trading-crab-lib | Earlier PyPI library snapshot |
+| `trading-crab/` | strycker/trading-crab | Historical notebook-era reference |
 
-**What's missing from `trading-crab-lib` submodule vs main repo:**
-`divergence.py`, `hmm.py`, `markov.py`, `momentum.py`, `monitoring.py` — all 5 are in the
-main repo but not yet in the submodule's snapshot.
+**What `claude-scratch-work` is:**
+This repo is the AI-assisted sandbox. Code validated here gets hand-copied by the
+owner to `strycker/trading-crab` (the human-validated production repo). This sandbox
+continues to exist for AI coding, experimentation, and feature development.
 
 ---
 
-## Big Picture: What We're Building Toward
-
-### Architecture: One Repo, Two PyPI Packages
+## Architecture: One Repo, Two PyPI Packages
 
 ```
 claude-scratch-work/  (this git repo)
 │
-├── pyproject.toml                  ← "trading-crab" (APPLICATION package)
+├── pyproject.toml                  ← "trading-crab" v0.1.2 (APPLICATION package)
 │                                      pip install trading-crab
 │                                      → installs `tradingcrab` CLI
 │                                      → depends on trading-crab-lib
@@ -51,17 +50,17 @@ claude-scratch-work/  (this git repo)
 │   │   └── cli.py
 │   │
 │   └── trading_crab_lib/           ← pure library
-│       ├── pyproject.toml          ← "trading-crab-lib" (LIBRARY package)
+│       ├── pyproject.toml          ← "trading-crab-lib" v0.1.2 (LIBRARY package)
 │       │                              pip install trading-crab-lib
 │       │                              → no executables, pure import API
 │       ├── __init__.py
 │       └── ... (31 library modules)
 │
-├── pipelines/                      ← live here; NOT installed to site-packages
-├── notebooks/                      ← live here; NOT installed to site-packages
-├── scripts/                        ← live here; NOT installed to site-packages
-├── config/                         ← live here; some copied by `tradingcrab setup`
-├── run_pipeline.py                 ← used directly (git clone workflow); called by CLI
+├── pipelines/                      ← NOT installed to site-packages
+├── notebooks/                      ← NOT installed to site-packages
+├── scripts/                        ← NOT installed to site-packages
+├── config/                         ← some files copied by `tradingcrab-setup`
+├── run_pipeline.py                 ← used directly (git clone) or via `tradingcrab` CLI
 ├── tests/                          ← tests for both packages
 └── ...
 ```
@@ -70,80 +69,11 @@ claude-scratch-work/  (this git repo)
 
 | Concern | Answer |
 |---|---|
-| AI visibility | Single repo = Claude Code sees lib + app + docs in one context window |
-| Single source of truth | One CLAUDE.md, one ROADMAP.md, one test suite, no sync drift |
-| Atomic changes | Change lib API and update all app callers in one commit |
-| Independent installability | `pip install trading-crab-lib` pulls only library deps; no scripts, no notebooks |
-| CLI entry points | `pip install trading-crab` installs `tradingcrab`, `tradingcrab-setup`, `tradingcrab-publish` |
-| Industry precedent | Standard monorepo pattern (uv workspaces, Pants, many Google/Meta projects) |
-
-**The key technical trick:** the library's `pyproject.toml` lives nested inside
-`src/trading_crab_lib/` and uses `where = [".."]` to tell setuptools "packages are
-in the parent directory (`src/`)". This means `pip install ./src/trading_crab_lib/`
-builds and installs only the library. The root `pyproject.toml` for the app uses
-`include = ["trading_crab"]` to pick up only `src/trading_crab/`, excluding the
-library which manages itself.
-
----
-
-## Exact Target Directory Layout
-
-```
-claude-scratch-work/
-├── pyproject.toml                    ← "trading-crab" app package (root level)
-├── src/
-│   ├── trading_crab/                 ← thin app Python package (NEW)
-│   │   ├── __init__.py
-│   │   └── cli.py                    ← tradingcrab / tradingcrab-setup / tradingcrab-publish
-│   └── trading_crab_lib/             ← pure library Python package (EXISTS)
-│       ├── pyproject.toml            ← "trading-crab-lib" lib package (NEW — nested)
-│       ├── py.typed
-│       ├── __init__.py
-│       ├── config.py
-│       ├── runtime.py
-│       ├── checkpoints.py
-│       ├── transforms.py
-│       ├── momentum.py
-│       ├── divergence.py
-│       ├── clustering.py
-│       ├── cluster_comparison.py
-│       ├── gmm.py
-│       ├── hmm.py
-│       ├── markov.py
-│       ├── density.py
-│       ├── spectral.py
-│       ├── regime.py
-│       ├── asset_returns.py
-│       ├── reporting.py
-│       ├── plotting.py               ← or plotting/ package after Phase 5A.2
-│       ├── monitoring.py             ← or monitoring/ package after Phase 5A.3
-│       ├── diagnostics.py
-│       ├── tactics.py
-│       ├── email.py
-│       ├── ingestion/
-│       │   ├── __init__.py
-│       │   ├── fred.py
-│       │   ├── multpl.py
-│       │   ├── macrotrends.py
-│       │   ├── assets.py
-│       │   └── grok.py
-│       └── prediction/
-│           ├── __init__.py           ← flat API (production)
-│           ├── classifier.py         ← bundle API (test/analysis)
-│           └── gradient_boosting.py  ← LightGBM (optional)
-├── pipelines/
-├── notebooks/
-├── scripts/
-├── config/
-├── run_pipeline.py
-├── tests/
-├── legacy/
-├── data/                             ← gitignored
-├── outputs/                          ← gitignored
-├── gsd-scratch-work/                 ← read-only submodule
-├── trading-crab-lib/                 ← read-only submodule
-└── trading-crab/                     ← read-only submodule
-```
+| AI visibility | Single repo = Claude Code sees lib + app + docs in one context |
+| Single source of truth | One CLAUDE.md, one test suite, no sync drift |
+| Atomic changes | Change lib API + update callers in one commit |
+| Independent installability | `pip install trading-crab-lib` = lean library only |
+| CLI entry points | `pip install trading-crab` = `tradingcrab`, `tradingcrab-setup`, `tradingcrab-publish` |
 
 ---
 
@@ -158,7 +88,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trading-crab"
-version = "0.1.0"
+version = "0.1.2"
 description = "Market regime classification pipeline — CLI and pipeline orchestration"
 readme = "README.md"
 license = {text = "MIT"}
@@ -172,7 +102,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "trading-crab-lib>=0.2.0",   # the library this app wraps
+    "trading-crab-lib>=0.1.2",   # the library this app wraps
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
 ]
@@ -219,7 +149,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trading-crab-lib"
-version = "0.2.0"
+version = "0.1.2"
 description = "Market regime classification library — transforms, clustering, prediction, reporting"
 readme = "../../README.md"
 license = {text = "MIT"}
@@ -241,7 +171,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# Core deps: pure data science + ML only — no network/API/viz
+# Core deps: pure data science + ML — no network/API/viz
 dependencies = [
     "pandas>=2.0",
     "numpy>=1.25",
@@ -260,7 +190,6 @@ Issues     = "https://github.com/strycker/trading-crab/issues"
 Changelog  = "https://github.com/strycker/trading-crab/blob/main/STATE.md"
 
 [project.optional-dependencies]
-# Data ingestion from external APIs/scrapers
 ingestion = [
     "fredapi>=0.5",
     "requests>=2.31",
@@ -269,38 +198,31 @@ ingestion = [
     "yfinance>=0.2",
     "certifi>=2024.0",
 ]
-# Visualization
 plotting = [
     "matplotlib>=3.8",
     "seaborn>=0.13",
 ]
-# Probabilistic / state-space models
 hmm = [
     "hmmlearn>=0.3",
     "statsmodels>=0.14",
 ]
-# Optional clustering backends
 clustering-extras = [
     "hdbscan>=0.8",
     "kneed>=0.8",
 ]
-# Gradient boosting
 boosting = [
     "lightgbm>=4.0",
 ]
-# Install everything
 all = [
     "trading-crab-lib[ingestion,plotting,hmm,clustering-extras,boosting]",
 ]
-# Development tools
 dev = [
     "pytest>=8.0",
     "pytest-cov",
     "flake8",
 ]
 
-# pyproject.toml lives in src/trading_crab_lib/ — tell setuptools to look
-# one level up (in src/) for the trading_crab_lib package directory.
+# pyproject.toml is at src/trading_crab_lib/ — look one level up (src/) for packages
 [tool.setuptools.packages.find]
 where   = [".."]
 include = ["trading_crab_lib*"]
@@ -309,216 +231,171 @@ include = ["trading_crab_lib*"]
 trading_crab_lib = ["py.typed"]
 ```
 
-### How the two packages install
+### Install workflows
 
-**For development (edit both packages simultaneously):**
 ```bash
-# Option A — standard pip (two commands)
-pip install -e src/trading_crab_lib/       # install lib in editable mode first
-pip install -e .                            # install app; already satisfies lib dep
+# Development (edit both packages)
+pip install -e src/trading_crab_lib/       # lib editable
+pip install -e .                            # app editable (lib already satisfied)
+# OR: uv sync                              # both at once via workspace
 
-# Option B — uv workspaces (one command, recommended)
-pip install uv
-uv sync                                     # reads [tool.uv.workspace] members
-```
-
-**For end users:**
-```bash
-# Just the library (data scientists, algorithm researchers)
+# End users — library only
 pip install trading-crab-lib
-pip install "trading-crab-lib[ingestion,plotting]"   # with extras
+pip install "trading-crab-lib[ingestion,plotting]"
 
-# Full application (pipeline runners, weekly report users)
+# End users — full pipeline
 pip install trading-crab
-tradingcrab --help
 tradingcrab --steps 1,2,3 --refresh --plots
-tradingcrab-setup                                     # interactive env setup
+tradingcrab-setup
+
+# CI
+pip install -e src/trading_crab_lib/[dev] && pip install -e .[dev]
+pytest tests/ -v
 ```
 
-**For CI:**
-```yaml
-- run: pip install -e src/trading_crab_lib/[dev] && pip install -e .[dev]
-- run: pytest tests/ -v
-```
+---
+
+## Phase Plan
+
+### Phase A — Simplify (3 parallel S-sized tasks)
+
+Clean up the library codebase to make everything downstream easier.
+
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **A1** | Dead code removal scan — grep for unused imports, unreachable functions, commented-out blocks; remove and verify tests pass | S | — |
+| **A2** | Dependency audit — classify deps as core vs optional; add try/except ImportError guards to all optional imports (matplotlib, fredapi, lxml, yfinance, hmmlearn, statsmodels, lightgbm); confirm `from trading_crab_lib.transforms import engineer_all` works with core-only deps | S | — |
+| **A3** | Type hint completeness — ensure all public functions have full annotations; fix `Any` types that should be specific | S | — |
+
+**A1, A2, A3 can all run in parallel.** Each is a standalone PR.
 
 ---
 
-## Phase 5: Library Simplification & PyPI Prep
+### Phase B — Decompose & Document (3 sequential M/S-sized tasks)
 
-**Goal:** Get `trading_crab_lib` into a clean, publishable state before the structural split.
+Split oversized modules and add documentation for the public API.
 
-### Phase 5A: Code Audit & Cleanup
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **B1** | Decompose `plotting.py` (2,018 lines) → `plotting/` package with `core.py`, `pca.py`, `regime.py`, `prediction.py`, `assets.py`, `diagnostics.py`; re-export from `__init__.py`; run tests after each move | M | A1 |
+| **B2** | Decompose `monitoring.py` (648 lines) → `monitoring/` package with `ingestion.py`, `clustering.py`, `prediction.py`, `pipeline.py`; re-export from `__init__.py` | S | A1 |
+| **B3** | Docstring pass — add one-line docstrings + parameter/return docs to all public functions; skip `_`-prefixed internals | M | B1, B2 |
 
-#### 5A.1 — Dead code removal scan (S)
-- Grep for unused imports, unreachable functions, commented-out blocks
-- Check which public functions have zero callers outside tests
-- Remove dead code; run tests to confirm nothing breaks
-- **Output:** Leaner codebase, list of removed items
-
-#### 5A.2 — plotting.py decomposition (M)
-- `plotting.py` is 2,018 lines — 20% of the entire library
-- Split into logical submodules: `plotting/pca.py`, `plotting/regime.py`,
-  `plotting/prediction.py`, `plotting/assets.py`, `plotting/diagnostics.py`,
-  `plotting/core.py` (shared helpers, palette, `_save_or_show`)
-- Re-export everything from `plotting/__init__.py` for backward compat
-- Run full test suite after each file move
-- **Output:** `src/trading_crab_lib/plotting/` package with ~6 files
-
-#### 5A.3 — monitoring.py decomposition (S)
-- 648 lines covering steps 1–9 validation, dataclasses, formatters
-- Split into `monitoring/ingestion.py`, `monitoring/clustering.py`,
-  `monitoring/prediction.py`, `monitoring/pipeline.py`
-- Re-export from `monitoring/__init__.py`
-- **Output:** `src/trading_crab_lib/monitoring/` package
-
-#### 5A.4 — Dependency audit & optional groups (S)
-- Move all optional imports to lazy try/except guards in each module:
-  - `matplotlib` / `seaborn` → only imported inside plotting functions
-  - `fredapi` / `lxml` / `yfinance` → only imported in `ingestion/`
-  - `hmmlearn` / `statsmodels` → only imported in `hmm.py` / `markov.py`
-  - `lightgbm` → only imported in `prediction/gradient_boosting.py`
-- Confirm: `python -c "from trading_crab_lib.transforms import engineer_all"` works with
-  only the core deps installed (pandas, numpy, scikit-learn, scipy, pyyaml, pyarrow, joblib)
-- **Output:** Library installable as a lean core; extras genuinely optional
-
-#### 5A.5 — Type hint completeness pass (S)
-- Ensure all public functions have full type annotations
-- `py.typed` marker already exists
-- Fix any `Any` types that should be more specific
-- **Output:** Cleaner API for IDE autocomplete
-
-#### 5A.6 — Docstring pass for public API (M)
-- Add one-line docstrings to all public functions that lack them
-- Include parameters and return type in the docstring body
-- Skip private/internal functions (`_` prefix)
-- **Output:** Usable `help(trading_crab_lib.clustering.fit_clusters)` etc.
-
-### Phase 5B: Two-Package Infrastructure
-
-#### 5B.1 — Add `src/trading_crab_lib/pyproject.toml` (S)
-- Create using the exact template above
-- Verify `pip install -e src/trading_crab_lib/` works from repo root
-- Verify `python -c "import trading_crab_lib; print(trading_crab_lib.__version__)"` works
-- Bump version in `__init__.py` to `0.2.0`
-- **Output:** Library independently installable
-
-#### 5B.2 — Create `src/trading_crab/` thin app package (S)
-- Create `src/trading_crab/__init__.py` (version: `0.1.0`, short description)
-- Create `src/trading_crab/cli.py` with three entry point functions:
-  - `run_pipeline()` — thin wrapper that calls `run_pipeline.py:main()` via importlib
-  - `setup()` — copies `.env.example` → `.env`, `config/email.example.yaml` → `config/email.local.yaml`, checks optional deps
-  - `publish_notebooks()` — stub with `print("Coming soon: notebook → GitHub markdown dashboard")`
-- Update root `pyproject.toml` per the template above (rename from `trading-crab-lib` to `trading-crab`, add scripts, restrict packages to `trading_crab`)
-- Verify `pip install -e .` installs `tradingcrab` command and `tradingcrab --help` works
-- **Output:** `tradingcrab` CLI functional
-
-#### 5B.3 — Build & test both packages locally (S)
-- `python -m build src/trading_crab_lib/` → check wheel and sdist contain only lib files
-- `python -m build` at root → check `trading-crab` wheel contains only `src/trading_crab/`
-- Install each wheel in a clean venv, verify imports and CLI
-- **Output:** Both wheels confirmed installable and clean
-
-#### 5B.4 — CI/CD update (S)
-- Update flake8 `--exclude` in both workflow files to add `trading-crab,trading-crab-lib,gsd-scratch-work` (submodule dirs)
-- Add `publish-lib.yml`: triggers on tag `lib-v*`, builds `src/trading_crab_lib/`, uploads to PyPI
-- Add `publish-app.yml`: triggers on tag `v*`, builds root, uploads to PyPI
-- **Output:** Both packages publish independently on their own tag patterns
+**B1 → B2 → B3** are sequential (each builds on the prior).
 
 ---
 
-## Phase 6: Monorepo Structural Cleanup
+### Phase C — Two-Package Infrastructure (4 tasks, partially parallel)
 
-**Goal:** After Phase 5B the two-package structure works. This phase cleans up ancillary files.
+Create the monorepo 2-package structure. This is the structural change.
 
-#### 6A — Update MANIFEST.in for two packages (S)
-- Current root `MANIFEST.in` prunes the right things for the library but not the app
-- For the library build (from `src/trading_crab_lib/`): create a minimal
-  `src/trading_crab_lib/MANIFEST.in` that excludes tests, notebooks, pipelines
-- Root `MANIFEST.in`: revise to reflect app package (include `src/trading_crab/`, not `src/trading_crab_lib/`)
-- **Output:** Clean sdists for both packages
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **C1** | Add `src/trading_crab_lib/pyproject.toml` (from template above, version 0.1.2); verify `pip install -e src/trading_crab_lib/` works; update `__init__.py` version | S | A2 (dep audit informs which deps are core vs optional) |
+| **C2** | Create `src/trading_crab/` app package — `__init__.py` (v0.1.2), `cli.py` with `run_pipeline()`, `setup()`, `publish_notebooks()` (stub); update root `pyproject.toml` (rename package to `trading-crab`, add `[project.scripts]`, restrict to `include = ["trading_crab"]`); verify `tradingcrab --help` works | S | C1 |
+| **C3** | Build & test — `python -m build src/trading_crab_lib/` + `python -m build` at root; install both wheels in clean venv; verify imports and CLI | S | C1, C2 |
+| **C4** | CI/CD update — update flake8 excludes; add `publish-lib.yml` (tag `lib-v*`) and `publish-app.yml` (tag `v*`) workflows | S | C3 |
 
-#### 6B — Update CLAUDE.md layout section (S)
-- Add `src/trading_crab/` entry to repository layout tree
-- Expand "How to Run" section with `tradingcrab` CLI examples
-- Update "Environment Setup" to show `uv sync` or two-step pip install
-- Add note explaining the two-package architecture and `where = [".."]` trick
-
-#### 6C — Update README.md (S)
-- Add "Installation" section with `pip install trading-crab` vs `pip install trading-crab-lib`
-- Update repo layout diagram
-- Add PyPI version badges for both packages once published
+**C1 → C2 → C3 + C4** (C3 and C4 can be parallel after C2).
 
 ---
 
-## Phase 7: New Features
+### Phase D — New Features, Tier 1 (can start during Phase B)
 
-### Tier 1 — High impact, achievable soon
+Feature work that is independent of the packaging restructure.
 
-#### 7.1 — LightGBM flat-API integration (M)
-- LightGBM exists in `prediction/gradient_boosting.py` and bundle API but NOT flat API
-- Add `train_lightgbm()` to `prediction/__init__.py`, wire into `pipelines/05_predict.py`
-  and `run_pipeline.py`, save as `outputs/models/lightgbm_regime.pkl`
-- Include in model comparison bar chart
-- **Prerequisite:** None
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **D1** | Additional FRED series — add INDPRO, PAYEMS, DPCERA3Q086SBEA to `config/settings.yaml`; add to `initial_features`; update ingestion completeness expected columns | S | — |
+| **D2** | LightGBM flat-API integration — add `train_lightgbm()` to `prediction/__init__.py`; wire into `pipelines/05_predict.py` and `run_pipeline.py`; save as `outputs/models/lightgbm_regime.pkl`; add to model comparison bar chart | M | — |
+| **D3** | Conference Board LEI proxy — composite indicator from UNRATE (inverted), T10Y2Y, M2SL, INDPRO, PAYEMS; add to `transforms.py` or new `indicators.py` | S | D1 |
+| **D4** | SMOTE / class-weight tuning — `class_weight="balanced"` in RF/DT/LGBM; optionally SMOTE via imblearn; evaluate per-class CV accuracy; add `prediction.class_balance_method` to settings | S | — |
 
-#### 7.2 — Additional FRED series: INDPRO, PAYEMS, DPCERA3Q086SBEA (S)
-- INDPRO = Industrial Production Index; PAYEMS = Total Nonfarm Payrolls; DPCERA3Q = Real PCE
-- Add to `config/settings.yaml` under `fred.series`
-- Add to `initial_features` list (not clustering until evaluated)
-- **Prerequisite:** None
-
-#### 7.3 — Conference Board LEI proxy from FRED (S)
-- Composite leading indicator from UNRATE (inverted), T10Y2Y, M2SL, INDPRO, PAYEMS
-- Equal-weight average of standardized series → `lei_proxy` column
-- **Prerequisite:** 7.2
-
-### Tier 2 — High value, more effort
-
-#### 7.4 — SMOTE / class-weight tuning (S)
-- `class_weight="balanced"` in RF/DT/LGBM, optionally SMOTE
-- Evaluate via per-class CV accuracy
-- **Prerequisite:** None
-
-#### 7.5 — Per-asset regime probability models (L)
-- Per-asset binary classifiers: P(asset outperforms | features)
-- Blend with regime-based ranking for final signal
-- **Prerequisite:** 7.1
-
-### Tier 3 — Longer-term
-
-#### 7.6 — Backtest framework (XL)
-- Walk-forward: retrain per quarter, predict regime, measure portfolio returns
-- Compare vs SPY buy-and-hold, 60/40, equal-weight
-- **Prerequisite:** 7.1, 7.4
-
-#### 7.7 — Interactive Streamlit dashboard (L)
-- Browser-based UI; `tradingcrab-publish` CLI entry point
-- Uses `trading_crab_lib` as backend
-- **Prerequisite:** Phase 5B complete
-
-#### 7.8 — Weekly automated report with AI narrative (XL)
-- Claude API generates natural-language market commentary
-- Input: current regime, transition probs, asset signals
-- **Prerequisite:** Phase 5B complete, 7.7
+**D1 + D2 + D4 can run in parallel** (D3 waits for D1).
+Phase D can start as early as Phase B — no dependency on C.
 
 ---
 
-## Recommended Execution Order
+### Phase E — Structural Cleanup (3 S-sized tasks)
+
+Polish docs and build artifacts after the 2-package split is working.
+
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **E1** | Update MANIFEST.in — create `src/trading_crab_lib/MANIFEST.in` for lib sdist; revise root MANIFEST.in for app sdist | S | C2 |
+| **E2** | Update CLAUDE.md — add `src/trading_crab/` to layout tree; add 2-package architecture note; update "How to Run" with `tradingcrab` CLI examples; update "Environment Setup" with `uv sync` | S | C2 |
+| **E3** | Update README.md — add Installation section (`pip install trading-crab` vs `trading-crab-lib`); update layout diagram; add PyPI badges placeholder | S | C2 |
+
+**E1, E2, E3 can all run in parallel** after Phase C.
+
+---
+
+### Phase F — Advanced Features (long-term backlog)
+
+Larger efforts for after the foundation is solid. Ordered by priority.
+
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **F1** | Per-asset regime probability models — per-ETF binary classifiers predicting P(outperform \| features); blend with regime-based ranking | L | D2 |
+| **F2** | Backtest framework — walk-forward: retrain per quarter, predict regime, construct portfolio, measure returns vs SPY/60-40/equal-weight; Sharpe, max drawdown, Calmar | XL | D2, D4 |
+| **F3** | Interactive Streamlit dashboard — browser-based UI with tabs for regime history, asset rankings, portfolio, diagnostics; wire into `tradingcrab-publish` | L | Phase C |
+| **F4** | Weekly automated report with AI narrative — Claude API generates market commentary from current regime, transition probs, asset signals | XL | Phase C, F3 |
+| **F5** | Finviz Elite integration — sector rotation, institutional flow data; gated behind API key / optional dep | L | Phase C |
+
+---
+
+## Execution Schedule
 
 ```
-Wave 1 (parallel, S-sized):   5A.1 + 5A.4 + 5A.5
-Wave 2 (sequential, M-sized): 5A.2 → 5A.3 → 5A.6
-Wave 3 (parallel, S-sized):   5B.1 + 5B.2 → 5B.3 + 5B.4
-Wave 4 (features):             7.1 + 7.2 (parallel) → 7.3
-Wave 5 (structural cleanup):   6A → 6B → 6C
-Wave 6 (advanced features):    7.4 → 7.5 → 7.6 → 7.7 → 7.8
+                A1 ─┐
+                A2 ─┤── (parallel) ── Phase A
+                A3 ─┘
+                     │
+                B1 → B2 → B3        Phase B
+                     │
+          D1 ─┐     │               Phase D (features — can start
+          D2 ─┤     │                during Phase B, parallel with it)
+          D4 ─┘     │
+           │        │
+           D3       │
+                     │
+                C1 → C2 → C3 ─┐     Phase C (2-package infra)
+                          C4 ─┘
+                     │
+              E1 ─┐  │              Phase E (structural cleanup)
+              E2 ─┤                  (parallel, after C)
+              E3 ─┘
+                     │
+       F1, F2, F3, F4, F5           Phase F (long-term, sequential)
 ```
 
-Each wave becomes its own branch + PR into `main`.
+**Concrete order for branches/PRs:**
+1. **Branch 1:** A1 + A2 + A3 (parallel — one PR with 3 commits, or 3 small PRs)
+2. **Branch 2:** B1 → B2 (decomposition)
+3. **Branch 3:** D1 + D2 + D4 (features — can overlap with Branch 2)
+4. **Branch 4:** B3 (docstrings — after decomposition settles)
+5. **Branch 5:** C1 → C2 → C3 + C4 (2-package infrastructure)
+6. **Branch 6:** D3 (LEI proxy — after D1 merges)
+7. **Branch 7:** E1 + E2 + E3 (doc cleanup — after C merges)
+8. **Branch 8+:** F1–F5 (long-term, one per branch)
 
 ---
 
-## Critical Constraints (unchanged)
+## Open Design Notes
+
+**Version:** Both packages start at `0.1.2`. We are still early — don't increment minor
+version yet. Patch bumps (0.1.3, 0.1.4, ...) for each meaningful release.
+
+**`claude-scratch-work` role:** Continues as the AI-assisted sandbox. Owner hand-copies
+validated code to `strycker/trading-crab` (production). This repo is not going away.
+
+**Finviz:** Deferred to Phase F5. Not incorporated now; listed as long-term backlog.
+
+**Submodules:** Remain read-only references. Never modify or push to them.
+
+---
+
+## Critical Constraints
 
 1. Feature pipeline order is sacred: cross-ratios → log → gap-fill → derivatives → select
 2. `balanced_cluster` is primary regime assignment for all downstream steps
