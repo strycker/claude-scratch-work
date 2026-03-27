@@ -14,6 +14,7 @@ Portfolio construction (regime-conditional allocation):
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 from pathlib import Path
 
@@ -59,7 +60,7 @@ def asset_signals(
 
 
 def print_dashboard(
-    current_prediction: dict,
+    current_prediction: dict[str, Any],
     regime_names: dict[int, str],
     asset_signals_df: pd.DataFrame,
     transition_matrix: pd.DataFrame,

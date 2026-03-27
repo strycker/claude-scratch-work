@@ -19,10 +19,18 @@ Uses lxml CSS selectors to match the legacy scraping approach exactly.
 import logging
 import time
 
+from typing import Any
 import numpy as np
 import pandas as pd
-import requests
-from lxml import html as HTMLParser
+
+try:
+    import requests
+    from lxml import html as HTMLParser
+except ImportError as _err:
+    raise ImportError(
+        "requests and lxml are required for multpl.com scraping. "
+        "Install with: pip install 'trading-crab-lib[ingestion]'"
+    ) from _err
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +90,7 @@ def _parse_series(raw_rows: list, short_name: str, value_type: str) -> pd.Series
     )
 
 
-def fetch_all(cfg: dict) -> pd.DataFrame:
+def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Scrape every dataset in cfg["multpl"]["datasets"].
 

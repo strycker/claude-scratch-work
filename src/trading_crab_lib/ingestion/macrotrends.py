@@ -24,8 +24,16 @@ import logging
 import re
 import time
 
+from typing import Any
 import pandas as pd
-import requests
+
+try:
+    import requests
+except ImportError as _err:
+    raise ImportError(
+        "requests is required for macrotrends.net scraping. "
+        "Install with: pip install 'trading-crab-lib[ingestion]'"
+    ) from _err
 
 log = logging.getLogger(__name__)
 
@@ -180,7 +188,7 @@ def _scrape_series_html_table(
     return s.resample("QE").mean()
 
 
-def fetch_all(cfg: dict) -> pd.DataFrame:
+def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Scrape all configured macrotrends series and return a quarterly DataFrame.
 

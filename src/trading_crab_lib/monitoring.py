@@ -10,6 +10,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from trading_crab_lib.ingestion import CompletenessReport
 
 import numpy as np
 import pandas as pd
@@ -20,7 +24,7 @@ log = logging.getLogger(__name__)
 # ── C1.1: Enhanced completeness report formatting ─────────────────────────
 
 
-def format_completeness_table(report) -> str:
+def format_completeness_table(report: CompletenessReport) -> str:
     """Format a CompletenessReport as a readable table for logging.
 
     Enhances the existing report.summary() with a per-column NaN table
@@ -174,7 +178,7 @@ class SourceRowCounts:
         return "\n".join(lines)
 
 
-def count_source_columns(df: pd.DataFrame, cfg: dict) -> SourceRowCounts:
+def count_source_columns(df: pd.DataFrame, cfg: dict[str, Any]) -> SourceRowCounts:
     """Count columns in the DataFrame grouped by data source.
 
     Uses config to identify which columns come from which source.

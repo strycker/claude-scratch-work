@@ -20,8 +20,16 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
+from typing import Any
 import pandas as pd
-from fredapi import Fred
+
+try:
+    from fredapi import Fred
+except ImportError as _err:
+    raise ImportError(
+        "fredapi is required for FRED data ingestion. "
+        "Install with: pip install 'trading-crab-lib[ingestion]'"
+    ) from _err
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +47,7 @@ def _fetch_one(fred: Fred, series_id: str, start: str, end: str, shift: bool) ->
     return quarterly
 
 
-def fetch_all(cfg: dict) -> pd.DataFrame:
+def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Fetch every series in cfg["fred"]["series"] and join into one DataFrame.
 

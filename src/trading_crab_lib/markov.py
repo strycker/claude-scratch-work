@@ -24,6 +24,7 @@ Usage
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 
 import numpy as np
@@ -53,7 +54,7 @@ def fit_markov_switching(
     k_regimes: int = 2,
     order: int = 0,
     switching_variance: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     """
     Fit a Markov regime-switching model on a univariate time series.
 
@@ -121,7 +122,7 @@ def fit_markov_switching(
     }
 
 
-def markov_labels(result: dict) -> pd.Series:
+def markov_labels(result: dict[str, Any]) -> pd.Series:
     """
     Extract hard regime labels (argmax of smoothed probabilities).
 
@@ -149,7 +150,7 @@ def markov_labels(result: dict) -> pd.Series:
     return raw_series.map(label_map).rename("markov_regime")
 
 
-def markov_probabilities(result: dict) -> pd.DataFrame:
+def markov_probabilities(result: dict[str, Any]) -> pd.DataFrame:
     """
     Extract smoothed marginal regime probabilities.
 

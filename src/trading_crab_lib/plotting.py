@@ -21,12 +21,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import matplotlib
-
-# Only force the Agg (headless) backend when NOT running inside Jupyter/IPython.
-# In Jupyter, %matplotlib inline has already configured the inline backend and
-# calling matplotlib.use("Agg") after that would break inline display and cause
-# "FigureCanvasAgg is non-interactive" warnings when plt.show() is called.
 def _in_jupyter() -> bool:
     try:
         from IPython import get_ipython  # type: ignore[import]
@@ -34,12 +28,22 @@ def _in_jupyter() -> bool:
     except ImportError:
         return False
 
-if not _in_jupyter():
-    matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import matplotlib.ticker as mticker
+try:
+    import matplotlib
+    # Only force the Agg (headless) backend when NOT running inside Jupyter/IPython.
+    # In Jupyter, %matplotlib inline has already configured the inline backend and
+    # calling matplotlib.use("Agg") after that would break inline display and cause
+    # "FigureCanvasAgg is non-interactive" warnings when plt.show() is called.
+    if not _in_jupyter():
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+    import matplotlib.ticker as mticker
+except ImportError as _matplotlib_err:
+    raise ImportError(
+        "matplotlib is required for plotting functions. "
+        "Install with: pip install 'trading-crab-lib[plotting]'"
+    ) from _matplotlib_err
 import numpy as np
 import pandas as pd
 

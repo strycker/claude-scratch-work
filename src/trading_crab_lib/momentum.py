@@ -16,6 +16,7 @@ Hooked into ``engineer_all()`` in ``transforms.py`` after cross-ratios.
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 
 import numpy as np
@@ -181,7 +182,7 @@ def compute_inflation_acceleration(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Master wrapper ─────────────────────────────────────────────────────────
 
-def add_momentum_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+def add_momentum_features(df: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Add all momentum and cross-asset ratio features to the DataFrame.
 

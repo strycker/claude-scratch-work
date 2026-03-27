@@ -51,6 +51,7 @@ Usage:
 """
 
 from __future__ import annotations
+from typing import Any
 
 import logging
 from datetime import date
@@ -369,7 +370,7 @@ def _fetch_tickers_openbb(tickers: list[str], start: str, end: str) -> list[pd.S
 
 # ── public API ─────────────────────────────────────────────────────────────────
 
-def fetch_all(cfg: dict) -> pd.DataFrame:
+def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Fetch quarterly adjusted-close prices for all tickers in cfg["assets"]["etfs"].
 
