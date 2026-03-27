@@ -37,15 +37,18 @@ New functions in `plotting.py` + smoke tests in `test_plotting.py`.
 
 ---
 
-## Phase A2 — PCA & Clustering Plot Functions (5 items)
+## Phase A2 — PCA & Clustering Plot Functions (5 items) ✅ DONE
 
-| Item | Function | Purpose |
-|------|----------|---------|
-| A2.1 | `plot_scree(pca_obj, run_cfg)` | Scree plot: individual + cumulative explained variance |
-| A2.2 | `plot_pca_loadings(pca_obj, feature_names, run_cfg, top_n=15)` | Heatmap: top features × PCA components (absolute loadings) |
-| A2.3 | `plot_silhouette_samples(X, labels, run_cfg)` | Per-sample silhouette width grouped by cluster |
-| A2.4 | `plot_gmm_bic_surface(bic_df, run_cfg)` | Heatmap: (k, covariance_type) → BIC from `fit_gmm()` |
-| A2.5 | `plot_method_comparison_table(comparison_df, run_cfg)` | Table-as-figure for `compare_all_methods()` output |
+| Item | Function | Purpose | Status |
+|------|----------|---------|--------|
+| A2.1 | `plot_scree(pca_obj, run_cfg)` | Scree plot: individual + cumulative explained variance | ✅ |
+| A2.2 | `plot_pca_loadings(pca_obj, feature_names, run_cfg, top_n=15)` | Heatmap: top features × PCA components (absolute loadings) | ✅ |
+| A2.3 | `plot_silhouette_samples(X, labels, run_cfg)` | Per-sample silhouette width grouped by cluster | ✅ |
+| A2.4 | `plot_gmm_bic_surface(bic_df, run_cfg)` | Heatmap: (k, covariance_type) → BIC from `fit_gmm()` | ✅ |
+| A2.5 | `plot_method_comparison_table(comparison_df, run_cfg)` | Table-as-figure for `compare_all_methods()` output | ✅ |
+
+**Implementation:** All 5 functions in `src/trading_crab_lib/plotting.py` (lines 1166–1360).
+7 tests in `tests/unit/test_plotting.py`. Wired into `run_pipeline.py` step 3 via Phase C2.
 
 ---
 
