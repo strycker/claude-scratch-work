@@ -1,8 +1,8 @@
 {
   "name": "pca_components",
-  "created": "2026-03-19T21:39:54.051203",
+  "created": "2026-03-26T22:45:48.116836",
   "config_hash": "e8cfb5c4",
-  "rows": 293,
+  "rows": 283,
   "columns": 5,
   "col_names": [
     "PC1",
@@ -11,6 +11,6 @@
     "PC4",
     "PC5"
   ],
-  "index_start": "1952-12-31 00:00:00",
+  "index_start": "1955-06-30 00:00:00",
   "index_end": "2025-12-31 00:00:00"
 }
