@@ -1,0 +1,9 @@
+[submodule "gsd-scratch-work"]
+	path = gsd-scratch-work
+	url = https://github.com/strycker/gsd-scratch-work
+[submodule "trading-crab-lib"]
+	path = trading-crab-lib
+	url = https://github.com/strycker/trading-crab-lib
+[submodule "trading-crab"]
+	path = trading-crab
+	url = https://github.com/strycker/trading-crab
