@@ -1587,3 +1587,24 @@ notebook comparing clustering methods and their soft probability outputs.
   available macro derivative (GDP/CPI d1), identifies recession state by lower mean,
   overlays recession probability on KMeans regime timeline. Cross-tabulation table via
   `compare_markov_kmeans()`.
+
+### D37. Phase D9 — New notebook 11: Feature Selection Workbench (2026-03-27)
+
+Created `notebooks/11_feature_selection.ipynb` (12 cells: 6 markdown + 6 code) — new
+notebook for exploring which features matter most for regime classification.
+
+- **D9.1**: Setup + load RF model importances from `outputs/models/current_regime.pkl`
+  via `extract_rf_feature_importances()`. Also loads features checkpoint and KMeans labels.
+
+- **D9.2**: Feature importance cumulative curve via `plot_feature_selection_curve()`.
+  Reports how many features are needed for 90% and 95% cumulative importance.
+
+- **D9.3**: Recommended feature subset via `recommend_clustering_features(top_k=35)`.
+  Shows full comparison table with kept/dropped status per clustering feature.
+
+- **D9.4**: What-if re-clustering with top-35 features vs full set. Runs complete
+  PCA + KMeans pipeline on both sets, compares silhouette scores with bar chart.
+
+- **D9.5**: Dead feature detector — flags features with < 0.5% importance. Horizontal
+  bar chart with dead threshold line (red). Also lists clustering features not in the
+  RF model (derivative-only features not used in supervised step).
