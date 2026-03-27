@@ -21,8 +21,15 @@ import time
 
 import numpy as np
 import pandas as pd
-import requests
-from lxml import html as HTMLParser
+
+try:
+    import requests
+    from lxml import html as HTMLParser
+except ImportError as _err:
+    raise ImportError(
+        "requests and lxml are required for multpl.com scraping. "
+        "Install with: pip install 'trading-crab-lib[ingestion]'"
+    ) from _err
 
 log = logging.getLogger(__name__)
 

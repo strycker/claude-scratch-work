@@ -21,7 +21,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
 import pandas as pd
-from fredapi import Fred
+
+try:
+    from fredapi import Fred
+except ImportError as _err:
+    raise ImportError(
+        "fredapi is required for FRED data ingestion. "
+        "Install with: pip install 'trading-crab-lib[ingestion]'"
+    ) from _err
 
 log = logging.getLogger(__name__)
 

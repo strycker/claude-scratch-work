@@ -18,7 +18,6 @@ import logging
 
 import numpy as np
 import pandas as pd
-import matplotlib.dates as mdates
 from scipy.interpolate import BPoly
 
 log = logging.getLogger(__name__)
@@ -93,8 +92,8 @@ def select_features(df: pd.DataFrame, feature_list: list[str]) -> pd.DataFrame:
 # ── 4. Bernstein polynomial gap filling ───────────────────────────────────
 
 def _dates_to_daynum(index) -> np.ndarray:
-    """Convert a DatetimeIndex or string index to matplotlib day-numbers."""
-    return mdates.date2num(index.values.astype(str))
+    """Convert a DatetimeIndex or string index to Julian day-numbers for np.gradient."""
+    return pd.DatetimeIndex(index.values.astype(str)).to_julian_date().values
 
 
 def _compute_derivatives(

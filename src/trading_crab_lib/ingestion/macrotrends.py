@@ -25,7 +25,14 @@ import re
 import time
 
 import pandas as pd
-import requests
+
+try:
+    import requests
+except ImportError as _err:
+    raise ImportError(
+        "requests is required for macrotrends.net scraping. "
+        "Install with: pip install 'trading-crab-lib[ingestion]'"
+    ) from _err
 
 log = logging.getLogger(__name__)
 
