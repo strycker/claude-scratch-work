@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -17,7 +18,7 @@ from trading_crab_lib import CONFIG_DIR
 log = logging.getLogger(__name__)
 
 
-def load(settings_path: Path | None = None) -> dict:
+def load(settings_path: Path | None = None) -> dict[str, Any]:
     """Load settings.yaml and inject secrets from .env / environment."""
     load_dotenv()  # reads .env if present; env vars already set take priority
 

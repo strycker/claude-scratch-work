@@ -22,6 +22,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+from typing import Any
 import yaml
 
 log = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ def _env_overrides() -> dict:
     return cfg
 
 
-def load_email_config(config_path: Path | None = None) -> dict:
+def load_email_config(config_path: Path | None = None) -> dict[str, Any]:
     """
     Load email configuration from a YAML file or environment variables.
 
@@ -223,7 +224,7 @@ def _build_html_body_with_plots(plain_text: str, plot_paths: list[Path]) -> str:
 
 
 def send_weekly_email(
-    config: dict,
+    config: dict[str, Any],
     subject: str,
     body: str,
     plot_paths: list[Path] | None = None,

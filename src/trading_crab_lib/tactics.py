@@ -17,6 +17,7 @@ this asset's price action is trending / mean-reverting / choppy."
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 
 import numpy as np
@@ -71,7 +72,7 @@ def _rolling_corr(a: pd.Series, b: pd.Series, window: int) -> float:
 def compute_tactics_metrics(
     prices: pd.DataFrame,
     regimes: pd.Series | None = None,
-    cfg: dict | None = None,
+    cfg: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     """
     Compute per-asset volatility, trend, correlation, and current regime metrics.

@@ -18,6 +18,7 @@ import logging
 
 import numpy as np
 import pandas as pd
+from typing import Any
 from scipy.interpolate import BPoly
 
 log = logging.getLogger(__name__)
@@ -236,7 +237,7 @@ def apply_derivatives(
 
 # ── Master wrapper ─────────────────────────────────────────────────────────
 
-def engineer_all(df: pd.DataFrame, cfg: dict, causal: bool = False) -> pd.DataFrame:
+def engineer_all(df: pd.DataFrame, cfg: dict[str, Any], causal: bool = False) -> pd.DataFrame:
     """
     Run the full feature engineering pipeline in order.
 

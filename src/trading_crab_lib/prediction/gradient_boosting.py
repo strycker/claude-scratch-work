@@ -21,6 +21,7 @@ Requires: ``pip install lightgbm>=4.0``  (declared as optional extra).
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 
 import numpy as np
@@ -76,8 +77,8 @@ def _tscv_scores_lgbm(
 def train_lightgbm_current_regime(
     X: pd.DataFrame,
     y: pd.Series,
-    cfg: dict,
-):
+    cfg: dict[str, Any],
+) -> Any:
     """
     Train a LightGBM classifier to predict the current regime label.
 
@@ -110,7 +111,7 @@ def train_lightgbm_current_regime(
 def train_lightgbm_forward(
     X: pd.DataFrame,
     y: pd.Series,
-    cfg: dict,
+    cfg: dict[str, Any],
 ) -> dict[int, dict[int, object]]:
     """
     For each (horizon, target_regime) pair, train a binary LightGBM classifier:

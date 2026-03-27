@@ -24,6 +24,7 @@ import logging
 import re
 import time
 
+from typing import Any
 import pandas as pd
 
 try:
@@ -187,7 +188,7 @@ def _scrape_series_html_table(
     return s.resample("QE").mean()
 
 
-def fetch_all(cfg: dict) -> pd.DataFrame:
+def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Scrape all configured macrotrends series and return a quarterly DataFrame.
 

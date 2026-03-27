@@ -20,6 +20,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
+from typing import Any
 import pandas as pd
 
 try:
@@ -46,7 +47,7 @@ def _fetch_one(fred: Fred, series_id: str, start: str, end: str, shift: bool) ->
     return quarterly
 
 
-def fetch_all(cfg: dict) -> pd.DataFrame:
+def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Fetch every series in cfg["fred"]["series"] and join into one DataFrame.
 

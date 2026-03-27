@@ -87,7 +87,7 @@ def train_current_regime(
     dt_max_depth: int = 8,
     include_gb: bool = False,
     gb_max_depth: int = 5,
-) -> dict:
+) -> dict[str, Any]:
     """
     Train RF and DT classifiers to predict today's regime.
 
@@ -149,7 +149,7 @@ def train_forward_classifiers(
     dt_max_depth: int = 8,
     include_gb: bool = False,
     gb_max_depth: int = 5,
-) -> dict[int, dict]:
+) -> dict[int, dict[str, Any]]:
     """
     Train RF and DT classifiers to predict regime H quarters forward.
 
@@ -215,7 +215,7 @@ def train_forward_classifiers(
 
 
 def extract_top_features(
-    model,
+    model: Any,
     feature_names: list[str],
     top_k: int = 10,
 ) -> list[tuple[str, float]]:
@@ -236,7 +236,7 @@ def extract_top_features(
 def train_interpretability_tree(
     X: pd.DataFrame,
     y: pd.Series,
-    model,
+    model: Any,
     top_k: int = 10,
     max_depth: int = 4,
     random_state: int = 42,
@@ -295,7 +295,7 @@ def _aggregate_classification_reports(reports: list[dict]) -> dict:
     }
 
 
-def model_metrics_summary(results: dict) -> dict:
+def model_metrics_summary(results: dict[str, Any]) -> dict[str, Any]:
     """
     Flatten model metrics into a JSON-serialisable summary dict.
 

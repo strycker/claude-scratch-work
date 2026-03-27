@@ -19,6 +19,7 @@ Uses lxml CSS selectors to match the legacy scraping approach exactly.
 import logging
 import time
 
+from typing import Any
 import numpy as np
 import pandas as pd
 
@@ -89,7 +90,7 @@ def _parse_series(raw_rows: list, short_name: str, value_type: str) -> pd.Series
     )
 
 
-def fetch_all(cfg: dict) -> pd.DataFrame:
+def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Scrape every dataset in cfg["multpl"]["datasets"].
 
