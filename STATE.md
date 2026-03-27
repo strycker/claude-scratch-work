@@ -52,13 +52,13 @@ tests/test_models_boosting.py                2 tests — ✅ all passing (Gradie
 tests/test_models_interpret_tree.py          2 tests — ✅ all passing (interpretability helpers)
 tests/test_models_reporting.py               3 tests — ✅ all passing (model_metrics_summary, 3 input shapes)
 tests/test_models_behavior.py                3 tests — ✅ all passing (make_behavior_labels, train_forward_behavior_models)
-tests/test_email_weekly.py                  13 tests — ✅ all passing (email config, body, SMTP, archive)
+tests/test_email_weekly.py                  30 tests — ✅ all passing (email config, body, SMTP, archive, plot attachments)
 tests/test_scripts_weekly_report.py          7 tests — ✅ all passing (weekly report archive, CLI argv, email)
 tests/test_pipelines_ingest_features.py      2 tests — ✅ all passing (pipeline step 01 + 02 smoke tests)
 tests/test_constraints_etf_universe.py       2 tests — ✅ all passing (ETF universe constraints)
 tests/test_constraints_frequency.py          2 tests — ✅ all passing (data frequency constraints)
 ─────────────────────────────────────────────────────────────────────
-Total: 556 collected — ✅ all passing (Python 3.11; 11 skipped: HDBSCAN + cssselect optional)
+Total: 573 collected — ✅ all passing (Python 3.11; 11 skipped: HDBSCAN + cssselect optional)
 ```
 
 **Coverage gaps:** All previously untested modules now have test coverage.
@@ -180,7 +180,7 @@ See `MONITORING_EXPANSION_PLAN.md` for the full phased plan (85 items, 17 phases
 | No RRG scatter plot in step 8 | Plot |
 | No gap-fill before/after overlay in step 2 | Plot |
 | Notebooks regenerate all plots instead of loading PNGs | Infrastructure |
-| Email has no plot attachments | Infrastructure |
+| ~~Email has no plot attachments~~ | ~~Infrastructure~~ ✅ Done (Phase E) |
 | Pipeline steps lack validation summaries between steps | Monitoring |
 | No model comparison bar chart (RF vs DT vs GB) | Plot |
 | No regime-colored feature overlay time-series | Plot |

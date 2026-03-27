@@ -1630,3 +1630,31 @@ notebook for exploring cross-asset divergence and momentum features.
 
 - **D10.5**: Feature correlation heatmap (seaborn) of all divergence + momentum columns.
   Flags pairs with |r| > 0.8 as redundancy candidates.
+
+### D39. Phase E — Email plot attachments (2026-03-27)
+
+Completed all 3 items from `MONITORING_EXPANSION_PLAN.md` Phase E:
+
+- **E.1**: `send_weekly_email()` gains optional `plot_paths: list[Path] | None` kwarg.
+  When provided, builds multipart/related HTML email: plain-text alternative + HTML body
+  with `<img src="cid:plot_N">` inline references + `MIMEImage` attachments with Content-ID
+  headers. HTML body wraps report text in `<pre>` (XSS-safe via `html.escape()`), followed
+  by a "Key Plots" section with one image per plot. Without `plot_paths`, behavior is
+  unchanged (plain text, fully backward compatible). New helpers: `resolve_plot_paths()`
+  resolves filenames to existing `Path` objects (logs WARNING for missing files),
+  `_build_html_body_with_plots()` generates the HTML.
+
+- **E.2**: `config/email.example.yaml` gains `attach_plots:` key — a list of PNG filenames
+  from `outputs/plots/` to embed inline. Default: `03_regime_pca_scatter.png`,
+  `05_cv_fold_accuracy.png`, `05_confusion_matrix.png`, `07_forward_prob_evolution.png`,
+  `04_feature_regime_overlay.png`. Set to `[]` or remove for plain-text-only email.
+
+- **E.3**: `scripts/run_weekly_report.py` reads `cfg.get("attach_plots", [])`, calls
+  `resolve_plot_paths()` against `outputs/plots/`, prints attachment count, and passes
+  resolved paths to `send_weekly_email(plot_paths=...)`.
+
+11 new tests in `tests/test_email_weekly.py` (total: 30): `resolve_plot_paths` (3 tests),
+`_build_html_body_with_plots` (2 tests), `send_weekly_email` with plots (4 tests).
+1 existing test in `tests/test_scripts_weekly_report.py` updated for new kwarg.
+
+This completes Phase 4 (Pipeline Monitoring & Notebook Expansion) — all phases A through E done.

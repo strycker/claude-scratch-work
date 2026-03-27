@@ -380,13 +380,32 @@ Created `notebooks/12_divergence_momentum.ipynb` (12 cells).
 
 ---
 
-## Phase E — Email Plot Attachments (3 items)
+## Phase E — Email Plot Attachments (3 items) ✅ DONE
 
-| Item | What |
-|------|------|
-| E.1 | Update `email.py`: `build_weekly_email_body()` returns `MIMEMultipart` with inline PNG attachments |
-| E.2 | Add `config/email.yaml` key `attach_plots: [list of plot filenames]` |
-| E.3 | Update `scripts/run_weekly_report.py` to pass plot paths to email builder |
+| Item | What | Status |
+|------|------|--------|
+| E.1 | `send_weekly_email()` accepts `plot_paths` kwarg; builds multipart/related HTML email with inline `<img>` references via Content-ID | ✅ Done |
+| E.2 | `config/email.example.yaml` gains `attach_plots:` key with default list of 5 key plot filenames | ✅ Done |
+| E.3 | `scripts/run_weekly_report.py` reads `attach_plots` from email config, resolves via `resolve_plot_paths()`, passes to `send_weekly_email()` | ✅ Done |
+
+**Implementation:** Updated `src/trading_crab_lib/email.py` (~310 lines). New functions:
+`resolve_plot_paths(plot_names, plots_dir)` resolves filenames to existing paths (skips missing
+with WARNING). `_build_html_body_with_plots(plain_text, plot_paths)` builds HTML with `<pre>`-wrapped
+report text + inline `<img src="cid:plot_N">` tags (XSS-safe via `html.escape()`). `send_weekly_email()`
+gains optional `plot_paths` kwarg — when provided, sends multipart/related with alternative
+plain-text + HTML parts and MIMEImage attachments with Content-ID headers. Without plots,
+behavior is unchanged (plain text only, backward compatible).
+
+`config/email.example.yaml` adds `attach_plots` list with 5 defaults:
+`03_regime_pca_scatter.png`, `05_cv_fold_accuracy.png`, `05_confusion_matrix.png`,
+`07_forward_prob_evolution.png`, `04_feature_regime_overlay.png`.
+
+`scripts/run_weekly_report.py` reads `cfg.get("attach_plots", [])`, calls
+`resolve_plot_paths()` to filter to existing files, prints count, and passes
+to `send_weekly_email()`.
+
+11 new tests in `tests/test_email_weekly.py` (total: 30). 1 existing test in
+`tests/test_scripts_weekly_report.py` updated for new kwarg signature.
 
 ---
 

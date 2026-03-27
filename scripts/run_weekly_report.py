@@ -34,6 +34,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from trading_crab_lib.email import (  # noqa: E402
     build_weekly_email_body,
     load_email_config,
+    resolve_plot_paths,
     send_weekly_email,
 )
 
@@ -101,7 +102,20 @@ def main() -> int:
                 print("Email config not found or invalid; skipping send.")
             else:
                 subject, body = build_weekly_email_body(REPORTS_DIR)
-                ok = send_weekly_email(cfg, subject, body)
+
+                # Resolve plot attachments from config
+                plot_paths = None
+                attach_plots = cfg.get("attach_plots", [])
+                if attach_plots:
+                    plots_dir = REPO_ROOT / "outputs" / "plots"
+                    plot_paths = resolve_plot_paths(attach_plots, plots_dir)
+                    if plot_paths:
+                        print(f"Attaching {len(plot_paths)} plot(s) to email.")
+                    else:
+                        print("No plot files found; sending plain text email.")
+                        plot_paths = None
+
+                ok = send_weekly_email(cfg, subject, body, plot_paths=plot_paths)
                 if ok:
                     print("Weekly report email sent.")
                 else:
