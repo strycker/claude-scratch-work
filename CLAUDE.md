@@ -32,8 +32,8 @@ organized more cleanly, with checkpointing, CLI flags, and dedicated plotting no
 references**. You may `git pull` / `git submodule update` to keep them current, but
 never modify or push to them. Use them only to compare implementations and inform
 changes to the main repo:
-- `gsd-scratch-work-repo-copy/` — GSD framework version of the project (earlier checkpoint)
-- `trading-crab-lib-repo-copy/` — Separate trading-crab library repo
+- `gsd-scratch-work/` — GSD framework version of the project (earlier checkpoint)
+- `trading-crab-lib/` — Separate trading-crab library repo
 
 ---
 
@@ -43,8 +43,8 @@ changes to the main repo:
 trading-crab/
 ├── CLAUDE.md                      ← you are here (all dev docs in one place)
 ├── README.md                      ← project overview (user-facing)
-├── gsd-scratch-work-repo-copy/    ← READ-ONLY submodule (GSD framework version)
-├── trading-crab-lib-repo-copy/    ← READ-ONLY submodule (trading-crab library repo)
+├── gsd-scratch-work/    ← READ-ONLY submodule (GSD framework version)
+├── trading-crab-lib/    ← READ-ONLY submodule (trading-crab library repo)
 ├── ROADMAP.md                     ← prioritized feature backlog
 ├── STATE.md                       ← current pipeline status and known gaps
 ├── .env.example                   ← copy to .env, fill in FRED_API_KEY
@@ -412,8 +412,8 @@ All tuneable parameters are in `config/settings.yaml`. Key sections:
 - **`prediction/__init__.py` flat API** — `run_pipeline.py`, `pipelines/05_predict.py`, and
   `pipelines/07_dashboard.py` all expect `current_regime.pkl` to be a bare `RandomForestClassifier`.
   Do not change to the bundle-dict API without updating all three consumers. See ADR #12 below.
-- **Reference submodules — no modifications, no pushes** — `gsd-scratch-work-repo-copy/`
-  and `trading-crab-lib-repo-copy/` are Git submodules for reference only. Pulling updates
+- **Reference submodules — no modifications, no pushes** — `gsd-scratch-work/`
+  and `trading-crab-lib/` are Git submodules for reference only. Pulling updates
   (`git pull` / `git submodule update`) is fine, but never modify files inside them or push
   to their remotes. Use them to compare implementations and inform changes to the main repo.
 
@@ -1101,7 +1101,7 @@ was NOT renamed — it is a data concept, not a package reference.
 
 ### D16. Submodule comparison: main repo is authoritative (2026-03-19)
 
-Compared `gsd-scratch-work-repo-copy/` and `trading-crab-lib-repo-copy/` against the main
+Compared `gsd-scratch-work/` and `trading-crab-lib/` against the main
 repo. Both submodules are earlier snapshots — the main repo is strictly ahead. No GSD-only
 functionality needs porting. Key differences:
 - GSD has 7 FRED series; main has 14
@@ -1284,7 +1284,7 @@ Supported: `TC_SMTP_HOST`, `TC_SMTP_PORT`, `TC_SMTP_USER`, `TC_SMTP_PASSWORD`,
 entirely when `weekly_report.md` doesn't exist, preventing the confusing error cascade.
 
 **Secrets protection**: Added `portfolio.local.yaml` to `.gitignore`;
-`trading-crab-lib-repo-copy` added to `MANIFEST.in` prune list.
+`trading-crab-lib` added to `MANIFEST.in` prune list.
 
 **Setup automation**: `scripts/setup.sh` now copies `email.example.yaml` →
 `email.local.yaml` as part of setup (GSD pattern).

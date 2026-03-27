@@ -455,7 +455,7 @@ D10                           (divergence/momentum notebook)
 
 | Item | Description | Status |
 |------|-------------|--------|
-| C5.1 | Align `email.py` to use `from_address`/`to_address` (GSD convention), matching `email.example.yaml`; add `portfolio.local.yaml` to `.gitignore`; add `trading-crab-lib-repo-copy` to `MANIFEST.in` prune list | ✅ |
+| C5.1 | Align `email.py` to use `from_address`/`to_address` (GSD convention), matching `email.example.yaml`; add `portfolio.local.yaml` to `.gitignore`; add `trading-crab-lib` to `MANIFEST.in` prune list | ✅ |
 | C5.2 | Add env var fallback for email config: `TC_SMTP_HOST`, `TC_SMTP_PORT`, `TC_SMTP_USER`, `TC_SMTP_PASSWORD`, `TC_EMAIL_FROM`, `TC_EMAIL_TO`, `TC_EMAIL_USE_TLS`, `TC_EMAIL_USE_SSL` — env vars override YAML values | ✅ |
 | C5.3 | Guard weekly report email flow: skip `send_weekly_email()` when `weekly_report.md` is missing (don't attempt email at all) | ✅ |
 | C5.4 | Add strict validation to `load_email_config()` — fail-fast at load time when required keys are missing, return empty dict with clear error | ✅ |
