@@ -352,31 +352,31 @@ Continue `notebooks/10_model_comparison.ipynb` — soft probability section.
 
 ---
 
-## Phase D9 — New Notebook 11: Feature Selection Workbench (5 items)
+## Phase D9 — New Notebook 11: Feature Selection Workbench (5 items) ✅ DONE
 
-Create `notebooks/11_feature_selection.ipynb`.
+Created `notebooks/11_feature_selection.ipynb` (12 cells).
 
-| Item | New Cell(s) |
-|------|-------------|
-| D9.1 | Setup + load RF model + feature importances |
-| D9.2 | Feature importance cumulative curve (`plot_feature_selection_curve`) |
-| D9.3 | Recommended feature subset from `recommend_clustering_features()` — table |
-| D9.4 | What-if: re-cluster with top-35 features only, compare silhouette vs full set |
-| D9.5 | Dead feature detector: features with <0.5% importance flagged for removal |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D9.1 | Setup + load RF model + feature importances | ✅ Loads from current_regime.pkl via extract_rf_feature_importances(), features checkpoint, KMeans labels |
+| D9.2 | Feature importance cumulative curve (`plot_feature_selection_curve`) | ✅ Uses plot_feature_selection_curve() + prints N features for 90%/95% thresholds |
+| D9.3 | Recommended feature subset from `recommend_clustering_features()` — table | ✅ Shows recommended vs dropped features with comparison DataFrame |
+| D9.4 | What-if: re-cluster with top-35 features only, compare silhouette vs full set | ✅ Full PCA+KMeans pipeline on both sets, bar chart comparison |
+| D9.5 | Dead feature detector: features with <0.5% importance flagged for removal | ✅ Horizontal bar chart with dead threshold line, lists features not in RF model |
 
 ---
 
-## Phase D10 — New Notebook 12: Divergence & Momentum Workbench (5 items)
+## Phase D10 — New Notebook 12: Divergence & Momentum Workbench (5 items) ✅ DONE
 
-Create `notebooks/12_divergence_momentum.ipynb`.
+Created `notebooks/12_divergence_momentum.ipynb` (12 cells).
 
-| Item | New Cell(s) |
-|------|-------------|
-| D10.1 | Setup + load features with divergence + momentum columns |
-| D10.2 | Divergence z-score time-series with regime-transition markers (`plot_divergence_timeseries`) |
-| D10.3 | Momentum dashboard: trailing returns + relative strength (`plot_momentum_dashboard`) |
-| D10.4 | Divergence trigger analysis: % of transitions preceded by trigger (leading indicator test) |
-| D10.5 | Correlation of divergence features with each other (redundancy check) |
+| Item | New Cell(s) | Status |
+|------|-------------|--------|
+| D10.1 | Setup + load features with divergence + momentum columns | ✅ 2 cells: imports + load features/labels with column detection |
+| D10.2 | Divergence z-score time-series with regime-transition markers (`plot_divergence_timeseries`) | ✅ Uses plot_divergence_timeseries() with auto-detected z-score columns |
+| D10.3 | Momentum dashboard: trailing returns + relative strength (`plot_momentum_dashboard`) | ✅ Uses plot_momentum_dashboard() with auto-detected momentum columns |
+| D10.4 | Divergence trigger analysis: % of transitions preceded by trigger (leading indicator test) | ✅ Multi-lookback (1Q/2Q/4Q) analysis with lift metric + bar chart |
+| D10.5 | Correlation of divergence features with each other (redundancy check) | ✅ Seaborn heatmap + flags pairs with |r| > 0.8 |
 
 ---
 
