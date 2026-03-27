@@ -23,75 +23,88 @@ session without timeout. Phases are ordered by dependency.
 
 ---
 
-## Phase A1 — Core Model Evaluation Plot Functions (5 items)
+## Phase A1 — Core Model Evaluation Plot Functions (5 items) ✅ DONE
 
 New functions in `plotting.py` + smoke tests in `test_plotting.py`.
 
-| Item | Function | Purpose |
-|------|----------|---------|
-| A1.1 | `plot_decision_tree(tree, feature_names, regime_names, run_cfg)` | Render sklearn DT via `plot_tree` (readable tree diagram) |
-| A1.2 | `plot_cv_fold_accuracy(fold_reports, run_cfg)` | Bar chart of per-fold accuracy from TimeSeriesSplit |
-| A1.3 | `plot_model_comparison_bar(metrics_dict, run_cfg)` | Grouped bar: RF vs DT vs GB accuracy/F1 side-by-side |
-| A1.4 | `plot_calibration_curve(model, X, y, regime_names, run_cfg)` | Reliability diagram: predicted prob vs actual frequency |
-| A1.5 | `plot_learning_curve(model, X, y, run_cfg)` | Train/test score vs training set size (detects overfitting) |
+| Item | Function | Purpose | Status |
+|------|----------|---------|--------|
+| A1.1 | `plot_decision_tree(tree, feature_names, regime_names, run_cfg)` | Render sklearn DT via `plot_tree` (readable tree diagram) | ✅ |
+| A1.2 | `plot_cv_fold_accuracy(fold_reports, run_cfg)` | Bar chart of per-fold accuracy from TimeSeriesSplit | ✅ |
+| A1.3 | `plot_model_comparison_bar(metrics_dict, run_cfg)` | Grouped bar: RF vs DT vs GB accuracy/F1 side-by-side | ✅ |
+| A1.4 | `plot_calibration_curve(model, X, y, regime_names, run_cfg)` | Reliability diagram: predicted prob vs actual frequency | ✅ |
+| A1.5 | `plot_learning_curve(model, X, y, run_cfg)` | Train/test score vs training set size (detects overfitting) | ✅ |
+
+**Implementation:** All 5 functions in `src/trading_crab_lib/plotting.py`. Wired into `run_pipeline.py` step 5 via Phase C3.
 
 ---
 
-## Phase A2 — PCA & Clustering Plot Functions (5 items)
+## Phase A2 — PCA & Clustering Plot Functions (5 items) ✅ DONE
 
-| Item | Function | Purpose |
-|------|----------|---------|
-| A2.1 | `plot_scree(pca_obj, run_cfg)` | Scree plot: individual + cumulative explained variance |
-| A2.2 | `plot_pca_loadings(pca_obj, feature_names, run_cfg, top_n=15)` | Heatmap: top features × PCA components (absolute loadings) |
-| A2.3 | `plot_silhouette_samples(X, labels, run_cfg)` | Per-sample silhouette width grouped by cluster |
-| A2.4 | `plot_gmm_bic_surface(bic_df, run_cfg)` | Heatmap: (k, covariance_type) → BIC from `fit_gmm()` |
-| A2.5 | `plot_method_comparison_table(comparison_df, run_cfg)` | Table-as-figure for `compare_all_methods()` output |
+| Item | Function | Purpose | Status |
+|------|----------|---------|--------|
+| A2.1 | `plot_scree(pca_obj, run_cfg)` | Scree plot: individual + cumulative explained variance | ✅ |
+| A2.2 | `plot_pca_loadings(pca_obj, feature_names, run_cfg, top_n=15)` | Heatmap: top features × PCA components (absolute loadings) | ✅ |
+| A2.3 | `plot_silhouette_samples(X, labels, run_cfg)` | Per-sample silhouette width grouped by cluster | ✅ |
+| A2.4 | `plot_gmm_bic_surface(bic_df, run_cfg)` | Heatmap: (k, covariance_type) → BIC from `fit_gmm()` | ✅ |
+| A2.5 | `plot_method_comparison_table(comparison_df, run_cfg)` | Table-as-figure for `compare_all_methods()` output | ✅ |
 
----
-
-## Phase A3 — Time-Series & Regime Plot Functions (5 items)
-
-| Item | Function | Purpose |
-|------|----------|---------|
-| A3.1 | `plot_soft_probabilities(probs_df, regime_names, run_cfg)` | Stacked area: GMM/HMM posterior probabilities over time |
-| A3.2 | `plot_feature_regime_overlay(series, labels, regime_names, run_cfg)` | Line plot with regime-colored background bands |
-| A3.3 | `plot_forward_prob_evolution(forward_probs, regime_names, run_cfg)` | Heatmap: regime × horizon P(transition) for 1Q/2Q/4Q/8Q |
-| A3.4 | `plot_gap_fill_before_after(raw_col, filled_col, run_cfg)` | Overlay: raw (with gaps) vs filled, gaps highlighted |
-| A3.5 | `plot_regime_colored_pca_3d(pca_df, labels, regime_names, run_cfg)` | 3D scatter PC1×PC2×PC3 with regime colors |
+**Implementation:** All 5 functions in `src/trading_crab_lib/plotting.py` (lines 1166–1360).
+7 tests in `tests/unit/test_plotting.py`. Wired into `run_pipeline.py` step 3 via Phase C2.
 
 ---
 
-## Phase A4 — Specialty Diagnostic Plot Functions (5 items)
+## Phase A3 — Time-Series & Regime Plot Functions (5 items) ✅ DONE
 
-| Item | Function | Purpose |
-|------|----------|---------|
-| A4.1 | `plot_rrg_scatter(rrg_df, run_cfg)` | RRG 4-quadrant scatter with asset labels and arrows |
-| A4.2 | `plot_feature_importance_comparison(models_dict, feature_names, run_cfg)` | Side-by-side importance: RF vs DT vs GB in one figure |
-| A4.3 | `plot_regime_duration_histogram(labels, regime_names, run_cfg)` | How many consecutive quarters each regime persists |
-| A4.4 | `plot_correlation_change_heatmap(features, labels, run_cfg)` | Feature correlation matrix per-regime (shows structure changes) |
-| A4.5 | `plot_feature_variance_ranking(features, run_cfg, top_n=30)` | Horizontal bar: features ranked by variance (find dead features) |
+| Item | Function | Purpose | Status |
+|------|----------|---------|--------|
+| A3.1 | `plot_soft_probabilities(probs_df, regime_names, run_cfg)` | Stacked area: GMM/HMM posterior probabilities over time | ✅ |
+| A3.2 | `plot_feature_regime_overlay(series, labels, regime_names, run_cfg)` | Line plot with regime-colored background bands | ✅ |
+| A3.3 | `plot_forward_prob_evolution(forward_probs, regime_names, run_cfg)` | Heatmap: regime × horizon P(transition) for 1Q/2Q/4Q/8Q | ✅ |
+| A3.4 | `plot_gap_fill_before_after(raw_col, filled_col, run_cfg)` | Overlay: raw (with gaps) vs filled, gaps highlighted | ✅ |
+| A3.5 | `plot_regime_colored_pca_3d(pca_df, labels, regime_names, run_cfg)` | 3D scatter PC1×PC2×PC3 with regime colors | ✅ |
 
----
-
-## Phase A5 — Feature Engineering & Selection Plot Functions (5 items)
-
-| Item | Function | Purpose |
-|------|----------|---------|
-| A5.1 | `plot_feature_selection_curve(importances, run_cfg)` | Cumulative importance vs # features (find diminishing returns) |
-| A5.2 | `plot_divergence_timeseries(div_features, labels, run_cfg)` | Z-score divergence over time with regime-transition markers |
-| A5.3 | `plot_momentum_dashboard(momentum_features, labels, run_cfg)` | Grid: trailing momentum + relative strength for key series |
-| A5.4 | `plot_nan_heatmap(df, run_cfg)` | Binary heatmap: which cells are NaN (data coverage map) |
-| A5.5 | `plot_centered_vs_causal_comparison(feat_c, feat_s, cols, run_cfg)` | Side-by-side: centered vs causal for same feature (shows look-ahead) |
+**Implementation:** All 5 functions in `src/trading_crab_lib/plotting.py`. Wired into `run_pipeline.py` steps 3-7 via Phases C2/C3.
 
 ---
 
-## Phase B — Plot Reuse Infrastructure (3 items)
+## Phase A4 — Specialty Diagnostic Plot Functions (5 items) ✅ DONE
 
-| Item | What |
-|------|------|
-| B.1 | Add `load_or_generate(plot_func, *args, filename, run_cfg)` helper to `plotting.py` |
-| B.2 | Helper checks `outputs/plots/{filename}` freshness vs checkpoint; shows PNG via `IPython.display.Image` if fresh, else regenerates |
-| B.3 | Add `list_available_plots()` utility: print table of all PNGs in `outputs/plots/` with timestamps |
+| Item | Function | Purpose | Status |
+|------|----------|---------|--------|
+| A4.1 | `plot_rrg_scatter(rrg_df, run_cfg)` | RRG 4-quadrant scatter with asset labels and arrows | ✅ |
+| A4.2 | `plot_feature_importance_comparison(models_dict, feature_names, run_cfg)` | Side-by-side importance: RF vs DT vs GB in one figure | ✅ |
+| A4.3 | `plot_regime_duration_histogram(labels, regime_names, run_cfg)` | How many consecutive quarters each regime persists | ✅ |
+| A4.4 | `plot_correlation_change_heatmap(features, labels, run_cfg)` | Feature correlation matrix per-regime (shows structure changes) | ✅ |
+| A4.5 | `plot_feature_variance_ranking(features, run_cfg, top_n=30)` | Horizontal bar: features ranked by variance (find dead features) | ✅ |
+
+**Implementation:** All 5 functions in `src/trading_crab_lib/plotting.py`. Wired into `run_pipeline.py` steps 4/8 via Phases C2/C4.
+
+---
+
+## Phase A5 — Feature Engineering & Selection Plot Functions (5 items) ✅ DONE
+
+| Item | Function | Purpose | Status |
+|------|----------|---------|--------|
+| A5.1 | `plot_feature_selection_curve(importances, run_cfg)` | Cumulative importance vs # features (find diminishing returns) | ✅ |
+| A5.2 | `plot_divergence_timeseries(div_features, labels, run_cfg)` | Z-score divergence over time with regime-transition markers | ✅ |
+| A5.3 | `plot_momentum_dashboard(momentum_features, labels, run_cfg)` | Grid: trailing momentum + relative strength for key series | ✅ |
+| A5.4 | `plot_nan_heatmap(df, run_cfg)` | Binary heatmap: which cells are NaN (data coverage map) | ✅ |
+| A5.5 | `plot_centered_vs_causal_comparison(feat_c, feat_s, cols, run_cfg)` | Side-by-side: centered vs causal for same feature (shows look-ahead) | ✅ |
+
+**Implementation:** All 5 functions in `src/trading_crab_lib/plotting.py`. Used in notebooks 02/11/12.
+
+---
+
+## Phase B — Plot Reuse Infrastructure (3 items) ✅ DONE
+
+| Item | What | Status |
+|------|------|--------|
+| B.1 | Add `load_or_generate(plot_func, *args, filename, run_cfg)` helper to `plotting.py` | ✅ |
+| B.2 | Helper checks `outputs/plots/{filename}` freshness vs checkpoint; shows PNG via `IPython.display.Image` if fresh, else regenerates | ✅ |
+| B.3 | Add `list_available_plots()` utility: print table of all PNGs in `outputs/plots/` with timestamps | ✅ |
+
+**Implementation:** `load_or_generate()` (line 118), `_plot_is_fresh()` (line 83), `list_available_plots()` (line 170) in `plotting.py`. 11 tests in `test_plotting.py`.
 
 ---
 
