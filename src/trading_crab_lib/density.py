@@ -40,7 +40,7 @@ import logging
 import numpy as np
 import pandas as pd
 from sklearn.cluster import DBSCAN
-from sklearn.metrics import davies_bouldin_score, silhouette_score
+from sklearn.metrics import silhouette_score
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 

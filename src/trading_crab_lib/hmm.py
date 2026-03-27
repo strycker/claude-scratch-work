@@ -110,7 +110,7 @@ def fit_hmm(
                     n_iter=n_iter,
                     random_state=seed,
                 )
-                with warnings.catch_warnings(record=True) as caught:
+                with warnings.catch_warnings(record=True):
                     warnings.simplefilter("always")
                     hmm.fit(X)
 

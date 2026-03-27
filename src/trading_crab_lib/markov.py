@@ -135,7 +135,6 @@ def markov_labels(result: dict) -> pd.Series:
         Series indexed like the input, name="markov_regime".
     """
     res = result["model"]
-    k = result["k_regimes"]
     means = result["regime_means"]
 
     # Smoothed probabilities: (n_obs, k_regimes)
@@ -160,7 +159,6 @@ def markov_probabilities(result: dict) -> pd.DataFrame:
     """
     res = result["model"]
     probs = res.smoothed_marginal_probabilities
-    k = result["k_regimes"]
 
     # Canonicalize column order to match label ordering (regime 0 = lowest mean)
     means = result["regime_means"]

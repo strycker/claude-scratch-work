@@ -17,7 +17,6 @@ import logging
 import os
 import smtplib
 import ssl
-from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText

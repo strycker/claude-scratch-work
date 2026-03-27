@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import logging
 
-import numpy as np
 import pandas as pd
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics import (

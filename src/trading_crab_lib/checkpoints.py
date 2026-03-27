@@ -55,7 +55,6 @@ from typing import Any
 import joblib
 
 import pandas as pd
-import yaml
 
 from trading_crab_lib import DATA_DIR, CONFIG_DIR
 
