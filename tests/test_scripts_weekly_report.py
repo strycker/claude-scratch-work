@@ -103,7 +103,7 @@ class TestScriptSendEmail:
         with patch("run_weekly_report.subprocess.run") as m:
             m.return_value = MagicMock(returncode=0)
             monkeypatch.setattr("run_weekly_report.load_email_config", lambda: {"smtp_host": "h", "smtp_port": 587, "username": "u", "password": "p", "from_address": "f", "to_address": "t", "use_tls": True, "use_ssl": False})
-            monkeypatch.setattr("run_weekly_report.send_weekly_email", lambda cfg, subj, body: True)
+            monkeypatch.setattr("run_weekly_report.send_weekly_email", lambda cfg, subj, body, plot_paths=None: True)
             with patch("sys.argv", ["run_weekly_report.py", "--send-email"]):
                 result = weekly.main()
             assert result == 0

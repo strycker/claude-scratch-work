@@ -8,6 +8,7 @@ body from the most recent weekly report, and sends via SMTP (TLS or SSL).
   load_email_config()        — parse YAML or env vars → config dict
   build_weekly_email_body()  — compose subject + body from report files
   send_weekly_email()        — send via SMTP with TLS/SSL support
+  resolve_plot_paths()       — resolve attach_plots config to existing files
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ import logging
 import os
 import smtplib
 import ssl
+from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -164,18 +167,78 @@ def build_weekly_email_body(
     return subject, "(No report files found)"
 
 
+def resolve_plot_paths(
+    plot_names: list[str],
+    plots_dir: Path | None = None,
+) -> list[Path]:
+    """
+    Resolve a list of plot filenames to existing file paths.
+
+    Args:
+        plot_names: list of filenames (e.g. ["03_regime_pca_scatter.png"])
+        plots_dir:  directory containing plots (default: outputs/plots/)
+
+    Returns:
+        List of Path objects for files that exist (missing files are logged
+        at WARNING level and skipped).
+    """
+    if plots_dir is None:
+        from trading_crab_lib import OUTPUT_DIR
+        plots_dir = OUTPUT_DIR / "plots"
+
+    resolved: list[Path] = []
+    for name in plot_names:
+        path = plots_dir / name
+        if path.exists():
+            resolved.append(path)
+        else:
+            log.warning("Plot file not found, skipping: %s", path)
+    return resolved
+
+
+def _build_html_body_with_plots(plain_text: str, plot_paths: list[Path]) -> str:
+    """
+    Build an HTML email body with inline plot images.
+
+    The plain text report is wrapped in <pre> tags, followed by inline
+    images referencing Content-ID attachments.
+    """
+    import html as html_mod
+
+    escaped = html_mod.escape(plain_text)
+    parts = [
+        "<html><body>",
+        f'<pre style="font-family: monospace; white-space: pre-wrap;">{escaped}</pre>',
+        "<hr>",
+        "<h3>Key Plots</h3>",
+    ]
+    for i, path in enumerate(plot_paths):
+        cid = f"plot_{i}"
+        parts.append(
+            f'<p><strong>{path.stem}</strong></p>'
+            f'<img src="cid:{cid}" alt="{path.stem}" '
+            f'style="max-width: 100%; height: auto;">'
+        )
+    parts.append("</body></html>")
+    return "\n".join(parts)
+
+
 def send_weekly_email(
     config: dict,
     subject: str,
     body: str,
+    plot_paths: list[Path] | None = None,
 ) -> bool:
     """
     Send an email via SMTP.
 
     Args:
-        config:  dict from load_email_config()
-        subject: email subject line
-        body:    email body (plain text)
+        config:      dict from load_email_config()
+        subject:     email subject line
+        body:        email body (plain text)
+        plot_paths:  optional list of PNG paths to embed as inline images.
+                     When provided, the email is sent as multipart/related
+                     with an HTML body containing <img> references.
 
     Returns:
         True if sent successfully, False otherwise.
@@ -201,11 +264,45 @@ def send_weekly_email(
         log.error("No recipients configured")
         return False
 
-    msg = MIMEMultipart()
-    msg["From"] = from_addr
-    msg["To"] = ", ".join(recipients)
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
+    # Build MIME message
+    if plot_paths:
+        # Multipart/related with HTML body + inline images
+        msg = MIMEMultipart("related")
+        msg["From"] = from_addr
+        msg["To"] = ", ".join(recipients)
+        msg["Subject"] = subject
+
+        # Alternative part: plain text + HTML
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(body, "plain"))
+
+        html_body = _build_html_body_with_plots(body, plot_paths)
+        alt.attach(MIMEText(html_body, "html"))
+        msg.attach(alt)
+
+        # Attach images with Content-ID
+        for i, path in enumerate(plot_paths):
+            cid = f"plot_{i}"
+            try:
+                img_data = path.read_bytes()
+                img = MIMEImage(img_data, name=path.name)
+                img.add_header("Content-ID", f"<{cid}>")
+                img.add_header(
+                    "Content-Disposition", "inline", filename=path.name
+                )
+                msg.attach(img)
+                log.debug("Attached plot: %s (cid:%s)", path.name, cid)
+            except OSError as exc:
+                log.warning("Failed to read plot %s: %s", path, exc)
+
+        log.info("Built HTML email with %d inline plot(s)", len(plot_paths))
+    else:
+        # Plain text email (original behavior)
+        msg = MIMEMultipart()
+        msg["From"] = from_addr
+        msg["To"] = ", ".join(recipients)
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
 
     use_ssl = config.get("use_ssl", False)
     host = config["smtp_host"]

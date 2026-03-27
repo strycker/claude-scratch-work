@@ -7,8 +7,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from trading_crab_lib.email import (
+    _build_html_body_with_plots,
     build_weekly_email_body,
     load_email_config,
+    resolve_plot_paths,
     send_weekly_email,
 )
 
@@ -203,6 +205,132 @@ def test_send_email_comma_separated_to_address(mock_smtp_cls):
     assert result is True
     call_args = mock_smtp.sendmail.call_args
     assert len(call_args[0][1]) == 2  # 2 recipients
+
+
+# ── resolve_plot_paths tests ─────────────────────────────────────────────────
+
+
+def test_resolve_plot_paths_existing(tmp_path):
+    """Returns paths for files that exist, skips missing."""
+    (tmp_path / "plot_a.png").write_bytes(b"\x89PNG")
+    (tmp_path / "plot_b.png").write_bytes(b"\x89PNG")
+    result = resolve_plot_paths(["plot_a.png", "missing.png", "plot_b.png"], tmp_path)
+    assert len(result) == 2
+    assert result[0].name == "plot_a.png"
+    assert result[1].name == "plot_b.png"
+
+
+def test_resolve_plot_paths_empty_list(tmp_path):
+    """Empty input returns empty output."""
+    assert resolve_plot_paths([], tmp_path) == []
+
+
+def test_resolve_plot_paths_all_missing(tmp_path):
+    """All missing files returns empty list."""
+    result = resolve_plot_paths(["no.png", "nope.png"], tmp_path)
+    assert result == []
+
+
+# ── _build_html_body_with_plots tests ────────────────────────────────────────
+
+
+def test_build_html_body_with_plots(tmp_path):
+    """HTML body contains <img> tags with correct Content-IDs."""
+    p1 = tmp_path / "scree.png"
+    p2 = tmp_path / "cv_fold.png"
+    p1.write_bytes(b"\x89PNG")
+    p2.write_bytes(b"\x89PNG")
+
+    html = _build_html_body_with_plots("Hello report", [p1, p2])
+    assert "<html>" in html
+    assert "Hello report" in html
+    assert 'src="cid:plot_0"' in html
+    assert 'src="cid:plot_1"' in html
+    assert "scree" in html
+    assert "cv_fold" in html
+
+
+def test_build_html_body_escapes_html():
+    """Special characters in plain text are escaped in HTML."""
+    html = _build_html_body_with_plots("<script>alert('xss')</script>", [])
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+
+
+# ── send_weekly_email with plot attachments ──────────────────────────────────
+
+
+@patch("trading_crab_lib.email.smtplib.SMTP")
+def test_send_email_with_plot_attachments(mock_smtp_cls, tmp_path):
+    """Email with plot_paths sends multipart/related with inline images."""
+    mock_smtp = MagicMock()
+    mock_smtp_cls.return_value = mock_smtp
+
+    # Create a small valid PNG-like file
+    plot = tmp_path / "test_plot.png"
+    plot.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50)
+
+    cfg = _make_config(use_ssl=False)
+    result = send_weekly_email(cfg, "Test", "Body", plot_paths=[plot])
+    assert result is True
+
+    # Verify the sent message contains the image
+    sent_msg = mock_smtp.sendmail.call_args[0][2]
+    assert "Content-ID: <plot_0>" in sent_msg
+    assert "test_plot.png" in sent_msg
+    assert "text/html" in sent_msg
+    assert "text/plain" in sent_msg
+
+
+@patch("trading_crab_lib.email.smtplib.SMTP")
+def test_send_email_without_plots_is_plain_text(mock_smtp_cls):
+    """No plot_paths → plain text email (backward compatible)."""
+    mock_smtp = MagicMock()
+    mock_smtp_cls.return_value = mock_smtp
+
+    cfg = _make_config(use_ssl=False)
+    result = send_weekly_email(cfg, "Test", "Body", plot_paths=None)
+    assert result is True
+
+    sent_msg = mock_smtp.sendmail.call_args[0][2]
+    assert "text/plain" in sent_msg
+    assert "text/html" not in sent_msg
+
+
+@patch("trading_crab_lib.email.smtplib.SMTP")
+def test_send_email_empty_plot_paths_is_plain_text(mock_smtp_cls):
+    """Empty plot_paths list → plain text email."""
+    mock_smtp = MagicMock()
+    mock_smtp_cls.return_value = mock_smtp
+
+    cfg = _make_config(use_ssl=False)
+    result = send_weekly_email(cfg, "Test", "Body", plot_paths=[])
+    assert result is True
+
+    sent_msg = mock_smtp.sendmail.call_args[0][2]
+    assert "text/html" not in sent_msg
+
+
+@patch("trading_crab_lib.email.smtplib.SMTP")
+def test_send_email_multiple_plots(mock_smtp_cls, tmp_path):
+    """Multiple plots are all attached with unique Content-IDs."""
+    mock_smtp = MagicMock()
+    mock_smtp_cls.return_value = mock_smtp
+
+    plots = []
+    for i in range(3):
+        p = tmp_path / f"plot_{i}.png"
+        p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20)
+        plots.append(p)
+
+    cfg = _make_config(use_ssl=False)
+    result = send_weekly_email(cfg, "Test", "Body", plot_paths=plots)
+    assert result is True
+
+    sent_msg = mock_smtp.sendmail.call_args[0][2]
+    assert "Content-ID: <plot_0>" in sent_msg
+    assert "Content-ID: <plot_1>" in sent_msg
+    assert "Content-ID: <plot_2>" in sent_msg
 
 
 # ── run_weekly_report.py tests ───────────────────────────────────────────────
