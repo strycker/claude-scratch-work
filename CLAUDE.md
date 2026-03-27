@@ -1608,3 +1608,25 @@ notebook for exploring which features matter most for regime classification.
 - **D9.5**: Dead feature detector — flags features with < 0.5% importance. Horizontal
   bar chart with dead threshold line (red). Also lists clustering features not in the
   RF model (derivative-only features not used in supervised step).
+
+### D38. Phase D10 — New notebook 12: Divergence & Momentum Workbench (2026-03-27)
+
+Created `notebooks/12_divergence_momentum.ipynb` (12 cells: 6 markdown + 6 code) — new
+notebook for exploring cross-asset divergence and momentum features.
+
+- **D10.1**: Setup + load features with auto-detection of divergence (`div_*`) and
+  momentum (`*_mom_*`, `*_rs_*`, `acceleration`, `corr_*`) columns. Reports counts
+  of z-score, trigger, and momentum columns found.
+
+- **D10.2**: Divergence z-score time-series via `plot_divergence_timeseries()` with
+  regime-transition vertical markers. Auto-detects `_z_` columns.
+
+- **D10.3**: Momentum dashboard via `plot_momentum_dashboard()` — grid of scatter
+  plots colored by regime for all momentum/relative-strength columns.
+
+- **D10.4**: Divergence trigger leading indicator analysis. For each trigger column,
+  computes % of regime transitions preceded by a trigger firing in prior 1Q/2Q/4Q
+  windows. Reports lift vs baseline trigger rate. Bar chart for 2Q lookback.
+
+- **D10.5**: Feature correlation heatmap (seaborn) of all divergence + momentum columns.
+  Flags pairs with |r| > 0.8 as redundancy candidates.
