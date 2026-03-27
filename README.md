@@ -300,8 +300,8 @@ main repo.
 
 | Submodule | Purpose |
 |-----------|---------|
-| `gsd-scratch-work-repo-copy/` | GSD framework version of the project (earlier development checkpoint) |
-| `trading-crab-lib-repo-copy/` | Separate trading-crab library repo |
+| `gsd-scratch-work/` | GSD framework version of the project (earlier development checkpoint) |
+| `trading-crab-lib/` | Separate trading-crab library repo |
 
 To initialize submodules after cloning:
 ```bash

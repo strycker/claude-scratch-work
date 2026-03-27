@@ -11,7 +11,7 @@ codebase. **438 references across 89 files** (excluding read-only submodules).
 
 - All tests pass before starting
 - Clean git working tree
-- Submodules (`gsd-scratch-work-repo-copy/`, `trading-crab-lib-repo-copy/`) are untouched
+- Submodules (`gsd-scratch-work/`, `trading-crab-lib/`) are untouched
 
 ---
 
@@ -128,8 +128,8 @@ the `market_regime` Python package.
 ```bash
 grep -r "market_regime" --include="*.py" --include="*.md" --include="*.yaml" \
   --include="*.toml" --include="*.in" --include="*.ipynb" \
-  --exclude-dir=gsd-scratch-work-repo-copy \
-  --exclude-dir=trading-crab-lib-repo-copy \
+  --exclude-dir=gsd-scratch-work \
+  --exclude-dir=trading-crab-lib \
   --exclude-dir=legacy
 ```
 (Note: `legacy/` should NOT be modified per project rules.)
@@ -160,7 +160,7 @@ python -c "import trading_crab_lib; print(trading_crab_lib.__file__)"
   Appears in settings.yaml, transforms.py, run_pipeline.py CLI flags (`--market-code`),
   and throughout the pipeline. It is NOT related to the package name.
 - Files in `legacy/` — Never modify. Per CLAUDE.md rules.
-- Files in `gsd-scratch-work-repo-copy/` or `trading-crab-lib-repo-copy/` — Read-only submodules.
+- Files in `gsd-scratch-work/` or `trading-crab-lib/` — Read-only submodules.
 - `market_regime` in git commit history — historical, cannot be changed.
 
 ---
