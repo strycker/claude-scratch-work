@@ -39,7 +39,6 @@ from __future__ import annotations
 import logging
 import warnings
 
-import numpy as np
 import pandas as pd
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.mixture import GaussianMixture
