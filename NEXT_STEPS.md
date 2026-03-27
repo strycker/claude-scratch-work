@@ -292,7 +292,7 @@ Create the monorepo 2-package structure. This is the structural change.
 | Task | Description | Size | Depends on |
 |---|---|---|---|
 | **C1** | Add `src/trading_crab_lib/pyproject.toml` (from template above, version 0.1.2); verify `pip install -e src/trading_crab_lib/` works; update `__init__.py` version | S | A2 (dep audit informs which deps are core vs optional) |
-| **C2** | Create `src/trading_crab/` app package — `__init__.py` (v0.1.2), `cli.py` with `run_pipeline()`, `setup()`, `publish_notebooks()` (stub); update root `pyproject.toml` (rename package to `trading-crab`, add `[project.scripts]`, restrict to `include = ["trading_crab"]`); verify `tradingcrab --help` works | S | C1 |
+| **C2** | Create `src/trading_crab/` app package — `__init__.py` (v0.1.2), `cli.py` with `run_pipeline()` (thin import wrapping `run_pipeline.py` as-is), `setup()` (interactive config generation from example `settings.yaml`), `publish_notebooks()` (stub); ship `config/settings.example.yaml` as package data in `trading-crab` (NOT in `trading-crab-lib`); update root `pyproject.toml` (rename package to `trading-crab`, add `[project.scripts]`, restrict to `include = ["trading_crab"]`); verify `tradingcrab --help` works | S | C1 |
 | **C3** | Build & test — `python -m build src/trading_crab_lib/` + `python -m build` at root; install both wheels in clean venv; verify imports and CLI | S | C1, C2 |
 | **C4** | CI/CD update — update flake8 excludes; add `publish-lib.yml` (tag `lib-v*`) and `publish-app.yml` (tag `v*`) workflows | S | C3 |
 
@@ -316,31 +316,34 @@ Phase D can start as early as Phase B — no dependency on C.
 
 ---
 
-### Phase E — Structural Cleanup (3 S-sized tasks)
+### Phase E — Structural Cleanup & Refactor (4 tasks)
 
-Polish docs and build artifacts after the 2-package split is working.
+Polish docs and build artifacts after the 2-package split, then refactor the pipeline.
 
 | Task | Description | Size | Depends on |
 |---|---|---|---|
 | **E1** | Update MANIFEST.in — create `src/trading_crab_lib/MANIFEST.in` for lib sdist; revise root MANIFEST.in for app sdist | S | C2 |
 | **E2** | Update CLAUDE.md — add `src/trading_crab/` to layout tree; add 2-package architecture note; update "How to Run" with `tradingcrab` CLI examples; update "Environment Setup" with `uv sync` | S | C2 |
 | **E3** | Update README.md — add Installation section (`pip install trading-crab` vs `trading-crab-lib`); update layout diagram; add PyPI badges placeholder | S | C2 |
+| **E4** | Refactor `run_pipeline.py` (62KB monolith at repo root) into `src/trading_crab/pipeline.py` — move pipeline logic into the app package proper; `run_pipeline.py` becomes a thin shim (`from trading_crab.pipeline import main; main()`) for backward compat; `cli.py:run_pipeline()` calls the same entry point directly | M | C2 |
 
-**E1, E2, E3 can all run in parallel** after Phase C.
+**E1, E2, E3 can all run in parallel** after Phase C. **E4** is independent and can be done any time after C2.
 
 ---
 
 ### Phase F — Advanced Features (long-term backlog)
 
 Larger efforts for after the foundation is solid. Ordered by priority.
+F1–F3 are Tier 1 (high priority); F4–F6 are Tier 2 (deferred).
 
-| Task | Description | Size | Depends on |
-|---|---|---|---|
-| **F1** | Per-asset regime probability models — per-ETF binary classifiers predicting P(outperform \| features); blend with regime-based ranking | L | D2 |
-| **F2** | Backtest framework — walk-forward: retrain per quarter, predict regime, construct portfolio, measure returns vs SPY/60-40/equal-weight; Sharpe, max drawdown, Calmar | XL | D2, D4 |
-| **F3** | Interactive Streamlit dashboard — browser-based UI with tabs for regime history, asset rankings, portfolio, diagnostics; wire into `tradingcrab-publish` | L | Phase C |
-| **F4** | Weekly automated report with AI narrative — Claude API generates market commentary from current regime, transition probs, asset signals | XL | Phase C, F3 |
-| **F5** | Finviz Elite integration — sector rotation, institutional flow data; gated behind API key / optional dep | L | Phase C |
+| Task | Description | Size | Depends on | Tier |
+|---|---|---|---|---|
+| **F1** | Per-asset regime probability models — per-ETF binary classifiers predicting P(outperform \| features); blend with regime-based ranking | L | D2 | 1 |
+| **F2** | Backtest framework — walk-forward: retrain per quarter, predict regime, construct portfolio, measure returns vs SPY/60-40/equal-weight; Sharpe, max drawdown, Calmar | XL | D2, D4 | 1 |
+| **F3** | Interactive Streamlit dashboard — browser-based UI with tabs for regime history, asset rankings, portfolio, diagnostics; wire into `tradingcrab-publish` | L | Phase C | 1 |
+| **F4** | Weekly automated report with AI narrative — Claude API generates market commentary from current regime, transition probs, asset signals | XL | Phase C, F3 | 2 |
+| **F5** | Finviz Elite integration — sector rotation, institutional flow data; gated behind API key / optional dep | L | Phase C | 2 |
+| **F6** | `trading-crab-lib` config independence — allow library to accept a config dict or path at runtime rather than requiring `config/settings.yaml` on disk; enables clean `pip install` usage without git clone | S | Phase C | 2 |
 
 ---
 
@@ -377,11 +380,12 @@ Larger efforts for after the foundation is solid. Ordered by priority.
 5. **Branch 5:** C1 → C2 → C3 + C4 (2-package infrastructure)
 6. **Branch 6:** D3 (LEI proxy — after D1 merges)
 7. **Branch 7:** E1 + E2 + E3 (doc cleanup — after C merges)
-8. **Branch 8+:** F1–F5 (long-term, one per branch)
+8. **Branch 8:** E4 (refactor run_pipeline.py → src/trading_crab/pipeline.py)
+9. **Branch 9+:** F1–F6 (long-term, one per branch)
 
 ---
 
-## Open Design Notes
+## Design Decisions (resolved)
 
 **Version:** Both packages start at `0.1.2`. We are still early — don't increment minor
 version yet. Patch bumps (0.1.3, 0.1.4, ...) for each meaningful release.
@@ -392,6 +396,23 @@ validated code to `strycker/trading-crab` (production). This repo is not going a
 **Finviz:** Deferred to Phase F5. Not incorporated now; listed as long-term backlog.
 
 **Submodules:** Remain read-only references. Never modify or push to them.
+
+**Config ownership:** `trading-crab-lib` does NOT ship `settings.yaml`. The library
+expects config to be provided at runtime (path or dict). `trading-crab` (app) ships
+`settings.example.yaml` as package data and `tradingcrab-setup` generates the user's
+`config/settings.yaml` from it interactively. Long-term (F6): library should accept
+config dict/path at init for standalone `pip install` usage without git clone.
+
+**`run_pipeline.py` refactor:** Phase C2 wraps `run_pipeline.py` as-is via thin import
+in `cli.py`. Phase E4 refactors the 62KB monolith into `src/trading_crab/pipeline.py`.
+`run_pipeline.py` at repo root becomes a backward-compat shim for `python run_pipeline.py`.
+
+**Phase D overlaps with B:** Acceptable. Feature work (D) can start during Phase B
+decomposition since they touch different files. In practice, tasks will likely execute
+in order (A → B → C → D → E → F), but the dependency graph allows parallelism.
+
+**B1 dependency:** B1 (plotting decomposition) waits for A1 (dead code scan) only,
+not all of Phase A. A2 and A3 can merge independently.
 
 ---
 
