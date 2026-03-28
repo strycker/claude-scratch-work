@@ -55,6 +55,7 @@ class RegimeStabilityReport:
     avg_duration: dict[int, float] = field(default_factory=dict)
 
     def summary(self) -> str:
+        """Return a formatted summary of regime persistence and run lengths."""
         lines = ["  Regime stability (transition matrix diagonal):"]
         if not self.persistence:
             return "  (no persistence data)"

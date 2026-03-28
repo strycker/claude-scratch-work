@@ -26,6 +26,7 @@ class CompletenessReport:
     passed: bool = True
 
     def summary(self) -> str:
+        """Return a human-readable summary of the completeness check."""
         lines = [
             f"Ingestion completeness: {self.total_columns}/{self.expected_columns} columns",
         ]

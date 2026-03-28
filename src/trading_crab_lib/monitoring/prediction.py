@@ -20,9 +20,11 @@ class CVFoldReport:
     model_scores: dict[str, list[float]] = field(default_factory=dict)
 
     def add(self, model_name: str, fold_scores: list[float]) -> None:
+        """Record per-fold accuracy scores for *model_name*."""
         self.model_scores[model_name] = fold_scores
 
     def summary(self) -> str:
+        """Return a formatted table of per-model fold accuracies with mean ± std."""
         lines = ["  Cross-validation fold accuracy:"]
         for name, scores in self.model_scores.items():
             mean = np.mean(scores) if scores else 0.0

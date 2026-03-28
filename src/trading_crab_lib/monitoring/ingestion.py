@@ -55,6 +55,7 @@ class DateRangeReport:
     passed: bool = True
 
     def summary(self) -> str:
+        """Return a formatted summary of date-range freshness checks."""
         lines: list[str] = []
         if self.last_date is not None:
             lines.append(
@@ -159,6 +160,7 @@ class SourceRowCounts:
     total_columns: int = 0
 
     def summary(self) -> str:
+        """Return a formatted breakdown of column counts by data source."""
         lines = [
             "  Per-source column counts:",
             f"    multpl.com:    {self.multpl:3d} columns",

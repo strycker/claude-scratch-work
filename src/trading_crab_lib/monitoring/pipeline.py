@@ -54,9 +54,11 @@ class StepValidation:
 
     @property
     def passed(self) -> bool:
+        """Return True if all checks passed."""
         return all(ok for _, ok, _ in self.checks)
 
     def summary(self) -> str:
+        """Return a formatted summary of per-output validation checks."""
         lines = [f"  Step {self.step_num} output validation:"]
         for name, ok, detail in self.checks:
             status = "OK" if ok else "WARN"
@@ -137,6 +139,7 @@ class PipelineHealthSummary:
     total_warnings: int = 0
 
     def record_step(self, step_num: int, elapsed: float, *, failed: bool = False) -> None:
+        """Record timing and pass/fail status for a pipeline step."""
         self.step_timings[step_num] = elapsed
         if failed:
             self.steps_failed.append(step_num)
@@ -144,6 +147,7 @@ class PipelineHealthSummary:
             self.steps_run.append(step_num)
 
     def summary(self) -> str:
+        """Return a formatted pipeline health report with per-step timings."""
         total_elapsed = sum(self.step_timings.values())
         lines = [
             "═" * 60,

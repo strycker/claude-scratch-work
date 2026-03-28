@@ -97,6 +97,7 @@ def save_dashboard_csv(
     output_dir: Path,
     filename: str = "dashboard.csv",
 ) -> Path:
+    """Write *asset_signals_df* to CSV and return the output path."""
     out = output_dir / filename
     asset_signals_df.to_csv(out, index=False)
     log.info("Dashboard saved to %s", out)

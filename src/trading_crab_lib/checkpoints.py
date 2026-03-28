@@ -274,4 +274,5 @@ class CheckpointManager:
         return model
 
     def model_exists(self, name: str) -> bool:
+        """Return True if a pickled model checkpoint exists for *name*."""
         return (self.dir / f"{name}.pkl").exists()

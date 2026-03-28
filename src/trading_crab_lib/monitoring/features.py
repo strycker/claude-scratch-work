@@ -22,6 +22,7 @@ class FeatureQualityReport:
     top_correlation_pairs: list[tuple[str, str, float]] = field(default_factory=list)
 
     def summary(self) -> str:
+        """Return a formatted summary of NaN counts, variance, and correlations."""
         lines = [
             f"  Feature quality: {self.n_rows} rows × {self.n_cols} columns",
         ]
