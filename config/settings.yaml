@@ -187,6 +187,9 @@ features:
     - etf_gld           # Gold ETF (2004+)
     - etf_qqq           # Nasdaq-100 ETF (1999+)
     - etf_vnq           # REIT ETF (2004+)
+    - fred_indpro       # industrial production index (1919+)
+    - fred_payems       # total nonfarm payrolls (1939+)
+    - fred_real_pce     # real personal consumption expenditures (1947+)
 
   # ETF tickers to merge into macro_raw as etf_{ticker.lower()} columns.
   # Only tickers with enough history to be useful for clustering are included.
@@ -263,6 +266,12 @@ features:
     - credit_spread_mom_4q    # trailing 4Q spread change (1950+)
     - corr_sp500_10yr_ustreas_8q  # rolling 8Q equity-bond correlation (1951+)
     - cpi_acceleration        # 2nd derivative of CPI (1950+)
+    # New FRED series (Phase D1 — deep history, safe for clustering)
+    - log_fred_indpro         # industrial production (1919+)
+    - log_fred_payems         # nonfarm payrolls (1939+)
+    - log_fred_real_pce       # real personal consumption (1947+)
+    # LEI proxy (Phase D3 — composite leading indicator)
+    - lei_proxy               # Conference Board LEI proxy (z-score composite)
 
   # Final feature set fed into PCA + clustering.
   # Uses d1+d2 for most series; d1+d2+d3 only for sp500 series (higher-order
@@ -372,6 +381,13 @@ features:
     - corr_sp500_10yr_ustreas_8q_d1 # change in equity-bond correlation
     - cpi_acceleration        # inflation acceleration (2nd deriv of CPI)
     - cpi_acceleration_d1     # jerk of inflation (3rd-order signal)
+    # New FRED series derivatives (Phase D1 — deep history)
+    - log_fred_indpro_d1      # industrial production 1st derivative
+    - log_fred_indpro_d2      # industrial production 2nd derivative
+    - log_fred_payems_d1      # nonfarm payrolls 1st derivative
+    - log_fred_payems_d2      # nonfarm payrolls 2nd derivative
+    - log_fred_real_pce_d1    # real PCE 1st derivative
+    - log_fred_real_pce_d2    # real PCE 2nd derivative
 
   derivative_window: 5  # rolling mean window applied before/after np.gradient
 
@@ -430,6 +446,9 @@ prediction:
   boosted_n_estimators:      200
   interpret_tree_max_depth:  3     # shallow tree for human-readable splits
   interpret_top_k_features:  10    # number of top features to use when fitting interpretability tree
+  # Class balancing (Phase D4): "balanced" adjusts weights inversely proportional
+  # to class frequency; "none" uses uniform weights. Applies to RF, DT, and LGBM.
+  class_balance_method:      "balanced"
 
 # ── Asset classes ─────────────────────────────────────────────────────────────
 assets:

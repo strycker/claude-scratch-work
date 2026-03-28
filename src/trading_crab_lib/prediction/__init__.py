@@ -98,6 +98,8 @@ def train_classifier(
     pcfg = cfg["prediction"]
     n_splits = pcfg.get("cv_splits", 5)
     rs = pcfg.get("random_state", 42)
+    balance = pcfg.get("class_balance_method", "balanced")
+    cw = "balanced" if balance == "balanced" else None
 
     if kind == "rf":
         def _factory():
@@ -106,7 +108,7 @@ def train_classifier(
                 max_depth=pcfg.get("rf_max_depth", 12),
                 random_state=rs,
                 n_jobs=-1,
-                class_weight="balanced",
+                class_weight=cw,
             )
         label = "RF current-regime"
     elif kind == "dt":
@@ -114,6 +116,7 @@ def train_classifier(
             return DecisionTreeClassifier(
                 max_depth=pcfg.get("dt_max_depth", 8),
                 random_state=rs,
+                class_weight=cw,
             )
         label = "DT current-regime"
     elif kind == "lgbm":
@@ -131,7 +134,7 @@ def train_classifier(
                 subsample=pcfg.get("lgbm_bagging_fraction", 0.8),
                 colsample_bytree=pcfg.get("lgbm_feature_fraction", 0.8),
                 reg_lambda=pcfg.get("lgbm_lambda_l2", 1.0),
-                class_weight="balanced",
+                class_weight=cw,
                 random_state=rs,
                 verbose=-1,
             )
@@ -190,6 +193,8 @@ def train_forward_classifiers(
     n_splits = pcfg.get("cv_splits", 5)
     n_estimators = pcfg.get("n_estimators", 200)
     rs = pcfg.get("random_state", 42)
+    balance = pcfg.get("class_balance_method", "balanced")
+    cw = "balanced" if balance == "balanced" else None
 
     results: dict[int, dict[int, RandomForestClassifier]] = {}
 
@@ -207,7 +212,7 @@ def train_forward_classifiers(
                     n_estimators=n_estimators,
                     random_state=rs,
                     n_jobs=-1,
-                    class_weight="balanced",
+                    class_weight=cw,
                 )
 
             scores = _tscv_scores(
