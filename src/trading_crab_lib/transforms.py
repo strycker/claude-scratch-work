@@ -274,6 +274,12 @@ def engineer_all(df: pd.DataFrame, cfg: dict[str, Any], causal: bool = False) ->
     from trading_crab_lib.momentum import add_momentum_features
     df = add_momentum_features(df, cfg)
 
+    log.info("Step 2b/8 — LEI proxy composite indicator")
+    from trading_crab_lib.indicators import compute_lei_proxy
+    lei = compute_lei_proxy(df)
+    if lei.notna().any():
+        df["lei_proxy"] = lei
+
     log.info("Step 3/8 — divergence features (level-space)")
     from trading_crab_lib.divergence import add_divergence_features
     df = add_divergence_features(df, cfg)
