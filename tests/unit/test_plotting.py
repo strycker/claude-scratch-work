@@ -18,6 +18,7 @@ import pytest
 
 from trading_crab_lib.runtime import RunConfig
 from trading_crab_lib import plotting
+from trading_crab_lib.plotting import core as _plotting_core
 
 
 # ── Shared fixtures ──────────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ from trading_crab_lib import plotting
 def run_cfg(tmp_path, monkeypatch):
     """RunConfig that saves plots to tmp_path, never calls plt.show()."""
     monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+    monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
     return RunConfig(generate_plots=True, save_plots=True, show_plots=False)
 
 
@@ -64,6 +66,7 @@ def regime_names():
 class TestSaveOrShow:
     def test_saves_file(self, run_cfg, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         fig, ax = plt.subplots()
         ax.plot([1, 2, 3])
         plotting._save_or_show(fig, "test_plot.png", run_cfg)
@@ -71,6 +74,7 @@ class TestSaveOrShow:
 
     def test_no_save_when_disabled(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         cfg = RunConfig(save_plots=False, show_plots=False)
         fig, ax = plt.subplots()
         ax.plot([1, 2, 3])
@@ -561,15 +565,18 @@ class TestPlotIsFresh:
 
     def test_missing_png_returns_false(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         assert plotting._plot_is_fresh("nonexistent.png") is False
 
     def test_existing_png_no_checkpoint_returns_true(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         (tmp_path / "test.png").write_bytes(b"PNG")
         assert plotting._plot_is_fresh("test.png") is True
 
     def test_existing_png_no_checkpoint_name_returns_true(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         (tmp_path / "test.png").write_bytes(b"PNG")
         assert plotting._plot_is_fresh("test.png", checkpoint_name=None) is True
 
@@ -578,6 +585,7 @@ class TestPlotIsFresh:
         from datetime import datetime, timedelta
 
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         ckpt_dir = tmp_path / "checkpoints"
         ckpt_dir.mkdir()
         monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
@@ -596,6 +604,7 @@ class TestPlotIsFresh:
         from datetime import datetime, timedelta
 
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         ckpt_dir = tmp_path / "checkpoints"
         ckpt_dir.mkdir()
         monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
@@ -614,6 +623,7 @@ class TestPlotIsFresh:
 
     def test_missing_checkpoint_meta_treated_as_fresh(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         ckpt_dir = tmp_path / "checkpoints"
         ckpt_dir.mkdir()
         monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
@@ -624,6 +634,7 @@ class TestPlotIsFresh:
 
     def test_corrupt_checkpoint_meta_treated_as_fresh(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         ckpt_dir = tmp_path / "checkpoints"
         ckpt_dir.mkdir()
         monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
@@ -645,6 +656,7 @@ class TestLoadOrGenerate:
 
     def test_regenerates_when_no_cached_png(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         cfg = RunConfig(save_plots=True, show_plots=False)
 
         plotting.load_or_generate(
@@ -656,6 +668,7 @@ class TestLoadOrGenerate:
 
     def test_uses_cache_when_fresh(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         # Pre-create a cached PNG
         (tmp_path / "dummy.png").write_bytes(b"CACHED_PNG")
         cfg = RunConfig(save_plots=True, show_plots=False)
@@ -684,6 +697,7 @@ class TestLoadOrGenerate:
         from datetime import datetime
 
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         ckpt_dir = tmp_path / "checkpoints"
         ckpt_dir.mkdir()
         monkeypatch.setattr("trading_crab_lib.checkpoints.CHECKPOINT_DIR", ckpt_dir)
@@ -710,6 +724,7 @@ class TestLoadOrGenerate:
 
     def test_forwards_extra_kwargs(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         cfg = RunConfig(save_plots=True, show_plots=False)
 
         received = {}
@@ -761,6 +776,7 @@ class TestListAvailablePlots:
 
     def test_default_plot_dir(self, tmp_path, monkeypatch):
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
+        monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
         (tmp_path / "test.png").write_bytes(b"PNG")
         result = plotting.list_available_plots()
         assert "test.png" in result
