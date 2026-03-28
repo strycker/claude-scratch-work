@@ -85,10 +85,10 @@ trading-crab/
 │   ├── 08_diagnostics.py          ← ratio diagnostics + RRG rotation view
 │   └── 09_tactics.py              ← per-asset buy_hold / swing / stand_aside
 │
-├── run_pipeline.py                ← master entry point with --steps / --refresh / --plots
+├── run_pipeline.py                ← backward-compat shim; delegates to trading_crab.pipeline
 │
-├── requirements.txt               ← pinned runtime dependencies
-├── requirements-dev.txt           ← runtime + dev extras (pytest, jupyterlab)
+├── requirements.txt               ← pinned runtime dependencies (legacy; prefer pyproject.toml extras)
+├── requirements-dev.txt           ← runtime + dev extras (legacy; prefer pyproject.toml extras)
 │
 ├── scripts/
 │   ├── setup.sh                   ← automated environment setup
@@ -139,7 +139,13 @@ trading-crab/
 │   ├── plots/                     ← saved figures (PNG/PDF)
 │   └── reports/                   ← dashboard.csv, weekly summaries
 │
-└── src/trading_crab_lib/             ← installable Python package
+├── src/trading_crab/                  ← app package (pip name: trading-crab)
+│   ├── __init__.py                ← version + package metadata
+│   ├── cli.py                     ← CLI entry points (tradingcrab, tradingcrab-setup, tradingcrab-publish)
+│   └── pipeline.py                ← full pipeline orchestration (moved from run_pipeline.py)
+│
+└── src/trading_crab_lib/             ← library package (pip name: trading-crab-lib)
+    ├── pyproject.toml             ← independent pyproject.toml for library sdist
     ├── __init__.py                ← defines ROOT, CONFIG_DIR, DATA_DIR, OUTPUT_DIR
     ├── config.py                  ← load(), load_portfolio(), setup_logging()
     ├── runtime.py                 ← RunConfig dataclass (verbose, plots, refresh flags)
@@ -177,16 +183,45 @@ trading-crab/
 
 ---
 
+## Two-Package Architecture
+
+This monorepo ships **two independent PyPI packages**:
+
+| Package | pip name | Contents | Consumers |
+|---|---|---|---|
+| `src/trading_crab_lib/` | `trading-crab-lib` | All library code: transforms, clustering, prediction, reporting, plotting, ingestion | Other Python projects, notebooks, tests |
+| `src/trading_crab/` | `trading-crab` | CLI entry points + pipeline orchestration | End users running the pipeline |
+
+`trading-crab` depends on `trading-crab-lib>=0.1.2`. The library has no dependency on the app.
+
+**Optional extras** (library): `[ingestion]`, `[plotting]`, `[hmm]`, `[clustering-extras]`, `[boosting]`, `[all]`, `[dev]`.
+
+**Development install:**
+```bash
+# Install both packages in editable mode with all extras
+pip install -e "src/trading_crab_lib/[all,dev]"
+pip install -e ".[dev]"
+
+# Or with uv (workspace-aware, installs both automatically):
+uv sync
+```
+
+---
+
 ## How to Run
 
 ### Full pipeline (scrape fresh data, recompute everything, generate plots)
 ```bash
+# Via CLI entry point (after pip install -e .):
+tradingcrab --refresh --recompute --plots
+
+# Or via backward-compat shim:
 python run_pipeline.py --refresh --recompute --plots
 ```
 
 ### Load from checkpoints, skip re-scraping and re-computing, only re-cluster
 ```bash
-python run_pipeline.py --steps 3,4,5,6,7 --plots
+tradingcrab --steps 3,4,5,6,7 --plots
 ```
 
 ### Run individual steps
@@ -202,7 +237,7 @@ python pipelines/08_diagnostics.py
 python pipelines/09_tactics.py
 ```
 
-### CLI flag reference (run_pipeline.py)
+### CLI flag reference (tradingcrab / run_pipeline.py)
 | Flag | Effect |
 |---|---|
 | `--refresh` | Re-scrape multpl.com + re-hit FRED API (slow, ~10 min) |
@@ -229,8 +264,12 @@ jupyter lab notebooks/
 ## Environment Setup
 
 ```bash
-# 1. Install package + dev extras
+# 1. Install both packages in editable mode with all extras
+pip install -e "src/trading_crab_lib/[all,dev]"
 pip install -e ".[dev]"
+
+# Or with uv (workspace-aware):
+# uv sync
 
 # 2. Optional but recommended for balanced clustering
 pip install k-means-constrained
@@ -241,6 +280,7 @@ cp .env.example .env
 
 # 4. Verify
 python -c "from trading_crab_lib.config import load; print(load()['data'])"
+tradingcrab --help
 ```
 
 ### Key dependencies

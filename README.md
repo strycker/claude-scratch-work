@@ -31,6 +31,17 @@ Predict market conditions, optimal portfolios, and stock picks by:
   - Given a portfolio of X assets at Y percentages, the market condition regime, the recommended portfolio mix, the projected performance of each asset (which indicators have recently turned on warning lights), should you buy, sell, or hold that asset?
   - Send a weekly email (can use AI for this part!) with the final recommendations on portfolio changes &mdash; what assets need traded, bought, or sold THIS WEEK?
 
+## Two Packages
+
+This monorepo contains two independent Python packages:
+
+| Package | pip name | What it provides |
+|---|---|---|
+| `src/trading_crab_lib/` | **`trading-crab-lib`** | Library: transforms, clustering, prediction, reporting, plotting, ingestion |
+| `src/trading_crab/` | **`trading-crab`** | Application: CLI (`tradingcrab`) + pipeline orchestration |
+
+`trading-crab` depends on `trading-crab-lib`. The library can be used standalone.
+
 ## Installation
 
 ### Prerequisites
@@ -60,23 +71,19 @@ source .venv/bin/activate
 #    FRED_API_KEY=your_key_here
 
 # 5. Run the pipeline
-python run_pipeline.py --refresh --recompute --plots --market-code grok --save-market-code
+tradingcrab --refresh --recompute --plots --market-code grok --save-market-code
 ```
 
 ### Manual Installation
-
-If you prefer to manage your own environment:
 
 ```bash
 # Create and activate a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
-# Install runtime dependencies (pinned)
-pip install -r requirements.txt
-
-# OR install dev extras (adds pytest + JupyterLab)
-pip install -r requirements-dev.txt
+# Install both packages (editable mode, all extras)
+pip install -e "src/trading_crab_lib/[all,dev]"
+pip install -e ".[dev]"
 
 # Optional but recommended — enables balanced-size clustering
 pip install k-means-constrained
@@ -84,10 +91,17 @@ pip install k-means-constrained
 # Set up .env
 cp .env.example .env
 # Edit .env and set: FRED_API_KEY=your_key_here
+```
 
-# Create runtime directories
-mkdir -p data/{raw,processed,regimes,checkpoints}
-mkdir -p outputs/{plots,models,reports}
+### Library-Only Installation
+
+If you only need the library (no CLI, no pipeline scripts):
+
+```bash
+pip install trading-crab-lib                # core only (transforms, clustering, prediction)
+pip install "trading-crab-lib[ingestion]"   # + FRED/multpl/yfinance fetchers
+pip install "trading-crab-lib[plotting]"    # + matplotlib/seaborn
+pip install "trading-crab-lib[all]"         # everything
 ```
 
 ### Common Commands (via Makefile)
@@ -126,37 +140,40 @@ make help           # Show all available targets
 
 #### Common Workflows
 
+All commands below use `tradingcrab` (installed CLI). You can substitute
+`python run_pipeline.py` if you prefer the backward-compatible entry point.
+
 ```bash
 # ① FRESH START — scrape everything, seed with Grok labels (recommended first run)
-python run_pipeline.py --refresh --recompute --plots \
+tradingcrab --refresh --recompute --plots \
     --market-code grok --save-market-code
 
 # ② FULLY DATA-DRIVEN — no label seed, cluster purely from data
-python run_pipeline.py --refresh --recompute --plots --save-market-code
+tradingcrab --refresh --recompute --plots --save-market-code
 
 # ③ FAST RE-RUN — skip scraping, use cached checkpoints, regenerate plots
-python run_pipeline.py --steps 3,4,5,6,7 --plots
+tradingcrab --steps 3,4,5,6,7 --plots
 
 # ④ RE-CLUSTER ONLY — update cluster assignments and save for downstream
-python run_pipeline.py --steps 3 --save-market-code --plots
+tradingcrab --steps 3 --save-market-code --plots
 
 # ⑤ DOWNSTREAM WITH NEW CLUSTER LABELS — use labels saved in ④
-python run_pipeline.py --steps 4,5,6,7 --market-code clustered --plots
+tradingcrab --steps 4,5,6,7 --market-code clustered --plots
 
 # ⑥ DOWNSTREAM WITH GROK SEED — overlay original AI labels
-python run_pipeline.py --steps 4,5,6,7 --market-code grok --plots
+tradingcrab --steps 4,5,6,7 --market-code grok --plots
 
 # ⑦ DOWNSTREAM WITH PREDICTED LABELS — use last step-5 predictions as seed
-python run_pipeline.py --steps 4,5,6,7 --market-code predicted --plots
+tradingcrab --steps 4,5,6,7 --market-code predicted --plots
 
 # ⑧ RECOMPUTE FEATURES WITHOUT RE-SCRAPING (e.g. after editing settings.yaml)
-python run_pipeline.py --recompute --steps 2,3,4,5,6,7 --plots
+tradingcrab --recompute --steps 2,3,4,5,6,7 --plots
 
 # ⑨ ETF DATA REFRESH ONLY (no macro re-scrape)
-python run_pipeline.py --steps 6,7 --refresh-assets --plots
+tradingcrab --steps 6,7 --refresh-assets --plots
 
 # ⑩ DEBUG A SINGLE STEP
-python run_pipeline.py --steps 3 --verbose --plots --show-plots
+tradingcrab --steps 3 --verbose --plots --show-plots
 ```
 
 #### Individual Step Scripts
@@ -272,23 +289,29 @@ pip install pandas-datareader openbb
 
 ### Dependency Notes
 
-| Package | Required? | Purpose |
+Dependencies are managed via `pyproject.toml` optional extras (not `requirements.txt`).
+
+| Extra group | Packages | Purpose |
 |---|---|---|
-| All in `requirements.txt` | Yes | Core pipeline |
-| `k-means-constrained` | Recommended | Balanced-size clustering; falls back to plain KMeans if absent |
-| `kneed` | Optional | Automated elbow detection for KMeans (via `[clustering-extras]`) |
-| `hdbscan` | Optional | Hierarchical DBSCAN (via `[clustering-extras]`) |
-| `pandas-datareader` | Optional | Stooq ETF fallback (via `[data-extras]`) |
-| `openbb` | Optional | Multi-provider ETF fallback (via `[data-extras]`) |
-| `requirements-dev.txt` extras | Dev only | pytest, JupyterLab, IPython kernel |
+| *(core)* | pandas, numpy, scikit-learn, scipy, pyarrow | Always installed with `trading-crab-lib` |
+| `[ingestion]` | fredapi, lxml, yfinance, requests | Data fetching from FRED, multpl, yfinance |
+| `[plotting]` | matplotlib, seaborn | Visualization |
+| `[hmm]` | hmmlearn, statsmodels | Hidden Markov Model + Markov switching |
+| `[clustering-extras]` | hdbscan, kneed | HDBSCAN + elbow detection |
+| `[boosting]` | lightgbm | LightGBM classifier |
+| `[all]` | All of the above | Everything |
+| `[dev]` | pytest, flake8, pytest-cov | Testing and linting |
 
-To upgrade all pinned dependencies to their latest compatible versions:
+Additional optional packages (not in extras):
 
-```bash
-pip install pip-tools
-pip-compile pyproject.toml --upgrade --output-file requirements.txt
-pip-compile pyproject.toml --extra dev --upgrade --output-file requirements-dev.txt
-```
+| Package | Purpose |
+|---|---|
+| `k-means-constrained` | Balanced-size clustering; falls back to plain KMeans if absent |
+| `pandas-datareader` | Stooq ETF fallback |
+| `openbb` | Multi-provider ETF fallback |
+
+Legacy `requirements.txt` / `requirements-dev.txt` files are still present for
+backward compatibility but `pyproject.toml` extras are the preferred install method.
 
 ---
 

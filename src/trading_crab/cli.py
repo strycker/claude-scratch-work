@@ -15,20 +15,11 @@ import sys
 def run_pipeline() -> None:
     """Run the full market-regime pipeline.
 
-    Wraps the existing ``run_pipeline.py`` main() function so it can be
-    invoked as ``tradingcrab`` from the command line after ``pip install trading-crab``.
+    Invoked as ``tradingcrab`` from the command line after ``pip install trading-crab``.
+    Delegates to ``trading_crab.pipeline.main()``.
     """
-    # run_pipeline.py lives at the repo root, not inside a package.
-    # Import its main() directly — it handles argparse and all step dispatch.
-    from pathlib import Path
-
-    repo_root = Path(__file__).parent.parent.parent
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
-
-    # Import after path adjustment
-    import run_pipeline as _rp  # noqa: E402
-    _rp.main()
+    from trading_crab.pipeline import main
+    main()
 
 
 def setup() -> None:
