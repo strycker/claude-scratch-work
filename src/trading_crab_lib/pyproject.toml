@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=68,<76", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-crab-lib"
+version = "0.1.2"
+description = "Market regime classification library — transforms, clustering, prediction, reporting"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{ name = "Strycker" }]
+keywords = ["finance", "clustering", "macroeconomics", "machine-learning", "time-series"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+# Core deps: pure data science + ML — no network/API/viz
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.25",
+    "pyarrow>=14.0",
+    "scikit-learn>=1.4",
+    "scipy>=1.11",
+    "pyyaml>=6.0",
+    "joblib>=1.3",
+    "python-dotenv>=1.0",
+]
+
+[project.urls]
+Homepage   = "https://github.com/strycker/trading-crab"
+Repository = "https://github.com/strycker/trading-crab"
+Issues     = "https://github.com/strycker/trading-crab/issues"
+Changelog  = "https://github.com/strycker/trading-crab/blob/main/STATE.md"
+
+[project.optional-dependencies]
+ingestion = [
+    "fredapi>=0.5",
+    "requests>=2.31",
+    "lxml>=4.9",
+    "beautifulsoup4>=4.12",
+    "yfinance>=0.2",
+    "certifi>=2024.0",
+]
+plotting = [
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+]
+hmm = [
+    "hmmlearn>=0.3",
+    "statsmodels>=0.14",
+]
+clustering-extras = [
+    "hdbscan>=0.8",
+    "kneed>=0.8",
+]
+boosting = [
+    "lightgbm>=4.0",
+]
+all = [
+    "trading-crab-lib[ingestion,plotting,hmm,clustering-extras,boosting]",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "flake8",
+]
+
+# pyproject.toml is at src/trading_crab_lib/ — look one level up (src/) for packages
+[tool.setuptools.packages.find]
+where   = [".."]
+include = ["trading_crab_lib*"]
+
+[tool.setuptools.package-data]
+trading_crab_lib = ["py.typed"]
