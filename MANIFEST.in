@@ -1,10 +1,20 @@
+# Root MANIFEST.in — for the `trading-crab` app sdist
+# The library (`trading-crab-lib`) has its own MANIFEST.in at src/trading_crab_lib/
+
 include LICENSE
 include README.md
 include pyproject.toml
-recursive-include src/trading_crab_lib py.typed
+
+# App package lives at src/trading_crab/
+recursive-include src/trading_crab *.py py.typed
+
+# The library is a separate sdist — exclude it from the app sdist
+prune src/trading_crab_lib
+
+# Exclude repo-only files
+exclude run_pipeline.py
 exclude config/email.yaml
 exclude config/email.local.yaml
-
 
 prune gsd-scratch-work
 prune trading-crab-lib
@@ -13,10 +23,9 @@ prune trading-crab
 prune pipelines
 prune scripts
 prune notebooks
-
-exclude run_pipeline.py
-
+prune legacy
 prune config
+prune tests
 
 prune data
 prune outputs
