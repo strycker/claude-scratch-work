@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+import matplotlib.patches
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
