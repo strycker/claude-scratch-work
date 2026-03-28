@@ -18,12 +18,12 @@ build/
 
 # Data — raw/processed data should not be versioned
 data/raw/
-data/processed/
-data/regimes/
-outputs/figures/
-outputs/models/
-outputs/plots/
-outputs/reports/
+# data/processed/
+# data/regimes/
+# outputs/figures/
+# outputs/models/
+# outputs/plots/
+# outputs/reports/
 
 # Secrets / API keys (always use .env instead)
 *.key
