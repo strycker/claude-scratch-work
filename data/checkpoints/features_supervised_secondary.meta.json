@@ -1,9 +1,9 @@
 {
   "name": "features_supervised_secondary",
-  "created": "2026-03-26T22:42:40.632080",
-  "config_hash": "e8cfb5c4",
+  "created": "2026-03-28T10:33:59.962250",
+  "config_hash": "eaaafd97",
   "rows": 305,
-  "columns": 92,
+  "columns": 98,
   "col_names": [
     "10yr_ustreas_d1",
     "10yr_ustreas_d2",
@@ -96,6 +96,12 @@
     "corr_sp500_10yr_ustreas_8q_d1",
     "cpi_acceleration",
     "cpi_acceleration_d1",
+    "log_fred_indpro_d1",
+    "log_fred_indpro_d2",
+    "log_fred_payems_d1",
+    "log_fred_payems_d2",
+    "log_fred_real_pce_d1",
+    "log_fred_real_pce_d2",
     "market_code"
   ],
   "index_start": "1950-03-31 00:00:00",
