@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+__version__ = "0.1.2"
+
 
 def _resolve_dir(env_var: str, default: Path) -> Path:
     """Return Path from *env_var* if set, otherwise *default*."""

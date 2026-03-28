@@ -3,70 +3,35 @@ requires = ["setuptools>=68,<76", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "trading-crab-lib"
-version = "0.1.0"
-description = "Market regime classification and prediction pipeline using macroeconomic data"
+name = "trading-crab"
+version = "0.1.2"
+description = "Market regime classification pipeline — CLI and pipeline orchestration"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
-authors = [
-    { name = "Strycker" },
-]
-keywords = [
-    "finance",
-    "trading-crab",
-    "clustering",
-    "macroeconomics",
-    "portfolio",
-    "time-series",
-    "machine-learning",
-]
+authors = [{ name = "Strycker" }]
+keywords = ["finance", "trading-crab", "macroeconomics", "portfolio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: Financial and Insurance Industry",
-    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Office/Business :: Financial :: Investment",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Typing :: Typed",
 ]
 dependencies = [
-    # Data
-    "pandas>=2.0",
-    "numpy>=1.25",
-    "pyarrow>=14.0",          # parquet I/O
-    # Data ingestion
-    "fredapi>=0.5",
-    "requests>=2.31",
-    "beautifulsoup4>=4.12",
-    "lxml>=4.9",              # fast HTML parser for BS4
-    # Feature engineering / ML
-    "scikit-learn>=1.4",
-    "scipy>=1.11",
-    "hmmlearn>=0.3",
-    "statsmodels>=0.14",
-    # Config
+    "trading-crab-lib>=0.1.2",   # the library this app wraps
     "pyyaml>=6.0",
-    # Visualization
-    "matplotlib>=3.8",
-    "seaborn>=0.13",
-    # Reporting (optional — add API key later)
     "python-dotenv>=1.0",
-    "yfinance>=0.2",              # ETF price history for step 06
-    "certifi>=2024.0",            # SSL CA bundle used by curl_cffi / yfinance
 ]
 
+[project.scripts]
+tradingcrab         = "trading_crab.cli:run_pipeline"
+tradingcrab-setup   = "trading_crab.cli:setup"
+tradingcrab-publish = "trading_crab.cli:publish_notebooks"
+
 [project.urls]
-Homepage = "https://github.com/strycker/claude-scratch-work"
-Repository = "https://github.com/strycker/claude-scratch-work"
-Issues = "https://github.com/strycker/claude-scratch-work/issues"
-Changelog = "https://github.com/strycker/claude-scratch-work/blob/main/STATE.md"
+Homepage   = "https://github.com/strycker/trading-crab"
+Repository = "https://github.com/strycker/trading-crab"
+Issues     = "https://github.com/strycker/trading-crab/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -76,31 +41,16 @@ dev = [
     "jupyterlab",
     "flake8",
 ]
-# Alternative / fallback ETF price data sources (used when yfinance fails).
-# Phase 3 — stooq via pandas-datareader: free, no API key, daily data back to ~1993.
-# Phase 4 — OpenBB: wraps multiple providers (cboe free; fmp/tiingo need API keys).
-data-extras = [
-    "pandas-datareader>=0.10",
-    "openbb>=4.1",
-]
-# Optional clustering backends and elbow detection utilities.
-# hdbscan — hierarchical DBSCAN; more robust than DBSCAN for varying densities.
-# kneed   — KneeLocator for automated elbow/knee detection on inertia curves.
-clustering-extras = [
-    "hdbscan>=0.8",
-    "kneed>=0.8",
-]
-# LightGBM gradient-boosted classifier (alternative to scikit-learn RF).
-boosting-extras = [
-    "lightgbm>=4.0",
-]
 
+# Find only the app package; the library has its own pyproject.toml
 [tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-trading_crab_lib = ["py.typed"]
+where   = ["src"]
+include = ["trading_crab"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths  = ["tests"]
 pythonpath = ["src"]
+
+# uv workspace: editable-installs both packages with a single `uv sync`
+[tool.uv.workspace]
+members = ["src/trading_crab_lib"]
