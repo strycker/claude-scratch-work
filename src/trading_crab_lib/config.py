@@ -68,6 +68,7 @@ def load_portfolio(portfolio_path: Path | None = None) -> dict[str, float]:
 
 
 def setup_logging(level: str = "INFO") -> None:
+    """Configure root logger with a timestamped format at the given *level*."""
     logging.basicConfig(
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",

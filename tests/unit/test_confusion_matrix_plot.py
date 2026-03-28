@@ -18,7 +18,7 @@ def test_confusion_matrix_runs_without_error():
     regime_names = {0: "Growth", 1: "Stag", 2: "Recession"}
     run_cfg = RunConfig(save_plots=False, show_plots=False)
 
-    with patch("trading_crab_lib.plotting._save_or_show") as mock_save:
+    with patch("trading_crab_lib.plotting.prediction._save_or_show") as mock_save:
         plot_confusion_matrix(y_true, y_pred, regime_names, run_cfg)
         mock_save.assert_called_once()
         fig = mock_save.call_args[0][0]
