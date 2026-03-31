@@ -1,8 +1,61 @@
 """Shared fixtures for all tests."""
 
+import os
+import shutil
+
 import numpy as np
 import pandas as pd
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint isolation
+# ---------------------------------------------------------------------------
+# All checkpoint I/O is redirected to a session-scoped temporary directory so
+# that pytest NEVER reads from or writes to the production data/checkpoints/
+# directory.  This prevents:
+#   • tests corrupting checkpoints that a production pipeline run relies on
+#   • non-deterministic behaviour when pytest is run between pipeline runs
+#
+# Strategy:
+#   1. At session start, copy every file from data/checkpoints/ (if it exists)
+#      into a fresh tmp dir.  Tests that need a real checkpoint as a read-only
+#      fixture will find it there ("read fallback").
+#   2. Patch trading_crab_lib.checkpoints.CHECKPOINT_DIR to point to the tmp
+#      dir so that every CheckpointManager() instantiated during the session
+#      uses it.  Because __init__ reads the module-level variable at call time
+#      (not class-definition time) the patch takes effect for all new instances.
+#   3. Set TC_CHECKPOINT_DIR env var so any subprocess or late-import also
+#      picks up the override.
+#   4. Restore everything on session teardown.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
+    """Route all checkpoint I/O to a session-scoped tmp dir.
+
+    Production data/checkpoints/ is never written to during pytest.
+    """
+    import trading_crab_lib.checkpoints as ckpt_mod
+
+    session_dir = tmp_path_factory.mktemp("checkpoints", numbered=False)
+
+    # Copy production checkpoints into session dir so read-based tests work
+    prod_dir = ckpt_mod.CHECKPOINT_DIR
+    if prod_dir.exists():
+        for src in prod_dir.iterdir():
+            shutil.copy2(src, session_dir / src.name)
+
+    # Redirect all CheckpointManager() instances to session_dir
+    original_checkpoint_dir = ckpt_mod.CHECKPOINT_DIR
+    ckpt_mod.CHECKPOINT_DIR = session_dir
+    os.environ["TC_CHECKPOINT_DIR"] = str(session_dir)
+
+    yield session_dir
+
+    # Restore — production directory is never touched
+    ckpt_mod.CHECKPOINT_DIR = original_checkpoint_dir
+    os.environ.pop("TC_CHECKPOINT_DIR", None)
 
 
 @pytest.fixture

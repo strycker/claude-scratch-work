@@ -48,6 +48,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -112,7 +113,11 @@ class CheckpointManager:
     """
 
     def __init__(self, checkpoint_dir: Path | None = None) -> None:
-        self.dir = checkpoint_dir or CHECKPOINT_DIR
+        if checkpoint_dir is not None:
+            self.dir = checkpoint_dir
+        else:
+            env_override = os.environ.get("TC_CHECKPOINT_DIR")
+            self.dir = Path(env_override) if env_override else CHECKPOINT_DIR
         self.dir.mkdir(parents=True, exist_ok=True)
 
     # ── DataFrame checkpoints ─────────────────────────────────────────────

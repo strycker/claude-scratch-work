@@ -28,8 +28,23 @@ def _load_step_module(script_name: str) -> types.ModuleType:
     return module
 
 
-step01 = _load_step_module("01_ingest.py")
-step02 = _load_step_module("02_features.py")
+# Guard against missing optional dependencies (fredapi, yfinance, etc.).
+# When ingestion deps are absent the step modules cannot be imported at
+# collection time, which would cause an ERROR rather than a SKIP.
+# Tests that require step01/step02 are marked accordingly below.
+try:
+    step01 = _load_step_module("01_ingest.py")
+    step02 = _load_step_module("02_features.py")
+    _INGESTION_DEPS_AVAILABLE = True
+except ImportError as _import_err:
+    step01 = step02 = None  # type: ignore[assignment]
+    _INGESTION_DEPS_AVAILABLE = False
+    _INGESTION_DEPS_REASON = str(_import_err)
+
+_requires_ingestion = pytest.mark.skipif(
+    not _INGESTION_DEPS_AVAILABLE,
+    reason=_INGESTION_DEPS_REASON if not _INGESTION_DEPS_AVAILABLE else "",
+)
 
 
 def _make_synthetic_macro() -> pd.DataFrame:
@@ -48,6 +63,7 @@ def cfg():
     return load()
 
 
+@_requires_ingestion
 def test_step01_ingest_writes_macro_raw_without_network(monkeypatch, tmp_path, cfg) -> None:
     """
     Smoke test for pipelines/01_ingest.py.
@@ -72,6 +88,7 @@ def test_step01_ingest_writes_macro_raw_without_network(monkeypatch, tmp_path, c
     pd.testing.assert_index_equal(loaded.index, synthetic.index)
 
 
+@_requires_ingestion
 def test_step02_features_writes_feature_artifacts_without_network(monkeypatch, tmp_path, cfg) -> None:
     """
     Smoke test for pipelines/02_features.py.
