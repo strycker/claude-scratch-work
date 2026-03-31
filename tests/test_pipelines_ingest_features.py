@@ -105,3 +105,57 @@ def test_step02_features_writes_feature_artifacts_without_network(monkeypatch, t
 
     assert not pd.read_parquet(features_path).empty
     assert not pd.read_parquet(features_sup_path).empty
+
+
+def test_fetch_and_cache_asset_prices_writes_checkpoint_from_raw_cache(
+    monkeypatch, tmp_path, cfg
+) -> None:
+    """
+    Regression test: _fetch_and_cache_asset_prices must write the asset_prices
+    checkpoint even when loading from the raw-parquet cache (i.e. when
+    refresh_asset_prices=False and data/raw/asset_prices.parquet already exists).
+
+    Previously the checkpoint was only written inside the fresh-fetch branch,
+    so a second pipeline run (without --refresh-assets) left the checkpoint
+    absent, causing the constraint tests to skip.
+
+    Note: CheckpointManager.CHECKPOINT_DIR is a module-level constant, so the
+    save lands in the real data/checkpoints/ directory (not tmp_path).  We verify
+    this by checking cm.load() succeeds after the call.
+    """
+    import trading_crab.pipeline as pipeline_module
+    from trading_crab_lib.checkpoints import CheckpointManager
+    from trading_crab_lib.runtime import RunConfig
+    from unittest.mock import patch
+
+    # Arrange: pre-populate data/raw/asset_prices.parquet in tmp_path
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir(parents=True)
+    prices_df = pd.DataFrame(
+        {"SPY": [100.0, 101.0], "GLD": [50.0, 51.0]},
+        index=pd.date_range("2023-03-31", periods=2, freq="QE"),
+    )
+    prices_df.to_parquet(raw_dir / "asset_prices.parquet")
+
+    # Redirect DATA_DIR so the function picks up the raw parquet from tmp_path
+    monkeypatch.setattr(pipeline_module, "DATA_DIR", tmp_path)
+
+    # Track whether cm.save() is called with "asset_prices"
+    saved_names: list[str] = []
+    original_save = CheckpointManager.save
+
+    def recording_save(self, df, name, *args, **kwargs):
+        saved_names.append(name)
+        return original_save(self, df, name, *args, **kwargs)
+
+    # Act: call without refresh — should load from raw cache and still checkpoint
+    run_cfg = RunConfig(refresh_asset_prices=False)
+    with patch.object(CheckpointManager, "save", recording_save):
+        result = pipeline_module._fetch_and_cache_asset_prices(cfg, run_cfg)
+
+    # Assert: function returned data and cm.save was called for asset_prices
+    assert not result.empty, "Expected non-empty prices from raw-cache fallback"
+    assert "asset_prices" in saved_names, (
+        "asset_prices checkpoint was not written when loading from raw-parquet cache. "
+        "This causes constraint tests to skip on every non-refresh run."
+    )

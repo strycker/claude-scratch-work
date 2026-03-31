@@ -279,7 +279,6 @@ def _fetch_and_cache_asset_prices(
                 raw_dir = DATA_DIR / "raw"
                 raw_dir.mkdir(parents=True, exist_ok=True)
                 prices.to_parquet(cache_path)
-                cm.save(prices, "asset_prices")
                 log.info(
                     "Step 1: fetched ETF prices — %d tickers, %d quarters",
                     len(prices.columns), len(prices),
@@ -290,6 +289,11 @@ def _fetch_and_cache_asset_prices(
     if prices.empty and cache_path.exists():
         prices = pd.read_parquet(cache_path)
         log.info("Step 1: loaded cached ETF prices (%d tickers)", len(prices.columns))
+
+    # Always sync to checkpoint so tests and downstream steps can use cm.load("asset_prices")
+    # regardless of whether prices came from a fresh fetch or the raw parquet cache.
+    if not prices.empty:
+        cm.save(prices, "asset_prices")
 
     return prices
 
