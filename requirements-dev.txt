@@ -1,14 +1,28 @@
 # Development extras — includes all runtime deps plus testing and notebooks.
 # Minimum version bounds for direct dev dependencies; compatible with Python 3.10+.
 #
-# To install:
+# To install (full suite — zero skips, zero warnings):
 #   pip install -r requirements-dev.txt
+#
+# To install (core only, ~46 tests skipped for optional deps):
+#   pip install -r requirements.txt pytest pytest-cov
 
 -r requirements.txt
 
 # Testing
 pytest>=8.0
 pytest-cov>=5.0
+
+# Optional deps required for a zero-skip test run.
+# These match the [project.optional-dependencies] extras in
+# src/trading_crab_lib/pyproject.toml — keep them in sync.
+hmmlearn>=0.3          # test_hmm.py           (~19 tests)
+statsmodels>=0.14      # test_markov.py         (~18 tests)
+hdbscan>=0.8           # test_density.py hdbscan block (~8 tests)
+lightgbm>=4.0          # test_lightgbm.py       (~5 tests)
+lxml>=4.9              # test_ingestion.py multpl scraper
+cssselect>=1.2         # test_ingestion.py cssselect scraper
+kneed>=0.8             # test_clustering_exploration.py knee detection
 
 # Notebooks
 ipykernel>=6.0

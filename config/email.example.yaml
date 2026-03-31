@@ -24,8 +24,9 @@ to_address: "your_email@gmail.com"   # can be the same as from_address
 # inline in the weekly email. Only files that exist are attached; missing
 # files are silently skipped.  Remove or set to [] to send plain text only.
 attach_plots:
-  - "03_regime_pca_scatter.png"
-  - "05_cv_fold_accuracy.png"
-  - "05_confusion_matrix.png"
-  - "07_forward_prob_evolution.png"
-  - "04_feature_regime_overlay.png"
+  - "03_regime_pca_scatter.png"       # current regime in PCA space
+  - "04_feature_regime_overlay.png"   # key indicators with regime bands
+  - "05_cv_fold_accuracy.png"         # model CV accuracy per fold
+  - "05_confusion_matrix.png"         # confusion matrix (latest fold)
+  - "07_forward_prob_evolution.png"   # forward transition probabilities
+  - "08_rrg_scatter.png"              # Relative Rotation Graph quadrants

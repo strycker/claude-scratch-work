@@ -8,6 +8,7 @@ import pytest
 
 from trading_crab_lib.email import (
     _build_html_body_with_plots,
+    _markdown_to_html,
     build_weekly_email_body,
     load_email_config,
     resolve_plot_paths,
@@ -257,6 +258,79 @@ def test_build_html_body_escapes_html():
     assert "&lt;script&gt;" in html
 
 
+def test_build_html_body_no_plots_still_renders_html():
+    """Without plots the body is still HTML-rendered markdown, not <pre>."""
+    body = "# Weekly Report\n\n## Regime\n\nAll good.\n"
+    html = _build_html_body_with_plots(body, [])
+    assert "<h1>" in html
+    assert "<h2>" in html
+    # No raw markdown syntax in output
+    assert "# Weekly" not in html
+    assert "## Regime" not in html
+
+
+# ── _markdown_to_html (P4) ────────────────────────────────────────────────────
+
+
+def test_markdown_to_html_h1():
+    html = _markdown_to_html("# Heading One")
+    assert "<h1>Heading One</h1>" in html
+
+
+def test_markdown_to_html_h2():
+    html = _markdown_to_html("## Heading Two")
+    assert "<h2>Heading Two</h2>" in html
+
+
+def test_markdown_to_html_bold():
+    html = _markdown_to_html("This is **bold** text.")
+    assert "<strong>bold</strong>" in html
+
+
+def test_markdown_to_html_list():
+    md = "- Apple\n- Banana\n- Cherry\n"
+    html = _markdown_to_html(md)
+    assert "<ul>" in html
+    assert "<li>Apple</li>" in html
+    assert "<li>Banana</li>" in html
+
+
+def test_markdown_to_html_list_closes_on_blank_line():
+    md = "- Item\n\nParagraph."
+    html = _markdown_to_html(md)
+    assert "</ul>" in html
+    # </ul> must come before the paragraph
+    assert html.index("</ul>") < html.index("Paragraph")
+
+
+def test_markdown_to_html_escapes_special_chars():
+    html = _markdown_to_html("<b>not bold</b>")
+    assert "<b>" not in html
+    assert "&lt;b&gt;" in html
+
+
+def test_markdown_to_html_full_report_snippet():
+    """A realistic snippet from write_weekly_report_md output is valid HTML."""
+    md = (
+        "# Weekly Regime Report\n\n"
+        "**Current regime:** 2 — Growth Boom\n\n"
+        "## Recommendations\n\n"
+        "**Strongest BUY ideas:**\n"
+        "- **SPY** — target +15.0% vs current\n\n"
+        "## Risk & regime transition\n\n"
+        "- To regime 1: 30%\n"
+    )
+    html = _markdown_to_html(md)
+    assert "<h1>" in html
+    assert "<h2>" in html
+    assert "<strong>" in html
+    assert "<ul>" in html
+    assert "<li>" in html
+    # No raw markdown syntax leaks through
+    assert "# Weekly" not in html
+    assert "**" not in html
+
+
 # ── send_weekly_email with plot attachments ──────────────────────────────────
 
 
@@ -283,8 +357,8 @@ def test_send_email_with_plot_attachments(mock_smtp_cls, tmp_path):
 
 
 @patch("trading_crab_lib.email.smtplib.SMTP")
-def test_send_email_without_plots_is_plain_text(mock_smtp_cls):
-    """No plot_paths → plain text email (backward compatible)."""
+def test_send_email_without_plots_has_html_alternative(mock_smtp_cls):
+    """No plot_paths → multipart/alternative with plain + HTML (P4: always render HTML)."""
     mock_smtp = MagicMock()
     mock_smtp_cls.return_value = mock_smtp
 
@@ -294,12 +368,12 @@ def test_send_email_without_plots_is_plain_text(mock_smtp_cls):
 
     sent_msg = mock_smtp.sendmail.call_args[0][2]
     assert "text/plain" in sent_msg
-    assert "text/html" not in sent_msg
+    assert "text/html" in sent_msg
 
 
 @patch("trading_crab_lib.email.smtplib.SMTP")
-def test_send_email_empty_plot_paths_is_plain_text(mock_smtp_cls):
-    """Empty plot_paths list → plain text email."""
+def test_send_email_empty_plot_paths_has_html_alternative(mock_smtp_cls):
+    """Empty plot_paths → multipart/alternative (no inline images but HTML body rendered)."""
     mock_smtp = MagicMock()
     mock_smtp_cls.return_value = mock_smtp
 
@@ -308,7 +382,9 @@ def test_send_email_empty_plot_paths_is_plain_text(mock_smtp_cls):
     assert result is True
 
     sent_msg = mock_smtp.sendmail.call_args[0][2]
-    assert "text/html" not in sent_msg
+    assert "text/html" in sent_msg
+    # No image parts when no plots provided
+    assert "image/" not in sent_msg
 
 
 @patch("trading_crab_lib.email.smtplib.SMTP")

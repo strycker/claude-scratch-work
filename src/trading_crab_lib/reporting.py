@@ -364,6 +364,57 @@ def save_recommendation_bundle(
     return output_path
 
 
+def _append_diagnostics_section(
+    lines: list[str],
+    diagnostics_df: pd.DataFrame | None,
+    rrg_df: pd.DataFrame | None,
+) -> None:
+    """Append a ## Diagnostics section to *lines* in-place (no-op when no data)."""
+    has_diag = diagnostics_df is not None and not diagnostics_df.empty
+    has_rrg = rrg_df is not None and not rrg_df.empty
+    if not has_diag and not has_rrg:
+        return
+
+    lines.append("## Diagnostics")
+    lines.append("")
+
+    if has_diag:
+        # Expect a DataFrame whose columns are ratio names and whose last row
+        # is the most-recent z-score value (or any numeric row).  Show the
+        # top-5 ratios by absolute z-score so the biggest macro dislocations
+        # appear first.
+        try:
+            last = diagnostics_df.iloc[-1].dropna()
+            top5 = last.abs().sort_values(ascending=False).head(5)
+            if not top5.empty:
+                lines.append("**Ratio z-scores (largest dislocations):**")
+                for name, _ in top5.items():
+                    z = last[name]
+                    direction = "HIGH" if z > 0 else "LOW"
+                    lines.append(f"- {name}: z={z:+.2f} ({direction})")
+                lines.append("")
+        except Exception:
+            pass  # malformed diagnostics_df — skip silently
+
+    if has_rrg:
+        # Expect a DataFrame with at least a 'quadrant' column (from compute_rrg).
+        try:
+            if "quadrant" in rrg_df.columns:
+                counts = rrg_df["quadrant"].value_counts()
+                lines.append("**RRG quadrant counts (latest quarter):**")
+                for quad in ("LEADING", "IMPROVING", "WEAKENING", "LAGGING"):
+                    n = counts.get(quad, 0)
+                    lines.append(f"- {quad}: {n} asset(s)")
+                # List the leading assets by name if available
+                if "asset" in rrg_df.columns:
+                    leading = rrg_df[rrg_df["quadrant"] == "LEADING"]["asset"].tolist()
+                    if leading:
+                        lines.append(f"  Leading: {', '.join(leading)}")
+                lines.append("")
+        except Exception:
+            pass  # malformed rrg_df — skip silently
+
+
 def write_weekly_report_md(
     current_regime: int,
     regime_name: str,
@@ -371,9 +422,26 @@ def write_weekly_report_md(
     rec_df: pd.DataFrame,
     transition_row: pd.Series | None,
     output_path: Path,
+    diagnostics_df: pd.DataFrame | None = None,
+    rrg_df: pd.DataFrame | None = None,
 ) -> Path:
     """
-    Write weekly_report.md: regime summary, BUY/SELL bullets, risk/transition note.
+    Write weekly_report.md: regime summary, BUY/SELL bullets, risk/transition note,
+    diagnostics (ratio z-scores + RRG quadrant counts).
+
+    Args:
+        current_regime:       Integer cluster label for the current quarter.
+        regime_name:          Human-readable name for the current regime.
+        regime_probabilities: Dict mapping regime int → predicted probability.
+        rec_df:               DataFrame with columns signal/delta_pct/current_pct/target_pct.
+        transition_row:       Row of transition matrix for the current regime (or None).
+        output_path:          Where to write the markdown file.
+        diagnostics_df:       Optional DataFrame with rolling z-score ratio columns
+                              (from diagnostics.compute_rrg or a ratio DataFrame).
+                              When provided, top-5 ratios by |z| are shown.
+        rrg_df:               Optional DataFrame with columns [asset, quadrant] from
+                              diagnostics.compute_rrg(). When provided, quadrant counts
+                              are shown.
     """
     lines = [
         "# Weekly Regime Report",
@@ -444,6 +512,9 @@ def write_weekly_report_md(
         except Exception:
             # Do not let a malformed tactics file break the report.
             pass
+
+    # Optional diagnostics section: ratio z-scores + RRG quadrant counts
+    _append_diagnostics_section(lines, diagnostics_df, rrg_df)
 
     text = "\n".join(lines)
     output_path.parent.mkdir(parents=True, exist_ok=True)

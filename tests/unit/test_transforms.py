@@ -174,3 +174,80 @@ class TestApplyDerivatives:
         d1 = result["x_d1"].dropna()
         # All values should be nearly the same (constant slope)
         assert d1.std() < d1.mean() * 0.1
+
+
+# ── Determinism tests (P2 — non-determinism fix) ──────────────────────────
+
+
+class TestGapFillDeterminism:
+    """gap fill must produce identical results regardless of whether
+    market_code is present, and must be idempotent across runs."""
+
+    def _make_gapped_df(self, quarterly_index):
+        vals = np.linspace(1.0, 20.0, 20).tolist()
+        vals[5] = np.nan
+        vals[6] = np.nan
+        vals[14] = np.nan
+        return pd.DataFrame({"x": vals}, index=quarterly_index)
+
+    def test_gap_fill_idempotent(self, quarterly_index):
+        """Running gap fill twice on the same input gives identical output."""
+        df = self._make_gapped_df(quarterly_index)
+        result1 = apply_gap_fill(df.copy())
+        result2 = apply_gap_fill(df.copy())
+        pd.testing.assert_frame_equal(result1, result2)
+
+    def test_gap_fill_independent_of_market_code(self, quarterly_index):
+        """Gap fill on col X must not change when market_code is added/changed."""
+        df_no_mc = self._make_gapped_df(quarterly_index)
+        result_no_mc = apply_gap_fill(df_no_mc.copy())
+
+        # Add market_code with NaN at a position that overlaps one gap
+        df_with_mc = df_no_mc.copy()
+        mc_vals = np.zeros(20)
+        mc_vals[6] = np.nan  # overlaps with gap; previously changed valid-row set
+        df_with_mc["market_code"] = mc_vals
+        result_with_mc = apply_gap_fill(df_with_mc.copy())
+
+        # Feature column 'x' must be identical in both results
+        pd.testing.assert_series_equal(
+            result_no_mc["x"],
+            result_with_mc["x"],
+            check_names=False,
+        )
+
+    def test_gap_fill_market_code_column_untouched(self, quarterly_index):
+        """Gap fill must not modify market_code values."""
+        vals = np.linspace(1.0, 20.0, 20).tolist()
+        vals[5] = np.nan
+        mc = list(range(20))
+        mc[5] = np.nan  # intentional NaN in market_code
+        df = pd.DataFrame({"x": vals, "market_code": mc}, index=quarterly_index)
+        result = apply_gap_fill(df)
+        # market_code NaN should remain NaN (gap fill skips it)
+        assert np.isnan(result["market_code"].iloc[5])
+
+
+class TestDerivativesDeterminism:
+    """apply_derivatives must not change when market_code is present."""
+
+    def test_derivatives_independent_of_market_code(self, quarterly_index):
+        """Derivatives of col x must be identical with and without market_code."""
+        df_base = pd.DataFrame(
+            {"x": np.linspace(1.0, 20.0, 20)},
+            index=quarterly_index,
+        )
+        result_no_mc = apply_derivatives(df_base.copy())
+
+        mc_vals = np.zeros(20)
+        mc_vals[10] = np.nan  # NaN in market_code
+        df_with_mc = df_base.copy()
+        df_with_mc["market_code"] = mc_vals
+        result_with_mc = apply_derivatives(df_with_mc.copy())
+
+        for col in ("x_d1", "x_d2", "x_d3"):
+            pd.testing.assert_series_equal(
+                result_no_mc[col],
+                result_with_mc[col],
+                check_names=False,
+            )

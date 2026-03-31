@@ -117,6 +117,38 @@ make notebooks      # Launch JupyterLab
 make help           # Show all available targets
 ```
 
+### Running Tests
+
+```bash
+# Core test run (requires only core deps; ~46 tests skipped for optional deps)
+pytest tests/ -v
+
+# Full test run — zero skips, zero warnings (requires requirements-dev.txt)
+pip install -r requirements-dev.txt
+pytest tests/ -v
+
+# Run a specific module's tests
+pytest tests/unit/test_transforms.py -v
+
+# Run with coverage report
+pytest tests/ --cov=src/trading_crab_lib --cov-report=term-missing
+```
+
+**Optional dependencies and which tests they unlock:**
+
+| Package | Tests | Install |
+|---------|-------|---------|
+| `hmmlearn>=0.3` | `test_hmm.py` (~19 tests) | `pip install hmmlearn` |
+| `statsmodels>=0.14` | `test_markov.py` (~18 tests) | `pip install statsmodels` |
+| `hdbscan>=0.8` | `test_density.py` hdbscan block | `pip install hdbscan` |
+| `lightgbm>=4.0` | `test_lightgbm.py` (~5 tests) | `pip install lightgbm` |
+| `lxml>=4.9` + `cssselect>=1.2` | `test_ingestion.py` multpl scraper | `pip install lxml cssselect` |
+| `kneed>=0.8` | `test_clustering_exploration.py` knee detection | `pip install kneed` |
+
+All warnings from `statsmodels` optimization on synthetic data are suppressed via
+`[tool.pytest.ini_options] filterwarnings` in `pyproject.toml` — they are harmless
+numerical artefacts from short synthetic series and do not affect correctness.
+
 ### Running the Pipeline
 
 #### All CLI Flags

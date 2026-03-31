@@ -14,9 +14,15 @@ from trading_crab_lib.markov import (
     markov_probabilities,
 )
 
-pytestmark = pytest.mark.skipif(
-    not _STATSMODELS_AVAILABLE, reason="statsmodels not installed"
-)
+pytestmark = [
+    pytest.mark.skipif(not _STATSMODELS_AVAILABLE, reason="statsmodels not installed"),
+    # statsmodels MarkovRegression emits numpy overflow / divide-by-zero warnings
+    # during MLE optimisation on short synthetic series — harmless numerical
+    # artefacts that do not affect correctness.  Suppressed here and in
+    # pyproject.toml [tool.pytest.ini_options] filterwarnings.
+    pytest.mark.filterwarnings("ignore::RuntimeWarning"),
+    pytest.mark.filterwarnings("ignore:A date index has been provided:UserWarning"),
+]
 
 
 @pytest.fixture
@@ -24,6 +30,8 @@ def gdp_growth() -> pd.Series:
     """Synthetic GDP growth with clear 2-regime structure."""
     rng = np.random.RandomState(42)
     n = 120
+    # freq="QS" + explicit Period freq ensures statsmodels sees a valid freq
+    # attribute and does not emit a ValueWarning about missing frequency.
     idx = pd.date_range("1990-01-01", periods=n, freq="QS")
 
     # Two regimes: expansion (mean=3.0) and recession (mean=-1.5)
