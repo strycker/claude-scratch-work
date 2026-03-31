@@ -14,11 +14,13 @@ All transforms append new columns; originals are retained until the
 explicit selection steps.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 import numpy as np
 import pandas as pd
-from typing import Any
 from scipy.interpolate import BPoly
 
 log = logging.getLogger(__name__)
@@ -138,14 +140,13 @@ def _fill_column(df: pd.DataFrame, col: str, window: int) -> pd.Series:
     Bernstein polynomial is fitted through the boundary values and their
     smoothed derivatives.  Leading/trailing gaps use a Taylor expansion.
 
-    market_code is optional: when present, valid rows are those where both
-    the feature column and market_code are non-NaN.  When absent, valid rows
-    are those where the feature column itself is non-NaN.
+    Valid rows are determined solely by whether the feature column itself
+    is non-NaN.  market_code is intentionally excluded from this check:
+    its NaN pattern varies depending on which label source was loaded
+    (--market-code grok vs clustered), which would make gap-fill results
+    non-deterministic across pipeline runs.
     """
-    if "market_code" in df.columns:
-        valid = df[[col, "market_code"]].dropna()
-    else:
-        valid = df[[col]].dropna()
+    valid = df[[col]].dropna()
     if valid.empty:
         return df[col]
 
@@ -221,10 +222,7 @@ def apply_derivatives(
     df = df.copy()
     feature_cols = [c for c in df.columns if c != "market_code"]
     for col in feature_cols:
-        if "market_code" in df.columns:
-            valid = df[[col, "market_code"]].dropna()
-        else:
-            valid = df[[col]].dropna()
+        valid = df[[col]].dropna()
         if valid.empty:
             continue
         d1, d2, d3 = _compute_derivatives(valid[col], window=window, causal=causal)

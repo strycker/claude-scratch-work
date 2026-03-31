@@ -580,6 +580,13 @@ diagnostics:
     - SPY
     - VT
 
+# ── Pipeline-level settings ───────────────────────────────────────────────────
+pipeline:
+  # Global random seed applied at pipeline startup via np.random.seed() and
+  # random.seed().  Individual sklearn models also receive this as random_state.
+  # Change only when benchmarking clustering stability across seed values.
+  random_state: 42
+
 # ── Tactics (Phase 10A) ────────────────────────────────────────────────────────
 tactics:
   vol_windows: [5, 20, 60]

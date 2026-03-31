@@ -285,7 +285,7 @@ Each session should:
 | P1b | DONE | claude/review-meta-plan-Sqot2 | Sections 5–7 |
 | P1c | DONE | claude/review-meta-plan-Sqot2 | Sections 8–10 |
 | P1d | DONE | claude/review-meta-plan-Sqot2 | Section 11 + commit/push |
-| P2 | NOT STARTED | | Critical determinism fix |
+| P2 | DONE | claude/review-meta-plan-Sqot2 | Critical determinism fix |
 | P3 | NOT STARTED | | Pytest warnings + local setup |
 | P4 | NOT STARTED | | Email enhancements |
 | P5 | NOT STARTED | | Update NEXT_STEPS.md |

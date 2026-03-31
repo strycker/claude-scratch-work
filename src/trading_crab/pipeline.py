@@ -143,6 +143,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import random
 import shutil
 import sys
 from datetime import date
@@ -759,7 +760,14 @@ def step5_predict(cfg: dict, run_cfg: RunConfig) -> None:
     labels = _load_parquet(DATA_DIR / "regimes" / "cluster_labels.parquet", "cluster_labels")["balanced_cluster"]
 
     common = features.index.intersection(labels.index)
-    X = features.loc[common].drop(columns=["market_code"], errors="ignore").dropna(axis=1, how="any")
+    X_raw = features.loc[common].drop(columns=["market_code"], errors="ignore")
+    nan_cols = X_raw.columns[X_raw.isna().any()].tolist()
+    if nan_cols:
+        log.warning(
+            "Step 5: dropping %d column(s) with NaN values (consider fixing gap-fill): %s",
+            len(nan_cols), nan_cols,
+        )
+    X = X_raw.dropna(axis=1, how="any")
     y = labels.loc[common]
 
     current_model = train_current_regime(X, y, cfg)
@@ -1297,6 +1305,15 @@ def main() -> None:
     run_cfg.apply_logging()
 
     cfg = load()
+
+    # Set global random seeds for reproducibility.  Individual sklearn models
+    # also use random_state=42, but np.random.seed() is needed for any code
+    # path that calls np.random without an explicit seed (e.g. KMeans n_init).
+    _seed = cfg.get("pipeline", {}).get("random_state", 42)
+    import numpy as np
+    np.random.seed(_seed)
+    random.seed(_seed)
+    log.info("Global random seed set to %d (pipeline.random_state)", _seed)
 
     # Determine which steps to run
     if args.steps:
