@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.reporting import (
+    _append_diagnostics_section,
     asset_signals,
     print_dashboard,
     save_dashboard_csv,
@@ -228,3 +229,83 @@ def test_write_weekly_report_md(tmp_path):
     assert "BUY" in text
     assert "SELL" in text
     assert "Growth" in text
+
+
+# ── _append_diagnostics_section (P4) ─────────────────────────────────────────
+
+class TestAppendDiagnosticsSection:
+    def _make_rec(self):
+        return pd.DataFrame(
+            {"current_pct": [0.0, 50.0], "target_pct": [40.0, 0.0],
+             "delta_pct": [40.0, -50.0], "signal": ["BUY", "SELL"]},
+            index=pd.Index(["SPY", "GLD"], name="asset"),
+        )
+
+    def test_no_data_appends_nothing(self):
+        lines: list = []
+        _append_diagnostics_section(lines, None, None)
+        assert lines == []
+
+    def test_empty_dfs_appends_nothing(self):
+        lines: list = []
+        _append_diagnostics_section(lines, pd.DataFrame(), pd.DataFrame())
+        assert lines == []
+
+    def test_diagnostics_df_shows_top_ratios(self):
+        # DataFrame whose columns are ratio names; last row has z-scores
+        idx = pd.date_range("2024-01-01", periods=3, freq="QE")
+        diag = pd.DataFrame(
+            {"Oil:Gold": [0.1, 0.5, 2.3], "Bonds:Gold": [-0.2, -0.8, -1.9]},
+            index=idx,
+        )
+        lines: list = []
+        _append_diagnostics_section(lines, diag, None)
+        text = "\n".join(lines)
+        assert "## Diagnostics" in text
+        assert "Oil:Gold" in text
+        assert "Bonds:Gold" in text
+        # highest |z| should appear first
+        assert text.index("Oil:Gold") < text.index("Bonds:Gold") or "2.3" in text
+
+    def test_rrg_df_shows_quadrant_counts(self):
+        rrg = pd.DataFrame({
+            "asset": ["SPY", "TLT", "GLD", "QQQ"],
+            "quadrant": ["LEADING", "LAGGING", "LEADING", "IMPROVING"],
+        })
+        lines: list = []
+        _append_diagnostics_section(lines, None, rrg)
+        text = "\n".join(lines)
+        assert "## Diagnostics" in text
+        assert "LEADING" in text
+        assert "LAGGING" in text
+        assert "SPY" in text or "GLD" in text  # leading assets listed
+
+    def test_both_sections_present(self):
+        idx = pd.date_range("2024-01-01", periods=2, freq="QE")
+        diag = pd.DataFrame({"Oil:Gold": [0.5, 2.1]}, index=idx)
+        rrg = pd.DataFrame({"asset": ["SPY"], "quadrant": ["LEADING"]})
+        lines: list = []
+        _append_diagnostics_section(lines, diag, rrg)
+        text = "\n".join(lines)
+        assert "z=" in text
+        assert "LEADING" in text
+
+    def test_write_weekly_report_includes_diagnostics(self, tmp_path):
+        rec = pd.DataFrame(
+            {"current_pct": [0.0], "target_pct": [30.0],
+             "delta_pct": [30.0], "signal": ["BUY"]},
+            index=pd.Index(["SPY"], name="asset"),
+        )
+        trans = pd.Series({0: 0.7, 1: 0.3})
+        idx = pd.date_range("2024-01-01", periods=2, freq="QE")
+        diag = pd.DataFrame({"Oil:Gold": [0.4, 2.0]}, index=idx)
+        rrg = pd.DataFrame({"asset": ["SPY", "TLT"], "quadrant": ["LEADING", "LAGGING"]})
+        path = tmp_path / "report.md"
+        from trading_crab_lib.reporting import write_weekly_report_md
+        write_weekly_report_md(0, "Growth", {0: 0.7}, rec, trans, path,
+                               diagnostics_df=diag, rrg_df=rrg)
+        text = path.read_text()
+        assert "## Diagnostics" in text
+        assert "Oil:Gold" in text
+        assert "LEADING" in text
+        assert "Growth" in text

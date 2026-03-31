@@ -196,29 +196,92 @@ def resolve_plot_paths(
     return resolved
 
 
-def _build_html_body_with_plots(plain_text: str, plot_paths: list[Path]) -> str:
+def _markdown_to_html(text: str) -> str:
     """
-    Build an HTML email body with inline plot images.
+    Lightweight markdown → HTML conversion for the weekly report.
 
-    The plain text report is wrapped in <pre> tags, followed by inline
-    images referencing Content-ID attachments.
+    Handles the subset of markdown used by write_weekly_report_md():
+    - ## headings → <h2>
+    - # headings  → <h1>
+    - **bold**    → <strong>
+    - - list item → <li> wrapped in <ul>
+    - blank lines → paragraph breaks
+
+    Uses stdlib only (no external markdown library required).
     """
     import html as html_mod
+    import re
 
-    escaped = html_mod.escape(plain_text)
+    lines = text.splitlines()
+    html_lines: list[str] = []
+    in_ul = False
+
+    for line in lines:
+        # Headings
+        if line.startswith("## "):
+            if in_ul:
+                html_lines.append("</ul>")
+                in_ul = False
+            content = html_mod.escape(line[3:])
+            html_lines.append(f"<h2>{content}</h2>")
+        elif line.startswith("# "):
+            if in_ul:
+                html_lines.append("</ul>")
+                in_ul = False
+            content = html_mod.escape(line[2:])
+            html_lines.append(f"<h1>{content}</h1>")
+        # Unordered list items
+        elif line.startswith("- "):
+            if not in_ul:
+                html_lines.append("<ul>")
+                in_ul = True
+            content = html_mod.escape(line[2:])
+            # inline **bold**
+            content = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", content)
+            html_lines.append(f"<li>{content}</li>")
+        # Blank line
+        elif line.strip() == "":
+            if in_ul:
+                html_lines.append("</ul>")
+                in_ul = False
+            html_lines.append("<br>")
+        # Normal paragraph line
+        else:
+            if in_ul:
+                html_lines.append("</ul>")
+                in_ul = False
+            content = html_mod.escape(line)
+            # inline **bold**
+            content = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", content)
+            html_lines.append(f"<p>{content}</p>")
+
+    if in_ul:
+        html_lines.append("</ul>")
+
+    return "\n".join(html_lines)
+
+
+def _build_html_body_with_plots(plain_text: str, plot_paths: list[Path]) -> str:
+    """
+    Build an HTML email body: markdown-rendered report body followed by
+    inline plot images referencing Content-ID attachments.
+    """
+    html_body = _markdown_to_html(plain_text)
     parts = [
         "<html><body>",
-        f'<pre style="font-family: monospace; white-space: pre-wrap;">{escaped}</pre>',
-        "<hr>",
-        "<h3>Key Plots</h3>",
+        html_body,
     ]
-    for i, path in enumerate(plot_paths):
-        cid = f"plot_{i}"
-        parts.append(
-            f'<p><strong>{path.stem}</strong></p>'
-            f'<img src="cid:{cid}" alt="{path.stem}" '
-            f'style="max-width: 100%; height: auto;">'
-        )
+    if plot_paths:
+        parts += ["<hr>", "<h3>Key Plots</h3>"]
+        for i, path in enumerate(plot_paths):
+            cid = f"plot_{i}"
+            import html as html_mod
+            stem = html_mod.escape(path.stem)
+            parts.append(
+                f'<p><strong>{stem}</strong></p>'
+                f'<img src="cid:{cid}" alt="{stem}" '
+                f'style="max-width: 100%; height: auto;">'
+            )
     parts.append("</body></html>")
     return "\n".join(parts)
 
@@ -297,12 +360,14 @@ def send_weekly_email(
 
         log.info("Built HTML email with %d inline plot(s)", len(plot_paths))
     else:
-        # Plain text email (original behavior)
-        msg = MIMEMultipart()
+        # Multipart/alternative: plain text + HTML (no inline images)
+        msg = MIMEMultipart("alternative")
         msg["From"] = from_addr
         msg["To"] = ", ".join(recipients)
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
+        html_body = _build_html_body_with_plots(body, [])
+        msg.attach(MIMEText(html_body, "html"))
 
     use_ssl = config.get("use_ssl", False)
     host = config["smtp_host"]
