@@ -13,8 +13,9 @@ Updated: March 2026.
 | 2     | Regime Clustering and Interpretation          | 2/2            | Complete    | 2026-03-16 |
 | 3     | Supervised Regime and Behavior Models         | 3/3            | Complete    | 2026-03-18 |
 | 4     | Pipeline Monitoring & Notebook Expansion      | All done (A-E) | Complete    | 2026-03-27 |
-| 5     | Recommendations and Machine-Readable Outputs  | 0/0            | Not started | -          |
-| 6     | Weekly Report Pipeline                        | 0/0            | Not started | -          |
+| 5     | Audit & Hardening (META_PLAN P1–P5)           | P1–P5 done     | In progress | 2026-03-31 |
+| 6     | Test Hardening + CI/CD (META_PLAN H, J)       | —              | Not started | -          |
+| 7     | Migration Prep + Advanced Features (K, F)     | —              | Not started | -          |
 
 ### Phase 1 Plans (3 plans — all complete)
 - [x] `01-null-01-PLAN.md` — Data ingestion foundations and checkpoint system
@@ -412,12 +413,13 @@ Implementation approach (when ready):
 - ~~Package rename to `trading_crab_lib`~~ → ✅ complete
 - ~~Expand ETF universe to 38~~ → ✅ in settings.yaml
 - ~~HOUST + UMCSENT FRED series~~ → ✅ added
+- ~~Non-determinism fix (market_code in gap-fill/derivatives)~~ → ✅ META_PLAN P2 done
+- ~~Pytest warnings (statsmodels RuntimeWarning)~~ → ✅ META_PLAN P3 done
+- ~~Email Diagnostics section + HTML rendering~~ → ✅ META_PLAN P4 done
 
-**Next priorities (March 2026):**
-1. Add remaining FRED series (INDPRO, PAYEMS, DPCERA3Q086SBEA) — `S`, quick config additions
-2. Implement macrotrends.net scraper (gold/oil pre-1993 backfill) — `M`, extends data to 1915+
-3. LightGBM flat-API integration for production use — `M`, `gradient_boosting.py` exists but not in flat API
-4. Cross-asset divergence features (new item 2.15) — `L`, phased implementation
-5. Momentum and cross-asset ratio features (item 2.12) — `M`, pairs well with divergence features
-6. HMM regime detection (item 2.9) — `M`, temporal structure alternative to KMeans
-7. Backtest framework (item 3.5) — `XL`, validates the full strategy end-to-end
+**Next priorities (April 2026):**
+1. **Phase H — Test hardening** — smoke tests for `trading_crab.pipeline` + `trading_crab.cli`; integration test in `tests/integration/`
+2. **Phase J — CI/CD cleanup** — deduplicate 6 workflow files → 3; add mypy; add pre-commit hooks
+3. **Phase K — Migration prep** — config independence for library; Dockerfile; settings.yaml schema validation
+4. Add remaining FRED series (INDPRO, PAYEMS, DPCERA3Q086SBEA) — `S`, quick config additions
+5. Backtest framework (item 3.5) — `XL`, validates the full strategy end-to-end

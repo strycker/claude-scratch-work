@@ -1698,3 +1698,64 @@ Completed all 3 items from `MONITORING_EXPANSION_PLAN.md` Phase E:
 1 existing test in `tests/test_scripts_weekly_report.py` updated for new kwarg.
 
 This completes Phase 4 (Pipeline Monitoring & Notebook Expansion) — all phases A through E done.
+
+### D40. Non-determinism root causes fixed (META_PLAN P2) (2026-03-31)
+
+Three independent sources of non-determinism eliminated:
+
+**Root cause 1 — `market_code` in gap-fill valid-row logic** (`transforms.py`):
+`_fill_column()` and `apply_derivatives()` previously used `df[[col, "market_code"]].dropna()`
+to find valid rows. `market_code` NaN patterns differ by label source (`--market-code grok`
+vs `clustered` vs `predicted`), so gap-fill boundaries changed between runs, altering all
+downstream derivative values. Fix: use only `df[[col]].dropna()` — the feature column alone
+determines valid rows. `market_code` is a label, not a feature.
+
+**Root cause 2 — No global numpy/random seed** (`pipeline.py:main()`):
+Individual sklearn models had `random_state=42`, but any stochastic operation not explicitly
+seeded was non-deterministic. Fix: `np.random.seed(seed)` and `random.seed(seed)` are called
+once at the start of `main()`, seeded from `cfg["pipeline"]["random_state"]` (default 42).
+
+**Root cause 3 — Silent `dropna(axis=1)` in step 5** (`pipeline.py:step5_predict()`):
+Different NaN patterns (caused by root cause 1) produced different surviving column sets,
+giving the RF different features across runs. Fix: log a WARNING listing every dropped column
+so the user can see the variability. Long-term fix: pin the column list explicitly.
+
+**New `pipeline.random_state` config key** in `settings.yaml` under `[pipeline]` section.
+**4 new determinism tests** in `test_transforms.py`.
+**`from __future__ import annotations`** added to `transforms.py` (was the last missing module).
+
+### D41. Pytest warnings suppressed (META_PLAN P3) (2026-03-31)
+
+**statsmodels warnings** from `test_markov.py` suppressed at two levels:
+1. `[tool.pytest.ini_options] filterwarnings` in `pyproject.toml` — message-pattern filters
+   that work even when statsmodels is not installed (avoids `PytestConfigWarning`).
+2. `pytestmark` in `test_markov.py` upgraded from single `skipif` to a list including
+   `filterwarnings` marks.
+
+**`requirements-dev.txt`** updated with all optional deps required for a zero-skip run:
+`hmmlearn`, `statsmodels`, `hdbscan`, `lightgbm`, `lxml`, `cssselect`, `kneed`. Each
+annotated with which test file it unlocks.
+
+**README.md** gains a "Running Tests" subsection with a table mapping packages to unlocked
+tests and a note on why statsmodels warnings are suppressed.
+
+### D42. Email enhancements — Diagnostics section + HTML rendering (META_PLAN P4) (2026-03-31)
+
+**`write_weekly_report_md()` API extended** with two optional kwargs:
+- `diagnostics_df` — DataFrame of ratio z-scores; top-5 by |z| shown under `## Diagnostics`
+  with direction (HIGH/LOW) tag.
+- `rrg_df` — DataFrame[asset, quadrant] from `compute_rrg()`; LEADING/IMPROVING/WEAKENING/
+  LAGGING counts + leading asset names shown.
+Both are handled by new `_append_diagnostics_section()` helper. Fully backward-compatible —
+existing callers without these args see no change.
+
+**`_markdown_to_html()` added to `email.py`** — stdlib-only markdown → HTML conversion for
+the weekly report subset (`##`, `#`, `**bold**`, `- list`). XSS-safe via `html.escape()`.
+No external markdown dep (no `markdown`, `mistune`, or `pygments` required).
+
+**All emails now send `multipart/alternative`** (plain + HTML). Previously the no-plots path
+sent plain text only; now both paths include an HTML alternative so email clients always
+render structured headings and lists rather than raw markdown syntax.
+
+**`_build_html_body_with_plots()` rewritten** to use `_markdown_to_html()` instead of
+`<pre>`-wrapping. HTML body is now readable in any email client without monospace overrides.

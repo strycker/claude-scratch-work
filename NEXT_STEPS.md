@@ -347,29 +347,124 @@ F1–F3 are Tier 1 (high priority); F4–F6 are Tier 2 (deferred).
 
 ---
 
+### Phase G — Determinism & Reproducibility ✅ DONE (META_PLAN P2)
+
+Fixes for the three non-determinism root causes discovered in the 2026-03-30 audit.
+**All tasks complete** — merged in PR on branch `claude/review-meta-plan-Sqot2`.
+
+| Task | Description | Size | Status |
+|---|---|---|---|
+| **G1** | Remove `market_code` from `_fill_column()` valid-row logic in `transforms.py` | S | ✅ Done |
+| **G2** | Remove `market_code` from `apply_derivatives()` valid-row logic in `transforms.py` | S | ✅ Done |
+| **G3** | Set global seeds (`np.random.seed`, `random.seed`) in `pipeline.py:main()` | S | ✅ Done |
+| **G4** | Add `pipeline.random_state` key to `config/settings.yaml` | S | ✅ Done |
+| **G5** | Log which columns are dropped by `dropna(axis=1)` in `step5_predict()` | S | ✅ Done |
+| **G6** | Add determinism tests: gap-fill and derivatives independent of market_code | S | ✅ Done |
+| **G7** | Add `from __future__ import annotations` to `transforms.py` | S | ✅ Done |
+
+---
+
+### Phase H — Test Hardening
+
+Fill coverage gaps in the app package and add integration tests.
+Depends on: Phase G (determinism), Phase C (2-package structure).
+
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **H1** | Smoke tests for `trading_crab.pipeline` — test `build_parser()`, test `main()` with `--help`, test step dispatch with mocked step functions | M | — |
+| **H2** | Smoke tests for `trading_crab.cli` — test each entry point (`run_pipeline`, `setup`, `publish_notebooks`) with minimal mocks | S | — |
+| **H3** | `tests/integration/` — mini end-to-end test: synthetic `macro_raw` → step 2 → step 3 → step 4, assert output shapes and checkpoint presence, using `tmp_path` | M | G (determinism) |
+| **H4** | Determinism regression tests — run `engineer_all()` and `fit_clusters()` twice on fixed synthetic input, assert bit-for-bit identical output | S | G |
+| **H5** | Add `[tool.mypy]` to `pyproject.toml` with basic strict settings; add mypy run to CI | S | — |
+| **H6** | Reach 100% module coverage — every `.py` file has a corresponding test file | M | H1, H2 |
+
+**H1 + H2 can run in parallel.** H3 waits for G. H4–H6 are independent.
+
+---
+
+### Phase I — Email & Reporting Enhancements ✅ DONE (META_PLAN P4)
+
+GSD-style email sections and HTML rendering.
+**All tasks complete** — merged in PR on branch `claude/review-meta-plan-Sqot2`.
+
+| Task | Description | Size | Status |
+|---|---|---|---|
+| **I1** | Add `## Diagnostics` section to `write_weekly_report_md()` (ratio z-scores + RRG counts) | S | ✅ Done |
+| **I2** | New `_append_diagnostics_section()` helper; backward-compatible optional kwargs | S | ✅ Done |
+| **I3** | `_markdown_to_html()` — stdlib-only markdown → HTML for email body | S | ✅ Done |
+| **I4** | All emails now send `multipart/alternative` (plain + HTML), even without plot attachments | S | ✅ Done |
+| **I5** | `email.example.yaml` updated with diagnostics plot + ordered attach_plots list | S | ✅ Done |
+| **I6** | 16 new tests: `TestAppendDiagnosticsSection` (6) + `_markdown_to_html` (8) + HTML-always (2) | S | ✅ Done |
+
+---
+
+### Phase J — CI/CD Cleanup
+
+Deduplicate GitHub Actions workflows, add type checking, add pre-commit hooks.
+Depends on: Phase C (2-package structure confirmed), Phase H (mypy target).
+
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **J1** | Audit 6 workflow files — identify and delete duplicates left over from pre-split era | S | — |
+| **J2** | Consolidate to 3 workflows: `test.yml` (push/PR), `publish-lib.yml` (tag `lib-v*`), `publish-app.yml` (tag `v*`) | S | J1 |
+| **J3** | Add `[tool.mypy]` to `pyproject.toml`; add `--ignore-missing-imports`, `--no-strict-optional` for initial pass | S | — |
+| **J4** | Add mypy step to `test.yml` CI workflow | S | J2, J3 |
+| **J5** | Create `.pre-commit-config.yaml` — flake8 + mypy + trailing-whitespace + end-of-file-fixer | S | J3 |
+| **J6** | Document pre-commit setup in README.md (`pre-commit install` instructions) | S | J5 |
+
+**J1 → J2** are sequential. **J3 → J4** depends on J2. **J5 → J6** depends on J3.
+
+---
+
+### Phase K — Migration Prep
+
+Config independence, Docker, and distribution hardening for production use.
+Depends on: Phase C (2-package), Phase J (CI/CD).
+
+| Task | Description | Size | Depends on |
+|---|---|---|---|
+| **K1** | `trading-crab-lib` config independence — library accepts `config: dict \| Path \| None` at init; defaults to file-based path when None; enables clean `pip install` usage without git clone | M | Phase C |
+| **K2** | `Dockerfile` — multi-stage build: base (core deps) + pipeline (full deps + config); mounts `data/` and `outputs/` as volumes; wired to `tradingcrab` entrypoint | M | Phase C |
+| **K3** | `docker-compose.yml` — weekly-report service with env-var config, volume mounts, cron-compatible restart policy | S | K2 |
+| **K4** | Schema validation for `settings.yaml` — `pydantic` or `jsonschema` validation at `config.load()` time; fail-fast with clear error for missing/wrong-type keys | M | — |
+| **K5** | Migrate `pickle.dump` → `joblib.dump` everywhere (already done for models; audit for any remaining pickle usage) | S | — |
+| **K6** | Add PyPI badges to `README.md` (version, license, python versions) once first release tag is cut | S | Phase C |
+
+**K1 + K2 + K4** can run in parallel. **K3** waits for K2. **K5 + K6** are independent.
+
+---
+
 ## Execution Schedule
 
 ```
-                A1 ─┐
-                A2 ─┤── (parallel) ── Phase A
-                A3 ─┘
+  G (done) ──────────────────────────────────┐
+                                              │
+                A1 ─┐                         │
+                A2 ─┤── (parallel) ── Phase A │
+                A3 ─┘                         │
+                     │                        │
+                B1 → B2 → B3        Phase B   │
+                     │                        │
+          D1 ─┐     │               Phase D   │
+          D2 ─┤     │                         │
+          D4 ─┘     │                         │
+           │        │                         │
+           D3       │                         │
+                     │                        │
+                C1 → C2 → C3 ─┐     Phase C  │
+                          C4 ─┘              │
+                     │                        │
+              E1 ─┐  │              Phase E   │
+              E2 ─┤                  (after C)│
+              E3 ─┘                           │
+                     │                        │
+         H1+H2+H3+H4 ────────────────────────┘  Phase H (test hardening)
                      │
-                B1 → B2 → B3        Phase B
+       J1→J2→J3+J4+J5→J6                        Phase J (CI/CD)
                      │
-          D1 ─┐     │               Phase D (features — can start
-          D2 ─┤     │                during Phase B, parallel with it)
-          D4 ─┘     │
-           │        │
-           D3       │
+         K1+K2+K4 (parallel)                     Phase K (migration prep)
                      │
-                C1 → C2 → C3 ─┐     Phase C (2-package infra)
-                          C4 ─┘
-                     │
-              E1 ─┐  │              Phase E (structural cleanup)
-              E2 ─┤                  (parallel, after C)
-              E3 ─┘
-                     │
-       F1, F2, F3, F4, F5           Phase F (long-term, sequential)
+       F1, F2, F3, F4, F5, F6                   Phase F (long-term)
 ```
 
 **Concrete order for branches/PRs:**
@@ -381,7 +476,10 @@ F1–F3 are Tier 1 (high priority); F4–F6 are Tier 2 (deferred).
 6. **Branch 6:** D3 (LEI proxy — after D1 merges)
 7. **Branch 7:** E1 + E2 + E3 (doc cleanup — after C merges)
 8. **Branch 8:** E4 (refactor run_pipeline.py → src/trading_crab/pipeline.py)
-9. **Branch 9+:** F1–F6 (long-term, one per branch)
+9. **Branch 9:** H1 + H2 + H3 + H4 (test hardening — after G done)
+10. **Branch 10:** J1 → J2 → J3 + J4 + J5 → J6 (CI/CD cleanup)
+11. **Branch 11:** K1 + K2 + K4 (migration prep — parallel, after C)
+12. **Branch 12+:** F1–F6 (long-term advanced features, one per branch)
 
 ---
 
