@@ -127,7 +127,12 @@ testing strategy, and lessons learned.
 
 **Output:** `REBUILD-FROM-SCRATCH-GUIDE.md` committed to repo.
 
-**Estimated size:** ~500 lines of markdown. Single session.
+**Estimated size:** ~500 lines of markdown. Split into 4 sub-sessions to avoid timeouts:
+
+- **P1a** — Sections 1–4: Introduction, two-package architecture, repository layout, build order
+- **P1b** — Sections 5–7: Feature pipeline deep-dive, clustering, prediction
+- **P1c** — Sections 8–10: Testing strategy, packaging/distribution, lessons learned
+- **P1d** — Section 11 (critical invariants) + update META_PLAN.md + commit/push
 
 ---
 
@@ -276,7 +281,10 @@ Each session should:
 
 | Phase | Status | Branch/Commit | Notes |
 |-------|--------|---------------|-------|
-| P1 | NOT STARTED | | REBUILD-FROM-SCRATCH-GUIDE.md |
+| P1a | DONE | claude/review-meta-plan-Sqot2 | Sections 1–4 |
+| P1b | DONE | claude/review-meta-plan-Sqot2 | Sections 5–7 |
+| P1c | DONE | claude/review-meta-plan-Sqot2 | Sections 8–10 |
+| P1d | DONE | claude/review-meta-plan-Sqot2 | Section 11 + commit/push |
 | P2 | NOT STARTED | | Critical determinism fix |
 | P3 | NOT STARTED | | Pytest warnings + local setup |
 | P4 | NOT STARTED | | Email enhancements |
