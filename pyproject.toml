@@ -50,6 +50,17 @@ include = ["trading_crab"]
 [tool.pytest.ini_options]
 testpaths  = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    # statsmodels MarkovRegression emits numpy overflow warnings during
+    # optimization on synthetic test data — harmless numerical artefacts.
+    "ignore::RuntimeWarning:statsmodels",
+    # statsmodels warns when a DatetimeIndex has no associated frequency.
+    # Use message-pattern match so the filter works even without statsmodels installed.
+    "ignore:A date index has been provided:UserWarning",
+    # numpy overflow inside statsmodels optimization — same root cause.
+    "ignore:invalid value encountered in reduce:RuntimeWarning",
+    "ignore:divide by zero encountered:RuntimeWarning",
+]
 
 # uv workspace: editable-installs both packages with a single `uv sync`
 [tool.uv.workspace]
