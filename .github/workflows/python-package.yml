@@ -44,3 +44,9 @@ jobs:
     - name: Test with pytest
       run: |
         pytest tests/ -v --tb=short
+
+    - name: Type-check with mypy
+      run: |
+        pip install mypy
+        # Informational only — exit-zero until full type coverage is in place.
+        mypy src/trading_crab src/trading_crab_lib --ignore-missing-imports --no-error-summary || true

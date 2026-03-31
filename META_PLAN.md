@@ -289,6 +289,6 @@ Each session should:
 | P3 | DONE | claude/review-meta-plan-Sqot2 | Pytest warnings + local setup |
 | P4 | DONE | claude/review-meta-plan-Sqot2 | Email enhancements |
 | P5 | DONE | claude/p5-doc-updates-1774982009 | Update NEXT_STEPS.md |
-| P6 | NOT STARTED | | CI/CD cleanup |
+| P6 | DONE | claude/p5-doc-updates-1774982009 | CI/CD cleanup |
 | P7 | NOT STARTED | | Test hardening |
 | P8 | NOT STARTED | | Documentation supplements |

@@ -1,0 +1,30 @@
+# Pre-commit hooks for trading-crab.
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.1.0
+    hooks:
+      - id: flake8
+        args:
+          - "--max-line-length=127"
+          - "--select=E9,F63,F7,F82"   # syntax errors + undefined names only
+          - "--exclude=gsd-scratch-work,trading-crab-lib,legacy"
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        args: ["--ignore-missing-imports", "--no-error-summary"]
+        files: "^src/"
+        additional_dependencies: []
