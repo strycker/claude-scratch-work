@@ -1698,3 +1698,112 @@ Completed all 3 items from `MONITORING_EXPANSION_PLAN.md` Phase E:
 1 existing test in `tests/test_scripts_weekly_report.py` updated for new kwarg.
 
 This completes Phase 4 (Pipeline Monitoring & Notebook Expansion) — all phases A through E done.
+
+### D40. Non-determinism root causes fixed (META_PLAN P2) (2026-03-31)
+
+Three independent sources of non-determinism eliminated:
+
+**Root cause 1 — `market_code` in gap-fill valid-row logic** (`transforms.py`):
+`_fill_column()` and `apply_derivatives()` previously used `df[[col, "market_code"]].dropna()`
+to find valid rows. `market_code` NaN patterns differ by label source (`--market-code grok`
+vs `clustered` vs `predicted`), so gap-fill boundaries changed between runs, altering all
+downstream derivative values. Fix: use only `df[[col]].dropna()` — the feature column alone
+determines valid rows. `market_code` is a label, not a feature.
+
+**Root cause 2 — No global numpy/random seed** (`pipeline.py:main()`):
+Individual sklearn models had `random_state=42`, but any stochastic operation not explicitly
+seeded was non-deterministic. Fix: `np.random.seed(seed)` and `random.seed(seed)` are called
+once at the start of `main()`, seeded from `cfg["pipeline"]["random_state"]` (default 42).
+
+**Root cause 3 — Silent `dropna(axis=1)` in step 5** (`pipeline.py:step5_predict()`):
+Different NaN patterns (caused by root cause 1) produced different surviving column sets,
+giving the RF different features across runs. Fix: log a WARNING listing every dropped column
+so the user can see the variability. Long-term fix: pin the column list explicitly.
+
+**New `pipeline.random_state` config key** in `settings.yaml` under `[pipeline]` section.
+**4 new determinism tests** in `test_transforms.py`.
+**`from __future__ import annotations`** added to `transforms.py` (was the last missing module).
+
+### D41. Pytest warnings suppressed (META_PLAN P3) (2026-03-31)
+
+**statsmodels warnings** from `test_markov.py` suppressed at two levels:
+1. `[tool.pytest.ini_options] filterwarnings` in `pyproject.toml` — message-pattern filters
+   that work even when statsmodels is not installed (avoids `PytestConfigWarning`).
+2. `pytestmark` in `test_markov.py` upgraded from single `skipif` to a list including
+   `filterwarnings` marks.
+
+**`requirements-dev.txt`** updated with all optional deps required for a zero-skip run:
+`hmmlearn`, `statsmodels`, `hdbscan`, `lightgbm`, `lxml`, `cssselect`, `kneed`. Each
+annotated with which test file it unlocks.
+
+**README.md** gains a "Running Tests" subsection with a table mapping packages to unlocked
+tests and a note on why statsmodels warnings are suppressed.
+
+### D42. Email enhancements — Diagnostics section + HTML rendering (META_PLAN P4) (2026-03-31)
+
+**`write_weekly_report_md()` API extended** with two optional kwargs:
+- `diagnostics_df` — DataFrame of ratio z-scores; top-5 by |z| shown under `## Diagnostics`
+  with direction (HIGH/LOW) tag.
+- `rrg_df` — DataFrame[asset, quadrant] from `compute_rrg()`; LEADING/IMPROVING/WEAKENING/
+  LAGGING counts + leading asset names shown.
+Both are handled by new `_append_diagnostics_section()` helper. Fully backward-compatible —
+existing callers without these args see no change.
+
+**`_markdown_to_html()` added to `email.py`** — stdlib-only markdown → HTML conversion for
+the weekly report subset (`##`, `#`, `**bold**`, `- list`). XSS-safe via `html.escape()`.
+No external markdown dep (no `markdown`, `mistune`, or `pygments` required).
+
+**All emails now send `multipart/alternative`** (plain + HTML). Previously the no-plots path
+sent plain text only; now both paths include an HTML alternative so email clients always
+render structured headings and lists rather than raw markdown syntax.
+
+**`_build_html_body_with_plots()` rewritten** to use `_markdown_to_html()` instead of
+`<pre>`-wrapping. HTML body is now readable in any email client without monospace overrides.
+
+### D43. CI/CD deduplication and developer tooling (META_PLAN P6) (2026-03-31)
+
+**Workflow deduplication:** Removed 3 of 6 GitHub Actions workflows:
+- `python-app.yml` — single-version (3.10 only) CI, strict subset of `python-package.yml`
+- `publish.yml` — release-triggered publish via PYPI_API_TOKEN; superseded by `publish-app.yml`
+- `python-publish.yml` — unfinished GitHub boilerplate using OIDC trusted publishing; conflicted
+  with `publish-app.yml` on the same `release: published` trigger, causing duplicate uploads.
+
+**Retained:** `python-package.yml` (multi-version CI, 3.10–3.13), `publish-lib.yml` (`lib-v*` tags),
+`publish-app.yml` (`v*` tags). Each package now has exactly one publish trigger.
+
+**Mypy added:** `[tool.mypy]` section in root `pyproject.toml` with `ignore_missing_imports = true`
+and `warn_unused_configs = true`. Informational mypy step added to `python-package.yml` (exit-zero
+for now; blocking mode deferred until type coverage improves). Roadmap toward `warn_return_any`,
+`warn_unreachable`, `disallow_untyped_defs` documented in the config comment.
+
+**Pre-commit hooks:** `.pre-commit-config.yaml` created with `pre-commit-hooks` (trailing whitespace,
+EOF, YAML check, large-file guard), `flake8` (syntax errors only, `--select=E9,F63,F7,F82`), and
+`mypy` (on `src/` only, `--ignore-missing-imports`).
+
+**Decision on mypy scope:** Not strict yet because the codebase has many public functions with
+complete type hints but also internal helpers without annotations. Making CI fail on mypy now
+would block every PR. Incrementally enabling stricter settings is the correct approach.
+
+### D44. Test hardening — STEPS dict patching and integration test design (META_PLAN P7) (2026-03-31)
+
+**STEPS dict holds direct function references (not names):** `STEPS` in `pipeline.py` is built at
+module import time as `{1: ("desc", step1_ingest), ...}`. Patching the module attribute
+`trading_crab.pipeline.step1_ingest` replaces the name in the module namespace but does not
+affect what `STEPS[1]` already points to. Tests that mock pipeline step dispatch must patch
+the `STEPS` dict entries directly (replace `STEPS[k] = (desc, mock)`) and restore afterward.
+
+**`cli.run_pipeline()` imports `main` locally:** `main` is imported inside `run_pipeline()`'s
+function body (`from trading_crab.pipeline import main`). At module load time,
+`trading_crab.cli` has no `main` attribute. Tests must patch at the source:
+`patch("trading_crab.pipeline.main")`, not `patch("trading_crab.cli.main")`.
+
+**Integration test design:** `tests/integration/test_mini_pipeline.py` uses synthetic
+`_make_synthetic_macro(n_quarters=80)` DataFrames — no file I/O, no network, no checkpoints.
+The synthetic data includes all columns needed by `add_cross_ratios()` (sp500, dividend,
+fred_gdp, fred_gnp, fred_baa, fred_aaa, etc.). Tests verify: `engineer_all()` produces valid
+output, output is identical on repeated calls (determinism regression), output is independent of
+`market_code` column values (root-cause L2 regression), centered ≠ causal (look-ahead guard
+regression), PCA output is 5 components with no NaNs, clustering produces valid labels.
+
+**New test files:** `tests/test_pipeline_smoke.py` (12 tests), `tests/test_cli_smoke.py`
+(7 tests), `tests/integration/__init__.py`, `tests/integration/test_mini_pipeline.py` (14 tests).

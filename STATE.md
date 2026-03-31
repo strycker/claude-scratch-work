@@ -1,7 +1,7 @@
 # Trading-Crab — Current State
 
 Snapshot of what is implemented, what runs, and what doesn't.
-Updated: March 2026.
+Updated: 2026-03-31 (META_PLAN P1–P5 complete; audit fixes merged).
 
 ---
 
@@ -61,8 +61,17 @@ tests/test_constraints_frequency.py          2 tests — ✅ all passing (data f
 Total: 573 collected — ✅ all passing (Python 3.11; 11 skipped: HDBSCAN + cssselect optional)
 ```
 
+**After META_PLAN P2–P4 (2026-03-31):** +29 tests added:
+- `test_transforms.py`: +4 determinism tests (gap-fill/derivative market_code independence)
+- `test_reporting.py`: +6 `TestAppendDiagnosticsSection` tests + 1 end-to-end report test
+- `test_email_weekly.py`: +8 `_markdown_to_html` tests + 2 HTML-always tests + 2 updated
+
+**New total: ~602 collected** (11 skipped: HDBSCAN + cssselect optional).
+
 **Coverage gaps:** All previously untested modules now have test coverage.
 Former gaps (`reporting.py`, `plotting.py`, `runtime.py`) are fully covered.
+**Remaining gap:** `src/trading_crab/pipeline.py` (1374 lines) has zero direct test coverage
+— addressed in Phase H (see NEXT_STEPS.md).
 
 ---
 
@@ -201,30 +210,46 @@ See `MONITORING_EXPANSION_PLAN.md` for the full phased plan (85 items, 17 phases
 
 ## Known Gaps (Not Yet Implemented)
 
-### Priority 1 (implement next)
-| Gap | Where | Effort |
-|-----|-------|--------|
-| LightGBM classifier (production flat API) | `prediction/__init__.py` | S |
-| Empirical forward probabilities | `regime.py` | S |
-| macrotrends.net scraper (gold, oil pre-1993) | `ingestion/macrotrends.py` (new) | M |
-| Confusion matrix plot | `plotting.py` | S |
+### Priority 1 — Hardening (META_PLAN Phases H, J, K)
+| Gap | Where | Effort | Phase |
+|-----|-------|--------|-------|
+| Smoke tests for `trading_crab.pipeline` (1374 lines, 0% direct coverage) | `tests/unit/test_pipeline.py` | M | H |
+| Integration tests (multi-step synthetic data pipeline) | `tests/integration/` | M | H |
+| Deduplicate 6 CI workflow files → 3 | `.github/workflows/` | S | J |
+| mypy type checking in CI | `pyproject.toml` + `test.yml` | S | J |
+| Pre-commit hooks (flake8 + mypy) | `.pre-commit-config.yaml` | S | J |
+| `trading-crab-lib` config independence (no mandatory settings.yaml) | `config.py` | M | K |
+| Dockerfile + docker-compose for reproducible runs | `Dockerfile`, `docker-compose.yml` | M | K |
+| `settings.yaml` schema validation at load time | `config.py` | M | K |
 
-### Priority 2
+### Priority 2 — Features
 | Gap | Where | Effort |
 |-----|-------|--------|
-| Hidden Markov Model regime detection | `hmm.py` (new module) | M |
 | SMOTE for class imbalance in XGB training | `classifier.py` | S |
 | Per-asset regime probability models | `prediction/asset_classifier.py` (new) | L |
-| Momentum + cross-asset ratio features | `transforms.py` | M |
 | Finviz Elite sector signals | `ingestion/finviz.py` (new) | M |
+| Additional FRED series (INDPRO, PAYEMS, DPCERA3Q086SBEA) | `config/settings.yaml` | S |
 
-### Priority 3
+### Priority 3 — Long-term
 | Gap | Where | Effort |
 |-----|-------|--------|
-| Streamlit dashboard | `app/dashboard.py` (new) | L |
+| Streamlit interactive dashboard | `app/dashboard.py` (new) | L |
 | Backtest framework | `src/trading_crab_lib/backtest/` (new) | XL |
-| ~~`joblib.dump` for sklearn model serialization~~ | ~~`pipelines/05_predict.py`~~ | ✅ Done |
-| ~~Tests for `reporting.py` and `plotting.py`~~ | ~~`tests/`~~ | ✅ Done |
+| AI narrative generation (Claude API) | `scripts/narrative.py` (new) | XL |
+
+### Completed since last STATE.md update (2026-03-31)
+| Item | Phase | Notes |
+|------|-------|-------|
+| ~~Non-determinism: market_code in gap-fill/derivatives~~ | P2 | Removed from `_fill_column`, `apply_derivatives` |
+| ~~Global random seed at pipeline startup~~ | P2 | `np.random.seed(42)` in `pipeline.py:main()` |
+| ~~Log dropped columns in step5 dropna~~ | P2 | WARNING with column list |
+| ~~4 determinism tests added~~ | P2 | `test_transforms.py` |
+| ~~`from __future__ import annotations` in transforms.py~~ | P2 | Last missing module |
+| ~~Pytest statsmodels RuntimeWarning noise~~ | P3 | Suppressed in `pyproject.toml` |
+| ~~requirements-dev.txt missing optional deps~~ | P3 | Added hmmlearn/statsmodels/hdbscan/lightgbm/lxml/kneed |
+| ~~## Diagnostics section in weekly report~~ | P4 | Ratio z-scores + RRG quadrant counts |
+| ~~HTML email rendering (markdown → HTML)~~ | P4 | `_markdown_to_html()` stdlib-only |
+| ~~`email.example.yaml` attach_plots outdated~~ | P4 | Added RRG plot, re-ordered |
 
 ---
 
