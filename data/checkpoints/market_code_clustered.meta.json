@@ -1,12 +1,12 @@
 {
   "name": "market_code_clustered",
-  "created": "2026-03-28T10:34:08.143669",
-  "config_hash": "eaaafd97",
-  "rows": 293,
+  "created": "2026-03-31T15:48:19.086506",
+  "config_hash": "6c209fad",
+  "rows": 294,
   "columns": 1,
   "col_names": [
     "market_code"
   ],
   "index_start": "1952-12-31 00:00:00",
-  "index_end": "2025-12-31 00:00:00"
+  "index_end": "2026-03-31 00:00:00"
 }

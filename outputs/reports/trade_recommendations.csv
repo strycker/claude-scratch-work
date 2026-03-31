@@ -1,12 +1,5 @@
 asset,current_pct,target_pct,delta_pct,signal
-FBTC,0.0,11.2,11.2,BUY
-GDX,0.0,2.3,2.3,HOLD
-IAU,0.0,2.3,2.3,HOLD
-QQQ,0.0,8.3,8.3,BUY
-SLV,0.0,11.3,11.3,BUY
-USO,0.0,13.7,13.7,BUY
-VNQ,0.0,11.3,11.3,BUY
-XLB,0.0,0.2,0.2,HOLD
-XLF,0.0,8.3,8.3,BUY
-XLI,0.0,8.5,8.5,BUY
-XLK,0.0,22.5,22.5,BUY
+10Y Treasury,0.0,33.3,33.3,BUY
+GDP Growth,0.0,33.3,33.3,BUY
+Inflation,0.0,30.7,30.7,BUY
+S&P 500,0.0,2.7,2.7,HOLD
