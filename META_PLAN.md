@@ -291,4 +291,4 @@ Each session should:
 | P5 | DONE | claude/p5-doc-updates-1774982009 | Update NEXT_STEPS.md |
 | P6 | DONE | claude/p5-doc-updates-1774982009 | CI/CD cleanup |
 | P7 | DONE | claude/p5-doc-updates-1774982009 | Test hardening |
-| P8 | NOT STARTED | | Documentation supplements |
+| P8 | DONE | claude/p5-doc-updates-1774982009 | Documentation supplements |

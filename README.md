@@ -1,7 +1,11 @@
-# claude-scratch-work
-Repository for playing around with Claude Code
+# Trading-Crab — Market Regime Pipeline
 
-First project:  market regime classification and prediction pipeline.  Predict market conditions, best portfolios, and stock picks.
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-635%20passing-brightgreen)
+![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
+
+Market regime classification and prediction pipeline. Predict market conditions, best portfolios, and stock picks.
 
 ## Overview
 
@@ -372,6 +376,9 @@ git submodule update --init --recursive
 | `CLAUDE.md` | Code conventions, design rules, ADRs, pitfalls, session instructions for AI |
 | `ROADMAP.md` | Prioritized feature backlog with effort estimates |
 | `STATE.md` | Current implementation status and test coverage |
+| `LESSONS_LEARNED.md` | Pitfalls discovered during development and what we'd do differently |
+| `DISTRIBUTION.md` | How to distribute/deploy: PyPI, Docker, Maven/npm context |
+| `REBUILD-FROM-SCRATCH-GUIDE.md` | Step-by-step guide to rebuilding the project from zero |
 
 ---
 
@@ -386,12 +393,10 @@ Short summary:
 - [ ] LightGBM integration into flat production API (module exists, needs wiring)
 
 ### Medium Term (Tier 2)
-- [ ] **Momentum & cross-asset ratio features** — 6M/12M trailing returns, S&P-in-Gold, Gold-in-Oil, rolling cross-asset correlation, inflation acceleration (2nd derivative CPI)
-- [ ] **Cross-asset divergence features** — Phases A+B done (module + pipeline hook); Phase C (add to feature lists) and Phase D (evaluate impact) remaining. See ROADMAP 2.15.
-- [ ] Hidden Markov Model regime detection (`hmm.py`)
 - [ ] Per-asset probability models — "will ETF be +X% at Y quarters?" (Part I vision)
 - [ ] Conference Board LEI proxy from FRED components
 - [ ] Finviz Elite sector/stock signals for within-regime stock picking
+- [ ] Docker image for reproducible weekly runs (`Dockerfile` + `docker-compose.yml`)
 
 ### Long Term (Tier 3)
 - [ ] Backtest framework — walk-forward validation of full strategy
@@ -423,8 +428,11 @@ Short summary:
 - ✓ Confusion matrix visualization in `plotting.py`
 - ✓ Package renamed: `market_regime` → `trading_crab_lib` (pip name: `trading-crab-lib`)
 - ✓ yfinance fallback chain: stooq → OpenBB → macro proxy
-- ✓ 428 unit tests, all passing (10 skipped: HDBSCAN + cssselect optional)
-- ✓ Exploration notebooks (01–08)
+- ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
+- ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
+- ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
+- ✓ ~635 tests (unit + integration), all passing
+- ✓ Exploration notebooks (01–12)
 
 ---
 
