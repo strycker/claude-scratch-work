@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -27,14 +28,48 @@ import pytest
 #      (not class-definition time) the patch takes effect for all new instances.
 #   3. Set TC_CHECKPOINT_DIR env var so any subprocess or late-import also
 #      picks up the override.
-#   4. Restore everything on session teardown.
+#   4. If the asset_prices checkpoint was not copied from production (e.g. both
+#      data/raw/ and data/checkpoints/ were cleared, or yfinance is unavailable),
+#      synthesise a minimal one from the configured ETF tickers so that
+#      structural constraint tests always run rather than skip.
+#   5. Restore everything on session teardown.
 # ---------------------------------------------------------------------------
+
+
+def _synthesize_asset_prices(session_dir: Path, ckpt_mod) -> None:
+    """Write a minimal synthetic asset_prices checkpoint to *session_dir*.
+
+    Uses real ETF tickers from the project config so the column-universe
+    constraint is exercised against the actual configured list.
+    The DatetimeIndex is quarterly so the no-intraday constraint holds too.
+    Only called when no production copy exists — real data always takes priority.
+    """
+    try:
+        from trading_crab_lib.config import load as _load_cfg
+        cfg = _load_cfg()
+        tickers = [str(t).upper() for t in cfg["assets"]["etfs"]][:8]
+    except Exception:
+        tickers = ["SPY", "GLD", "TLT", "QQQ", "IWM", "VNQ", "AGG", "USO"]
+
+    index = pd.date_range("2000-03-31", periods=40, freq="QE")
+    rng = np.random.default_rng(42)
+    prices = pd.DataFrame(
+        {ticker: rng.uniform(50, 400, len(index)) for ticker in tickers},
+        index=index,
+    )
+    # Save via CheckpointManager so the manifest is also written
+    cm = ckpt_mod.CheckpointManager(checkpoint_dir=session_dir)
+    cm.save(prices, "asset_prices")
+
 
 @pytest.fixture(autouse=True, scope="session")
 def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     """Route all checkpoint I/O to a session-scoped tmp dir.
 
     Production data/checkpoints/ is never written to during pytest.
+    Structural constraint tests (asset_prices columns/frequency) always run —
+    never skip — because a minimal synthetic checkpoint is generated when no
+    production copy is available (e.g. yfinance absent or data dirs cleared).
     """
     import trading_crab_lib.checkpoints as ckpt_mod
 
@@ -50,6 +85,11 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     original_checkpoint_dir = ckpt_mod.CHECKPOINT_DIR
     ckpt_mod.CHECKPOINT_DIR = session_dir
     os.environ["TC_CHECKPOINT_DIR"] = str(session_dir)
+
+    # Synthesise asset_prices if absent (no production data or data dirs cleared).
+    # Real production data always takes priority — this is only a safety net.
+    if not (session_dir / "asset_prices.parquet").exists():
+        _synthesize_asset_prices(session_dir, ckpt_mod)
 
     yield session_dir
 

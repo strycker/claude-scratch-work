@@ -136,7 +136,11 @@ def _batch_yfinance(
     try:
         import yfinance as yf
     except ImportError:
-        raise ImportError("yfinance is not installed.  Run: pip install yfinance")
+        log.warning(
+            "yfinance is not installed — batch download skipped.  "
+            "Run: pip install yfinance"
+        )
+        return {}, False
 
     log.info("Batch-fetching %d tickers from yfinance ...", len(tickers))
 
