@@ -362,6 +362,10 @@ def step1_ingest(cfg: dict, run_cfg: RunConfig) -> None:
                     cm.save(combined, "macro_raw")
                     log.info("Step 1: refreshed market_code=%s in cached macro_raw",
                              run_cfg.market_code_source)
+        # Sync asset_prices checkpoint in case it was cleared without clearing the
+        # raw cache.  _fetch_and_cache_asset_prices will load from the raw parquet
+        # (no network hit) and write the checkpoint if it is missing.
+        _fetch_and_cache_asset_prices(cfg, run_cfg)
         return
 
     log.info("Step 1: fetching FRED data …")
@@ -904,6 +908,10 @@ def step6_asset_returns(cfg: dict, run_cfg: RunConfig) -> None:
         prices = _fetch_and_cache_asset_prices(cfg, run_cfg)
     elif cache_path.exists():
         prices = pd.read_parquet(cache_path)
+        # Ensure checkpoint is in sync — may be absent if step 1 took the
+        # early-return path or if checkpoints were cleared without clearing raw.
+        if not prices.empty:
+            cm.save(prices, "asset_prices")
     else:
         # No cache — try fetching now
         prices = _fetch_and_cache_asset_prices(cfg, run_cfg)
