@@ -182,9 +182,15 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     ckpt_mod.CHECKPOINT_DIR = session_dir
     os.environ["TC_CHECKPOINT_DIR"] = str(session_dir)
 
-    # Ensure asset_prices checkpoint exists so constraint tests run, not skip.
-    # When data/raw/ and data/checkpoints/ are both cleared, no production copy
-    # is available; synthesise one with real tickers from config.
+    # Ensure all checkpoint-dependent constraint tests run rather than skip.
+    # When data/raw/ and data/checkpoints/ are cleared, synthesise minimal
+    # stand-ins with the correct structure.  Real production data always wins —
+    # synthesis only fires when a file is absent.
+    if not (session_dir / "macro_raw.parquet").exists():
+        _synthesize_macro_raw(session_dir)
+    if not (session_dir / "features_noncausal.parquet").exists() or \
+            not (session_dir / "features_causal.parquet").exists():
+        _synthesize_features(session_dir)
     if not (session_dir / "asset_prices.parquet").exists():
         _synthesize_asset_prices(session_dir)
 
