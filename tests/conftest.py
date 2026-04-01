@@ -36,7 +36,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def _synthesize_asset_prices(session_dir: Path, ckpt_mod) -> None:
+def _synthesize_asset_prices(session_dir: Path) -> None:
     """Write a minimal synthetic asset_prices checkpoint to *session_dir*.
 
     Uses real ETF tickers from the project config so the column-universe
@@ -44,6 +44,8 @@ def _synthesize_asset_prices(session_dir: Path, ckpt_mod) -> None:
     The DatetimeIndex is quarterly so the no-intraday constraint holds too.
     Only called when no production copy exists — real data always takes priority.
     """
+    import trading_crab_lib.checkpoints as ckpt_mod
+
     try:
         from trading_crab_lib.config import load as _load_cfg
         cfg = _load_cfg()
@@ -89,7 +91,7 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     # Synthesise asset_prices if absent (no production data or data dirs cleared).
     # Real production data always takes priority — this is only a safety net.
     if not (session_dir / "asset_prices.parquet").exists():
-        _synthesize_asset_prices(session_dir, ckpt_mod)
+        _synthesize_asset_prices(session_dir)
 
     yield session_dir
 
