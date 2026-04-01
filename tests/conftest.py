@@ -51,8 +51,8 @@ def _synthesize_asset_prices(session_dir: Path, ckpt_mod) -> None:
     except Exception:
         tickers = ["SPY", "GLD", "TLT", "QQQ", "IWM", "VNQ", "AGG", "USO"]
 
-    index = pd.date_range("2000-03-31", periods=40, freq="QE")
     rng = np.random.default_rng(42)
+    index = pd.date_range("2000-03-31", periods=40, freq="QE")
     prices = pd.DataFrame(
         {ticker: rng.uniform(50, 400, len(index)) for ticker in tickers},
         index=index,
@@ -86,10 +86,11 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     ckpt_mod.CHECKPOINT_DIR = session_dir
     os.environ["TC_CHECKPOINT_DIR"] = str(session_dir)
 
-    # Synthesise asset_prices if absent (no production data or data dirs cleared).
-    # Real production data always takes priority — this is only a safety net.
+    # Ensure asset_prices checkpoint exists so constraint tests run, not skip.
+    # When data/raw/ and data/checkpoints/ are both cleared, no production copy
+    # is available; synthesise one with real tickers from config.
     if not (session_dir / "asset_prices.parquet").exists():
-        _synthesize_asset_prices(session_dir, ckpt_mod)
+        _synthesize_asset_prices(session_dir)
 
     yield session_dir
 
