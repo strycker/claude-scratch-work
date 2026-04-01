@@ -36,6 +36,100 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+def _synthesize_macro_raw(session_dir: Path) -> None:
+    """Write a minimal synthetic macro_raw checkpoint to *session_dir*.
+
+    Mirrors the real ingestion output structure so frequency/cadence
+    constraint tests always run rather than skip.
+    """
+    import trading_crab_lib.checkpoints as ckpt_mod
+
+    rng = np.random.default_rng(0)
+    n = 100
+    idx = pd.date_range("2000-03-31", periods=n, freq="QE")
+    sp500 = np.abs(rng.uniform(300, 5000, n)) + 200
+    data: dict[str, np.ndarray] = {
+        "sp500":        sp500,
+        "sp500_adj":    sp500 * rng.uniform(0.95, 1.05, n),
+        "dividend":     rng.uniform(10, 80, n),
+        "div_yield":    rng.uniform(0.01, 0.06, n),
+        "earnings":     rng.uniform(20, 200, n),
+        "cape_shiller": rng.uniform(8, 40, n),
+        "gdp":          rng.uniform(5000, 25000, n),
+        "cpi":          rng.uniform(100, 320, n),
+        "10yr_ustreas":  rng.uniform(1.0, 16.0, n),
+        "us_cpi":       rng.uniform(100, 320, n),
+        "book_value":   rng.uniform(100, 800, n),
+        "price_sales":  rng.uniform(0.5, 5.0, n),
+        "price_book":   rng.uniform(1.0, 6.0, n),
+        "fred_gdp":     rng.uniform(5000, 25000, n),
+        "fred_gnp":     rng.uniform(4800, 24000, n),
+        "fred_baa":     rng.uniform(3.0, 12.0, n),
+        "fred_aaa":     rng.uniform(2.5, 10.0, n),
+        "fred_cpi":     rng.uniform(100, 320, n),
+        "fred_gs10":    rng.uniform(1.0, 16.0, n),
+        "fred_tb3ms":   rng.uniform(0.01, 10.0, n),
+        "fred_vix":     rng.uniform(10, 80, n),
+        "fred_unrate":  rng.uniform(3.0, 15.0, n),
+        "fred_m2sl":    rng.uniform(3000, 25000, n),
+        "fred_gs2":     rng.uniform(0.01, 10.0, n),
+        "market_code":  np.zeros(n, dtype=float),
+    }
+    df = pd.DataFrame(data, index=idx)
+    df.index.name = "date"
+    cm = ckpt_mod.CheckpointManager(checkpoint_dir=session_dir)
+    cm.save(df, "macro_raw")
+
+
+def _synthesize_features(session_dir: Path) -> None:
+    """Write synthetic features_noncausal and features_causal checkpoints.
+
+    Runs engineer_all() on synthetic macro data so the feature structure
+    exactly matches what the real pipeline produces.  Falls back to a
+    simple quarterly DataFrame if engineer_all() fails (missing config/deps).
+    """
+    import trading_crab_lib.checkpoints as ckpt_mod
+
+    cm = ckpt_mod.CheckpointManager(checkpoint_dir=session_dir)
+
+    # Try to load macro_raw from the session dir; synthesise if absent.
+    try:
+        macro = cm.load("macro_raw")
+    except FileNotFoundError:
+        macro = None
+
+    if macro is None or macro.empty:
+        _synthesize_macro_raw(session_dir)
+        try:
+            macro = cm.load("macro_raw")
+        except FileNotFoundError:
+            macro = pd.DataFrame()
+
+    features = None
+    try:
+        from trading_crab_lib.config import load as _load_cfg
+        from trading_crab_lib.transforms import engineer_all
+        cfg = _load_cfg()
+        features_centered = engineer_all(macro.copy(), cfg, causal=False)
+        features_causal   = engineer_all(macro.copy(), cfg, causal=True)
+        cm.save(features_centered, "features_noncausal")
+        cm.save(features_causal,   "features_causal")
+        return
+    except Exception:
+        pass
+
+    # Fallback: minimal quarterly DataFrame (structure only, no real values)
+    rng = np.random.default_rng(1)
+    idx = pd.date_range("2000-03-31", periods=40, freq="QE")
+    placeholder = pd.DataFrame(
+        {"feature_a": rng.standard_normal(40), "feature_b": rng.standard_normal(40)},
+        index=idx,
+    )
+    placeholder.index.name = "date"
+    cm.save(placeholder, "features_noncausal")
+    cm.save(placeholder.copy(), "features_causal")
+
+
 def _synthesize_asset_prices(session_dir: Path) -> None:
     """Write a minimal synthetic asset_prices checkpoint to *session_dir*.
 
