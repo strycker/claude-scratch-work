@@ -57,10 +57,16 @@ class DateRangeReport:
     def summary(self) -> str:
         """Return a formatted summary of date-range freshness checks."""
         lines: list[str] = []
-        if self.last_date is not None:
+        if self.last_date is not None and self.last_date is not pd.NaT:
+            last_str = self.last_date.strftime("%Y-%m-%d")
+            qe_str = (
+                self.current_quarter_end.strftime("%Y-%m-%d")
+                if self.current_quarter_end is not None and self.current_quarter_end is not pd.NaT
+                else "unknown"
+            )
             lines.append(
-                f"  Date range: last data = {self.last_date.strftime('%Y-%m-%d')}, "
-                f"current quarter end = {self.current_quarter_end.strftime('%Y-%m-%d')}"
+                f"  Date range: last data = {last_str}, "
+                f"current quarter end = {qe_str}"
             )
         if self.quarters_behind > 0:
             lines.append(
@@ -69,7 +75,8 @@ class DateRangeReport:
         if self.stale_series:
             lines.append(f"  Stale series ({len(self.stale_series)}):")
             for col, last in self.stale_series[:10]:
-                lines.append(f"    {col}: last value at {last.strftime('%Y-%m-%d')}")
+                last_str = last.strftime("%Y-%m-%d") if last is not pd.NaT else "no data"
+                lines.append(f"    {col}: last value at {last_str}")
         if self.passed:
             lines.append("  Date range: OK")
         else:
