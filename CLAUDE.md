@@ -66,13 +66,17 @@ trading-crab/
 │
 ├── notebooks/                     ← plotting/exploration notebooks (one per pipeline stage)
 │   ├── 01_ingestion.ipynb
-│   ├── 02_features.ipynb
-│   ├── 03_clustering.ipynb        ← expanded: 28 investigation cells (GMM, DBSCAN, Spectral, gap stat)
-│   ├── 04_regimes.ipynb
-│   ├── 05_prediction.ipynb
-│   ├── 06_assets.ipynb
-│   ├── 07_pairplot.ipynb          ← triple-colored pairplots (unsupervised / grok / RF)
-│   └── 08_raw_series.ipynb        ← raw series inspection
+│   ├── 02_features.ipynb           ← gap-fill diagnostics, variance ranking, centered vs causal
+│   ├── 03_clustering.ipynb         ← PCA, GMM, DBSCAN, Spectral, gap stat, SVD comparison
+│   ├── 04_regimes.ipynb            ← regime stability, transition heatmaps, HMM comparison
+│   ├── 05_prediction.ipynb         ← CV diagnostics, model comparison, calibration, interpretability
+│   ├── 06_assets.ipynb             ← per-regime violin plots, Sharpe table, ETF coverage timeline
+│   ├── 07_pairplot.ipynb           ← triple-colored pairplots (unsupervised / grok / RF)
+│   ├── 08_raw_series.ipynb         ← raw series inspection
+│   ├── 09_diagnostics.ipynb        ← RRG scatter, rolling z-scores, quadrant rotation history
+│   ├── 10_model_comparison.ipynb   ← KMeans vs GMM vs HMM vs Spectral; soft probabilities
+│   ├── 11_feature_selection.ipynb  ← RF importance curves, dead-feature detector, what-if re-cluster
+│   └── 12_divergence_momentum.ipynb ← divergence z-scores, momentum dashboard, trigger analysis
 │
 ├── pipelines/                     ← runnable pipeline steps
 │   ├── 01_ingest.py
@@ -95,10 +99,13 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (571 tests)
+├── tests/                         ← pytest test suite (~769 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
-│   ├── integration/               ← integration tests (currently empty)
+│   ├── integration/
+│   │   └── test_mini_pipeline.py  ← synthetic end-to-end: steps 2-4, determinism regression
+│   ├── test_pipeline_smoke.py     ← trading_crab.pipeline smoke tests (build_parser, step dispatch)
+│   ├── test_cli_smoke.py          ← trading_crab.cli entry-point smoke tests
 │   ├── test_pipelines_ingest_features.py  ← pipeline steps 1-2 smoke tests
 │   ├── test_models_regime.py      ← regime classifier tests (bundle API)
 │   ├── test_models_boosting.py    ← GradientBoosting in bundle API
@@ -110,27 +117,38 @@ trading-crab/
 │   ├── test_constraints_etf_universe.py   ← ETF universe validation
 │   ├── test_constraints_frequency.py      ← data frequency validation
 │   └── unit/                      ← unit tests for src/ modules
-│       ├── test_transforms.py
+│       ├── test_transforms.py         ← engineer_all, gap-fill, derivatives, determinism
 │       ├── test_clustering.py
-│       ├── test_clustering_exploration.py
-│       ├── test_cluster_comparison.py
+│       ├── test_clustering_exploration.py ← GMM k-sweep, gap statistic, knee detection
+│       ├── test_cluster_comparison.py     ← pairwise ARI, RF feature importance
 │       ├── test_gmm.py
-│       ├── test_density.py
+│       ├── test_hmm.py                ← GaussianHMM (requires hmmlearn)
+│       ├── test_markov.py             ← MarkovRegression (requires statsmodels)
+│       ├── test_density.py            ← DBSCAN + HDBSCAN (hdbscan optional)
 │       ├── test_spectral.py
-│       ├── test_checkpoints.py
+│       ├── test_checkpoints.py        ← CheckpointManager + preservation checkpoints
 │       ├── test_returns.py
-│       ├── test_prediction_flat.py    ← flat prediction API (production)
+│       ├── test_prediction_flat.py    ← flat prediction API (RF, DT, predict_current)
+│       ├── test_lightgbm.py           ← LightGBM flat API (requires lightgbm)
 │       ├── test_ingestion.py          ← HTTP-mocked tests for multpl, FRED, assets
+│       ├── test_macrotrends.py        ← macrotrends.net scraper (mocked)
 │       ├── test_diagnostics_rrg.py    ← RRG analysis + rolling statistics
 │       ├── test_tactics.py            ← tactical asset classification
-│       ├── test_config.py             ← config.load_portfolio()
+│       ├── test_config.py             ← validate_config(), load_portfolio()
 │       ├── test_regime.py             ← regime profiling + transition matrix
 │       ├── test_fred_series_config.py ← FRED settings.yaml validation
 │       ├── test_yield_curve_features.py ← yield curve spread features
-│       ├── test_monitoring.py          ← pipeline monitoring (date-range, source counts, feature quality)
+│       ├── test_divergence.py         ← cross-asset divergence features
+│       ├── test_momentum.py           ← momentum + relative strength features
+│       ├── test_indicators.py         ← LEI proxy composite indicator
+│       ├── test_evaluate_divergence.py ← divergence A/B evaluation script
+│       ├── test_evaluate_momentum.py  ← momentum A/B evaluation script
+│       ├── test_forward_probabilities.py ← empirical forward transition matrices
+│       ├── test_confusion_matrix_plot.py ← confusion matrix plotting helpers
+│       ├── test_monitoring.py          ← pipeline monitoring (steps 1-9)
 │       ├── test_init_module.py        ← env var path overrides + convenience imports
 │       ├── test_reporting.py          ← dashboard signals, portfolio, recommendations
-│       ├── test_plotting.py           ← all plot functions (steps 01–06)
+│       ├── test_plotting.py           ← all plot functions (steps 01–06 + diagnostics)
 │       ├── test_runtime.py            ← RunConfig defaults, from_args, str, logging
 │       └── test_ingestion_completeness.py ← ingestion completeness report (P23)
 │
@@ -147,7 +165,7 @@ trading-crab/
 └── src/trading_crab_lib/             ← library package (pip name: trading-crab-lib)
     ├── pyproject.toml             ← independent pyproject.toml for library sdist
     ├── __init__.py                ← defines ROOT, CONFIG_DIR, DATA_DIR, OUTPUT_DIR
-    ├── config.py                  ← load(), load_portfolio(), setup_logging()
+    ├── config.py                  ← load() + validate_config(), load_portfolio(), setup_logging()
     ├── runtime.py                 ← RunConfig dataclass (verbose, plots, refresh flags)
     ├── checkpoints.py             ← CheckpointManager (save/load/is_fresh/clear)
     ├── transforms.py              ← ratios, log, select, gap-fill, derivatives, engineer_all
@@ -164,21 +182,48 @@ trading-crab/
     ├── regime.py                  ← build_profiles, suggest_names, build_transition_matrix
     ├── asset_returns.py           ← compute_quarterly_returns, returns_by_regime, rank_assets_by_regime
     ├── reporting.py               ← asset_signals, print_dashboard, save_dashboard_csv, portfolio helpers
-    ├── plotting.py                ← ALL visualization helpers (used by notebooks + pipelines)
-    ├── monitoring.py              ← pipeline monitoring: date-range validation, source counts, feature quality
     ├── diagnostics.py             ← RRG analysis: rolling_zscore, percentile_rank, normalize_100, compute_rrg
     ├── tactics.py                 ← tactical classification: compute_tactics_metrics, classify_tactics
     ├── email.py                   ← weekly email: load_email_config, build_weekly_email_body, send_weekly_email
+    ├── divergence.py              ← cross-asset divergence features: z-scores, triggers, derivative-space
+    ├── momentum.py                ← trailing momentum, relative strength, rolling correlation, CPI acceleration
+    ├── indicators.py              ← composite indicators: LEI proxy (UNRATE, T10Y2Y, M2SL, INDPRO, PAYEMS)
+    ├── yield_curve_features.py    ← yield curve spread features: 10Y-2Y, 10Y-3M from FRED + multpl
     ├── ingestion/
-    │   ├── multpl.py              ← lxml scraper for 46 multpl.com series
+    │   ├── __init__.py            ← ingestion_completeness_report() + CompletenessReport dataclass
+    │   ├── multpl.py              ← lxml scraper for multpl.com series
     │   ├── fred.py                ← FRED API fetcher with publication-lag shift
-    │   ├── assets.py              ← yfinance ETF price fetcher (16 ETFs, 3-phase fallback)
+    │   ├── assets.py              ← yfinance ETF price fetcher (3-phase fallback)
+    │   ├── macrotrends.py         ← macrotrends.net JSON scraper (gold, oil, silver back to 1915)
     │   └── grok.py               ← load external LLM-assisted quarter classifications
-    └── prediction/
-        ├── __init__.py            ← FLAT API: train_current_regime(X,y,cfg), train_decision_tree,
-        │                             train_forward_classifiers, predict_current — used by run_pipeline.py
-        └── classifier.py          ← BUNDLE API with FoldReport + GradientBoosting + interpretability
-                                      helpers; backwards-compat layer for tests (see ADR #12 below)
+    ├── prediction/
+    │   ├── __init__.py            ← FLAT API: train_current_regime(X,y,cfg), train_decision_tree,
+    │   │                             train_lightgbm, train_forward_classifiers, predict_current
+    │   ├── classifier.py          ← BUNDLE API with FoldReport + GradientBoosting + interpretability
+    │   │                             helpers; backwards-compat layer for tests (see ADR #12 below)
+    │   └── gradient_boosting.py   ← GradientBoostingClassifier helpers used by bundle API
+    ├── plotting/                  ← visualization package (re-exports from plotting/__init__.py)
+    │   ├── __init__.py            ← re-exports all plot functions + CUSTOM_COLORS, REGIME_CMAP
+    │   ├── core.py                ← _save_or_show, _regime_color, _in_jupyter, load_or_generate
+    │   ├── ingestion.py           ← plot_raw_series_coverage, plot_raw_series_sample (step 01)
+    │   ├── features.py            ← plot_feature_correlations, plot_gap_fill_before_after,
+    │   │                             plot_feature_variance_ranking, plot_centered_vs_causal (step 02)
+    │   ├── clustering.py          ← plot_elbow_curve, plot_pca_scatter, plot_scree,
+    │   │                             plot_silhouette_samples, plot_gmm_bic_surface (step 03)
+    │   ├── regime.py              ← plot_regime_timeline, plot_transition_matrix,
+    │   │                             plot_soft_probabilities, plot_forward_prob_evolution (step 04)
+    │   ├── prediction.py          ← plot_feature_importance, plot_decision_tree,
+    │   │                             plot_calibration_curve, plot_learning_curve (step 05)
+    │   ├── assets.py              ← plot_asset_returns_by_regime, plot_regime_asset_heatmap (step 06)
+    │   └── diagnostics.py         ← plot_rrg_scatter, plot_divergence_timeseries (steps 08-09)
+    └── monitoring/                ← pipeline monitoring package (re-exports from monitoring/__init__.py)
+        ├── __init__.py            ← re-exports all monitoring functions
+        ├── ingestion.py           ← validate_date_range, count_source_columns, format_completeness_table
+        ├── features.py            ← compute_feature_quality, FeatureQualityReport
+        ├── clustering.py          ← compute_regime_stability, format_method_comparison,
+        │                             RegimeStabilityReport
+        ├── prediction.py          ← compute_cv_fold_scores, check_regime_probabilities, CVFoldReport
+        └── pipeline.py            ← validate_step_output, PipelineHealthSummary, format_tactics_summary
 ```
 
 ---
@@ -1807,3 +1852,51 @@ regression), PCA output is 5 components with no NaNs, clustering produces valid 
 
 **New test files:** `tests/test_pipeline_smoke.py` (12 tests), `tests/test_cli_smoke.py`
 (7 tests), `tests/integration/__init__.py`, `tests/integration/test_mini_pipeline.py` (14 tests).
+
+### D45. A3 type hint pass — all 193 public functions fully annotated (2026-04-02)
+
+Completed the final A3 type-hint gap across 6 files. All 193 public functions in
+`trading_crab_lib` now have complete annotations (return types + parameter hints).
+`cls` in classmethods is intentionally unannotated per Python convention.
+
+Changes:
+- `__init__.py`: `-> dict` return types on `load()` and `load_portfolio()` wrappers
+- `monitoring/prediction.py`: `model: object` in `compute_cv_fold_scores`
+- `plotting/clustering.py`: `pca_obj: object` in `plot_scree` and `plot_pca_loadings`
+- `plotting/prediction.py`: `model: object` / `tree: object` in 4 plot functions
+- `prediction/__init__.py`: `-> object` return type on `train_lightgbm` (lgb optional dep)
+- `runtime.py`: `import argparse`; `args: argparse.Namespace` in `from_args`
+
+### D46. K4 — settings.yaml schema validation (2026-04-02)
+
+Added `validate_config(cfg)` to `src/trading_crab_lib/config.py`:
+- Checks all required top-level sections: `data`, `fred`, `multpl`, `features`,
+  `clustering`, `prediction`, `assets`, `dashboard`, `pipeline`, `tactics`
+- Validates types of 11 critical scalar keys (int/float/str) with full dotpath in error
+- Collects all errors before raising — one `ValueError` lists every issue at once
+- Called automatically at the end of `load()` (fail-fast before any pipeline step runs)
+- Helper `_get_nested(cfg, dotpath)` walks nested dicts via dot-separated paths
+- 8 new tests in `tests/unit/test_config.py` (total: 12 including existing portfolio tests)
+
+### D47. E1–E3 — MANIFEST.in, CLAUDE.md, README.md updates (2026-04-02)
+
+**E1 — lib MANIFEST.in fixed:** The `recursive-include trading_crab_lib *.py py.typed` line
+was a no-op (no `trading_crab_lib/` subdirectory inside `src/trading_crab_lib/`). Python
+source files are found via setuptools package discovery (`where = [".."]`); `py.typed` is
+covered by `[tool.setuptools.package-data]`. MANIFEST.in now contains only the metadata
+include and exclusions with an explanatory comment.
+
+**E2 — CLAUDE.md layout tree updated:**
+- Notebooks list extended from 08 to 12 (added 09-12 with descriptions)
+- Library tree updated: `plotting.py` → `plotting/` package (9 submodules);
+  `monitoring.py` → `monitoring/` package (5 submodules); added `divergence.py`,
+  `momentum.py`, `indicators.py`, `yield_curve_features.py`, `macrotrends.py`,
+  `ingestion/__init__.py`, `prediction/gradient_boosting.py`
+- Tests section updated from 571 to ~769 tests; added all new test files added
+  since v0.1.2 (test_hmm, test_markov, test_lightgbm, test_divergence, test_momentum,
+  test_indicators, test_macrotrends, test_pipeline_smoke, test_cli_smoke, integration/)
+- This ADR log updated with D45–D47
+
+**E3 — README.md badge updated:** `tests-635%20passing` → `tests-769%20passing`.
+STATE.md new total updated to ~769.
+

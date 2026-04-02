@@ -1,9 +1,13 @@
 # MANIFEST.in — for the `trading-crab-lib` library sdist
+#
+# Build root is src/trading_crab_lib/; package is discovered via
+#   [tool.setuptools.packages.find] where = [".."]
+# which tells setuptools to look in src/ (the parent) for packages.
+# Python source files are included automatically by package discovery.
+# py.typed is included via [tool.setuptools.package-data] in pyproject.toml.
+# This file only handles non-Python metadata and exclusions.
 
 include pyproject.toml
-
-# Library package
-recursive-include trading_crab_lib *.py py.typed
 
 # Exclude app-layer and repo-only artifacts
 prune trading_crab
