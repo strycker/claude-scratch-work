@@ -343,7 +343,7 @@ F1–F3 are Tier 1 (high priority); F4–F6 are Tier 2 (deferred).
 | **F3** | Interactive Streamlit dashboard — browser-based UI with tabs for regime history, asset rankings, portfolio, diagnostics; wire into `tradingcrab-publish` | L | Phase C | 1 |
 | **F4** | Weekly automated report with AI narrative — Claude API generates market commentary from current regime, transition probs, asset signals | XL | Phase C, F3 | 2 |
 | **F5** | Finviz Elite integration — sector rotation, institutional flow data; gated behind API key / optional dep | L | Phase C | 2 |
-| **F6** | `trading-crab-lib` config independence — allow library to accept a config dict or path at runtime rather than requiring `config/settings.yaml` on disk; enables clean `pip install` usage without git clone | S | Phase C | 2 |
+| **F6** ✅ | `trading-crab-lib` config independence — allow library to accept a config dict or path at runtime rather than requiring `config/settings.yaml` on disk; enables clean `pip install` usage without git clone | S | Phase C | 2 | Implemented as K1 (D48) |
 
 ---
 

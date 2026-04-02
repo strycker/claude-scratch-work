@@ -127,7 +127,10 @@ class TestLoadDictConfig:
         import logging
         cfg = _minimal_valid_cfg()
         env = {k: v for k, v in __import__("os").environ.items() if k != "FRED_API_KEY"}
+        # Also mock load_dotenv so a real .env file on disk can't inject FRED_API_KEY
+        # back into os.environ after the patch.dict clears it.
         with patch.dict("os.environ", env, clear=True), \
+             patch("trading_crab_lib.config.load_dotenv"), \
              caplog.at_level(logging.WARNING, logger="trading_crab_lib.config"):
             load(cfg)
         assert any("FRED_API_KEY" in r.message for r in caplog.records)
