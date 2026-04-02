@@ -35,7 +35,7 @@ class CVFoldReport:
 
 
 def compute_cv_fold_scores(
-    model,
+    model: object,
     X: pd.DataFrame,
     y: pd.Series,
     *,
