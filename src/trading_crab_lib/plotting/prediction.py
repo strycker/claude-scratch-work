@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 # ── Step 05: Prediction ────────────────────────────────────────────────────────
 
 def plot_feature_importance(
-    model,
+    model: object,
     feature_names: list[str],
     run_cfg: RunConfig,
     top_n: int = 25,
@@ -150,7 +150,7 @@ def plot_confusion_matrix(
 def plot_predicted_vs_actual(
     features: pd.DataFrame,
     labels: pd.Series,
-    model,
+    model: object,
     regime_names: dict[int, str],
     run_cfg: RunConfig,
 ) -> None:
@@ -330,7 +330,7 @@ def plot_asset_return_distributions(
 
 
 def plot_decision_tree(
-    tree,
+    tree: object,
     feature_names: list[str],
     regime_names: dict[int, str],
     run_cfg: RunConfig,
@@ -494,7 +494,7 @@ def plot_calibration_curve(
 
 
 def plot_learning_curve(
-    model,
+    model: object,
     X: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
     run_cfg: RunConfig,

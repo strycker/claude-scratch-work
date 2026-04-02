@@ -166,10 +166,11 @@ def train_decision_tree(X: pd.DataFrame, y: pd.Series, cfg: dict) -> DecisionTre
     return train_classifier(X, y, cfg, kind="dt")
 
 
-def train_lightgbm(X: pd.DataFrame, y: pd.Series, cfg: dict):
+def train_lightgbm(X: pd.DataFrame, y: pd.Series, cfg: dict) -> object:
     """Train a LightGBM classifier to predict today's regime. See train_classifier().
 
     Raises ImportError if lightgbm is not installed.
+    Returns an ``lgb.LGBMClassifier`` instance.
     """
     return train_classifier(X, y, cfg, kind="lgbm")
 

@@ -135,7 +135,7 @@ def plot_cluster_sizes(
 
 
 def plot_scree(
-    pca_obj,
+    pca_obj: object,
     run_cfg: RunConfig,
     *,
     filename: str = "03_scree.png",
@@ -168,7 +168,7 @@ def plot_scree(
 
 
 def plot_pca_loadings(
-    pca_obj,
+    pca_obj: object,
     feature_names: list[str],
     run_cfg: RunConfig,
     *,
