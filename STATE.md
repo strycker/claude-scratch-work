@@ -66,7 +66,7 @@ Total: 573 collected — ✅ all passing (Python 3.11; 11 skipped: HDBSCAN + css
 - `test_reporting.py`: +6 `TestAppendDiagnosticsSection` tests + 1 end-to-end report test
 - `test_email_weekly.py`: +8 `_markdown_to_html` tests + 2 HTML-always tests + 2 updated
 
-**New total: ~602 collected** (11 skipped: HDBSCAN + cssselect optional).
+**New total: ~769 collected** (optional-dep skips reduced by requirements-dev.txt covering all optional deps).
 
 **Coverage gaps:** All previously untested modules now have test coverage.
 Former gaps (`reporting.py`, `plotting.py`, `runtime.py`) are fully covered.
