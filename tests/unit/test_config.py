@@ -1,11 +1,12 @@
 """Unit tests for config loader, portfolio loader, and schema validation."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
 
-from trading_crab_lib.config import load_portfolio, validate_config
+from trading_crab_lib.config import load, load_portfolio, validate_config
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -99,6 +100,54 @@ class TestValidateConfig:
         # would never produce True for an integer setting in practice.
         # This test documents the behaviour rather than requiring rejection.
         validate_config(cfg)  # does not raise — bool passes int check
+
+
+# ── load (dict path — K1 config independence) ─────────────────────────────────
+
+class TestLoadDictConfig:
+    """load() accepts a pre-built dict, skipping all file I/O."""
+
+    def test_dict_config_passes_validation(self):
+        """A valid dict config is returned after validation + FRED key injection."""
+        cfg = _minimal_valid_cfg()
+        with patch.dict("os.environ", {"FRED_API_KEY": "test_key_123"}):
+            result = load(cfg)
+        assert result["fred"]["api_key"] == "test_key_123"
+
+    def test_dict_config_does_not_modify_original(self):
+        """load() mutates fred.api_key in-place; original dict is the same object."""
+        cfg = _minimal_valid_cfg()
+        with patch.dict("os.environ", {"FRED_API_KEY": "k"}):
+            result = load(cfg)
+        # result IS cfg (same object, mutated)
+        assert result is cfg
+
+    def test_dict_config_missing_fred_key_warns(self, caplog):
+        """Missing FRED_API_KEY logs a warning but does not raise."""
+        import logging
+        cfg = _minimal_valid_cfg()
+        env = {k: v for k, v in __import__("os").environ.items() if k != "FRED_API_KEY"}
+        with patch.dict("os.environ", env, clear=True), \
+             caplog.at_level(logging.WARNING, logger="trading_crab_lib.config"):
+            load(cfg)
+        assert any("FRED_API_KEY" in r.message for r in caplog.records)
+
+    def test_dict_config_invalid_raises_valueerror(self):
+        """An invalid dict still goes through validate_config and raises."""
+        cfg = _minimal_valid_cfg()
+        del cfg["clustering"]
+        with pytest.raises(ValueError, match="clustering"):
+            load(cfg)
+
+    def test_string_path_loads_file(self, tmp_path):
+        """load() accepts a str path in addition to Path objects."""
+        cfg = _minimal_valid_cfg()
+        yaml_text = yaml.dump(cfg)
+        p = tmp_path / "settings.yaml"
+        p.write_text(yaml_text)
+        with patch.dict("os.environ", {"FRED_API_KEY": "sk"}):
+            result = load(str(p))
+        assert result["data"]["frequency"] == "Q"
 
 
 # ── load_portfolio ─────────────────────────────────────────────────────────────

@@ -108,6 +108,29 @@ pip install "trading-crab-lib[plotting]"    # + matplotlib/seaborn
 pip install "trading-crab-lib[all]"         # everything
 ```
 
+### Docker
+
+If you prefer not to manage a Python environment locally, Docker provides a
+fully self-contained setup:
+
+```bash
+# Build the image (first time, ~5 min)
+docker build -t trading-crab .
+
+# Run the weekly report (requires FRED_API_KEY and SMTP vars in .env)
+docker compose run --rm weekly-report
+
+# Run an arbitrary pipeline subset
+docker compose run --rm pipeline --steps 3,4,5 --plots
+
+# Launch JupyterLab at http://localhost:8888
+docker compose up notebook
+```
+
+See [`Dockerfile`](Dockerfile) and [`docker-compose.yml`](docker-compose.yml)
+for the full configuration.  All secrets are passed via environment variables
+or a `.env` file — never baked into the image.
+
 ### Common Commands (via Makefile)
 
 ```bash

@@ -1,0 +1,114 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Trading-Crab — docker-compose.yml
+#
+# Services:
+#   weekly-report  — runs the full pipeline + emails the weekly report (one-shot)
+#   pipeline       — interactive pipeline runner with an arbitrary CMD
+#   notebook       — JupyterLab server for notebook exploration
+#
+# Quick start:
+#   # 1. Copy and fill in your credentials
+#   cp .env.example .env
+#   # Edit .env: set FRED_API_KEY and TC_SMTP_* / TC_EMAIL_* vars
+#
+#   # 2. Copy config if not already present
+#   mkdir -p config && cp config/settings.yaml config/ 2>/dev/null || true
+#
+#   # 3. Run the weekly report (one-shot, exits when done)
+#   docker compose run --rm weekly-report
+#
+#   # 4. Run an arbitrary pipeline subset interactively
+#   docker compose run --rm pipeline --steps 3,4,5 --plots
+#
+#   # 5. Launch JupyterLab (http://localhost:8888)
+#   docker compose up notebook
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-pipeline-base: &pipeline-base
+  image: trading-crab:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: pipeline
+  # All secrets come from .env — never bake them into the image.
+  env_file:
+    - .env
+  environment:
+    # Path overrides so the container reads config and writes data to
+    # the bind-mounted host directories.
+    TC_CONFIG_DIR: /app/config
+    TC_DATA_DIR: /app/data
+    TC_OUTPUT_DIR: /app/outputs
+    PYTHONUNBUFFERED: "1"
+  volumes:
+    # config/  — bind-mounted read-only; host manages settings.yaml
+    - ./config:/app/config:ro
+    # data/ and outputs/ — read-write; pipeline checkpoints and plots persist
+    # on the host between runs.
+    - ./data:/app/data
+    - ./outputs:/app/outputs
+
+
+services:
+
+  # ── Weekly report ────────────────────────────────────────────────────────────
+  # One-shot service: runs the full pipeline, writes the weekly report, and
+  # optionally sends an email.  Designed for cron or GitHub Actions scheduling.
+  #
+  # Usage:
+  #   docker compose run --rm weekly-report
+  #
+  # Cron example (run every Friday at 07:00 local time):
+  #   0 7 * * 5 cd /path/to/trading-crab && docker compose run --rm weekly-report
+  weekly-report:
+    <<: *pipeline-base
+    # Restart policy: "no" means Docker will NOT restart the container after it
+    # exits.  This is correct for a one-shot cron job.  For a long-running
+    # daemon-style setup, change to "on-failure".
+    restart: "no"
+    command: >
+      --refresh
+      --recompute
+      --steps 1,2,3,4,5,6,7
+      --weekly-report
+      --send-email
+
+  # ── Interactive pipeline runner ───────────────────────────────────────────────
+  # Use this service to run arbitrary step subsets or inspect checkpoints.
+  #
+  # Usage:
+  #   docker compose run --rm pipeline --steps 3,4,5 --plots
+  #   docker compose run --rm pipeline --help
+  pipeline:
+    <<: *pipeline-base
+    restart: "no"
+    # Default: print help.  Override on the command line.
+    command: ["--help"]
+
+  # ── JupyterLab notebook server ────────────────────────────────────────────────
+  # Starts JupyterLab and exposes it on http://localhost:8888.
+  # Notebooks are mounted from the host so edits persist.
+  #
+  # Usage:
+  #   docker compose up notebook
+  #   # Then open http://localhost:8888 in your browser.
+  notebook:
+    <<: *pipeline-base
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./notebooks:/app/notebooks
+    # Override entrypoint to run JupyterLab directly
+    entrypoint: ["jupyter", "lab"]
+    command:
+      - "--ip=0.0.0.0"
+      - "--port=8888"
+      - "--no-browser"
+      - "--notebook-dir=/app/notebooks"
+      - "--allow-root"
+      - "--ServerApp.token=''"
+      - "--ServerApp.password=''"

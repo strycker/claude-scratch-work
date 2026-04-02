@@ -1,6 +1,15 @@
 """
 Central config loader — call load() once at pipeline entry points.
 Uses python-dotenv for secrets, PyYAML for settings.
+
+``load()`` accepts three forms:
+
+* ``load()`` or ``load(None)``    — reads ``config/settings.yaml`` from the
+  repo root (default, backward-compatible with git-clone installs).
+* ``load("/path/to/settings.yaml")`` — reads a specific file.
+* ``load({"data": {...}, ...})``  — accepts a pre-built config dict directly,
+  skipping all file I/O.  Useful for ``pip install``-only users who manage
+  config programmatically, or for test isolation.
 """
 
 from __future__ import annotations
@@ -49,7 +58,7 @@ _REQUIRED_SCALARS: dict[str, tuple[type, str]] = {
 
 
 def _get_nested(cfg: dict, dotpath: str) -> Any:
-    """Return the value at *dotpath* (e.g. ``'clustering.k_cap'``), or ``KeyError``."""
+    """Return the value at *dotpath* (e.g. ``'clustering.k_cap'``), or raise ``KeyError``."""
     keys = dotpath.split(".")
     node: Any = cfg
     for k in keys:
@@ -105,16 +114,38 @@ def validate_config(cfg: dict[str, Any]) -> None:
         )
 
 
-def load(settings_path: Path | None = None) -> dict[str, Any]:
-    """Load settings.yaml, validate its schema, and inject secrets from .env / environment.
+def load(
+    settings_path: dict[str, Any] | Path | str | None = None,
+) -> dict[str, Any]:
+    """Load config, validate its schema, and inject secrets from the environment.
 
-    Raises :exc:`ValueError` if any required key is missing or has the wrong type.
+    Args:
+        settings_path: Controls how config is sourced:
+
+            * ``None`` (default) — reads ``config/settings.yaml`` relative to the
+              repo root detected at import time.  Equivalent to a git-clone install.
+            * ``Path`` or ``str`` — reads from the given YAML file path.
+            * ``dict`` — uses the provided mapping directly, bypassing all file I/O.
+              The dict is validated and the FRED API key is still injected from the
+              environment.  Useful for programmatic config, Docker / CI environments,
+              and ``pip install`` users who manage settings in code.
+
+    Returns:
+        Validated config dict with ``fred.api_key`` injected.
+
+    Raises:
+        ValueError: If required keys are missing or have the wrong type.
+        FileNotFoundError: If a file path is given but does not exist.
     """
     load_dotenv()  # reads .env if present; env vars already set take priority
 
-    path = settings_path or CONFIG_DIR / "settings.yaml"
-    with open(path) as f:
-        cfg = yaml.safe_load(f)
+    if isinstance(settings_path, dict):
+        # Dict path — skip file I/O entirely; validate + inject only.
+        cfg: dict[str, Any] = settings_path
+    else:
+        path = Path(settings_path) if settings_path is not None else CONFIG_DIR / "settings.yaml"
+        with open(path) as f:
+            cfg = yaml.safe_load(f)
 
     validate_config(cfg)
 
