@@ -1900,3 +1900,58 @@ include and exclusions with an explanatory comment.
 **E3 — README.md badge updated:** `tests-635%20passing` → `tests-769%20passing`.
 STATE.md new total updated to ~769.
 
+### D48. K1 — Config independence: load() accepts dict | Path | str | None (2026-04-02)
+
+`trading_crab_lib.config.load()` now accepts three input forms:
+
+- `None` (default) — reads `config/settings.yaml` from the repo root (backward-compatible).
+- `Path | str` — reads from the given YAML file path.
+- `dict` — accepts a pre-built config dict directly, **bypassing all file I/O**.
+  Validation and FRED key injection still run.
+
+This enables clean `pip install trading-crab-lib` usage without a git clone — callers
+can construct the config programmatically and pass it to `load()`.  Also useful for
+Docker/CI environments where config is injected via environment variables.
+
+5 new tests in `TestLoadDictConfig` (total test_config.py: 17).
+
+### D49. K2 — Dockerfile: multi-stage build for reproducible pipeline runs (2026-04-02)
+
+Two-stage Dockerfile:
+
+- **Stage `base`** — Python 3.11-slim + system build tools + core library deps only.
+  Useful as a lightweight base for custom downstream images.
+- **Stage `pipeline`** (default) — extends `base` with all optional extras
+  (`[ingestion,plotting,boosting]`), the `trading-crab` app package, and the
+  `tradingcrab` CLI entry point.  Optionally installs `k-means-constrained`.
+
+Runtime directories (`/app/config`, `/app/data`, `/app/outputs`) are pre-created
+inside the image but designed to be overridden by bind mounts.  All secrets pass
+through environment variables (`FRED_API_KEY`, `TC_SMTP_*`, etc.) — none are baked
+into the image.  `TC_CONFIG_DIR`, `TC_DATA_DIR`, `TC_OUTPUT_DIR` are pre-set to
+`/app/config`, `/app/data`, `/app/outputs` respectively, matching the expected volume
+mount points.
+
+`.dockerignore` excludes: `.env`, secrets, `data/`, `outputs/`, `.venv`,
+`gsd-scratch-work/`, `trading-crab-lib/`, `notebooks/`, `legacy/`, and build artefacts.
+
+### D50. K3 — docker-compose.yml: three-service compose file (2026-04-02)
+
+Three services defined via YAML anchors (`x-pipeline-base`):
+
+- **`weekly-report`** — one-shot service (`restart: no`) that runs
+  `tradingcrab --refresh --recompute --steps 1,2,3,4,5,6,7 --weekly-report --send-email`.
+  Designed for cron (`0 7 * * 5 docker compose run --rm weekly-report`) or GitHub Actions.
+
+- **`pipeline`** — interactive runner with `CMD ["--help"]` override; use
+  `docker compose run --rm pipeline --steps 3,4,5` for ad-hoc step execution.
+
+- **`notebook`** — overrides `ENTRYPOINT` to `jupyter lab` and exposes port 8888.
+  Notebooks mounted from `./notebooks` on the host so edits persist.
+
+All three services share the `x-pipeline-base` anchor: same image build, same
+`env_file: .env`, same volume mounts (`./config:ro`, `./data`, `./outputs`), same
+`TC_*` path overrides.
+
+README.md updated with a Docker quick-start section.
+

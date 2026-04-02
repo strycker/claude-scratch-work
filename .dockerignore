@@ -1,0 +1,62 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .dockerignore — keep the Docker build context small and secrets-free
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets / credentials ─────────────────────────────────────────────────────
+.env
+config/email.yaml
+config/email.local.yaml
+config/portfolio.local.yaml
+
+# ── Runtime data (always bind-mounted, never baked into image) ────────────────
+data/
+outputs/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Python byte-code and caches ───────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Git and version-control metadata ─────────────────────────────────────────
+.git/
+.gitignore
+.gitmodules
+
+# ── Reference submodules (read-only; not needed in the image) ─────────────────
+gsd-scratch-work/
+trading-crab-lib/
+trading-crab/
+
+# ── Development / editor artefacts ───────────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.cover
+
+notebooks/
+legacy/
+
+# Documentation files (not needed at runtime)
+*.md
+!README.md
+
+# IDE / OS artefacts
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
