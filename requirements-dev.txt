@@ -13,6 +13,9 @@
 pytest>=8.0
 pytest-cov>=5.0
 
+# Linting / type-checking
+ruff>=0.4
+
 # Optional deps required for a zero-skip test run.
 # These match the [project.optional-dependencies] extras in
 # src/trading_crab_lib/pyproject.toml — keep them in sync.
