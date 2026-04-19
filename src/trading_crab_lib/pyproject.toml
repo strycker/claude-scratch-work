@@ -74,6 +74,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov",
     "flake8",
+    "ruff>=0.4",
 ]
 
 # pyproject.toml is at src/trading_crab_lib/ — look one level up (src/) for packages

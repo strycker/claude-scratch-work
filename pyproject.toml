@@ -40,6 +40,7 @@ dev = [
     "ipykernel",
     "jupyterlab",
     "flake8",
+    "ruff>=0.4",
 ]
 
 # Find only the app package; the library has its own pyproject.toml
@@ -68,6 +69,26 @@ ignore_missing_imports = true
 warn_unused_configs = true
 # Not strict yet — enable incrementally as type coverage improves.
 # Next targets: warn_return_any, warn_unreachable, disallow_untyped_defs.
+
+[tool.ruff]
+line-length = 127
+target-version = "py310"
+exclude = [
+    "gsd-scratch-work",
+    "trading-crab-lib",
+    "legacy",
+    ".venv",
+]
+
+[tool.ruff.lint]
+# E/W: pycodestyle errors/warnings  F: pyflakes  I: isort  UP: pyupgrade
+select = ["E", "F", "W", "I", "UP"]
+# E741: ambiguous variable name (l, O, I) — common in ML/math code
+ignore = ["E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests freely shadow/re-import fixtures
+"tests/**/*.py" = ["F811"]
 
 # uv workspace: editable-installs both packages with a single `uv sync`
 [tool.uv.workspace]
