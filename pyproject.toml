@@ -93,3 +93,41 @@ ignore = ["E741"]
 # uv workspace: editable-installs both packages with a single `uv sync`
 [tool.uv.workspace]
 members = ["src/trading_crab_lib"]
+
+# ── Poetry ──────────────────────────────────────────────────────────────────
+# Poetry 2.x reads [project] for metadata. This section adds Poetry-specific
+# overrides — in particular, the path dependency for trading-crab-lib so that
+# `poetry install` installs the library from source instead of PyPI.
+#
+# pip / uv use [project.dependencies] (trading-crab-lib>=0.1.2).
+# Poetry uses [tool.poetry.dependencies] (path dep below).
+#
+# To set up locally with Poetry:
+#   pip install poetry
+#   poetry install                  # installs lib (path) + app + dev deps
+#   poetry run pytest tests/ -v
+#   poetry run tradingcrab --help
+#
+# To regenerate the lock file after dependency changes:
+#   poetry lock
+
+[tool.poetry]
+name = "trading-crab"
+packages = [{include = "trading_crab", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+# Install library as editable path dep (overrides [project.dependencies] for Poetry).
+trading-crab-lib = {path = "src/trading_crab_lib", develop = true}
+pyyaml = ">=6.0"
+python-dotenv = ">=1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0"
+pytest-cov = "*"
+ipykernel = "*"
+jupyterlab = "*"
+flake8 = "*"
+ruff = ">=0.4"
+pylint = ">=3.0"
+mypy = ">=1.0"

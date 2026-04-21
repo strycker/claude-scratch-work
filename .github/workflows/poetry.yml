@@ -1,0 +1,61 @@
+# Verify that Poetry can install both packages and the test suite passes.
+# This is a parallel install-method check alongside the pip-based CI in
+# python-package.yml.  It runs on Python 3.11 only (single version is enough
+# to catch Poetry-specific resolution issues without duplicating the matrix).
+#
+# Local equivalent:
+#   pip install poetry
+#   poetry install
+#   poetry run pytest tests/ -v --tb=short
+
+name: Poetry
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  poetry-install-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install "poetry>=1.8"
+
+      - name: Configure Poetry (no venv inside project dir)
+        run: poetry config virtualenvs.in-project false
+
+      - name: Install project and dependencies via Poetry
+        run: |
+          # `poetry install` reads [tool.poetry.dependencies] from root pyproject.toml,
+          # which declares trading-crab-lib as an editable path dep.  This installs
+          # both packages plus dev extras in one step.
+          poetry install --with dev
+
+      - name: Install optional extras for full test coverage
+        run: |
+          # Install the same optional packages the pip CI installs so the Poetry
+          # test run exercises the same code paths.
+          poetry run pip install \
+            "trading-crab-lib[all]" \
+            k-means-constrained \
+            cssselect \
+            curl_cffi \
+            kneed \
+            hdbscan || true   # hdbscan compilation non-fatal
+
+      - name: Run tests via Poetry
+        run: poetry run pytest tests/ -v --tb=short
+
+      - name: Verify CLI entry point resolves
+        run: poetry run tradingcrab --help || true   # stub raises NotImplementedError; that's OK

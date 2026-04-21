@@ -1,7 +1,8 @@
 # Makefile — shortcuts for common Trading-Crab tasks.
 # Run `make help` to see all available targets.
 
-.PHONY: help setup setup-dev install install-dev test lint run run-full run-steps clean-checkpoints clean-all
+.PHONY: help setup setup-dev install install-dev test lint run run-full run-steps clean-checkpoints clean-all \
+        poetry-install poetry-test poetry-lock poetry-build
 
 # ── default ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,11 @@ help:
 	@echo ""
 	@echo "  make test           Run the full test suite"
 	@echo "  make test-fast      Run tests, stop at first failure"
+	@echo ""
+	@echo "  make poetry-install Install all deps via Poetry (creates poetry.lock)"
+	@echo "  make poetry-test    Run test suite via Poetry"
+	@echo "  make poetry-lock    Regenerate poetry.lock without installing"
+	@echo "  make poetry-build   Build both packages (sdist + wheel) via Poetry"
 	@echo ""
 	@echo "  make run            Steps 3-7 from cached data (fast, no re-scraping)"
 	@echo "  make run-full       Full pipeline — re-scrape + recompute + plots"
@@ -50,6 +56,29 @@ test:
 
 test-fast:
 	pytest tests/ -x -q
+
+# ── poetry ─────────────────────────────────────────────────────────────────────
+
+# Install both packages + all dev deps via Poetry.
+# On first run this generates poetry.lock — commit it afterward.
+poetry-install:
+	pip install --quiet "poetry>=1.8"
+	poetry install --with dev
+
+# Run the full test suite through Poetry's managed environment.
+poetry-test: poetry-install
+	poetry run pytest tests/ -v --tb=short
+
+# Regenerate poetry.lock after changing dependencies (does not install).
+poetry-lock:
+	pip install --quiet "poetry>=1.8"
+	poetry lock
+
+# Build sdist + wheel for both packages using Poetry.
+poetry-build:
+	pip install --quiet "poetry>=1.8"
+	poetry build
+	cd src/trading_crab_lib && poetry build
 
 # ── pipeline ───────────────────────────────────────────────────────────────────
 

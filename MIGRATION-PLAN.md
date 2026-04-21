@@ -10,6 +10,23 @@ and the exact file contents will be generated for copy-paste into the target rep
 
 ---
 
+## Phase Status Summary
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Q0 — Foundation | ✅ Complete | S0.1–S0.7 done; plus S9.3/S9.5 work done early |
+| Q1 — Data Ingestion | 🔲 Next | Begin with S1.1 |
+| Q2 — Feature Engineering | 🔲 | |
+| Q3 — Clustering | 🔲 | |
+| Q4 — Regime Labeling | 🔲 | |
+| Q5 — Prediction | 🔲 | |
+| Q6 — Asset Returns & Dashboard | 🔲 | |
+| Q7 — Diagnostics & Tactics | 🔲 | |
+| Q8 — Pipeline Orchestration & CLI | 🔲 | Stubs exist (cli.py, pipeline.py) |
+| Q9 — DevOps & Packaging | 🟡 Partial | CI/publish/pylint/ruff/mypy/Poetry done |
+
+---
+
 ## How to Use This Plan
 
 1. Work through Q-phases in order (Q0 → Q9).
@@ -25,19 +42,19 @@ and the exact file contents will be generated for copy-paste into the target rep
 
 ---
 
-## Q0 — Foundation: Repo Skeleton & Core Infrastructure
+## Q0 — Foundation: Repo Skeleton & Core Infrastructure ✅ COMPLETE
 
 **Goal:** An installable but empty shell. Both packages install, imports work, tests run (0 tests pass, 0 fail).
 
-| Tag | Description | Files Created/Modified |
-|-----|-------------|------------------------|
-| S0.1 | Root repo files | `README.md`, `.gitignore`, `.env.example`, `Makefile`, `pyproject.toml` (root/app) |
-| S0.2 | Library pyproject + package skeleton | `src/trading_crab_lib/pyproject.toml`, `src/trading_crab_lib/__init__.py`, `src/trading_crab_lib/py.typed` |
-| S0.3 | App package skeleton | `src/trading_crab/__init__.py`, `src/trading_crab/cli.py` (stub), `src/trading_crab/pipeline.py` (stub) |
-| S0.4 | Core library modules | `src/trading_crab_lib/runtime.py`, `src/trading_crab_lib/config.py` (load skeleton only), `src/trading_crab_lib/checkpoints.py` |
-| S0.5 | Plotting & monitoring package skeletons | `src/trading_crab_lib/plotting/__init__.py`, `src/trading_crab_lib/plotting/core.py`, `src/trading_crab_lib/monitoring/__init__.py` |
-| S0.6 | Test infrastructure | `tests/__init__.py`, `tests/conftest.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py` |
-| S0.7 | Settings skeleton + regime labels | `config/settings.yaml` (empty sections only), `config/regime_labels.yaml` (empty) |
+| Tag | Status | Description | Files Created/Modified |
+|-----|--------|-------------|------------------------|
+| S0.1 | ✅ | Root repo files | `README.md`, `.gitignore`, `.env.example`, `Makefile`, `pyproject.toml` (root/app) |
+| S0.2 | ✅ | Library pyproject + package skeleton | `src/trading_crab_lib/pyproject.toml`, `src/trading_crab_lib/__init__.py`, `src/trading_crab_lib/py.typed` |
+| S0.3 | ✅ | App package skeleton | `src/trading_crab/__init__.py`, `src/trading_crab/cli.py` (stub), `src/trading_crab/pipeline.py` (stub) |
+| S0.4 | ✅ | Core library modules | `src/trading_crab_lib/runtime.py`, `src/trading_crab_lib/config.py` (load skeleton only), `src/trading_crab_lib/checkpoints.py` |
+| S0.5 | ✅ | Plotting & monitoring package skeletons | `src/trading_crab_lib/plotting/__init__.py`, `src/trading_crab_lib/plotting/core.py`, `src/trading_crab_lib/monitoring/__init__.py` |
+| S0.6 | ✅ | Test infrastructure | `tests/__init__.py`, `tests/conftest.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py` |
+| S0.7 | ✅ | Settings skeleton + regime labels | `config/settings.yaml` (empty sections only), `config/regime_labels.yaml` (empty) |
 
 **Validation after Q0:**
 ```bash
@@ -281,23 +298,30 @@ python run_pipeline.py --steps 3,4,5 --plots --verbose
 
 ---
 
-## Q9 — Remaining Tests, DevOps & Packaging
+## Q9 — Remaining Tests, DevOps & Packaging 🟡 PARTIAL
 
 **Goal:** Full test suite green; Docker build succeeds; GitHub Actions CI passes on push;
 `pip install trading-crab-lib` from PyPI (test index) works cleanly.
 
-| Tag | Description | Files Created/Modified |
-|-----|-------------|------------------------|
-| S9.1 | Remaining unit tests | `tests/unit/test_init_module.py`, `tests/unit/test_plotting.py`, `tests/unit/test_monitoring.py`, `tests/unit/test_confusion_matrix_plot.py` |
-| S9.2 | Constraint + legacy tests | `tests/test_pipelines_ingest_features.py`, `tests/unit/test_cluster_comparison.py` |
-| S9.3 | GitHub Actions workflows | `.github/workflows/python-package.yml`, `.github/workflows/publish-lib.yml`, `.github/workflows/publish-app.yml` |
-| S9.4 | Docker support | `Dockerfile`, `docker-compose.yml`, `.dockerignore` |
-| S9.5 | Pre-commit + mypy | `.pre-commit-config.yaml`, mypy section in root `pyproject.toml` |
-| S9.6 | CLAUDE.md + STATE.md for target repo | `CLAUDE.md` (adapted for trading-crab), `STATE.md`, `ROADMAP.md` |
+> **Already done in `trading-crab` ahead of schedule:**
+> - S9.3 — `ci.yml` (matrix CI) and `publish-pypi.yml` (consolidated) are live
+> - S9.5 — ruff and mypy wired into CI; `.pylintrc` present; `poetry.toml` sections added
+>
+> Items below are what remains.
+
+| Tag | Status | Description | Files Created/Modified |
+|-----|--------|-------------|------------------------|
+| S9.1 | 🔲 | Remaining unit tests | `tests/unit/test_init_module.py`, `tests/unit/test_plotting.py`, `tests/unit/test_monitoring.py`, `tests/unit/test_confusion_matrix_plot.py` |
+| S9.2 | 🔲 | Constraint + legacy tests | `tests/test_pipelines_ingest_features.py`, `tests/unit/test_cluster_comparison.py` |
+| S9.3 | ✅ | GitHub Actions workflows | `ci.yml` (matrix CI), `publish-pypi.yml` (consolidated both packages) |
+| S9.4 | 🔲 | Docker support | `Dockerfile`, `docker-compose.yml`, `.dockerignore` |
+| S9.5 | 🟡 | Pre-commit + linters + Poetry | `.pylintrc` ✅, ruff in CI ✅, mypy in CI ✅, Poetry `[tool.poetry]` sections ✅, `.pre-commit-config.yaml` 🔲 |
+| S9.6 | 🔲 | CLAUDE.md + STATE.md for target repo | `CLAUDE.md` (adapted for trading-crab), `STATE.md`, `ROADMAP.md` |
 
 **Validation after Q9:**
 ```bash
 pytest tests/ -v  # full suite, all passing
+poetry install && poetry run pytest tests/ -v  # verify Poetry path works
 docker build --target pipeline -t trading-crab:local .
 docker run --rm trading-crab:local tradingcrab --help
 pip install -e "src/trading_crab_lib/[all,dev]" && pip install -e ".[dev]"
