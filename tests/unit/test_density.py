@@ -165,15 +165,8 @@ def hdbscan_available():
 
 class TestFitHdbscanSweep:
     def test_import_error_when_not_installed(self, pca_df, monkeypatch):
-        import builtins
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "hdbscan":
-                raise ImportError("No module named 'hdbscan'")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", mock_import)
+        import trading_crab_lib.density as density_mod
+        monkeypatch.setattr(density_mod, "_HDBSCAN_AVAILABLE", False)
         with pytest.raises(ImportError, match="hdbscan not installed"):
             fit_hdbscan_sweep(pca_df)
 
@@ -205,15 +198,8 @@ class TestFitHdbscanSweep:
 
 class TestHdbscanLabels:
     def test_import_error_when_not_installed(self, pca_df, monkeypatch):
-        import builtins
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "hdbscan":
-                raise ImportError("No module named 'hdbscan'")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", mock_import)
+        import trading_crab_lib.density as density_mod
+        monkeypatch.setattr(density_mod, "_HDBSCAN_AVAILABLE", False)
         with pytest.raises(ImportError, match="hdbscan not installed"):
             hdbscan_labels(pca_df)
 
