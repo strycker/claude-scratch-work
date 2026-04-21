@@ -21,7 +21,6 @@ from trading_crab_lib.clustering import (
     reduce_pca,
 )
 
-
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 
 @pytest.fixture

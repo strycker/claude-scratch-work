@@ -9,16 +9,17 @@ from __future__ import annotations
 # matplotlib.use("Agg") must precede pyplot import — import order is intentional.
 # pylint: disable=wrong-import-position,wrong-import-order
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab_lib.runtime import RunConfig
 from trading_crab_lib import plotting
 from trading_crab_lib.plotting import core as _plotting_core
+from trading_crab_lib.runtime import RunConfig
+
 # pylint: enable=wrong-import-position,wrong-import-order
 
 
@@ -306,8 +307,8 @@ class TestPlotRrgScatter:
 
 class TestPlotFeatureImportanceComparison:
     def test_does_not_crash(self, run_cfg, tmp_path):
-        from sklearn.tree import DecisionTreeClassifier
         from sklearn.ensemble import RandomForestClassifier
+        from sklearn.tree import DecisionTreeClassifier
         rng = np.random.default_rng(42)
         data = rng.standard_normal((40, 10))
         y = np.array([i % 3 for i in range(40)])

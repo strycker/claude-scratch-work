@@ -13,7 +13,6 @@ from trading_crab_lib.email import (
     send_weekly_email,
 )
 
-
 # ── load_email_config tests ──────────────────────────────────────────────────
 
 

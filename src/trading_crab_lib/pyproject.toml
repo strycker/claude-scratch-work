@@ -84,3 +84,72 @@ include = ["trading_crab_lib*"]
 
 [tool.setuptools.package-data]
 trading_crab_lib = ["py.typed"]
+
+# ── Poetry ──────────────────────────────────────────────────────────────────
+# When working on the library in isolation, run from src/trading_crab_lib/:
+#   poetry install -E all        # installs core + all optional extras
+#   poetry run pytest ../../tests/unit/ -v
+#
+# From the repo root, `poetry install` installs this package as a path dep
+# automatically — you don't need to run poetry install here separately.
+
+[tool.poetry]
+name = "trading-crab-lib"
+packages = [{include = "trading_crab_lib", from = ".."}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = ">=2.0"
+numpy = ">=1.25"
+pyarrow = ">=14.0"
+scikit-learn = ">=1.4"
+scipy = ">=1.11"
+pyyaml = ">=6.0"
+joblib = ">=1.3"
+python-dotenv = ">=1.0"
+
+# Optional dependency groups mirror [project.optional-dependencies].
+# Install with: poetry install -E ingestion -E plotting  (or -E all)
+[tool.poetry.group.ingestion]
+optional = true
+
+[tool.poetry.group.ingestion.dependencies]
+fredapi = ">=0.5"
+requests = ">=2.31"
+lxml = ">=4.9"
+beautifulsoup4 = ">=4.12"
+yfinance = ">=0.2"
+certifi = ">=2024.0"
+
+[tool.poetry.group.plotting]
+optional = true
+
+[tool.poetry.group.plotting.dependencies]
+matplotlib = ">=3.8"
+seaborn = ">=0.13"
+
+[tool.poetry.group.hmm]
+optional = true
+
+[tool.poetry.group.hmm.dependencies]
+hmmlearn = ">=0.3"
+statsmodels = ">=0.14"
+
+[tool.poetry.group.clustering-extras]
+optional = true
+
+[tool.poetry.group.clustering-extras.dependencies]
+hdbscan = ">=0.8"
+kneed = ">=0.8"
+
+[tool.poetry.group.boosting]
+optional = true
+
+[tool.poetry.group.boosting.dependencies]
+lightgbm = ">=4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0"
+pytest-cov = "*"
+flake8 = "*"
+ruff = ">=0.4"

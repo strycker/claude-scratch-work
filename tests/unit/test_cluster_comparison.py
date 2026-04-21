@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import joblib
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -15,7 +14,6 @@ from trading_crab_lib.cluster_comparison import (
     pairwise_rand_index,
     recommend_clustering_features,
 )
-
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 

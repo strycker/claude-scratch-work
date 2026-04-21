@@ -23,9 +23,9 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import BPoly
 
-from trading_crab_lib.momentum import add_momentum_features
-from trading_crab_lib.indicators import compute_lei_proxy
 from trading_crab_lib.divergence import add_divergence_features
+from trading_crab_lib.indicators import compute_lei_proxy
+from trading_crab_lib.momentum import add_momentum_features
 
 log = logging.getLogger(__name__)
 

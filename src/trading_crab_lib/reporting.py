@@ -14,9 +14,9 @@ Portfolio construction (regime-conditional allocation):
 
 from __future__ import annotations
 
-from typing import Any
 import logging
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 

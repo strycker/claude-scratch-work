@@ -6,11 +6,11 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.tactics import (
+    _realized_vol,
+    _rolling_corr,
+    _trend_slope,
     classify_tactics,
     compute_tactics_metrics,
-    _realized_vol,
-    _trend_slope,
-    _rolling_corr,
 )
 
 

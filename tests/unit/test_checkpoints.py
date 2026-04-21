@@ -5,8 +5,8 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.checkpoints import (
-    CheckpointManager,
     PRESERVATION_CHECKPOINT_NAMES,
+    CheckpointManager,
     preservation_checkpoint_should_write,
 )
 

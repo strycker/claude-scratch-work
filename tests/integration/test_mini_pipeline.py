@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Synthetic data factory
 # ---------------------------------------------------------------------------
@@ -176,8 +175,8 @@ class TestClusteringIntegration:
 
     @pytest.fixture(scope="class")
     def pca_df(self):
-        from trading_crab_lib.config import load
         from trading_crab_lib.clustering import reduce_pca
+        from trading_crab_lib.config import load
         from trading_crab_lib.transforms import engineer_all
 
         cfg = load()

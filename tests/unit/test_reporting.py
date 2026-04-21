@@ -7,16 +7,15 @@ import pytest
 from trading_crab_lib.reporting import (
     _append_diagnostics_section,
     asset_signals,
+    blended_regime_portfolio,
+    build_recommendation_digest,
+    generate_recommendation,
     print_dashboard,
     save_dashboard_csv,
-    simple_regime_portfolio,
-    blended_regime_portfolio,
-    generate_recommendation,
-    build_recommendation_digest,
     save_recommendation_bundle,
+    simple_regime_portfolio,
     write_weekly_report_md,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

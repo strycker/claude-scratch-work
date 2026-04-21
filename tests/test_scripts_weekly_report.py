@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import run_weekly_report as weekly
 
-
 # ── Archive logic (timestamped copy + email_body.txt) ────────────────────────
 
 class TestArchiveWeeklyReport:

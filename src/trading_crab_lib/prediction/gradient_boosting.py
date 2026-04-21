@@ -21,8 +21,8 @@ Requires: ``pip install lightgbm>=4.0``  (declared as optional extra).
 
 from __future__ import annotations
 
-from typing import Any
 import logging
+from typing import Any
 
 import numpy as np
 import pandas as pd

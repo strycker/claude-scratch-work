@@ -10,7 +10,6 @@ import argparse
 import sys
 from unittest.mock import MagicMock
 
-
 # ---------------------------------------------------------------------------
 # build_parser()
 # ---------------------------------------------------------------------------
@@ -82,6 +81,7 @@ def test_steps_registry_entries_are_callable():
 
 def test_step3_cluster_save_market_code_defaults_false():
     import inspect
+
     from trading_crab.pipeline import step3_cluster
     sig = inspect.signature(step3_cluster)
     assert "save_market_code" in sig.parameters
@@ -103,8 +103,9 @@ def _make_step_mocks() -> dict[int, MagicMock]:
 
 def _patched_steps(mocks: dict[int, MagicMock]):
     """Context manager: replace STEPS values with mocks for the duration."""
-    import trading_crab.pipeline as _pl
     from contextlib import contextmanager
+
+    import trading_crab.pipeline as _pl
 
     @contextmanager
     def _ctx():

@@ -5,8 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
-from evaluate_momentum import _strip_momentum_from_config, _cluster_metrics, _is_momentum_feature
+from evaluate_momentum import _cluster_metrics, _is_momentum_feature, _strip_momentum_from_config
 
 
 @pytest.fixture

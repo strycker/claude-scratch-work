@@ -12,6 +12,19 @@ All public names are re-exported here so existing imports continue to work:
 
 from __future__ import annotations
 
+# ── Steps 3-4: Clustering & regime stability ─────────────────────────────
+from trading_crab_lib.monitoring.clustering import (
+    RegimeStabilityReport,
+    compute_regime_stability,
+    format_method_comparison,
+)
+
+# ── Step 2: Feature quality ──────────────────────────────────────────────
+from trading_crab_lib.monitoring.features import (
+    FeatureQualityReport,
+    compute_feature_quality,
+)
+
 # ── Step 1-2: Ingestion monitoring ───────────────────────────────────────
 from trading_crab_lib.monitoring.ingestion import (
     DateRangeReport,
@@ -21,17 +34,12 @@ from trading_crab_lib.monitoring.ingestion import (
     validate_date_range,
 )
 
-# ── Step 2: Feature quality ──────────────────────────────────────────────
-from trading_crab_lib.monitoring.features import (
-    FeatureQualityReport,
-    compute_feature_quality,
-)
-
-# ── Steps 3-4: Clustering & regime stability ─────────────────────────────
-from trading_crab_lib.monitoring.clustering import (
-    RegimeStabilityReport,
-    compute_regime_stability,
-    format_method_comparison,
+# ── Pipeline-level validation ────────────────────────────────────────────
+from trading_crab_lib.monitoring.pipeline import (
+    PipelineHealthSummary,
+    StepValidation,
+    format_tactics_summary,
+    validate_step_output,
 )
 
 # ── Steps 5-7: Prediction & dashboard QA ─────────────────────────────────
@@ -39,14 +47,6 @@ from trading_crab_lib.monitoring.prediction import (
     CVFoldReport,
     check_regime_probabilities,
     compute_cv_fold_scores,
-)
-
-# ── Pipeline-level validation ────────────────────────────────────────────
-from trading_crab_lib.monitoring.pipeline import (
-    PipelineHealthSummary,
-    StepValidation,
-    format_tactics_summary,
-    validate_step_output,
 )
 
 __all__ = [
