@@ -69,7 +69,7 @@ def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     api_key = cfg["fred"].get("api_key")
     if not api_key:
-        raise EnvironmentError("FRED_API_KEY is not set")
+        raise OSError("FRED_API_KEY is not set")
 
     fred = Fred(api_key=api_key)
 

@@ -5,8 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
-from evaluate_divergence import _strip_divergence_from_config, _cluster_metrics
+from evaluate_divergence import _cluster_metrics, _strip_divergence_from_config
 
 
 @pytest.fixture

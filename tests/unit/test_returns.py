@@ -5,16 +5,15 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.asset_returns import (
-    compute_quarterly_returns,
-    returns_by_regime,
-    returns_full_stats,
-    rank_assets_by_regime,
-    compute_template_returns,
-    behavior_tables,
     _absolute_signal,
     _score_absolute,
+    behavior_tables,
+    compute_quarterly_returns,
+    compute_template_returns,
+    rank_assets_by_regime,
+    returns_by_regime,
+    returns_full_stats,
 )
-
 
 # ── compute_quarterly_returns ──────────────────────────────────────────────
 

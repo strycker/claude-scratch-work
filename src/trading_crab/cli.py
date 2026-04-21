@@ -9,8 +9,6 @@ Entry points registered in pyproject.toml:
 
 from __future__ import annotations
 
-import sys
-
 
 def run_pipeline() -> None:
     """Run the full market-regime pipeline.

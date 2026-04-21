@@ -16,7 +16,6 @@ from trading_crab_lib.ingestion.macrotrends import (
     fetch_all,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 SAMPLE_JSON_DATA = [

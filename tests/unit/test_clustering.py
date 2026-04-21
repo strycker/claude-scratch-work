@@ -5,10 +5,10 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.clustering import (
-    reduce_pca,
     evaluate_kmeans,
-    pick_best_k,
     fit_clusters,
+    pick_best_k,
+    reduce_pca,
 )
 
 

@@ -24,8 +24,8 @@ Usage
 
 from __future__ import annotations
 
-from typing import Any
 import logging
+from typing import Any
 
 import numpy as np
 import pandas as pd

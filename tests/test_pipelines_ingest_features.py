@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import importlib.util
 import types
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -141,10 +141,11 @@ def test_fetch_and_cache_asset_prices_writes_checkpoint_from_raw_cache(
     save lands in the real data/checkpoints/ directory (not tmp_path).  We verify
     this by checking cm.load() succeeds after the call.
     """
+    from unittest.mock import patch
+
     import trading_crab.pipeline as pipeline_module
     from trading_crab_lib.checkpoints import CheckpointManager
     from trading_crab_lib.runtime import RunConfig
-    from unittest.mock import patch
 
     # Arrange: pre-populate data/raw/asset_prices.parquet in tmp_path
     raw_dir = tmp_path / "raw"

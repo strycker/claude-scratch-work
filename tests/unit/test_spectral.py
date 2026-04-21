@@ -8,7 +8,6 @@ import pytest
 
 from trading_crab_lib.spectral import fit_spectral_sweep, spectral_labels
 
-
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 
 @pytest.fixture

@@ -9,11 +9,10 @@ import pytest
 from trading_crab_lib.density import (
     fit_dbscan,
     fit_dbscan_sweep,
+    fit_hdbscan_sweep,
     hdbscan_labels,
     knn_distances,
-    fit_hdbscan_sweep,
 )
-
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 

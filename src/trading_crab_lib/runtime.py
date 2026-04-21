@@ -57,7 +57,7 @@ class RunConfig:
     market_code_source: str | None = None
 
     @classmethod
-    def from_args(cls, args: argparse.Namespace) -> "RunConfig":
+    def from_args(cls, args: argparse.Namespace) -> RunConfig:
         """
         Build a RunConfig from a parsed argparse.Namespace.
 

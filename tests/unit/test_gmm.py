@@ -9,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 
 from trading_crab_lib.gmm import fit_gmm, gmm_labels, gmm_probabilities, select_gmm_k
 
-
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 
 @pytest.fixture

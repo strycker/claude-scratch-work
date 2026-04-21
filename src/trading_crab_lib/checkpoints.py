@@ -54,10 +54,9 @@ from pathlib import Path
 from typing import Any
 
 import joblib
-
 import pandas as pd
 
-from trading_crab_lib import DATA_DIR, CONFIG_DIR
+from trading_crab_lib import CONFIG_DIR, DATA_DIR
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +76,7 @@ PRESERVATION_CHECKPOINT_NAMES: frozenset[str] = frozenset({
 
 def preservation_checkpoint_should_write(
     name: str,
-    cm: "CheckpointManager",
+    cm: CheckpointManager,
     *,
     force: bool = False,
 ) -> bool:

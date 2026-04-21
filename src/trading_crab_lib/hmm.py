@@ -65,7 +65,7 @@ def fit_hmm(
     n_iter: int = 200,
     n_restarts: int = 10,
     random_state: int = 42,
-) -> tuple[pd.DataFrame, dict[int, "GaussianHMM"], StandardScaler]:
+) -> tuple[pd.DataFrame, dict[int, GaussianHMM], StandardScaler]:
     """
     Fit GaussianHMM for each k in k_range, picking the best restart per k.
 
@@ -180,7 +180,7 @@ def select_hmm_k(scores_df: pd.DataFrame) -> int:
 
 def hmm_labels(
     pca_df: pd.DataFrame,
-    model: "GaussianHMM",
+    model: GaussianHMM,
     scaler: StandardScaler | None = None,
 ) -> pd.Series:
     """
@@ -213,7 +213,7 @@ def hmm_labels(
 
 def hmm_probabilities(
     pca_df: pd.DataFrame,
-    model: "GaussianHMM",
+    model: GaussianHMM,
     scaler: StandardScaler | None = None,
 ) -> pd.DataFrame:
     """
@@ -239,7 +239,7 @@ def hmm_probabilities(
     return pd.DataFrame(probs, index=pca_df.index, columns=cols)
 
 
-def hmm_transition_matrix(model: "GaussianHMM") -> pd.DataFrame:
+def hmm_transition_matrix(model: GaussianHMM) -> pd.DataFrame:
     """
     Extract the learned transition matrix as a labeled DataFrame.
 

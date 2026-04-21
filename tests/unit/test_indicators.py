@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab_lib.indicators import compute_lei_proxy, DEFAULT_LEI_COMPONENTS
+from trading_crab_lib.indicators import DEFAULT_LEI_COMPONENTS, compute_lei_proxy
 
 
 @pytest.fixture

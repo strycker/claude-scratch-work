@@ -7,7 +7,6 @@ import yaml
 
 from trading_crab_lib.config import load, load_portfolio, validate_config
 
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _minimal_valid_cfg() -> dict:

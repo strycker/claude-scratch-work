@@ -44,8 +44,8 @@ try:
     # "FigureCanvasAgg is non-interactive" warnings when plt.show() is called.
     if not _in_jupyter():
         matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
 except ImportError as _matplotlib_err:
     raise ImportError(
         "matplotlib is required for plotting functions. "

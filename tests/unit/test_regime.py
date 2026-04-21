@@ -3,9 +3,9 @@ import pandas as pd
 
 from trading_crab_lib.regime import (
     build_profiles,
-    suggest_names,
     build_transition_matrix,
     load_name_overrides,
+    suggest_names,
 )
 
 
