@@ -18,34 +18,11 @@ Usage:
 
 from __future__ import annotations
 
-# ── Core helpers and constants ────────────────────────────────────────────────
-from trading_crab_lib.plotting.core import (
-    CUSTOM_COLORS,
-    PLOT_DIR,
-    REGIME_CMAP,
-    _in_jupyter,
-    _plot_is_fresh,
-    _regime_color,
-    _save_or_show,
-    list_available_plots,
-    load_or_generate,
-)
-
-# ── Step 01: Ingestion ────────────────────────────────────────────────────────
-from trading_crab_lib.plotting.ingestion import (
-    plot_raw_series_coverage,
-    plot_raw_series_sample,
-)
-
-# ── Step 02: Features ─────────────────────────────────────────────────────────
-from trading_crab_lib.plotting.features import (
-    plot_centered_vs_causal_comparison,
-    plot_feature_correlations,
-    plot_feature_distributions,
-    plot_feature_variance_ranking,
-    plot_gap_fill_before_after,
-    plot_nan_heatmap,
-    plot_pairplot,
+# ── Step 06: Asset Returns ────────────────────────────────────────────────────
+from trading_crab_lib.plotting.assets import (
+    plot_asset_heatmap,
+    plot_asset_return_distributions,
+    plot_asset_returns_by_regime,
 )
 
 # ── Step 03: Clustering ──────────────────────────────────────────────────────
@@ -61,16 +38,49 @@ from trading_crab_lib.plotting.clustering import (
     plot_silhouette_samples,
 )
 
-# ── Step 04: Regime Profiling ─────────────────────────────────────────────────
-from trading_crab_lib.plotting.regime import (
-    plot_correlation_change_heatmap,
-    plot_feature_regime_overlay,
-    plot_forward_prob_evolution,
-    plot_regime_duration_histogram,
-    plot_regime_profiles,
-    plot_regime_timeline,
-    plot_soft_probabilities,
-    plot_transition_matrix,
+# ── Core helpers and constants ────────────────────────────────────────────────
+from trading_crab_lib.plotting.core import (
+    CUSTOM_COLORS,
+    PLOT_DIR,
+    REGIME_CMAP,
+    list_available_plots,
+    load_or_generate,
+)
+from trading_crab_lib.plotting.core import (
+    _in_jupyter as _in_jupyter,
+)
+from trading_crab_lib.plotting.core import (
+    _plot_is_fresh as _plot_is_fresh,
+)
+from trading_crab_lib.plotting.core import (
+    _regime_color as _regime_color,
+)
+from trading_crab_lib.plotting.core import (
+    _save_or_show as _save_or_show,
+)
+
+# ── Diagnostics ───────────────────────────────────────────────────────────────
+from trading_crab_lib.plotting.diagnostics import (
+    plot_divergence_timeseries,
+    plot_momentum_dashboard,
+    plot_rrg_scatter,
+)
+
+# ── Step 02: Features ─────────────────────────────────────────────────────────
+from trading_crab_lib.plotting.features import (
+    plot_centered_vs_causal_comparison,
+    plot_feature_correlations,
+    plot_feature_distributions,
+    plot_feature_variance_ranking,
+    plot_gap_fill_before_after,
+    plot_nan_heatmap,
+    plot_pairplot,
+)
+
+# ── Step 01: Ingestion ────────────────────────────────────────────────────────
+from trading_crab_lib.plotting.ingestion import (
+    plot_raw_series_coverage,
+    plot_raw_series_sample,
 )
 
 # ── Step 05: Prediction ──────────────────────────────────────────────────────
@@ -88,18 +98,16 @@ from trading_crab_lib.plotting.prediction import (
     plot_predicted_vs_actual,
 )
 
-# ── Step 06: Asset Returns ────────────────────────────────────────────────────
-from trading_crab_lib.plotting.assets import (
-    plot_asset_heatmap,
-    plot_asset_return_distributions,
-    plot_asset_returns_by_regime,
-)
-
-# ── Diagnostics ───────────────────────────────────────────────────────────────
-from trading_crab_lib.plotting.diagnostics import (
-    plot_divergence_timeseries,
-    plot_momentum_dashboard,
-    plot_rrg_scatter,
+# ── Step 04: Regime Profiling ─────────────────────────────────────────────────
+from trading_crab_lib.plotting.regime import (
+    plot_correlation_change_heatmap,
+    plot_feature_regime_overlay,
+    plot_forward_prob_evolution,
+    plot_regime_duration_histogram,
+    plot_regime_profiles,
+    plot_regime_timeline,
+    plot_soft_probabilities,
+    plot_transition_matrix,
 )
 
 __all__ = [
