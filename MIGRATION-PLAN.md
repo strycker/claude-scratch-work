@@ -73,9 +73,19 @@ Notebook 01 renders fully.
 
 **Config additions (settings.yaml):** `data:`, `fred.series:`, `multpl.datasets:`, `macrotrends:` sections.
 
+> **Note — trading-crab skeleton is ahead:** The `config/settings.yaml` in `trading-crab`
+> already contains skeleton entries for Q2–Q8 sections (`features`, `clustering`, `prediction`,
+> `assets`, `dashboard`, `diagnostics`, `tactics`, `pipeline`, `plotting`). These are empty/stub
+> values placed during S0.7. S1.1 only populates `data:` and `fred.series:` — leave the Q2–Q8
+> skeletons untouched. They will be filled in during their respective Q-phases.
+>
+> **Series count correction:** The source repo (`claude-scratch-work`) now has **19 FRED series**,
+> not 14 as originally planned. Five series were added after the initial plan: HOUST, UMCSENT,
+> INDPRO (shift: false), PAYEMS (shift: true), DPCERA3Q086SBEA/fred_real_pce (shift: true).
+
 | Tag | Description | Files Created/Modified |
 |-----|-------------|------------------------|
-| S1.1 | settings.yaml — data + fred sections | `config/settings.yaml` (data, fred.series: GDP/GNP/BAA/AAA/CPI/GS10/TB3MS/VIXCLS/UNRATE/M2SL/M2NS/GS2/T10Y2Y/T10Y3M) |
+| S1.1 | settings.yaml — data + fred sections | `config/settings.yaml` (data, fred.series: 19 series — GDP/GNP/BAA/AAA/CPI/GS10/TB3MS/VIXCLS/UNRATE/M2SL/M2NS/GS2/T10Y2Y/T10Y3M/HOUST/UMCSENT/INDPRO/PAYEMS/DPCERA3Q086SBEA) |
 | S1.2 | settings.yaml — multpl + macrotrends sections | `config/settings.yaml` (multpl.datasets: all 46 series; macrotrends: gold/oil/silver URLs) |
 | S1.3 | Ingestion: multpl scraper | `src/trading_crab_lib/ingestion/__init__.py` (stub), `src/trading_crab_lib/ingestion/multpl.py`, `src/trading_crab_lib/ingestion/grok.py` |
 | S1.4 | Ingestion: FRED fetcher | `src/trading_crab_lib/ingestion/fred.py` |
