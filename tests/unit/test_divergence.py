@@ -7,7 +7,6 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.divergence import (
-    DEFAULT_DIVERGENCE_PAIRS,
     add_divergence_features,
     compute_derivative_divergence,
     compute_divergence,

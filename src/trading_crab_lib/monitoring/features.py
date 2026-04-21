@@ -90,11 +90,11 @@ def compute_feature_quality(df: pd.DataFrame) -> FeatureQualityReport:
         corr_matrix = feat.corr(min_periods=3)
         pairs: list[tuple[str, str, float]] = []
         cols = list(corr_matrix.columns)
-        for i in range(len(cols)):
-            for j in range(i + 1, len(cols)):
-                val = corr_matrix.iloc[i, j]
+        for i, col_a in enumerate(cols):
+            for col_b in cols[i + 1:]:
+                val = corr_matrix.loc[col_a, col_b]
                 if pd.notna(val):
-                    pairs.append((cols[i], cols[j], float(val)))
+                    pairs.append((col_a, col_b, float(val)))
         pairs.sort(key=lambda t: abs(t[2]), reverse=True)
         report.top_correlation_pairs = pairs[:5]
 

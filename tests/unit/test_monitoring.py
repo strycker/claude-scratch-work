@@ -10,11 +10,8 @@ import pytest
 from trading_crab_lib.monitoring import (
     format_completeness_table,
     validate_date_range,
-    DateRangeReport,
     count_source_columns,
-    SourceRowCounts,
     compute_feature_quality,
-    FeatureQualityReport,
     format_method_comparison,
     compute_regime_stability,
     RegimeStabilityReport,
@@ -23,7 +20,6 @@ from trading_crab_lib.monitoring import (
     check_regime_probabilities,
     format_tactics_summary,
     validate_step_output,
-    StepValidation,
     PipelineHealthSummary,
 )
 
@@ -319,7 +315,7 @@ class TestComputeFeatureQuality:
         df = pd.DataFrame({"x": range(10)}, index=idx)
         report = compute_feature_quality(df)
         assert report.n_cols == 1
-        assert report.top_correlation_pairs == []
+        assert not report.top_correlation_pairs
 
     def test_empty_df(self):
         df = pd.DataFrame()
@@ -430,7 +426,7 @@ class TestComputeRegimeStability:
         labels = pd.Series([], dtype=int)
         report = compute_regime_stability(transition_matrix, labels)
         assert report.persistence[0] == pytest.approx(0.8)
-        assert report.avg_duration == {}
+        assert not report.avg_duration
 
     def test_empty_persistence_summary(self):
         report = RegimeStabilityReport()
@@ -443,7 +439,7 @@ class TestComputeRegimeStability:
 
 _has_sklearn = True
 try:
-    import sklearn  # noqa: F401
+    import sklearn  # noqa: F401  # pylint: disable=unused-import
 except ImportError:
     _has_sklearn = False
 
@@ -453,24 +449,24 @@ class TestComputeCVFoldScores:
     def test_returns_correct_number_of_folds(self):
         from sklearn.ensemble import RandomForestClassifier
         rng = np.random.default_rng(42)
-        X = pd.DataFrame(rng.random((50, 5)), columns=[f"f{i}" for i in range(5)])
+        feat = pd.DataFrame(rng.random((50, 5)), columns=[f"f{i}" for i in range(5)])
         y = pd.Series(rng.integers(0, 3, 50))
         model = RandomForestClassifier(n_estimators=10, random_state=42)
-        model.fit(X, y)
-        scores = compute_cv_fold_scores(model, X, y, n_splits=3)
+        model.fit(feat, y)
+        scores = compute_cv_fold_scores(model, feat, y, n_splits=3)
         assert len(scores) == 3
         assert all(0 <= s <= 1 for s in scores)
 
     def test_does_not_mutate_original_model(self):
         from sklearn.tree import DecisionTreeClassifier
         rng = np.random.default_rng(0)
-        X = pd.DataFrame(rng.random((30, 3)), columns=["a", "b", "c"])
+        feat = pd.DataFrame(rng.random((30, 3)), columns=["a", "b", "c"])
         y = pd.Series(rng.integers(0, 2, 30))
         model = DecisionTreeClassifier(max_depth=3, random_state=0)
-        model.fit(X, y)
-        orig_pred = model.predict(X).copy()
-        compute_cv_fold_scores(model, X, y, n_splits=3)
-        np.testing.assert_array_equal(model.predict(X), orig_pred)
+        model.fit(feat, y)
+        orig_pred = model.predict(feat).copy()
+        compute_cv_fold_scores(model, feat, y, n_splits=3)
+        np.testing.assert_array_equal(model.predict(feat), orig_pred)
 
 
 class TestCVFoldReport:
@@ -496,7 +492,7 @@ class TestCheckRegimeProbabilities:
     def test_all_ok(self):
         probs = {0: 0.3, 1: 0.4, 2: 0.3}
         warnings = check_regime_probabilities(probs)
-        assert warnings == []
+        assert not warnings
 
     def test_low_probability_detected(self):
         probs = {0: 0.9, 1: 0.08, 2: 0.02}
@@ -518,7 +514,7 @@ class TestCheckRegimeProbabilities:
     def test_exact_threshold_passes(self):
         probs = {0: 0.5, 1: 0.45, 2: 0.05}
         warnings = check_regime_probabilities(probs)
-        assert warnings == []
+        assert not warnings
 
 
 # ── C4.2: format_tactics_summary ─────────────────────────────────────────
@@ -618,7 +614,7 @@ class TestPipelineHealthSummary:
         health.record_step(1, 1.0)
         health.record_step(2, 2.0)
         assert health.steps_run == [1, 2]
-        assert health.steps_failed == []
+        assert not health.steps_failed
 
     def test_failed_steps(self):
         health = PipelineHealthSummary()

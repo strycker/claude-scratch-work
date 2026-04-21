@@ -13,17 +13,24 @@ body from the most recent weekly report, and sends via SMTP (TLS or SSL).
 
 from __future__ import annotations
 
+import html as html_mod
 import logging
 import os
+import re
 import smtplib
 import ssl
+from datetime import date
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-
 from typing import Any
+
+import pandas as pd
 import yaml
+
+import trading_crab_lib as _tcl
+from trading_crab_lib import OUTPUT_DIR
 
 log = logging.getLogger(__name__)
 
@@ -89,20 +96,19 @@ def load_email_config(config_path: Path | None = None) -> dict[str, Any]:
 
     # ── YAML file ──────────────────────────────────────────────────────
     if config_path is None:
-        from trading_crab_lib import CONFIG_DIR
-        config_path = CONFIG_DIR / "email.yaml"
+        config_path = _tcl.CONFIG_DIR / "email.yaml"
         if not config_path.exists():
-            config_path = CONFIG_DIR / "email.local.yaml"
+            config_path = _tcl.CONFIG_DIR / "email.local.yaml"
 
     if config_path.exists():
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
             if isinstance(loaded, dict):
                 cfg = loaded
             else:
                 log.warning("Email config is not a dict: %s", config_path)
-        except Exception as exc:
+        except (OSError, yaml.YAMLError) as exc:
             log.warning("Failed to load email config: %s", exc)
 
     # ── Env var overrides ──────────────────────────────────────────────
@@ -141,7 +147,6 @@ def build_weekly_email_body(
     Returns:
         (subject, body) tuple.
     """
-    from datetime import date
     subject = f"{subject_prefix} — {date.today().isoformat()}"
 
     # Try pre-formatted email body
@@ -159,7 +164,6 @@ def build_weekly_email_body(
     # Fallback: dashboard CSV summary
     dashboard_file = report_dir / "dashboard.csv"
     if dashboard_file.exists():
-        import pandas as pd
         df = pd.read_csv(dashboard_file)
         body = f"Dashboard summary ({len(df)} assets):\n\n{df.to_string(index=False)}"
         return subject, body
@@ -183,7 +187,6 @@ def resolve_plot_paths(
         at WARNING level and skipped).
     """
     if plots_dir is None:
-        from trading_crab_lib import OUTPUT_DIR
         plots_dir = OUTPUT_DIR / "plots"
 
     resolved: list[Path] = []
@@ -209,9 +212,6 @@ def _markdown_to_html(text: str) -> str:
 
     Uses stdlib only (no external markdown library required).
     """
-    import html as html_mod
-    import re
-
     lines = text.splitlines()
     html_lines: list[str] = []
     in_ul = False
@@ -275,7 +275,6 @@ def _build_html_body_with_plots(plain_text: str, plot_paths: list[Path]) -> str:
         parts += ["<hr>", "<h3>Key Plots</h3>"]
         for i, path in enumerate(plot_paths):
             cid = f"plot_{i}"
-            import html as html_mod
             stem = html_mod.escape(path.stem)
             parts.append(
                 f'<p><strong>{stem}</strong></p>'
@@ -386,6 +385,6 @@ def send_weekly_email(
         server.quit()
         log.info("Weekly email sent to %s", recipients)
         return True
-    except Exception as exc:
+    except (smtplib.SMTPException, OSError) as exc:
         log.error("Failed to send email: %s", exc)
         return False

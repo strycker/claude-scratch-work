@@ -3,13 +3,10 @@ from __future__ import annotations
 import logging
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 from trading_crab_lib.plotting.core import (
     CUSTOM_COLORS,
-    PLOT_DIR,
-    REGIME_CMAP,
     RunConfig,
     _regime_color,
     _save_or_show,
@@ -172,4 +169,3 @@ def plot_momentum_dashboard(
     fig.suptitle("Momentum & Relative Strength Dashboard", fontsize=13)
     fig.tight_layout()
     _save_or_show(fig, filename, run_cfg)
-

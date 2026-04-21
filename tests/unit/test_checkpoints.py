@@ -1,14 +1,8 @@
 """Unit tests for src/trading_crab_lib/io/checkpoints.py"""
 
-import sys
-import time
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from trading_crab_lib.checkpoints import (
     CheckpointManager,
@@ -90,7 +84,7 @@ class TestClear:
         cm.save(sample_df, "a")
         cm.save(sample_df, "b")
         cm.clear_all()
-        assert list(cm.dir.iterdir()) == []
+        assert not list(cm.dir.iterdir())
 
     def test_clear_all_preserves_secondary(self, cm, sample_df):
         cm.save(sample_df, "a")
@@ -105,14 +99,14 @@ class TestClear:
         cm.save(sample_df, "a")
         cm.save(sample_df, "macro_raw_secondary")
         cm.clear_all(include_preservation=True)
-        assert list(cm.dir.iterdir()) == []
+        assert not list(cm.dir.iterdir())
 
 
 # ── list / summary ─────────────────────────────────────────────────────────
 
 class TestList:
     def test_list_empty_when_no_checkpoints(self, cm):
-        assert cm.list() == []
+        assert not cm.list()
 
     def test_list_returns_metadata(self, cm, sample_df):
         cm.save(sample_df, "test")

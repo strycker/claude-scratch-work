@@ -30,8 +30,8 @@ def format_tactics_summary(tactics_df: pd.DataFrame) -> str:
     for cls in ["buy_hold", "swing", "stand_aside"]:
         n = counts.get(cls, 0)
         pct = n / total * 100 if total else 0
-        bar = "#" * int(pct / 5)
-        lines.append(f"    {cls:<14}  {n:3d} assets  ({pct:5.1f}%)  {bar}")
+        pct_bar = "#" * int(pct / 5)
+        lines.append(f"    {cls:<14}  {n:3d} assets  ({pct:5.1f}%)  {pct_bar}")
     # Any other classifications
     other = [c for c in counts.index if c not in {"buy_hold", "swing", "stand_aside"}]
     for cls in other:

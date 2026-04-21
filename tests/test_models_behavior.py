@@ -79,14 +79,13 @@ def test_train_forward_behavior_models_trains_per_asset_and_horizon() -> None:
             down_threshold=0.0,
         )
         idx_joint = labels.index.intersection(features.index).intersection(regimes.index)
-        X_joint = features.loc[idx_joint].copy()
-        X_joint["regime"] = regimes.loc[idx_joint].astype(int)
+        feat_joint = features.loc[idx_joint].copy()
+        feat_joint["regime"] = regimes.loc[idx_joint].astype(int)
 
-        proba = model.predict_proba(X_joint)
+        proba = model.predict_proba(feat_joint)
         # Probabilities should sum to 1 along the class axis.
         assert np.allclose(proba.sum(axis=1), 1.0)
 
         # At least two behavior classes should be represented.
         classes = set(model.classes_)
         assert len(classes) >= 2
-

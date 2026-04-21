@@ -32,7 +32,7 @@ def test_publish_notebooks_prints_output(capsys):
 
 
 def test_cli_module_imports_cleanly():
-    import trading_crab.cli  # noqa: F401 — just ensure no import-time errors
+    import trading_crab.cli  # noqa: F401  # pylint: disable=unused-import
 
 
 def test_run_pipeline_is_callable():

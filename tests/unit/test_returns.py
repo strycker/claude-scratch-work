@@ -1,13 +1,8 @@
 """Unit tests for src/trading_crab_lib/assets/returns.py"""
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from trading_crab_lib.asset_returns import (
     compute_quarterly_returns,

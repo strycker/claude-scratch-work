@@ -129,10 +129,9 @@ class TestConvenienceImports:
     def test_runconfig_accessible(self):
         import trading_crab_lib
 
-        RC = trading_crab_lib.RunConfig
-        assert RC is not None
-        # Verify it's the actual dataclass
-        rc = RC()
+        run_config_cls = trading_crab_lib.RunConfig
+        assert run_config_cls is not None
+        rc = run_config_cls()
         assert hasattr(rc, "verbose")
         assert hasattr(rc, "generate_plots")
 
@@ -143,10 +142,10 @@ class TestConvenienceImports:
     def test_checkpoint_manager_accessible(self):
         import trading_crab_lib
 
-        CM = trading_crab_lib.CheckpointManager
-        assert CM is not None
-        assert hasattr(CM, "save")
-        assert hasattr(CM, "load")
+        checkpoint_cls = trading_crab_lib.CheckpointManager
+        assert checkpoint_cls is not None
+        assert hasattr(checkpoint_cls, "save")
+        assert hasattr(checkpoint_cls, "load")
 
     def test_invalid_attr_raises(self):
         import trading_crab_lib

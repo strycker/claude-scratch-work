@@ -28,6 +28,13 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 
+try:
+    import lightgbm as lgb  # type: ignore[import]
+    _LGBM_AVAILABLE = True
+except ImportError:
+    lgb = None  # type: ignore[assignment]
+    _LGBM_AVAILABLE = False
+
 log = logging.getLogger(__name__)
 
 
@@ -51,20 +58,18 @@ def _get_lgbm_params(cfg: dict) -> dict:
 
 def _tscv_scores_lgbm(
     params: dict,
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     n_splits: int,
     label: str,
 ) -> list[float]:
     """Run TimeSeriesSplit CV with LightGBM and return per-fold accuracy scores."""
-    import lightgbm as lgb
-
     tscv = TimeSeriesSplit(n_splits=n_splits)
     scores: list[float] = []
-    for fold, (train_idx, test_idx) in enumerate(tscv.split(X), start=1):
+    for fold, (train_idx, test_idx) in enumerate(tscv.split(features_df), start=1):
         m = lgb.LGBMClassifier(**params)
-        m.fit(X.iloc[train_idx], y.iloc[train_idx])
-        acc = m.score(X.iloc[test_idx], y.iloc[test_idx])
+        m.fit(features_df.iloc[train_idx], y.iloc[train_idx])
+        acc = m.score(features_df.iloc[test_idx], y.iloc[test_idx])
         scores.append(acc)
         log.debug("%s fold %d/%d: accuracy=%.3f", label, fold, n_splits, acc)
     log.info(
@@ -75,7 +80,7 @@ def _tscv_scores_lgbm(
 
 
 def train_lightgbm_current_regime(
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     cfg: dict[str, Any],
 ) -> Any:
@@ -83,24 +88,25 @@ def train_lightgbm_current_regime(
     Train a LightGBM classifier to predict the current regime label.
 
     Args:
-        X   — feature matrix (rows = quarters, causal features only)
-        y   — integer cluster labels aligned to X
-        cfg — pipeline config dict
+        features_df — feature matrix (rows = quarters, causal features only)
+        y           — integer cluster labels aligned to features_df
+        cfg         — pipeline config dict
 
     Returns:
         Fitted ``lgb.LGBMClassifier`` (trained on all data).
     """
-    import lightgbm as lgb
+    if not _LGBM_AVAILABLE:
+        raise ImportError("lightgbm is not installed. Run: pip install lightgbm>=4.0")
 
     params = _get_lgbm_params(cfg)
     n_splits = cfg.get("prediction", {}).get("cv_splits", 5)
 
-    _tscv_scores_lgbm(params, X, y, n_splits, "LGBM current-regime")
+    _tscv_scores_lgbm(params, features_df, y, n_splits, "LGBM current-regime")
 
     final = lgb.LGBMClassifier(**params)
-    final.fit(X, y)
+    final.fit(features_df, y)
 
-    importances = pd.Series(final.feature_importances_, index=X.columns)
+    importances = pd.Series(final.feature_importances_, index=features_df.columns)
     top = importances.sort_values(ascending=False).head(15)
     lines = "\n".join(f"  {f:<40s} {v:.0f}" for f, v in top.items())
     log.info("LGBM top-15 feature importances:\n%s", lines)
@@ -109,7 +115,7 @@ def train_lightgbm_current_regime(
 
 
 def train_lightgbm_forward(
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     cfg: dict[str, Any],
 ) -> dict[int, dict[int, object]]:
@@ -120,7 +126,8 @@ def train_lightgbm_forward(
     Returns:
         {horizon: {regime_id: fitted_lgb.LGBMClassifier}}
     """
-    import lightgbm as lgb
+    if not _LGBM_AVAILABLE:
+        raise ImportError("lightgbm is not installed. Run: pip install lightgbm>=4.0")
 
     params = _get_lgbm_params(cfg)
     pcfg = cfg.get("prediction", {})
@@ -132,7 +139,7 @@ def train_lightgbm_forward(
     for h in horizons:
         results[h] = {}
         y_future = y.shift(-h).dropna().astype(int)
-        X_aligned = X.loc[y_future.index]
+        features_aligned = features_df.loc[y_future.index]
 
         for regime in sorted(y.unique()):
             y_binary = (y_future == regime).astype(int)
@@ -142,7 +149,7 @@ def train_lightgbm_forward(
             binary_params.pop("class_weight", None)
 
             scores = _tscv_scores_lgbm(
-                binary_params, X_aligned, y_binary, n_splits,
+                binary_params, features_aligned, y_binary, n_splits,
                 f"LGBM h={h}Q regime={regime}",
             )
             log.info(
@@ -151,7 +158,7 @@ def train_lightgbm_forward(
             )
 
             final = lgb.LGBMClassifier(**binary_params)
-            final.fit(X_aligned, y_binary)
+            final.fit(features_aligned, y_binary)
             results[h][regime] = final
 
     return results

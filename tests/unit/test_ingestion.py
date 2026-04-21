@@ -43,7 +43,7 @@ class _FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise Exception(f"HTTP {self.status_code}")
+            raise OSError(f"HTTP {self.status_code}")
 
 
 @patch("trading_crab_lib.ingestion.multpl.time.sleep")
@@ -224,7 +224,7 @@ def test_fred_fetch_all_handles_single_series_failure(mock_fred_cls):
 
     def _side_effect(series_id, **kwargs):
         if series_id == "GDP":
-            raise Exception("API rate limit")
+            raise OSError("API rate limit")
         return _make_mock_fred_series()
 
     mock_fred.get_series.side_effect = _side_effect

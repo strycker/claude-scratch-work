@@ -18,8 +18,15 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime
 from pathlib import Path
+
+from trading_crab_lib import OUTPUT_DIR
+from trading_crab_lib import checkpoints as _checkpoints_mod
+from trading_crab_lib.runtime import RunConfig
+
 
 def _in_jupyter() -> bool:
     try:
@@ -27,6 +34,7 @@ def _in_jupyter() -> bool:
         return get_ipython() is not None
     except ImportError:
         return False
+
 
 try:
     import matplotlib
@@ -38,18 +46,11 @@ try:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
-    import matplotlib.ticker as mticker
 except ImportError as _matplotlib_err:
     raise ImportError(
         "matplotlib is required for plotting functions. "
         "Install with: pip install 'trading-crab-lib[plotting]'"
     ) from _matplotlib_err
-import numpy as np
-import pandas as pd
-
-from trading_crab_lib import OUTPUT_DIR
-from trading_crab_lib.runtime import RunConfig
-from trading_crab_lib.transforms import trim_incomplete_tail
 
 log = logging.getLogger(__name__)
 
@@ -99,15 +100,10 @@ def _plot_is_fresh(filename: str, checkpoint_name: str | None = None) -> bool:
     if checkpoint_name is None:
         return True
 
-    from trading_crab_lib.checkpoints import CHECKPOINT_DIR
-
-    meta_path = CHECKPOINT_DIR / f"{checkpoint_name}.meta.json"
+    meta_path = _checkpoints_mod.CHECKPOINT_DIR / f"{checkpoint_name}.meta.json"
     if not meta_path.exists():
         # No checkpoint to compare against — treat PNG as fresh
         return True
-
-    import json
-    from datetime import datetime
 
     try:
         meta = json.loads(meta_path.read_text())
@@ -188,7 +184,7 @@ def list_available_plots(plot_dir: Path | None = None) -> str:
 
     pngs = sorted(d.glob("*.png"))
     if not pngs:
-        return "No plots found in %s" % d
+        return f"No plots found in {d}"
 
     lines = [
         f"{'Filename':<50} {'Modified':<22} {'Size':>10}",
@@ -197,7 +193,6 @@ def list_available_plots(plot_dir: Path | None = None) -> str:
 
     for p in pngs:
         stat = p.stat()
-        from datetime import datetime
         mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
         size_kb = stat.st_size / 1024
         if size_kb >= 1024:
@@ -208,4 +203,3 @@ def list_available_plots(plot_dir: Path | None = None) -> str:
 
     lines.append(f"\nTotal: {len(pngs)} plots")
     return "\n".join(lines)
-

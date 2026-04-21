@@ -32,6 +32,7 @@ def _load_step_module(script_name: str) -> types.ModuleType:
 # When ingestion deps are absent the step modules cannot be imported at
 # collection time, which would cause an ERROR rather than a SKIP.
 # Tests that require step01/step02 are marked accordingly below.
+_INGESTION_DEPS_REASON = ""
 try:
     step01 = _load_step_module("01_ingest.py")
     step02 = _load_step_module("02_features.py")

@@ -223,7 +223,7 @@ def load_name_overrides(config_dir: Path) -> dict[int, str]:
     path = config_dir / "regime_labels.yaml"
     if not path.exists():
         return {}
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     overrides = {int(k): v for k, v in raw.items() if not str(k).startswith("#")}
     if overrides:

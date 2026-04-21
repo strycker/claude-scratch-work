@@ -7,12 +7,19 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+from sklearn.metrics import confusion_matrix as _cm
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.tree import plot_tree
+
+try:
+    import seaborn as sns
+    _SEABORN_AVAILABLE = True
+except ImportError:
+    sns = None  # type: ignore[assignment]
+    _SEABORN_AVAILABLE = False
 
 from trading_crab_lib.plotting.core import (
-
     CUSTOM_COLORS,
-    PLOT_DIR,
-    REGIME_CMAP,
     RunConfig,
     _regime_color,
     _save_or_show,
@@ -39,7 +46,7 @@ def plot_feature_importance(
     top_values = importances[idx]
 
     fig, ax = plt.subplots(figsize=(9, max(4, top_n * 0.28)))
-    colors = plt.cm.viridis(np.linspace(0.2, 0.85, len(top_features)))
+    colors = plt.get_cmap("viridis")(np.linspace(0.2, 0.85, len(top_features)))
     ax.barh(range(len(top_features)), top_values, color=colors, edgecolor="none")
     ax.set_yticks(range(len(top_features)))
     ax.set_yticklabels(top_features, fontsize=8)
@@ -78,8 +85,8 @@ def plot_forward_probabilities(
         f"(predicted regime: {regime_names.get(prediction['regime'], prediction['regime'])})",
         fontsize=11,
     )
-    for bar, val in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+    for rect, val in zip(bars, values):
+        ax.text(rect.get_x() + rect.get_width() / 2, rect.get_height() + 0.01,
                 f"{val:.1%}", ha="center", va="bottom", fontsize=8)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -105,8 +112,6 @@ def plot_confusion_matrix(
         title        — plot title
         normalize    — if True, show row-normalized (recall) percentages
     """
-    from sklearn.metrics import confusion_matrix as _cm
-
     labels = sorted(y_true.dropna().astype(int).unique())
     cm = _cm(y_true, y_pred, labels=labels)
 
@@ -121,9 +126,7 @@ def plot_confusion_matrix(
 
     tick_labels = [regime_names.get(i, f"Regime {i}") for i in labels]
 
-    try:
-        import seaborn as sns
-    except ImportError:
+    if not _SEABORN_AVAILABLE:
         log.warning("seaborn not installed — skipping confusion matrix plot")
         return
 
@@ -161,13 +164,13 @@ def plot_predicted_vs_actual(
     # incomplete quarter(s) where centered np.gradient leaves NaN (edge effect).
     if hasattr(model, "feature_names_in_"):
         train_cols = [c for c in model.feature_names_in_ if c in features.columns]
-        X = trim_incomplete_tail(features[train_cols]).dropna(how="any")
+        feat_mat = trim_incomplete_tail(features[train_cols]).dropna(how="any")
     else:
-        X = trim_incomplete_tail(features).dropna(how="any")
-    common = X.index.intersection(labels.index)
-    X = X.loc[common]
+        feat_mat = trim_incomplete_tail(features).dropna(how="any")
+    common = feat_mat.index.intersection(labels.index)
+    feat_mat = feat_mat.loc[common]
     y_true = labels.loc[common]
-    y_pred = pd.Series(model.predict(X), index=common, name="predicted")
+    y_pred = pd.Series(model.predict(feat_mat), index=common, name="predicted")
 
     unique_clusters = sorted(labels.dropna().astype(int).unique())
     fig, axes = plt.subplots(2, 1, figsize=(16, 6), sharex=True)
@@ -259,9 +262,7 @@ def plot_asset_heatmap(
     """
     if profile.empty:
         return
-    try:
-        import seaborn as sns
-    except ImportError:
+    if not _SEABORN_AVAILABLE:
         log.warning("seaborn not installed — skipping asset heatmap")
         return
 
@@ -339,8 +340,6 @@ def plot_decision_tree(
     filename: str = "05_decision_tree.png",
 ) -> None:
     """Render a sklearn DecisionTreeClassifier as a readable tree diagram."""
-    from sklearn.tree import plot_tree
-
     class_names = [regime_names.get(i, f"R{i}") for i in sorted(regime_names)]
     depth = min(max_depth, tree.get_depth()) if max_depth else tree.get_depth()
     fig_h = max(6, 2 * depth)
@@ -377,8 +376,8 @@ def plot_cv_fold_accuracy(
     bars = ax.bar(range(1, n + 1), fold_accuracies, color=CUSTOM_COLORS[0], alpha=0.8)
     ax.axhline(mean_acc, color="red", linestyle="--", linewidth=1.5,
                label=f"Mean = {mean_acc:.1%}")
-    for bar, acc in zip(bars, fold_accuracies):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+    for rect, acc in zip(bars, fold_accuracies):
+        ax.text(rect.get_x() + rect.get_width() / 2, rect.get_height() + 0.01,
                 f"{acc:.1%}", ha="center", va="bottom", fontsize=9)
     ax.set_xlabel("Fold")
     ax.set_ylabel("Accuracy")
@@ -417,8 +416,8 @@ def plot_model_comparison_bar(
         vals = [metrics[model].get(m, 0) for m in metric_names]
         color = CUSTOM_COLORS[i % len(CUSTOM_COLORS)]
         bars = ax.bar(x + i * width, vals, width, label=model, color=color, alpha=0.85)
-        for bar, v in zip(bars, vals):
-            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+        for rect, v in zip(bars, vals):
+            ax.text(rect.get_x() + rect.get_width() / 2, rect.get_height() + 0.01,
                     f"{v:.2f}", ha="center", va="bottom", fontsize=8)
 
     ax.set_xticks(x + width * (n_models - 1) / 2)
@@ -495,7 +494,7 @@ def plot_calibration_curve(
 
 def plot_learning_curve(
     model: object,
-    X: pd.DataFrame | np.ndarray,
+    features_input: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
     run_cfg: RunConfig,
     *,
@@ -507,11 +506,9 @@ def plot_learning_curve(
 
     Uses TimeSeriesSplit to respect temporal ordering.
     """
-    from sklearn.model_selection import TimeSeriesSplit
-
-    X_arr = np.asarray(X)
+    feat_arr = np.asarray(features_input)
     y_arr = np.asarray(y)
-    n_total = len(X_arr)
+    n_total = len(feat_arr)
 
     # generate increasing training sizes
     min_train = max(cv * 2, 10)
@@ -523,18 +520,18 @@ def plot_learning_curve(
     actual_sizes = []
 
     for size in sizes:
-        X_sub, y_sub = X_arr[:size], y_arr[:size]
+        feat_sub, y_sub = feat_arr[:size], y_arr[:size]
         if len(np.unique(y_sub)) < 2:
             continue
         tscv = TimeSeriesSplit(n_splits=min(cv, size // 3))
         fold_train, fold_test = [], []
-        for tr_idx, te_idx in tscv.split(X_sub):
+        for tr_idx, te_idx in tscv.split(feat_sub):
             if len(np.unique(y_sub[tr_idx])) < 2:
                 continue
             m = model.__class__(**model.get_params())
-            m.fit(X_sub[tr_idx], y_sub[tr_idx])
-            fold_train.append(m.score(X_sub[tr_idx], y_sub[tr_idx]))
-            fold_test.append(m.score(X_sub[te_idx], y_sub[te_idx]))
+            m.fit(feat_sub[tr_idx], y_sub[tr_idx])
+            fold_train.append(m.score(feat_sub[tr_idx], y_sub[tr_idx]))
+            fold_test.append(m.score(feat_sub[te_idx], y_sub[te_idx]))
         if fold_train and fold_test:
             train_scores.append(np.mean(fold_train))
             test_scores.append(np.mean(fold_test))
@@ -644,4 +641,3 @@ def plot_feature_selection_curve(
     ax.grid(alpha=0.3)
     fig.tight_layout()
     _save_or_show(fig, filename, run_cfg)
-

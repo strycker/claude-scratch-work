@@ -50,7 +50,7 @@ def _log_feature_importance(model, feature_names, top_n: int = 15) -> None:
 
 def _tscv_scores(
     model_factory,
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     n_splits: int,
     label: str,
@@ -58,10 +58,10 @@ def _tscv_scores(
     """Run TimeSeriesSplit CV and return per-fold accuracy scores."""
     tscv = TimeSeriesSplit(n_splits=n_splits)
     scores = []
-    for fold, (train_idx, test_idx) in enumerate(tscv.split(X), start=1):
+    for fold, (train_idx, test_idx) in enumerate(tscv.split(features_df), start=1):
         m = model_factory()
-        m.fit(X.iloc[train_idx], y.iloc[train_idx])
-        acc = m.score(X.iloc[test_idx], y.iloc[test_idx])
+        m.fit(features_df.iloc[train_idx], y.iloc[train_idx])
+        acc = m.score(features_df.iloc[test_idx], y.iloc[test_idx])
         scores.append(acc)
         log.debug("%s fold %d/%d: accuracy=%.3f", label, fold, n_splits, acc)
     log.info(
@@ -74,7 +74,7 @@ def _tscv_scores(
 # ── public training functions ──────────────────────────────────────────────────
 
 def train_classifier(
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     cfg: dict,
     kind: str = "rf",
@@ -142,41 +142,41 @@ def train_classifier(
     else:
         raise ValueError(f"kind must be 'rf', 'dt', or 'lgbm', got {kind!r}")
 
-    _tscv_scores(_factory, X, y, n_splits, label)
+    _tscv_scores(_factory, features_df, y, n_splits, label)
 
     final = _factory()
-    final.fit(X, y)
+    final.fit(features_df, y)
 
     log.info(
         "%s — in-sample report:\n%s",
-        label, classification_report(y, final.predict(X), zero_division=0),
+        label, classification_report(y, final.predict(features_df), zero_division=0),
     )
-    _log_feature_importance(final, X.columns)
+    _log_feature_importance(final, features_df.columns)
     return final
 
 
 # Convenience aliases kept for call-site readability
-def train_current_regime(X: pd.DataFrame, y: pd.Series, cfg: dict) -> RandomForestClassifier:
+def train_current_regime(features_df: pd.DataFrame, y: pd.Series, cfg: dict) -> RandomForestClassifier:
     """Train a RandomForest to predict today's regime. See train_classifier()."""
-    return train_classifier(X, y, cfg, kind="rf")
+    return train_classifier(features_df, y, cfg, kind="rf")
 
 
-def train_decision_tree(X: pd.DataFrame, y: pd.Series, cfg: dict) -> DecisionTreeClassifier:
+def train_decision_tree(features_df: pd.DataFrame, y: pd.Series, cfg: dict) -> DecisionTreeClassifier:
     """Train a shallow DecisionTree to predict today's regime. See train_classifier()."""
-    return train_classifier(X, y, cfg, kind="dt")
+    return train_classifier(features_df, y, cfg, kind="dt")
 
 
-def train_lightgbm(X: pd.DataFrame, y: pd.Series, cfg: dict) -> object:
+def train_lightgbm(features_df: pd.DataFrame, y: pd.Series, cfg: dict) -> object:
     """Train a LightGBM classifier to predict today's regime. See train_classifier().
 
     Raises ImportError if lightgbm is not installed.
     Returns an ``lgb.LGBMClassifier`` instance.
     """
-    return train_classifier(X, y, cfg, kind="lgbm")
+    return train_classifier(features_df, y, cfg, kind="lgbm")
 
 
 def train_forward_classifiers(
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     cfg: dict,
 ) -> dict[int, dict[int, RandomForestClassifier]]:
@@ -201,9 +201,9 @@ def train_forward_classifiers(
 
     for h in horizons:
         results[h] = {}
-        # Shift labels back by h so X[t] predicts y[t+h]
+        # Shift labels back by h so features_df[t] predicts y[t+h]
         y_future = y.shift(-h).dropna().astype(int)
-        X_aligned = X.loc[y_future.index]
+        features_aligned = features_df.loc[y_future.index]
 
         for regime in sorted(y.unique()):
             y_binary = (y_future == regime).astype(int)
@@ -217,7 +217,7 @@ def train_forward_classifiers(
                 )
 
             scores = _tscv_scores(
-                _factory, X_aligned, y_binary, n_splits,
+                _factory, features_aligned, y_binary, n_splits,
                 f"RF h={h}Q regime={regime}",
             )
             log.info(
@@ -226,7 +226,7 @@ def train_forward_classifiers(
             )
 
             final = _factory()
-            final.fit(X_aligned, y_binary)
+            final.fit(features_aligned, y_binary)
             results[h][regime] = final
 
     return results
@@ -234,14 +234,14 @@ def train_forward_classifiers(
 
 # ── inference ──────────────────────────────────────────────────────────────────
 
-def predict_current(model: RandomForestClassifier, X_now: pd.DataFrame) -> dict:
+def predict_current(model: RandomForestClassifier, features_now: pd.DataFrame) -> dict:
     """
     Score the most recent quarter.
 
     Returns:
         {"regime": int, "probabilities": {regime_id: prob, …}}
     """
-    proba = model.predict_proba(X_now)[-1]
+    proba = model.predict_proba(features_now)[-1]
     regime = int(model.classes_[np.argmax(proba)])
     return {
         "regime": regime,
@@ -374,9 +374,9 @@ def train_forward_behavior_models(
                 # Need at least two behavior classes to train a classifier.
                 continue
 
-            X_joint = features.loc[idx].copy()
+            features_with_regime = features.loc[idx].copy()
             # Include regime at time t as an additional feature.
-            X_joint["regime"] = regimes.loc[idx].astype(int)
+            features_with_regime["regime"] = regimes.loc[idx].astype(int)
 
             def _factory() -> RandomForestClassifier:
                 return RandomForestClassifier(
@@ -389,14 +389,14 @@ def train_forward_behavior_models(
 
             scores = _tscv_scores(
                 _factory,
-                X_joint,
+                features_with_regime,
                 y,
                 n_splits=n_splits,
                 label=f"behavior asset={asset} h={horizon}",
             )
 
             final = _factory()
-            final.fit(X_joint, y)
+            final.fit(features_with_regime, y)
 
             results["models"][asset][horizon] = final
             results["cv_reports"][asset][horizon] = {

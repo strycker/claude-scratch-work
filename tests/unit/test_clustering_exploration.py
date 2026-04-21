@@ -157,7 +157,7 @@ class TestCompareSvdPca:
 
 class TestComputeGapStatistic:
     @pytest.fixture
-    def X(self):
+    def cluster_data(self):
         """Simple 2D data with 3 obvious clusters."""
         rng = np.random.default_rng(5)
         return np.vstack([
@@ -166,54 +166,54 @@ class TestComputeGapStatistic:
             rng.multivariate_normal([0, 3], 0.2 * np.eye(2), 30),
         ])
 
-    def test_returns_dataframe(self, X):
-        result = compute_gap_statistic(X, k_range=range(2, 5), n_boots=3, n_init=3)
+    def test_returns_dataframe(self, cluster_data):
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=3, n_init=3)
         assert isinstance(result, pd.DataFrame)
 
-    def test_expected_columns(self, X):
-        result = compute_gap_statistic(X, k_range=range(2, 5), n_boots=3, n_init=3)
+    def test_expected_columns(self, cluster_data):
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=3, n_init=3)
         for col in ("k", "gap", "gap_std", "gap_sk", "optimal"):
             assert col in result.columns
 
-    def test_one_row_per_k(self, X):
-        result = compute_gap_statistic(X, k_range=range(2, 6), n_boots=3, n_init=3)
+    def test_one_row_per_k(self, cluster_data):
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 6), n_boots=3, n_init=3)
         assert len(result) == 4
 
-    def test_exactly_one_optimal_k(self, X):
-        result = compute_gap_statistic(X, k_range=range(2, 6), n_boots=3, n_init=3)
+    def test_exactly_one_optimal_k(self, cluster_data):
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 6), n_boots=3, n_init=3)
         assert result["optimal"].sum() == 1
 
-    def test_gap_sk_geq_gap_std(self, X):
+    def test_gap_sk_geq_gap_std(self, cluster_data):
         """gap_sk = gap_std * sqrt(1 + 1/B) must be >= gap_std."""
-        result = compute_gap_statistic(X, k_range=range(2, 5), n_boots=5, n_init=3)
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=5, n_init=3)
         assert (result["gap_sk"].values >= result["gap_std"].values - 1e-9).all()
 
-    def test_gap_std_and_gap_sk_differ(self, X):
+    def test_gap_std_and_gap_sk_differ(self, cluster_data):
         """They should NOT be identical (gap_sk = std * sqrt(1 + 1/B) > std)."""
-        result = compute_gap_statistic(X, k_range=range(2, 5), n_boots=5, n_init=3)
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=5, n_init=3)
         assert not np.allclose(result["gap_std"].values, result["gap_sk"].values), (
             "gap_std and gap_sk are identical — the fix separating them may have been reverted"
         )
 
-    def test_gap_values_are_finite(self, X):
-        result = compute_gap_statistic(X, k_range=range(2, 5), n_boots=3, n_init=3)
+    def test_gap_values_are_finite(self, cluster_data):
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=3, n_init=3)
         assert np.isfinite(result["gap"].values).all()
 
     def test_too_few_samples_raises(self):
         with pytest.raises(ValueError, match="samples"):
             compute_gap_statistic(np.array([[1.0]]), k_range=range(2, 4))
 
-    def test_empty_k_range_raises(self, X):
+    def test_empty_k_range_raises(self, cluster_data):
         with pytest.raises(ValueError, match="empty"):
-            compute_gap_statistic(X, k_range=range(0, 0))
+            compute_gap_statistic(cluster_data, k_range=range(0, 0))
 
-    def test_reproducible_with_same_seed(self, X):
-        r1 = compute_gap_statistic(X, k_range=range(2, 5), n_boots=3, n_init=3, random_state=42)
-        r2 = compute_gap_statistic(X, k_range=range(2, 5), n_boots=3, n_init=3, random_state=42)
+    def test_reproducible_with_same_seed(self, cluster_data):
+        r1 = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=3, n_init=3, random_state=42)
+        r2 = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=3, n_init=3, random_state=42)
         pd.testing.assert_frame_equal(r1, r2)
 
-    def test_k_column_matches_k_range(self, X):
-        result = compute_gap_statistic(X, k_range=range(2, 5), n_boots=3, n_init=3)
+    def test_k_column_matches_k_range(self, cluster_data):
+        result = compute_gap_statistic(cluster_data, k_range=range(2, 5), n_boots=3, n_init=3)
         assert list(result["k"]) == [2, 3, 4]
 
 

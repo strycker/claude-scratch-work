@@ -107,11 +107,9 @@ class TestMarkovLabels:
         assert set(labels.unique()).issubset({0, 1})
 
     def test_canonicalization_regime0_lower_mean(self, gdp_result):
-        labels = markov_labels(gdp_result)
-        # Regime 0 should have lower mean → corresponds to recession
+        markov_labels(gdp_result)
         means = gdp_result["regime_means"]
         sorted_means = sorted(means.values())
-        # The lowest mean regime should be mapped to 0
         assert sorted_means[0] < sorted_means[1]
 
     def test_length_matches_input(self, gdp_result, gdp_growth):

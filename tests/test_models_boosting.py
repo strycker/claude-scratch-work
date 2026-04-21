@@ -13,7 +13,7 @@ from trading_crab_lib.prediction.classifier import (
 def _make_synthetic_data(n_samples: int = 40, n_features: int = 5, n_regimes: int = 3):
     rng = np.random.default_rng(42)
     index = pd.RangeIndex(n_samples)
-    X = pd.DataFrame(
+    features = pd.DataFrame(
         rng.normal(size=(n_samples, n_features)),
         index=index,
         columns=[f"f{i}" for i in range(n_features)],
@@ -23,26 +23,26 @@ def _make_synthetic_data(n_samples: int = 40, n_features: int = 5, n_regimes: in
         index=index,
         name="regime",
     )
-    return X, y
+    return features, y
 
 
 def test_train_current_regime_includes_gb_when_enabled():
-    X, y = _make_synthetic_data()
-    result = train_current_regime(X, y, cv_splits=3, include_gb=True)
+    features, y = _make_synthetic_data()
+    result = train_current_regime(features, y, cv_splits=3, include_gb=True)
 
     assert "gb" in result["models"]
     assert "gb" in result["cv_reports"]
 
     gb_model = result["models"]["gb"]
-    proba = gb_model.predict_proba(X)
-    assert proba.shape[0] == len(X)
-    np.testing.assert_allclose(proba.sum(axis=1), np.ones(len(X)), rtol=1e-6)
+    proba = gb_model.predict_proba(features)
+    assert proba.shape[0] == len(features)
+    np.testing.assert_allclose(proba.sum(axis=1), np.ones(len(features)), rtol=1e-6)
 
 
 def test_train_forward_classifiers_supports_gb_flag():
-    X, y = _make_synthetic_data()
+    features, y = _make_synthetic_data()
     results = train_forward_classifiers(
-        X, y, horizons=[1], cv_splits=3, include_gb=True
+        features, y, horizons=[1], cv_splits=3, include_gb=True
     )
 
     h1 = results[1]
@@ -51,6 +51,6 @@ def test_train_forward_classifiers_supports_gb_flag():
 
     gb_model = h1["models"]["gb"]
     y_future = y.shift(-1).dropna()
-    X_aligned = X.loc[y_future.index]
-    preds = gb_model.predict(X_aligned)
-    assert len(preds) == len(X_aligned)
+    feat_aligned = features.loc[y_future.index]
+    preds = gb_model.predict(feat_aligned)
+    assert len(preds) == len(feat_aligned)

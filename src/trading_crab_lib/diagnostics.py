@@ -144,14 +144,10 @@ def compute_rrg(
         if pd.isna(rs_last) or pd.isna(rm_last):
             continue
 
-        if rs_last > 100 and rm_last > 100:
-            quadrant = "LEADING"
-        elif rs_last > 100 and rm_last <= 100:
-            quadrant = "WEAKENING"
-        elif rs_last <= 100 and rm_last <= 100:
-            quadrant = "LAGGING"
+        if rs_last > 100:
+            quadrant = "LEADING" if rm_last > 100 else "WEAKENING"
         else:
-            quadrant = "IMPROVING"
+            quadrant = "LAGGING" if rm_last <= 100 else "IMPROVING"
 
         records.append({
             "asset": ticker,
@@ -186,8 +182,7 @@ def rrg_for_benchmark(
     """
     if benchmark not in prices.columns:
         return pd.DataFrame()
-    if len(prices) < lookback:
-        lookback = len(prices)
+    lookback = min(lookback, len(prices))
     window_prices = prices.iloc[-lookback:]
     rs = window_prices.divide(window_prices[benchmark], axis=0)
     rs_smooth = rs.rolling(window=min(13, lookback), min_periods=1).mean()
@@ -206,14 +201,10 @@ def rrg_for_benchmark(
             continue
         rr_last = rr.iloc[-1]
         mm_last = mm.iloc[-1]
-        if rr_last >= 100 and mm_last >= 100:
-            quadrant = "LEADING"
-        elif rr_last >= 100 and mm_last < 100:
-            quadrant = "WEAKENING"
-        elif rr_last < 100 and mm_last < 100:
-            quadrant = "LAGGING"
+        if rr_last >= 100:
+            quadrant = "LEADING" if mm_last >= 100 else "WEAKENING"
         else:
-            quadrant = "IMPROVING"
+            quadrant = "LAGGING" if mm_last < 100 else "IMPROVING"
         records.append(
             {
                 "as_of": as_of,

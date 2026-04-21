@@ -157,7 +157,7 @@ class TestFitDbscan:
 @pytest.fixture
 def hdbscan_available():
     try:
-        import hdbscan  # noqa: F401
+        import hdbscan  # noqa: F401  # pylint: disable=unused-import
         return True
     except ImportError:
         return False

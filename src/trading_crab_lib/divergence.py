@@ -26,7 +26,6 @@ before log transforms.
 
 from __future__ import annotations
 
-from typing import Any
 import logging
 
 import numpy as np

@@ -7,10 +7,14 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
+try:
+    import seaborn as sns
+    _SEABORN_AVAILABLE = True
+except ImportError:
+    sns = None  # type: ignore[assignment]
+    _SEABORN_AVAILABLE = False
+
 from trading_crab_lib.plotting.core import (
-    CUSTOM_COLORS,
-    PLOT_DIR,
-    REGIME_CMAP,
     RunConfig,
     _regime_color,
     _save_or_show,
@@ -78,9 +82,7 @@ def plot_asset_heatmap(
     """
     if profile.empty:
         return
-    try:
-        import seaborn as sns
-    except ImportError:
+    if not _SEABORN_AVAILABLE:
         log.warning("seaborn not installed — skipping asset heatmap")
         return
 
@@ -142,5 +144,3 @@ def plot_asset_return_distributions(
     ax.grid(alpha=0.3)
     fig.tight_layout()
     _save_or_show(fig, f"06_returns_dist_{ticker}.png", run_cfg)
-
-

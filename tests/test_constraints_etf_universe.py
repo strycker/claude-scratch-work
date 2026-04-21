@@ -64,4 +64,3 @@ def test_helper_rejects_out_of_universe_ticker(etf_universe: list[str]) -> None:
 
     with pytest.raises(AssertionError):
         _assert_columns_within_universe(df.columns, etf_universe)
-

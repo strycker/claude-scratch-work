@@ -44,8 +44,9 @@ Usage
 from __future__ import annotations
 
 import logging
-import joblib
 from pathlib import Path
+
+import joblib
 
 import numpy as np
 import pandas as pd
@@ -87,7 +88,7 @@ def compare_all_methods(
     if not labels_dict:
         raise ValueError("labels_dict is empty — no methods to compare")
 
-    X = StandardScaler().fit_transform(pca_df.values)
+    features_arr = StandardScaler().fit_transform(pca_df.values)
     rows: list[dict] = []
 
     for name, labels in labels_dict.items():
@@ -104,17 +105,17 @@ def compare_all_methods(
                 name, n_missing,
             )
 
-        X_clean = X[valid.values]
+        features_clean = features_arr[valid.values]
         labels_clean = aligned[valid].astype(int).values
         n_clusters = len(set(labels_clean)) if len(labels_clean) > 0 else 0
 
         sil = db = ch = float("nan")
-        if n_clusters >= 2 and len(labels_clean) >= n_clusters:
+        if 2 <= n_clusters <= len(labels_clean):
             try:
-                sil = silhouette_score(X_clean, labels_clean)
-                db  = davies_bouldin_score(X_clean, labels_clean)
-                ch  = calinski_harabasz_score(X_clean, labels_clean)
-            except Exception as exc:
+                sil = silhouette_score(features_clean, labels_clean)
+                db  = davies_bouldin_score(features_clean, labels_clean)
+                ch  = calinski_harabasz_score(features_clean, labels_clean)
+            except (ValueError, RuntimeError) as exc:
                 log.warning("%s: metric computation failed — %s", name, exc)
         elif n_clusters < 2:
             log.warning(

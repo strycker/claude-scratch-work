@@ -17,7 +17,7 @@ def _require_checkpoint(name: str, cm: CheckpointManager) -> pd.DataFrame:
     try:
         return cm.load(name)
     except FileNotFoundError:
-        pytest.skip(
+        return pytest.skip(  # type: ignore[return-value]  # pytest.skip() raises Skipped
             f"{name} checkpoint not found; run the corresponding pipeline steps to "
             f"materialise data/checkpoints/{name}.parquet before enforcing cadence constraints."
         )
@@ -65,4 +65,3 @@ def test_feature_artifacts_are_quarterly(name: str, checkpoints: CheckpointManag
     assert not features.empty, f"{name} checkpoint is empty"
     _assert_quarterly_index(features.index)
     _assert_no_intraday(features.index)
-

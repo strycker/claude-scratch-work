@@ -23,8 +23,9 @@ import json
 import logging
 import re
 import time
-
+from io import StringIO
 from typing import Any
+
 import pandas as pd
 
 try:
@@ -154,7 +155,6 @@ def _scrape_series_html_table(
     resample_method: str,
 ) -> pd.Series:
     """Fallback: parse an HTML table from the page using pandas.read_html."""
-    from io import StringIO
     tables = pd.read_html(StringIO(html))
     if not tables:
         raise ValueError(f"No HTML tables found for {column_name}")
@@ -231,7 +231,7 @@ def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
                     s.index[0].strftime("%Y-Q%q") if len(s) > 0 else "?",
                     s.index[-1].strftime("%Y-Q%q") if len(s) > 0 else "?",
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — network libraries raise various types
             log.warning("Failed to scrape macrotrends %s: %s", column_name, exc)
         time.sleep(RATE_LIMIT_SECONDS)
 

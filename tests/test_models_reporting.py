@@ -55,14 +55,14 @@ def test_model_metrics_summary_current_bundle():
     cur = summary["current"]
     assert set(cur.keys()) == {"dt", "rf"}
 
-    for model_name, stats in cur.items():
+    for _model_name, stats in cur.items():
         overall = stats["overall"]
         assert 0.0 <= overall["accuracy"] <= 1.0
         assert 0.0 <= overall["macro_f1"] <= 1.0
         assert 0.0 <= overall["weighted_f1"] <= 1.0
 
         per_class = stats["per_class"]
-        for cls, metrics in per_class.items():
+        for _cls, metrics in per_class.items():
             assert metrics["precision"] >= 0.0
             assert metrics["recall"] >= 0.0
             assert metrics["f1"] >= 0.0
@@ -96,7 +96,7 @@ def test_model_metrics_summary_forward_horizons():
     assert fake_forward == original
 
     assert set(summary.keys()) == {1, 2}
-    for h, models in summary.items():
+    for _h, models in summary.items():
         assert "rf" in models
         overall = models["rf"]["overall"]
         assert 0.0 <= overall["accuracy"] <= 1.0
@@ -167,4 +167,3 @@ def test_model_metrics_summary_combined_regime_and_behavior() -> None:
     ]
     assert len(etf1_up) == 1
     assert 0.0 <= etf1_up[0]["value"] <= 1.0
-

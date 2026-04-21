@@ -5,11 +5,16 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Patch
+
+try:
+    import seaborn as sns
+    _SEABORN_AVAILABLE = True
+except ImportError:
+    sns = None  # type: ignore[assignment]
+    _SEABORN_AVAILABLE = False
 
 from trading_crab_lib.plotting.core import (
-    CUSTOM_COLORS,
-    PLOT_DIR,
-    REGIME_CMAP,
     RunConfig,
     _regime_color,
     _save_or_show,
@@ -62,9 +67,7 @@ def plot_transition_matrix(
     Heatmap of the regime transition probability matrix.
     Cell values are probabilities; diagonal = persistence.
     """
-    try:
-        import seaborn as sns
-    except ImportError:
+    if not _SEABORN_AVAILABLE:
         log.warning("seaborn not installed — skipping transition matrix heatmap")
         return
 
@@ -213,8 +216,7 @@ def plot_feature_regime_overlay(
 
     # draw regime background bands
     unique_regimes = sorted(lab.unique())
-    for i in range(len(common)):
-        dt = common[i]
+    for i, dt in enumerate(common):
         cid = lab.iloc[i]
         # quarter width: approximate as 90 days
         left = dt - pd.Timedelta(days=45)
@@ -228,7 +230,6 @@ def plot_feature_regime_overlay(
     ax.grid(alpha=0.3)
 
     # legend for regimes
-    from matplotlib.patches import Patch
     handles = [Patch(facecolor=_regime_color(r), alpha=0.4,
                      label=regime_names.get(r, f"R{r}")) for r in unique_regimes]
     ax.legend(handles=handles, loc="upper left", fontsize=8, ncol=min(len(unique_regimes), 5))
@@ -253,7 +254,9 @@ def plot_forward_prob_evolution(
         ``{horizon: DataFrame}`` where each DataFrame has shape (n_regimes, n_regimes),
         rows = source regime, columns = target regime.  From ``compute_forward_probabilities()``.
     """
-    import seaborn as sns
+    if not _SEABORN_AVAILABLE:
+        log.warning("seaborn not installed — skipping forward probability evolution plot")
+        return
 
     if not forward_probs:
         return
@@ -341,7 +344,9 @@ def plot_correlation_change_heatmap(
     Selects top_n features by variance, then plots one correlation heatmap
     per regime side-by-side.
     """
-    import seaborn as sns
+    if not _SEABORN_AVAILABLE:
+        log.warning("seaborn not installed — skipping correlation change heatmap")
+        return
 
     common = features.index.intersection(labels.index)
     if len(common) < 10:
@@ -368,12 +373,10 @@ def plot_correlation_change_heatmap(
         corr = subset.corr()
         sns.heatmap(corr, ax=ax, cmap="RdBu_r", center=0, vmin=-1, vmax=1,
                     xticklabels=False, yticklabels=(i == 0),
-                    linewidths=0.3, cbar=(i == n - 1))
+                    linewidths=0.3, cbar=i == n - 1)
         ax.set_title(regime_names.get(cid, f"R{cid}"), fontsize=10)
         ax.tick_params(axis="y", labelsize=7)
 
     fig.suptitle("Feature Correlation by Regime", fontsize=13)
     fig.tight_layout()
     _save_or_show(fig, filename, run_cfg)
-
-

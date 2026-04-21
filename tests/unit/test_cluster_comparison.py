@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import joblib
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -67,10 +65,10 @@ def noise_labels(pca_df):
 def rf_model_path(tmp_path):
     """Fit a small RF model, pickle it, return the path."""
     rng = np.random.default_rng(0)
-    X = rng.random((100, 10))
-    y = (X[:, 0] > 0.5).astype(int)
+    feat_data = rng.random((100, 10))
+    y = (feat_data[:, 0] > 0.5).astype(int)
     rf = RandomForestClassifier(n_estimators=10, random_state=42)
-    rf.fit(X, y)
+    rf.fit(feat_data, y)
     path = tmp_path / "rf_model.pkl"
     joblib.dump(rf, path)
     return path, rf, [f"feat_{i}" for i in range(10)]
@@ -203,8 +201,7 @@ class TestExtractRfFeatureImportances:
 
     def test_feature_names_from_model_when_none(self, rf_model_path):
         """Without explicit feature_names, should fall back to model.feature_names_in_."""
-        path, rf, names = rf_model_path
-        # RF fitted without feature names → will use feature_N fallback
+        path, _, _ = rf_model_path
         importances = extract_rf_feature_importances(path, feature_names=None)
         assert len(importances) == 10
 

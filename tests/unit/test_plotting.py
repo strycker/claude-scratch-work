@@ -6,11 +6,11 @@ created and saved correctly when run_cfg.save_plots is True.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
+# matplotlib.use("Agg") must precede pyplot import — import order is intentional.
+# pylint: disable=wrong-import-position,wrong-import-order
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402
 
 import numpy as np
 import pandas as pd
@@ -19,6 +19,7 @@ import pytest
 from trading_crab_lib.runtime import RunConfig
 from trading_crab_lib import plotting
 from trading_crab_lib.plotting import core as _plotting_core
+# pylint: enable=wrong-import-position,wrong-import-order
 
 
 # ── Shared fixtures ──────────────────────────────────────────────────────────
@@ -308,10 +309,10 @@ class TestPlotFeatureImportanceComparison:
         from sklearn.tree import DecisionTreeClassifier
         from sklearn.ensemble import RandomForestClassifier
         rng = np.random.default_rng(42)
-        X = rng.standard_normal((40, 10))
+        data = rng.standard_normal((40, 10))
         y = np.array([i % 3 for i in range(40)])
-        rf = RandomForestClassifier(n_estimators=10, random_state=42).fit(X, y)
-        dt = DecisionTreeClassifier(max_depth=3, random_state=42).fit(X, y)
+        rf = RandomForestClassifier(n_estimators=10, random_state=42).fit(data, y)
+        dt = DecisionTreeClassifier(max_depth=3, random_state=42).fit(data, y)
         names = [f"feat_{i}" for i in range(10)]
         plotting.plot_feature_importance_comparison({"RF": rf, "DT": dt}, names, run_cfg, top_n=5)
         assert (tmp_path / "05_feature_importance_comparison.png").exists()
@@ -435,8 +436,8 @@ class TestPlotScree:
     def test_does_not_crash(self, run_cfg, tmp_path):
         from sklearn.decomposition import PCA
         rng = np.random.default_rng(42)
-        X = rng.standard_normal((40, 10))
-        pca = PCA(n_components=5).fit(X)
+        data = rng.standard_normal((40, 10))
+        pca = PCA(n_components=5).fit(data)
         plotting.plot_scree(pca, run_cfg)
         assert (tmp_path / "03_scree.png").exists()
 
@@ -445,8 +446,8 @@ class TestPlotPcaLoadings:
     def test_does_not_crash(self, run_cfg, tmp_path):
         from sklearn.decomposition import PCA
         rng = np.random.default_rng(42)
-        X = rng.standard_normal((40, 10))
-        pca = PCA(n_components=3).fit(X)
+        data = rng.standard_normal((40, 10))
+        pca = PCA(n_components=3).fit(data)
         names = [f"feat_{i}" for i in range(10)]
         plotting.plot_pca_loadings(pca, names, run_cfg, top_n=5)
         assert (tmp_path / "03_pca_loadings.png").exists()
@@ -455,9 +456,9 @@ class TestPlotPcaLoadings:
 class TestPlotSilhouetteSamples:
     def test_does_not_crash(self, run_cfg, tmp_path):
         rng = np.random.default_rng(42)
-        X = rng.standard_normal((40, 5))
+        data = rng.standard_normal((40, 5))
         labels = np.array([i % 3 for i in range(40)])
-        plotting.plot_silhouette_samples(X, labels, run_cfg)
+        plotting.plot_silhouette_samples(data, labels, run_cfg)
         assert (tmp_path / "03_silhouette_samples.png").exists()
 
 
@@ -497,11 +498,11 @@ class TestPlotDecisionTree:
     def test_does_not_crash(self, regime_names, run_cfg, tmp_path):
         from sklearn.tree import DecisionTreeClassifier
         rng = np.random.default_rng(42)
-        X = rng.standard_normal((40, 5))
+        data = rng.standard_normal((40, 5))
         y = np.array([i % 3 for i in range(40)])
-        tree = DecisionTreeClassifier(max_depth=3, random_state=42).fit(X, y)
-        features = [f"feat_{i}" for i in range(5)]
-        plotting.plot_decision_tree(tree, features, regime_names, run_cfg)
+        tree = DecisionTreeClassifier(max_depth=3, random_state=42).fit(data, y)
+        feature_names = [f"feat_{i}" for i in range(5)]
+        plotting.plot_decision_tree(tree, feature_names, regime_names, run_cfg)
         assert (tmp_path / "05_decision_tree.png").exists()
 
 
@@ -540,10 +541,10 @@ class TestPlotLearningCurve:
     def test_does_not_crash(self, run_cfg, tmp_path):
         from sklearn.tree import DecisionTreeClassifier
         rng = np.random.default_rng(42)
-        X = rng.standard_normal((60, 5))
+        data = rng.standard_normal((60, 5))
         y = np.array([i % 3 for i in range(60)])
-        model = DecisionTreeClassifier(max_depth=3, random_state=42).fit(X, y)
-        plotting.plot_learning_curve(model, X, y, run_cfg, cv=3, n_points=4)
+        model = DecisionTreeClassifier(max_depth=3, random_state=42).fit(data, y)
+        plotting.plot_learning_curve(model, data, y, run_cfg, cv=3, n_points=4)
         assert (tmp_path / "05_learning_curve.png").exists()
 
 
@@ -581,7 +582,7 @@ class TestPlotIsFresh:
         assert plotting._plot_is_fresh("test.png", checkpoint_name=None) is True
 
     def test_png_newer_than_checkpoint_is_fresh(self, tmp_path, monkeypatch):
-        import json, time
+        import json
         from datetime import datetime, timedelta
 
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
@@ -600,8 +601,10 @@ class TestPlotIsFresh:
         assert plotting._plot_is_fresh("test.png", checkpoint_name="features") is True
 
     def test_png_older_than_checkpoint_is_stale(self, tmp_path, monkeypatch):
-        import json, os, time
-        from datetime import datetime, timedelta
+        import json
+        import os
+        import time
+        from datetime import datetime
 
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
         monkeypatch.setattr(_plotting_core, "PLOT_DIR", tmp_path)
@@ -693,7 +696,9 @@ class TestLoadOrGenerate:
         assert (tmp_path / "dummy.png").read_bytes() == b"CACHED_PNG"
 
     def test_regenerates_when_stale(self, tmp_path, monkeypatch):
-        import json, os, time
+        import json
+        import os
+        import time
         from datetime import datetime
 
         monkeypatch.setattr(plotting, "PLOT_DIR", tmp_path)
