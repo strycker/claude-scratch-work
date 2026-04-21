@@ -24,7 +24,7 @@ def synthetic_data():
     rng = np.random.default_rng(42)
     n, n_feat, n_regimes = 60, 8, 4
     idx = pd.date_range("2000-03-31", periods=n, freq="QE")
-    X = pd.DataFrame(
+    features = pd.DataFrame(
         rng.normal(size=(n, n_feat)),
         index=idx,
         columns=[f"feat_{i}" for i in range(n_feat)],
@@ -34,7 +34,7 @@ def synthetic_data():
         index=idx,
         name="regime",
     )
-    return X, y
+    return features, y
 
 
 @pytest.fixture
@@ -52,31 +52,31 @@ def cfg():
 
 
 def test_train_current_regime_returns_rf(synthetic_data, cfg):
-    X, y = synthetic_data
-    model = train_current_regime(X, y, cfg)
+    features, y = synthetic_data
+    model = train_current_regime(features, y, cfg)
     assert isinstance(model, RandomForestClassifier)
     assert hasattr(model, "predict_proba")
-    proba = model.predict_proba(X)
-    assert proba.shape[0] == len(X)
+    proba = model.predict_proba(features)
+    assert proba.shape[0] == len(features)
 
 
 def test_train_decision_tree_returns_dt(synthetic_data, cfg):
-    X, y = synthetic_data
-    model = train_decision_tree(X, y, cfg)
+    features, y = synthetic_data
+    model = train_decision_tree(features, y, cfg)
     assert isinstance(model, DecisionTreeClassifier)
     assert model.get_depth() <= cfg["prediction"]["dt_max_depth"]
 
 
 def test_train_classifier_invalid_kind_raises(synthetic_data, cfg):
-    X, y = synthetic_data
+    features, y = synthetic_data
     with pytest.raises(ValueError, match="kind must be"):
-        train_classifier(X, y, cfg, kind="xgb")
+        train_classifier(features, y, cfg, kind="xgb")
 
 
 def test_predict_current_returns_regime_and_probs(synthetic_data, cfg):
-    X, y = synthetic_data
-    model = train_current_regime(X, y, cfg)
-    result = predict_current(model, X)
+    features, y = synthetic_data
+    model = train_current_regime(features, y, cfg)
+    result = predict_current(model, features)
     assert "regime" in result
     assert "probabilities" in result
     assert isinstance(result["regime"], int)
@@ -86,11 +86,10 @@ def test_predict_current_returns_regime_and_probs(synthetic_data, cfg):
 
 
 def test_train_forward_classifiers_structure(synthetic_data, cfg):
-    X, y = synthetic_data
-    results = train_forward_classifiers(X, y, cfg)
+    features, y = synthetic_data
+    results = train_forward_classifiers(features, y, cfg)
     assert set(results.keys()) == {1, 2}
-    for h, per_regime in results.items():
-        for regime_id, model in per_regime.items():
+    for _h, per_regime in results.items():
+        for _regime_id, model in per_regime.items():
             assert isinstance(model, RandomForestClassifier)
-            # Binary classifier: classes should be [0, 1]
             assert len(model.classes_) == 2

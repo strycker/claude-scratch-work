@@ -90,8 +90,8 @@ def fit_hmm(
         k_range = range(2, 8)
 
     scaler = StandardScaler()
-    X = scaler.fit_transform(pca_df.values)
-    n_samples, n_features = X.shape
+    features_arr = scaler.fit_transform(pca_df.values)
+    n_samples, n_features = features_arr.shape
 
     rows: list[dict] = []
     models: dict[int, GaussianHMM] = {}
@@ -112,15 +112,15 @@ def fit_hmm(
                 )
                 with warnings.catch_warnings(record=True):
                     warnings.simplefilter("always")
-                    hmm.fit(X)
+                    hmm.fit(features_arr)
 
-                ll = float(hmm.score(X))
+                ll = float(hmm.score(features_arr))
                 if ll > best_ll:
                     best_ll = ll
                     best_model = hmm
                     converged = bool(hmm.monitor_.converged)
 
-            except Exception as exc:
+            except (ValueError, RuntimeError) as exc:
                 log.debug("HMM k=%d restart=%d failed: %s", k, restart, exc)
                 continue
 
@@ -201,8 +201,8 @@ def hmm_labels(
     if scaler is None:
         log.warning("hmm_labels called without scaler — fitting new scaler on pca_df")
         scaler = StandardScaler().fit(pca_df.values)
-    X = scaler.transform(pca_df.values)
-    raw_labels = pd.Series(model.predict(X), index=pca_df.index, name="hmm_state")
+    features_arr = scaler.transform(pca_df.values)
+    raw_labels = pd.Series(model.predict(features_arr), index=pca_df.index, name="hmm_state")
 
     # Canonicalize: state 0 = smallest mean PC1
     pc1 = pca_df.iloc[:, 0]
@@ -232,8 +232,8 @@ def hmm_probabilities(
     if scaler is None:
         log.warning("hmm_probabilities called without scaler — fitting new scaler")
         scaler = StandardScaler().fit(pca_df.values)
-    X = scaler.transform(pca_df.values)
-    probs = model.predict_proba(X)
+    features_arr = scaler.transform(pca_df.values)
+    probs = model.predict_proba(features_arr)
     k = probs.shape[1]
     cols = [f"hmm_prob_{i}" for i in range(k)]
     return pd.DataFrame(probs, index=pca_df.index, columns=cols)

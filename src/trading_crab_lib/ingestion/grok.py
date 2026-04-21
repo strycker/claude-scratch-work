@@ -61,7 +61,7 @@ def load_grok_labels(data_dir: Path) -> pd.Series | None:
 
     try:
         df = pd.read_pickle(path)
-    except Exception as exc:
+    except (OSError, ValueError, EOFError) as exc:
         log.error("Failed to load grok pickle %s: %s", path, exc)
         return None
 

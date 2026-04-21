@@ -4,8 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from trading_crab_lib.email import (
     _build_html_body_with_plots,
     _markdown_to_html,
@@ -131,19 +129,19 @@ def test_build_body_from_email_body_txt(tmp_path):
 
 def test_build_body_from_weekly_report_md(tmp_path):
     (tmp_path / "weekly_report.md").write_text("# Weekly Report\nAll good.")
-    subject, body = build_weekly_email_body(tmp_path)
+    _, body = build_weekly_email_body(tmp_path)
     assert "# Weekly Report" in body
 
 
 def test_build_body_from_dashboard_csv(tmp_path):
     (tmp_path / "dashboard.csv").write_text("asset,signal\nSPY,GREEN\nGLD,YELLOW\n")
-    subject, body = build_weekly_email_body(tmp_path)
+    _, body = build_weekly_email_body(tmp_path)
     assert "Dashboard summary" in body
     assert "SPY" in body
 
 
 def test_build_body_no_files(tmp_path):
-    subject, body = build_weekly_email_body(tmp_path)
+    _, body = build_weekly_email_body(tmp_path)
     assert "No report files found" in body
 
 
@@ -223,13 +221,13 @@ def test_resolve_plot_paths_existing(tmp_path):
 
 def test_resolve_plot_paths_empty_list(tmp_path):
     """Empty input returns empty output."""
-    assert resolve_plot_paths([], tmp_path) == []
+    assert not resolve_plot_paths([], tmp_path)
 
 
 def test_resolve_plot_paths_all_missing(tmp_path):
     """All missing files returns empty list."""
     result = resolve_plot_paths(["no.png", "nope.png"], tmp_path)
-    assert result == []
+    assert not result
 
 
 # ── _build_html_body_with_plots tests ────────────────────────────────────────

@@ -30,17 +30,19 @@ from sklearn.preprocessing import StandardScaler
 
 log = logging.getLogger(__name__)
 
+try:
+    from kneed import KneeLocator  # type: ignore[import]
+    _KNEED_AVAILABLE = True
+except ImportError:
+    KneeLocator = None  # type: ignore[assignment,misc]
+    _KNEED_AVAILABLE = False
 
-def _load_constrained_kmeans():
-    try:
-        from k_means_constrained import KMeansConstrained
-        return KMeansConstrained
-    except ImportError:
-        log.warning(
-            "k-means-constrained not installed — balanced clustering unavailable. "
-            "Run: pip install k-means-constrained"
-        )
-        return None
+try:
+    from k_means_constrained import KMeansConstrained  # type: ignore[import]
+    _KMC_AVAILABLE = True
+except ImportError:
+    KMeansConstrained = None  # type: ignore[assignment,misc]
+    _KMC_AVAILABLE = False
 
 
 # ── 1. PCA ─────────────────────────────────────────────────────────────────
@@ -59,10 +61,10 @@ def reduce_pca(
         scaler   — fitted StandardScaler (kept for the same reason)
     """
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(df.values)
+    features_scaled = scaler.fit_transform(df.values)
 
     pca = PCA(n_components=n_components, random_state=random_state)
-    X_reduced = pca.fit_transform(X_scaled)
+    features_pca = pca.fit_transform(features_scaled)
 
     ratios = np.round(pca.explained_variance_ratio_, 3)
     cumvar = np.cumsum(pca.explained_variance_ratio_)
@@ -76,14 +78,14 @@ def reduce_pca(
     )
 
     col_names = [f"PC{i + 1}" for i in range(n_components)]
-    pca_df = pd.DataFrame(X_reduced, index=df.index, columns=col_names)
+    pca_df = pd.DataFrame(features_pca, index=df.index, columns=col_names)
     return pca_df, pca, scaler
 
 
 # ── 2. K evaluation ────────────────────────────────────────────────────────
 
 def evaluate_kmeans(
-    X: np.ndarray,
+    features_arr: np.ndarray,
     k_range: range,
     n_init: int = 50,
     random_state: int = 0,
@@ -93,7 +95,7 @@ def evaluate_kmeans(
       inertia, silhouette, calinski, davies_bouldin.
 
     Args:
-        X            — scaled feature matrix (output of StandardScaler)
+        features_arr — scaled feature matrix (output of StandardScaler)
         k_range      — range of k values to evaluate, e.g. range(2, 13)
         n_init       — KMeans restarts per k (higher = more stable)
         random_state
@@ -105,13 +107,13 @@ def evaluate_kmeans(
     results = []
     for k in k_range:
         model = KMeans(n_clusters=k, n_init=n_init, random_state=random_state)
-        labels = model.fit_predict(X)
+        labels = model.fit_predict(features_arr)
         results.append({
             "k":              k,
             "inertia":        model.inertia_,
-            "silhouette":     silhouette_score(X, labels),
-            "calinski":       calinski_harabasz_score(X, labels),
-            "davies_bouldin": davies_bouldin_score(X, labels),
+            "silhouette":     silhouette_score(features_arr, labels),
+            "calinski":       calinski_harabasz_score(features_arr, labels),
+            "davies_bouldin": davies_bouldin_score(features_arr, labels),
         })
         log.debug("k=%d  sil=%.4f  CH=%.1f  DB=%.4f",
                   k, results[-1]["silhouette"],
@@ -166,27 +168,31 @@ def fit_clusters(
         pca_df with two new columns: cluster, balanced_cluster.
     """
     # Re-scale the PCA components before clustering
-    X = StandardScaler().fit_transform(pca_df.values)
+    features_arr = StandardScaler().fit_transform(pca_df.values)
     result = pca_df.copy()
 
     # Standard KMeans
     result["cluster"] = KMeans(
         n_clusters=best_k, n_init=100, random_state=random_state
-    ).fit_predict(X)
+    ).fit_predict(features_arr)
     log.info("Standard KMeans (k=%d): %s", best_k, _size_summary(result["cluster"]))
 
     # Size-constrained KMeans
-    KMC = _load_constrained_kmeans() if use_constrained else None
-    if KMC is not None:
-        n = len(X)
+    if not _KMC_AVAILABLE and use_constrained:
+        log.warning(
+            "k-means-constrained not installed — balanced clustering unavailable. "
+            "Run: pip install k-means-constrained"
+        )
+    if _KMC_AVAILABLE and use_constrained and KMeansConstrained is not None:
+        n = len(features_arr)
         bucket = n // balanced_k
-        model = KMC(
+        model = KMeansConstrained(
             n_clusters=balanced_k,
             size_min=bucket - 2,
             size_max=bucket + 2,
             random_state=random_state,
         )
-        result["balanced_cluster"] = model.fit_predict(X)
+        result["balanced_cluster"] = model.fit_predict(features_arr)
         log.info(
             "Balanced KMeans (k=%d): %s",
             balanced_k, _size_summary(result["balanced_cluster"]),
@@ -195,7 +201,7 @@ def fit_clusters(
         # Fall back to plain KMeans so the column always exists
         result["balanced_cluster"] = KMeans(
             n_clusters=balanced_k, n_init=100, random_state=random_state
-        ).fit_predict(X)
+        ).fit_predict(features_arr)
         log.warning("balanced_cluster uses plain KMeans (k-means-constrained unavailable)")
 
     # Canonicalize label IDs so cluster 0 always has the smallest mean PC1 value.
@@ -287,23 +293,23 @@ def optimize_n_components(
         )
 
     scaler_outer = StandardScaler()
-    X_raw = scaler_outer.fit_transform(df.values)
+    features_raw = scaler_outer.fit_transform(df.values)
 
     rows = []
     for n in valid_n:
         pca = PCA(n_components=n, random_state=random_state)
-        X_pca = pca.fit_transform(X_raw)
+        pca_components = pca.fit_transform(features_raw)
         cumvar = float(np.sum(pca.explained_variance_ratio_))
 
-        X_scaled = StandardScaler().fit_transform(X_pca)
-        labels = KMeans(n_clusters=balanced_k, n_init=n_init, random_state=random_state).fit_predict(X_scaled)
+        pca_scaled = StandardScaler().fit_transform(pca_components)
+        labels = KMeans(n_clusters=balanced_k, n_init=n_init, random_state=random_state).fit_predict(pca_scaled)
 
         rows.append({
             "n_components": n,
             "explained_variance_pct": round(cumvar * 100, 2),
-            "silhouette": silhouette_score(X_scaled, labels),
-            "davies_bouldin": davies_bouldin_score(X_scaled, labels),
-            "calinski": calinski_harabasz_score(X_scaled, labels),
+            "silhouette": silhouette_score(pca_scaled, labels),
+            "davies_bouldin": davies_bouldin_score(pca_scaled, labels),
+            "calinski": calinski_harabasz_score(pca_scaled, labels),
         })
         log.info(
             "PCA n=%d  var=%.1f%%  sil=%.4f  DB=%.4f  CH=%.1f",
@@ -346,19 +352,19 @@ def compare_svd_pca(
 
     feature_names = list(df.columns)
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(df.values)
+    features_scaled = scaler.fit_transform(df.values)
 
     # PCA
     pca = PCA(n_components=n_components, random_state=random_state)
-    X_pca = pca.fit_transform(X_scaled)
+    pca_components = pca.fit_transform(features_scaled)
     pca_cols = [f"PC{i+1}" for i in range(n_components)]
-    pca_df = pd.DataFrame(X_pca, index=df.index, columns=pca_cols)
+    pca_df = pd.DataFrame(pca_components, index=df.index, columns=pca_cols)
 
-    # TruncatedSVD (no additional centering — operates on X_scaled directly)
+    # TruncatedSVD (no additional centering — operates on features_scaled directly)
     svd = TruncatedSVD(n_components=n_components, random_state=random_state)
-    X_svd = svd.fit_transform(X_scaled)
+    svd_components = svd.fit_transform(features_scaled)
     svd_cols = [f"SV{i+1}" for i in range(n_components)]
-    svd_df = pd.DataFrame(X_svd, index=df.index, columns=svd_cols)
+    svd_df = pd.DataFrame(svd_components, index=df.index, columns=svd_cols)
 
     # Loadings comparison: absolute value of component weights per feature
     pca_loadings = pd.DataFrame(
@@ -379,7 +385,7 @@ def compare_svd_pca(
 
 
 def compute_gap_statistic(
-    X: np.ndarray,
+    features_arr: np.ndarray,
     k_range: range | None = None,
     n_boots: int = 10,
     n_init: int = 20,
@@ -393,10 +399,10 @@ def compute_gap_statistic(
     where s_k = sd_k * sqrt(1 + 1/B) is the simulation error.
 
     Args:
-        X        — scaled feature matrix (rows = samples, cols = features)
-        k_range  — k values to evaluate (default range(2, 12))
-        n_boots  — bootstrap reference datasets (higher = more accurate, slower)
-        n_init   — KMeans restarts per k
+        features_arr — scaled feature matrix (rows = samples, cols = features)
+        k_range      — k values to evaluate (default range(2, 12))
+        n_boots      — bootstrap reference datasets (higher = more accurate, slower)
+        n_init       — KMeans restarts per k
 
     Returns:
         DataFrame with columns:
@@ -407,10 +413,10 @@ def compute_gap_statistic(
           optimal  — True for the first k satisfying the Tibshirani criterion
 
     Raises:
-        ValueError if X has fewer than 2 samples or k_range is empty.
+        ValueError if features_arr has fewer than 2 samples or k_range is empty.
     """
-    if len(X) < 2:
-        raise ValueError(f"X must have at least 2 samples, got {len(X)}")
+    if len(features_arr) < 2:
+        raise ValueError(f"features_arr must have at least 2 samples, got {len(features_arr)}")
     if k_range is None:
         k_range = range(2, 12)
 
@@ -421,12 +427,12 @@ def compute_gap_statistic(
     rng = np.random.default_rng(random_state)
 
     # Bounding box for uniform reference sampling
-    mins = X.min(axis=0)
-    maxs = X.max(axis=0)
+    mins = features_arr.min(axis=0)
+    maxs = features_arr.max(axis=0)
 
-    def _log_wk(X_data: np.ndarray, k: int, seed: int) -> float:
+    def _log_wk(arr: np.ndarray, k: int, seed: int) -> float:
         model = KMeans(n_clusters=k, n_init=n_init, random_state=seed)
-        model.fit(X_data)
+        model.fit(arr)
         return float(np.log(model.inertia_ + 1e-12))
 
     log_wks: list[float] = []
@@ -434,14 +440,14 @@ def compute_gap_statistic(
 
     for k in ks:
         log.info("Gap statistic: k=%d ...", k)
-        log_wks.append(_log_wk(X, k, seed=random_state))
+        log_wks.append(_log_wk(features_arr, k, seed=random_state))
 
         boot_vals = []
         for _ in range(n_boots):
-            X_ref = rng.uniform(mins, maxs, size=X.shape)
+            ref_arr = rng.uniform(mins, maxs, size=features_arr.shape)
             # Use independent seeds for each bootstrap fit to avoid correlated KMeans init
             boot_seed = int(rng.integers(0, 2**31))
-            boot_vals.append(_log_wk(X_ref, k, seed=boot_seed))
+            boot_vals.append(_log_wk(ref_arr, k, seed=boot_seed))
         boot_log_wks.append(boot_vals)
 
     gaps = [float(np.mean(boot)) - obs for boot, obs in zip(boot_log_wks, log_wks)]
@@ -506,13 +512,12 @@ def find_knee_k(scores: pd.DataFrame) -> int:
     inertia = scores["inertia"].values
 
     # Attempt kneed first
-    try:
-        from kneed import KneeLocator  # type: ignore[import]
+    if _KNEED_AVAILABLE and KneeLocator is not None:
         kl = KneeLocator(ks, inertia, curve="convex", direction="decreasing")
         if kl.knee is not None:
             log.info("kneed: knee at k=%d", kl.knee)
             return int(kl.knee)
-    except ImportError:
+    else:
         log.debug("kneed not installed — using gradient method for elbow detection")
 
     # Gradient-of-gradient method

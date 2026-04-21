@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
+
 if TYPE_CHECKING:
     from trading_crab_lib.ingestion import CompletenessReport
-
-import pandas as pd
 
 log = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ def format_completeness_table(report: CompletenessReport) -> str:
             lines.append("  Top NaN columns:")
             max_name = max(len(col) for col, _ in top_nan)
             for col, frac in top_nan:
-                bar = "#" * int(frac * 20)
-                lines.append(f"    {col:<{max_name}}  {frac:5.1%}  {bar}")
+                pct_bar = "#" * int(frac * 20)
+                lines.append(f"    {col:<{max_name}}  {frac:5.1%}  {pct_bar}")
 
     return "\n".join(lines)
 

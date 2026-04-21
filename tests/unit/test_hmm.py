@@ -59,7 +59,7 @@ class TestFitHMM:
         assert "converged" in scores.columns
 
     def test_one_model_per_k(self, pca_df):
-        scores, models, _ = fit_hmm(pca_df, k_range=range(2, 5), n_restarts=3)
+        _scores, models, _ = fit_hmm(pca_df, k_range=range(2, 5), n_restarts=3)
         for k in range(2, 5):
             assert k in models
 
@@ -69,7 +69,7 @@ class TestFitHMM:
             fit_hmm(empty)
 
     def test_default_k_range(self, pca_df_small):
-        scores, models, _ = fit_hmm(pca_df_small, n_restarts=2)
+        scores, _models, _ = fit_hmm(pca_df_small, n_restarts=2)
         ks = set(scores["k"].tolist())
         assert 2 in ks
         assert 7 in ks

@@ -6,11 +6,17 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+from sklearn.metrics import silhouette_samples, silhouette_score
+
+try:
+    import seaborn as sns
+    _SEABORN_AVAILABLE = True
+except ImportError:
+    sns = None  # type: ignore[assignment]
+    _SEABORN_AVAILABLE = False
 
 from trading_crab_lib.plotting.core import (
     CUSTOM_COLORS,
-    PLOT_DIR,
-    REGIME_CMAP,
     RunConfig,
     _regime_color,
     _save_or_show,
@@ -123,8 +129,8 @@ def plot_cluster_sizes(
     ax.set_xticklabels(regime_labels, rotation=20, ha="right", fontsize=9)
     ax.set_ylabel("Number of quarters")
     ax.set_title(title, fontsize=12)
-    for bar, val in zip(bars, counts.values):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+    for rect, val in zip(bars, counts.values):
+        ax.text(rect.get_x() + rect.get_width() / 2, rect.get_height() + 0.5,
                 str(val), ha="center", va="bottom", fontsize=9)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -176,7 +182,9 @@ def plot_pca_loadings(
     filename: str = "03_pca_loadings.png",
 ) -> None:
     """Heatmap of top features x PCA components (absolute loadings)."""
-    import seaborn as sns
+    if not _SEABORN_AVAILABLE:
+        log.warning("seaborn not installed — skipping PCA loadings heatmap")
+        return
 
     components = pca_obj.components_  # (n_components, n_features)
     abs_loadings = np.abs(components)
@@ -203,22 +211,20 @@ def plot_pca_loadings(
 
 
 def plot_silhouette_samples(
-    X: np.ndarray | pd.DataFrame,
+    features_arr: np.ndarray | pd.DataFrame,
     labels: pd.Series | np.ndarray,
     run_cfg: RunConfig,
     *,
     filename: str = "03_silhouette_samples.png",
 ) -> None:
     """Per-sample silhouette width plot grouped by cluster."""
-    from sklearn.metrics import silhouette_samples, silhouette_score
-
-    X_arr = np.asarray(X)
+    features_np = np.asarray(features_arr)
     labels_arr = np.asarray(labels).astype(int)
     unique_labels = np.sort(np.unique(labels_arr))
     n_clusters = len(unique_labels)
 
-    sil_vals = silhouette_samples(X_arr, labels_arr)
-    avg_score = silhouette_score(X_arr, labels_arr)
+    sil_vals = silhouette_samples(features_np, labels_arr)
+    avg_score = silhouette_score(features_np, labels_arr)
 
     fig, ax = plt.subplots(figsize=(8, max(5, n_clusters * 1.5)))
     y_lower = 0
@@ -258,7 +264,9 @@ def plot_gmm_bic_surface(
     bic_df : DataFrame
         Must have columns 'k', 'covariance_type', 'bic'.
     """
-    import seaborn as sns
+    if not _SEABORN_AVAILABLE:
+        log.warning("seaborn not installed — skipping GMM BIC surface plot")
+        return
 
     required = {"k", "covariance_type", "bic"}
     if not required.issubset(bic_df.columns):
@@ -369,4 +377,3 @@ def plot_regime_colored_pca_3d(
     ax.legend(fontsize=8, loc="upper left")
     fig.tight_layout()
     _save_or_show(fig, filename, run_cfg)
-

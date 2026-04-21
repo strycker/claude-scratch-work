@@ -1,9 +1,6 @@
 """Tests for src/trading_crab_lib/reporting.py — dashboard + portfolio construction."""
 from __future__ import annotations
 
-from pathlib import Path
-
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -244,12 +241,12 @@ class TestAppendDiagnosticsSection:
     def test_no_data_appends_nothing(self):
         lines: list = []
         _append_diagnostics_section(lines, None, None)
-        assert lines == []
+        assert not lines
 
     def test_empty_dfs_appends_nothing(self):
         lines: list = []
         _append_diagnostics_section(lines, pd.DataFrame(), pd.DataFrame())
-        assert lines == []
+        assert not lines
 
     def test_diagnostics_df_shows_top_ratios(self):
         # DataFrame whose columns are ratio names; last row has z-scores
@@ -301,7 +298,6 @@ class TestAppendDiagnosticsSection:
         diag = pd.DataFrame({"Oil:Gold": [0.4, 2.0]}, index=idx)
         rrg = pd.DataFrame({"asset": ["SPY", "TLT"], "quadrant": ["LEADING", "LAGGING"]})
         path = tmp_path / "report.md"
-        from trading_crab_lib.reporting import write_weekly_report_md
         write_weekly_report_md(0, "Growth", {0: 0.7}, rec, trans, path,
                                diagnostics_df=diag, rrg_df=rrg)
         text = path.read_text()

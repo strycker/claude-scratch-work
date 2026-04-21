@@ -43,8 +43,7 @@ def _trend_slope(prices: pd.Series, window: int) -> float:
     p = prices.dropna()
     if p.empty:
         return 0.0
-    if len(p) < window:
-        window = len(p)
+    window = min(window, len(p))
     if window < 2:
         return 0.0
     y = np.log(p.iloc[-window:])

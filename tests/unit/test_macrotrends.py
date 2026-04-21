@@ -6,10 +6,9 @@ All network access is mocked — no real HTTP calls are made.
 from __future__ import annotations
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pandas as pd
-import pytest
 
 from trading_crab_lib.ingestion.macrotrends import (
     _extract_json_data,
@@ -55,7 +54,7 @@ class _FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise Exception(f"HTTP {self.status_code}")
+            raise OSError(f"HTTP {self.status_code}")
 
 
 # ── _extract_json_data tests ─────────────────────────────────────────────────

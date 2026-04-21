@@ -20,7 +20,7 @@ def test_forward_prob_returns_dict_of_dataframes():
 
     assert isinstance(result, dict)
     assert set(result.keys()) == {1, 4}
-    for h, df in result.items():
+    for _h, df in result.items():
         assert isinstance(df, pd.DataFrame)
         assert list(df.index) == [0, 1]
         assert list(df.columns) == [0, 1]

@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from trading_crab_lib import OUTPUT_DIR
+
 log = logging.getLogger(__name__)
 
 
@@ -51,7 +53,7 @@ def asset_signals(
     def _signal(ret: float) -> str:
         if ret >= t["green"]:
             return "GREEN"
-        elif ret >= t["yellow"]:
+        if ret >= t["yellow"]:
             return "YELLOW"
         return "RED"
 
@@ -76,8 +78,8 @@ def print_dashboard(
 
     print("\nRegime Probabilities:")
     for r, p in sorted(proba.items(), key=lambda x: -x[1]):
-        bar = "█" * int(p * 30)
-        print(f"  Regime {r} ({regime_names.get(r, '?'):<30s})  {p:5.1%}  {bar}")
+        progress_bar = "█" * int(p * 30)
+        print(f"  Regime {r} ({regime_names.get(r, '?'):<30s})  {p:5.1%}  {progress_bar}")
 
     print("\nAsset Signals (current regime):")
     for _, row in asset_signals_df.iterrows():
@@ -393,7 +395,7 @@ def _append_diagnostics_section(
                     direction = "HIGH" if z > 0 else "LOW"
                     lines.append(f"- {name}: z={z:+.2f} ({direction})")
                 lines.append("")
-        except Exception:
+        except (KeyError, ValueError, TypeError, IndexError, AttributeError):
             pass  # malformed diagnostics_df — skip silently
 
     if has_rrg:
@@ -411,7 +413,7 @@ def _append_diagnostics_section(
                     if leading:
                         lines.append(f"  Leading: {', '.join(leading)}")
                 lines.append("")
-        except Exception:
+        except (KeyError, ValueError, TypeError, IndexError, AttributeError):
             pass  # malformed rrg_df — skip silently
 
 
@@ -490,8 +492,6 @@ def write_weekly_report_md(
     lines.append("")
 
     # Optional tactics section
-    from trading_crab_lib import OUTPUT_DIR  # local import to avoid circulars
-
     tactics_path = OUTPUT_DIR / "reports" / "tactics_signals.parquet"
     if tactics_path.exists():
         try:
@@ -509,7 +509,7 @@ def write_weekly_report_md(
             if stand_aside:
                 lines.append(f"- **Stand-aside:** {', '.join(stand_aside)}")
             lines.append("")
-        except Exception:
+        except (OSError, KeyError, ValueError, TypeError, AttributeError):
             # Do not let a malformed tactics file break the report.
             pass
 

@@ -1,6 +1,5 @@
 """Unit tests for config loader, portfolio loader, and schema validation."""
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest

@@ -1,13 +1,7 @@
 """Unit tests for src/trading_crab_lib/features/transforms.py"""
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from trading_crab_lib.transforms import (
     add_cross_ratios,

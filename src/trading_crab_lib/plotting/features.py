@@ -3,13 +3,17 @@ from __future__ import annotations
 import logging
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
+
+try:
+    import seaborn as sns
+    _SEABORN_AVAILABLE = True
+except ImportError:
+    sns = None  # type: ignore[assignment]
+    _SEABORN_AVAILABLE = False
 
 from trading_crab_lib.plotting.core import (
     CUSTOM_COLORS,
-    PLOT_DIR,
-    REGIME_CMAP,
     RunConfig,
     _regime_color,
     _save_or_show,
@@ -27,9 +31,7 @@ def plot_feature_correlations(
     """
     Correlation heatmap for the top_n most-variance clustering features.
     """
-    try:
-        import seaborn as sns
-    except ImportError:
+    if not _SEABORN_AVAILABLE:
         log.warning("seaborn not installed — skipping correlation heatmap")
         return
 
@@ -105,9 +107,7 @@ def plot_pairplot(
     """
     if not run_cfg.generate_pairplot:
         return
-    try:
-        import seaborn as sns
-    except ImportError:
+    if not _SEABORN_AVAILABLE:
         log.warning("seaborn not installed — skipping pairplot")
         return
 

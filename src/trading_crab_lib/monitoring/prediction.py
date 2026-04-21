@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
+from sklearn.model_selection import TimeSeriesSplit
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ class CVFoldReport:
 
 def compute_cv_fold_scores(
     model: object,
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     *,
     n_splits: int = 5,
@@ -45,15 +47,12 @@ def compute_cv_fold_scores(
 
     Clones the model via sklearn's clone() to avoid mutating the original.
     """
-    from sklearn.base import clone
-    from sklearn.model_selection import TimeSeriesSplit
-
     tscv = TimeSeriesSplit(n_splits=n_splits)
     scores: list[float] = []
-    for train_idx, test_idx in tscv.split(X):
+    for train_idx, test_idx in tscv.split(features_df):
         m = clone(model)
-        m.fit(X.iloc[train_idx], y.iloc[train_idx])
-        scores.append(float(m.score(X.iloc[test_idx], y.iloc[test_idx])))
+        m.fit(features_df.iloc[train_idx], y.iloc[train_idx])
+        scores.append(float(m.score(features_df.iloc[test_idx], y.iloc[test_idx])))
     return scores
 
 

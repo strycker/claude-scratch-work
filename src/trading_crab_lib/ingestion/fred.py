@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 FRED API ingestion.
 
@@ -16,11 +14,13 @@ Publication-lag shift:
   for preventing look-ahead bias in supervised models.
 """
 
+from __future__ import annotations
+
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
-
 from typing import Any
+
 import pandas as pd
 
 try:
@@ -87,7 +87,7 @@ def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
             s = _fetch_one(fred, series_id, start, end, shift)
             s.name = friendly_name
             return friendly_name, s
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — fredapi raises various types
             log.warning("Failed to fetch %s (%s): %s", friendly_name, series_id, exc)
             return friendly_name, None
 
@@ -106,4 +106,3 @@ def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
     df.index.name = "date"
     log.info("FRED fetch complete: %d quarters, %d series", len(df), len(df.columns))
     return df
-

@@ -50,7 +50,7 @@ include = ["trading_crab"]
 
 [tool.pytest.ini_options]
 testpaths  = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "scripts"]
 filterwarnings = [
     # statsmodels MarkovRegression emits numpy overflow warnings during
     # optimization on synthetic test data — harmless numerical artefacts.

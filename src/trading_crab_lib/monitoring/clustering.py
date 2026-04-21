@@ -61,11 +61,11 @@ class RegimeStabilityReport:
             return "  (no persistence data)"
         max_id_len = max(len(str(r)) for r in self.persistence)
         for rid, pval in sorted(self.persistence.items()):
-            bar = "#" * int(pval * 20)
+            pct_bar = "#" * int(pval * 20)
             dur = self.avg_duration.get(rid, 0)
             lines.append(
                 f"    Regime {rid:<{max_id_len}}:  persist={pval:5.1%}  "
-                f"avg_run={dur:.1f}Q  {bar}"
+                f"avg_run={dur:.1f}Q  {pct_bar}"
             )
         if self.most_stable:
             lines.append(

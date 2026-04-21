@@ -1,0 +1,111 @@
+[MAIN]
+# Ignore auto-generated, reference-only, and numbered pipeline files.
+ignore-paths = legacy,gsd-scratch-work,trading-crab-lib
+ignore-patterns = ^[0-9][0-9]_.*\.py$
+
+# Use multiple processes for speed.
+jobs = 1
+
+[MESSAGES CONTROL]
+# Disable false-positives and intentional patterns that are common in ML pipelines.
+disable =
+    # Documentation — enforce at code-review, not lint time.
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+
+    # Complexity metrics — ML pipeline functions legitimately exceed these.
+    R0914,  # too-many-locals
+    R0912,  # too-many-branches
+    R0915,  # too-many-statements
+    R0913,  # too-many-arguments
+    R0917,  # too-many-positional-arguments
+    C0302,  # too-many-lines
+
+    # Duplication — expected in pipeline, train/eval, and plotting patterns.
+    R0801,  # duplicate-code
+
+    # Class shape — dataclasses and sklearn-style objects legitimately vary.
+    R0902,  # too-many-instance-attributes
+    R0903,  # too-few-public-methods
+
+    # Test patterns — fixtures intentionally use protected access and unused args.
+    W0613,  # unused-argument
+    W0212,  # protected-access
+
+    # Import errors for optional dependencies (hdbscan, lightgbm, hmmlearn, etc.)
+    E0401,  # import-error
+
+    # Wildcard imports used in plotting/__init__.py re-export pattern.
+    W0401,  # wildcard-import
+    W0614,  # unused-wildcard-import
+
+    # pandas / numpy chained attribute patterns trigger this incorrectly.
+    W0104,  # pointless-statement
+
+    # Optional / lazy imports inside functions (IPython detection, __getattr__,
+    # load_or_generate). These are intentional deferred imports.
+    C0415,  # import-outside-toplevel
+
+    # False positive: pylint misidentifies module-level availability flags
+    # assigned inside try/except blocks as cyclic or broken imports.
+    R0401,  # cyclic-import
+
+    # Subscriptable false positives on pandas Series/DataFrame types.
+    E1136,  # unsubscriptable-object
+
+    # Too-many-return-statements — legitimate in piecewise scoring functions.
+    R0911,  # too-many-return-statements
+
+    # no-member false positives on dynamic matplotlib attributes (e.g. plt.cm.viridis).
+    E1101,  # no-member
+
+    # Network ingestion code (fred, multpl, macrotrends) legitimately catches broad
+    # exceptions because third-party network libs raise many undocumented types.
+    # These sites are already annotated with  # noqa: BLE001  for ruff.
+    W0718,  # broad-exception-caught
+
+    # pytest fixture parameters shadow the module-level fixture functions by design.
+    # This is the standard pytest pattern; renaming parameters would break discovery.
+    W0621,  # redefined-outer-name
+
+[FORMAT]
+max-line-length = 127
+
+[VARIABLES]
+# Allow double-underscore name dunder patterns and common ML loop variables.
+# Single-letter loop indices (i, j, k, n, q, x, y) are permitted.
+good-names = i,j,k,n,q,v,df,ax,fig,h,p,r,s,t,x,y,e,m,pc1,rs,cv,db,ch,auc,bic,aic,ll
+
+[BASIC]
+# Module names: allow numbered pipeline scripts like 01_ingest.py (via ignore-patterns above).
+# Constant naming: allow UPPER_CASE with leading underscore for private flags.
+const-rgx = (([A-Z_][A-Z0-9_]*)|(__.*__)|([a-z_][a-z0-9_]*))$
+# Variable naming: allow both standard snake_case and _UPPER_CASE availability flags
+# (e.g. _HMM_AVAILABLE, _STATSMODELS_AVAILABLE assigned inside try/except blocks).
+variable-rgx = (_[A-Z][A-Z0-9_]*$)|([a-z_][a-z0-9_]{0,30}$)
+# Allow _HMM_AVAILABLE, _STATSMODELS_AVAILABLE, HAS_LIGHTGBM style flags.
+module-naming-style = any
+
+[DESIGN]
+# These are handled by the disable list above; kept here for explicit documentation.
+max-args = 10
+max-locals = 25
+max-branches = 15
+max-statements = 60
+
+[SIMILARITIES]
+# Minimum lines to consider as duplicated code.
+min-similarity-lines = 10
+ignore-comments = yes
+ignore-docstrings = yes
+ignore-imports = yes
+
+[TYPECHECK]
+# Suppress errors for members of optional/dynamic packages.
+ignored-modules = lightgbm,hmmlearn,hdbscan,statsmodels,kneed
+
+[REPORTS]
+# Concise output suitable for CI.
+output-format = colorized
+score = no

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 multpl.com scraper.
 
@@ -16,10 +14,12 @@ value_type controls how the raw string value is parsed:
 Uses lxml CSS selectors to match the legacy scraping approach exactly.
 """
 
+from __future__ import annotations
+
 import logging
 import time
-
 from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -112,7 +112,7 @@ def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
             s = _parse_series(raw, short_name, value_type)
             s.name = short_name
             series_list.append(s)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — network libraries raise various types
             log.warning("Failed to scrape %s: %s", short_name, exc)
         time.sleep(RATE_LIMIT_SECONDS)
 

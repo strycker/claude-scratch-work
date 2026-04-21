@@ -51,12 +51,47 @@ Usage:
 """
 
 from __future__ import annotations
-from typing import Any
 
 import logging
 from datetime import date
+from typing import Any
 
 import pandas as pd
+
+try:
+    from curl_cffi import requests as curl_requests  # type: ignore[import]
+    _CURL_CFFI_AVAILABLE = True
+except ImportError:
+    curl_requests = None  # type: ignore[assignment]
+    _CURL_CFFI_AVAILABLE = False
+
+try:
+    import urllib3
+    _URLLIB3_AVAILABLE = True
+except ImportError:
+    urllib3 = None  # type: ignore[assignment]
+    _URLLIB3_AVAILABLE = False
+
+try:
+    import yfinance as yf  # type: ignore[import]
+    _YFINANCE_AVAILABLE = True
+except ImportError:
+    yf = None  # type: ignore[assignment]
+    _YFINANCE_AVAILABLE = False
+
+try:
+    from pandas_datareader import data as pdr  # type: ignore[import]
+    _PDR_AVAILABLE = True
+except ImportError:
+    pdr = None  # type: ignore[assignment]
+    _PDR_AVAILABLE = False
+
+try:
+    from openbb import obb  # type: ignore[import]
+    _OPENBB_AVAILABLE = True
+except ImportError:
+    obb = None  # type: ignore[assignment]
+    _OPENBB_AVAILABLE = False
 
 log = logging.getLogger(__name__)
 
@@ -93,20 +128,15 @@ def _ssl_bypass_curl_session():
     If that raises (unsupported in the installed curl_cffi version), we fall back to
     no impersonation with verify=False.
     """
-    try:
-        from curl_cffi import requests as curl_requests
-    except ImportError:
+    if not _CURL_CFFI_AVAILABLE:
         log.warning(
             "curl_cffi not importable — cannot create SSL-bypass session. "
             "Try: pip install curl_cffi"
         )
         return None
 
-    try:
-        import urllib3
+    if _URLLIB3_AVAILABLE and urllib3 is not None:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    except ImportError:
-        pass
 
     # Try with browser impersonation first (avoids Yahoo anti-bot 401).
     # Some older curl_cffi builds don't accept impersonate= on Session();
@@ -133,9 +163,7 @@ def _batch_yfinance(
     Passing session=None uses yfinance's default curl_cffi behaviour.
     Passing a curl_cffi Session overrides SSL settings for that session.
     """
-    try:
-        import yfinance as yf
-    except ImportError:
+    if not _YFINANCE_AVAILABLE:
         log.warning(
             "yfinance is not installed — batch download skipped.  "
             "Run: pip install yfinance"
@@ -144,21 +172,21 @@ def _batch_yfinance(
 
     log.info("Batch-fetching %d tickers from yfinance ...", len(tickers))
 
-    kwargs: dict = dict(
-        tickers=tickers,
-        start=start,
-        end=end,
-        interval="1mo",
-        auto_adjust=True,
-        progress=False,
-    )
+    kwargs: dict = {
+        "tickers": tickers,
+        "start": start,
+        "end": end,
+        "interval": "1mo",
+        "auto_adjust": True,
+        "progress": False,
+    }
     if session is not None:
         kwargs["session"] = session
 
     ssl_seen = False
     try:
         raw = yf.download(**kwargs)
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, TypeError) as exc:
         msg = str(exc)
         if any(sig in msg for sig in _SSL_ERROR_SIGNATURES):
             ssl_seen = True
@@ -216,7 +244,8 @@ def _fetch_ticker_with_session(ticker: str, start: str, end: str, session) -> pd
     session must be a curl_cffi.requests.Session — yfinance ≥ 0.2 rejects
     a plain requests.Session with "Yahoo API requires curl_cffi session".
     """
-    import yfinance as yf
+    if not _YFINANCE_AVAILABLE or yf is None:
+        raise ImportError("yfinance is not installed. Run: pip install yfinance")
     log.info("Fetching %s via curl_cffi session (SSL bypass) ...", ticker)
     raw = yf.Ticker(ticker, session=session).history(
         start=start, end=end, interval="1mo", auto_adjust=True
@@ -249,7 +278,7 @@ def _fetch_missing_with_ssl_bypass(
             s = _fetch_ticker_with_session(ticker, start, end, session)
             if not s.empty:
                 results[ticker] = s
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
             log.warning("SSL bypass also failed for %s: %s", ticker, exc)
     return results
 
@@ -265,13 +294,13 @@ def _fetch_ticker_stooq(ticker: str, start: str, end: str) -> pd.Series:
 
     Raises ImportError if pandas-datareader is not installed (caller breaks loop).
     """
-    from pandas_datareader import data as pdr  # ImportError propagates to caller
-
+    if not _PDR_AVAILABLE or pdr is None:
+        raise ImportError("pandas-datareader not installed. Run: pip install pandas-datareader")
     log.info("Fetching %s from stooq (fallback) ...", ticker)
     symbol = f"{ticker}.US"  # stooq convention for US-listed securities
     try:
         raw = pdr.get_data_stooq(symbol, start=start, end=end)
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
         log.warning("stooq returned error for %s (%s): %s", ticker, symbol, exc)
         return pd.Series(name=ticker, dtype=float)
 
@@ -299,7 +328,7 @@ def _fetch_tickers_stooq(tickers: list[str], start: str, end: str) -> list[pd.Se
                 "Run: pip install pandas-datareader"
             )
             break  # no point trying more tickers
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, KeyError) as exc:
             log.warning("stooq failed for %s: %s", ticker, exc)
     return results
 
@@ -316,21 +345,21 @@ def _fetch_ticker_openbb(ticker: str, start: str, end: str) -> pd.Series:
     Install: pip install openbb
     Raises ImportError if openbb is not installed (caller breaks loop).
     """
-    from openbb import obb  # ImportError propagates to caller
-
+    if not _OPENBB_AVAILABLE or obb is None:
+        raise ImportError("openbb not installed. Run: pip install openbb")
     log.info("Fetching %s via OpenBB (fallback) ...", ticker)
 
     df: pd.DataFrame | None = None
     for provider in ("cboe", None):  # None → OpenBB picks default
         try:
-            kwargs: dict = dict(symbol=ticker, start_date=start, end_date=end)
+            kwargs: dict = {"symbol": ticker, "start_date": start, "end_date": end}
             if provider is not None:
                 kwargs["provider"] = provider
             result = obb.equity.price.historical(**kwargs)
             df = result.to_df()
             if not df.empty:
                 break
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
             log.debug("OpenBB provider=%s failed for %s: %s", provider, ticker, exc)
 
     if df is None or df.empty:
@@ -367,7 +396,7 @@ def _fetch_tickers_openbb(tickers: list[str], start: str, end: str) -> list[pd.S
                 "Run: pip install openbb"
             )
             break  # no point trying more tickers
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
             log.warning("OpenBB failed for %s: %s", ticker, exc)
     return results
 

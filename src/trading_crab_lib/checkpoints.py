@@ -242,7 +242,7 @@ class CheckpointManager:
             try:
                 meta = json.loads(meta_path.read_text())
                 entries.append(meta)
-            except Exception as exc:
+            except (json.JSONDecodeError, OSError, ValueError) as exc:
                 log.warning("Failed to parse checkpoint metadata %s: %s", meta_path.name, exc)
         entries.sort(key=lambda m: m.get("created", ""))
         return entries

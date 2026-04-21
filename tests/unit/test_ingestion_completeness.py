@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab_lib.ingestion import ingestion_completeness_report, CompletenessReport
+from trading_crab_lib.ingestion import ingestion_completeness_report
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ class TestIngestCompleteness:
         )
         assert report.passed
         assert report.total_columns == 3
-        assert report.missing_columns == []
+        assert not report.missing_columns
 
     def test_missing_column_fails(self, sample_df):
         report = ingestion_completeness_report(

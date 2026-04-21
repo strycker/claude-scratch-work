@@ -105,7 +105,6 @@ def _synthesize_features(session_dir: Path) -> None:
         except FileNotFoundError:
             macro = pd.DataFrame()
 
-    features = None
     try:
         from trading_crab_lib.config import load as _load_cfg
         from trading_crab_lib.transforms import engineer_all

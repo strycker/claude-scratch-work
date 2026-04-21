@@ -1,10 +1,8 @@
 """Tests for plotting.plot_confusion_matrix()."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import numpy as np
 import pandas as pd
-import pytest
 
 from trading_crab_lib.runtime import RunConfig
 

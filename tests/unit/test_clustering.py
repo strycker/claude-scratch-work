@@ -1,13 +1,8 @@
 """Unit tests for src/trading_crab_lib/clustering/kmeans.py"""
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from trading_crab_lib.clustering import (
     reduce_pca,
@@ -34,7 +29,7 @@ def feature_df(quarterly_index):
 
 class TestReducePca:
     def test_output_shape(self, feature_df):
-        pca_df, pca, scaler = reduce_pca(feature_df, n_components=5)
+        pca_df, _, _ = reduce_pca(feature_df, n_components=5)
         assert pca_df.shape == (len(feature_df), 5)
 
     def test_column_names(self, feature_df):

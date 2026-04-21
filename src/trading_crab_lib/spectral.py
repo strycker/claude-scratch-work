@@ -78,20 +78,20 @@ def fit_spectral_sweep(
     if k_range is None:
         k_range = range(2, 8)
 
-    X = StandardScaler().fit_transform(pca_df.values)
+    features_arr = StandardScaler().fit_transform(pca_df.values)
     rows: list[dict] = []
     all_labels: dict[int, pd.Series] = {}
 
     # Pre-compute affinity matrix for nearest_neighbors (independent of k)
     if affinity == "nearest_neighbors":
         log.info("Spectral: pre-computing k-NN affinity matrix (n_neighbors=%d) ...", n_neighbors)
-        connectivity = kneighbors_graph(X, n_neighbors=n_neighbors, include_self=False)
+        connectivity = kneighbors_graph(features_arr, n_neighbors=n_neighbors, include_self=False)
         # Symmetrize and convert to dense for SpectralClustering(affinity="precomputed")
         affinity_matrix = 0.5 * (connectivity + connectivity.T).toarray()
         sweep_affinity = "precomputed"
         sweep_n_neighbors = None  # not used with precomputed
     else:
-        affinity_matrix = X
+        affinity_matrix = features_arr
         sweep_affinity = affinity
         sweep_n_neighbors = n_neighbors
 
@@ -111,12 +111,12 @@ def fit_spectral_sweep(
             labels = pd.Series(labels_arr, index=pca_df.index, name=f"spectral_k{k}")
             all_labels[k] = labels
 
-            sil = silhouette_score(X, labels_arr)
-            db  = davies_bouldin_score(X, labels_arr)
-            ch  = calinski_harabasz_score(X, labels_arr)
+            sil = silhouette_score(features_arr, labels_arr)
+            db  = davies_bouldin_score(features_arr, labels_arr)
+            ch  = calinski_harabasz_score(features_arr, labels_arr)
             rows.append({"k": k, "silhouette": sil, "davies_bouldin": db, "calinski": ch})
             log.info("Spectral k=%d  sil=%.4f  DB=%.4f  CH=%.1f", k, sil, db, ch)
-        except Exception as exc:
+        except (ValueError, RuntimeError) as exc:
             log.warning("Spectral k=%d failed: %s", k, exc)
 
     return pd.DataFrame(rows), all_labels
@@ -142,7 +142,7 @@ def spectral_labels(
     if pca_df.empty:
         raise ValueError("pca_df is empty — cannot run Spectral Clustering")
 
-    X = StandardScaler().fit_transform(pca_df.values)
+    features_arr = StandardScaler().fit_transform(pca_df.values)
     sc = SpectralClustering(
         n_clusters=k,
         affinity=affinity,
@@ -150,7 +150,7 @@ def spectral_labels(
         n_init=n_init,
         random_state=random_state,
     )
-    raw = pd.Series(sc.fit_predict(X), index=pca_df.index, name="spectral_cluster")
+    raw = pd.Series(sc.fit_predict(features_arr), index=pca_df.index, name="spectral_cluster")
 
     # Canonicalize by mean PC1 (cluster 0 = smallest mean PC1)
     pc1 = pca_df.iloc[:, 0]

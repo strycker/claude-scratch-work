@@ -4,8 +4,6 @@ from __future__ import annotations
 import logging
 from argparse import Namespace
 
-import pytest
-
 from trading_crab_lib.runtime import RunConfig
 
 

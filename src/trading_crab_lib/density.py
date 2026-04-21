@@ -46,6 +46,13 @@ from sklearn.preprocessing import StandardScaler
 
 log = logging.getLogger(__name__)
 
+try:
+    import hdbscan as hdbscan_lib  # type: ignore[import]
+    _HDBSCAN_AVAILABLE = True
+except ImportError:
+    hdbscan_lib = None  # type: ignore[assignment]
+    _HDBSCAN_AVAILABLE = False
+
 
 def knn_distances(pca_df: pd.DataFrame, k: int = 5) -> pd.Series:
     """
@@ -59,9 +66,9 @@ def knn_distances(pca_df: pd.DataFrame, k: int = 5) -> pd.Series:
     """
     if pca_df.empty:
         raise ValueError("pca_df is empty — cannot compute k-NN distances")
-    X = StandardScaler().fit_transform(pca_df.values)
-    nbrs = NearestNeighbors(n_neighbors=k).fit(X)
-    distances, _ = nbrs.kneighbors(X)
+    scaled_data = StandardScaler().fit_transform(pca_df.values)
+    nbrs = NearestNeighbors(n_neighbors=k).fit(scaled_data)
+    distances, _ = nbrs.kneighbors(scaled_data)
     kth_dist = np.sort(distances[:, -1])  # distance to k-th nearest neighbour
     return pd.Series(kth_dist, name=f"{k}nn_distance")
 
@@ -84,11 +91,11 @@ def fit_dbscan_sweep(
     if eps_values is None:
         eps_values = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
 
-    X = StandardScaler().fit_transform(pca_df.values)
+    scaled_data = StandardScaler().fit_transform(pca_df.values)
     rows: list[dict] = []
 
     for eps in eps_values:
-        labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(X)
+        labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(scaled_data)
         n_noise = int((labels == -1).sum())
         unique_clusters = sorted(set(labels) - {-1})
         n_clusters = len(unique_clusters)
@@ -110,8 +117,8 @@ def fit_dbscan_sweep(
             mask = labels != -1
             if mask.sum() >= n_clusters:
                 try:
-                    sil = silhouette_score(X[mask], labels[mask])
-                except Exception as exc:
+                    sil = silhouette_score(scaled_data[mask], labels[mask])
+                except ValueError as exc:
                     log.debug("silhouette_score failed for eps=%.2f: %s", eps, exc)
 
         rows.append({
@@ -148,8 +155,8 @@ def fit_dbscan(
     """
     if pca_df.empty:
         raise ValueError("pca_df is empty — cannot run DBSCAN")
-    X = StandardScaler().fit_transform(pca_df.values)
-    labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(X)
+    scaled_data = StandardScaler().fit_transform(pca_df.values)
+    labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(scaled_data)
     series = pd.Series(labels, index=pca_df.index, name="dbscan_cluster")
 
     n_noise = int((series == -1).sum())
@@ -187,9 +194,7 @@ def fit_hdbscan_sweep(
     Returns:
         DataFrame with columns: min_cluster_size, n_clusters, n_noise, noise_pct, silhouette
     """
-    try:
-        import hdbscan as hdbscan_lib  # type: ignore[import]
-    except ImportError:
+    if not _HDBSCAN_AVAILABLE:
         raise ImportError(
             "hdbscan not installed.  Run: pip install hdbscan\n"
             "Or use fit_dbscan_sweep() for the sklearn DBSCAN alternative."
@@ -200,12 +205,12 @@ def fit_hdbscan_sweep(
     if min_cluster_sizes is None:
         min_cluster_sizes = [10, 15, 20, 25]
 
-    X = StandardScaler().fit_transform(pca_df.values)
+    scaled_data = StandardScaler().fit_transform(pca_df.values)
     rows: list[dict] = []
 
     for mcs in min_cluster_sizes:
         clusterer = hdbscan_lib.HDBSCAN(min_cluster_size=mcs)
-        labels = clusterer.fit_predict(X)
+        labels = clusterer.fit_predict(scaled_data)
         n_noise = int((labels == -1).sum())
         n_clusters = len(set(labels) - {-1})
 
@@ -227,8 +232,8 @@ def fit_hdbscan_sweep(
             mask = labels != -1
             if mask.sum() >= n_clusters:
                 try:
-                    sil = silhouette_score(X[mask], labels[mask])
-                except Exception as exc:
+                    sil = silhouette_score(scaled_data[mask], labels[mask])
+                except ValueError as exc:
                     log.debug("silhouette_score failed for min_cluster_size=%d: %s", mcs, exc)
 
         rows.append({
@@ -255,16 +260,14 @@ def hdbscan_labels(pca_df: pd.DataFrame, min_cluster_size: int = 15) -> pd.Serie
 
     Warns if all points are noise or only 1 cluster is found.
     """
-    try:
-        import hdbscan as hdbscan_lib  # type: ignore[import]
-    except ImportError:
+    if not _HDBSCAN_AVAILABLE:
         raise ImportError("hdbscan not installed.  Run: pip install hdbscan")
 
     if pca_df.empty:
         raise ValueError("pca_df is empty — cannot run HDBSCAN")
 
-    X = StandardScaler().fit_transform(pca_df.values)
-    labels = hdbscan_lib.HDBSCAN(min_cluster_size=min_cluster_size).fit_predict(X)
+    scaled_data = StandardScaler().fit_transform(pca_df.values)
+    labels = hdbscan_lib.HDBSCAN(min_cluster_size=min_cluster_size).fit_predict(scaled_data)
     series = pd.Series(labels, index=pca_df.index, name="hdbscan_cluster")
 
     n_noise = int((series == -1).sum())

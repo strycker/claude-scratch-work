@@ -81,7 +81,7 @@ def fit_gmm(
         k_range = range(2, 10)
 
     scaler = StandardScaler()
-    X = scaler.fit_transform(pca_df.values)
+    features_arr = scaler.fit_transform(pca_df.values)
     rows: list[dict] = []
     models: dict[tuple[int, str], GaussianMixture] = {}
 
@@ -97,7 +97,7 @@ def fit_gmm(
                 )
                 with warnings.catch_warnings(record=True) as caught:
                     warnings.simplefilter("always", ConvergenceWarning)
-                    gm.fit(X)
+                    gm.fit(features_arr)
 
                 if any(issubclass(w.category, ConvergenceWarning) for w in caught):
                     log.warning(
@@ -106,13 +106,13 @@ def fit_gmm(
                         k, cov_type, max_iter,
                     )
 
-                bic = float(gm.bic(X))
-                aic = float(gm.aic(X))
-                ll  = float(gm.score(X))  # mean log-likelihood per sample
+                bic = float(gm.bic(features_arr))
+                aic = float(gm.aic(features_arr))
+                ll  = float(gm.score(features_arr))  # mean log-likelihood per sample
                 rows.append({"k": k, "covariance_type": cov_type, "bic": bic, "aic": aic, "log_likelihood": ll})
                 models[(k, cov_type)] = gm
                 log.info("GMM k=%d cov=%s  BIC=%.1f  AIC=%.1f  LL=%.4f", k, cov_type, bic, aic, ll)
-            except Exception as exc:
+            except (ValueError, RuntimeError) as exc:
                 log.warning("GMM k=%d cov=%s failed: %s", k, cov_type, exc)
 
     return pd.DataFrame(rows), models, scaler
@@ -166,8 +166,8 @@ def gmm_labels(
             "pca_df.  For correct assignments pass the scaler returned by fit_gmm()."
         )
         scaler = StandardScaler().fit(pca_df.values)
-    X = scaler.transform(pca_df.values)
-    raw_labels = pd.Series(model.predict(X), index=pca_df.index, name="gmm_cluster")
+    features_arr = scaler.transform(pca_df.values)
+    raw_labels = pd.Series(model.predict(features_arr), index=pca_df.index, name="gmm_cluster")
 
     # Canonicalize: cluster 0 = smallest mean PC1 (consistent with KMeans canonicalization)
     pc1 = pca_df.iloc[:, 0]
@@ -200,8 +200,8 @@ def gmm_probabilities(
             "pca_df.  For correct probabilities pass the scaler returned by fit_gmm()."
         )
         scaler = StandardScaler().fit(pca_df.values)
-    X = scaler.transform(pca_df.values)
-    probs = model.predict_proba(X)
+    features_arr = scaler.transform(pca_df.values)
+    probs = model.predict_proba(features_arr)
     k = probs.shape[1]
     cols = [f"gmm_prob_{i}" for i in range(k)]
     return pd.DataFrame(probs, index=pca_df.index, columns=cols)

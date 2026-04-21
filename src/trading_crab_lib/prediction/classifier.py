@@ -58,16 +58,16 @@ def _gb_factory(
 
 def _run_tscv(
     factory,
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     n_splits: int,
 ) -> list[FoldReport]:
     tscv = TimeSeriesSplit(n_splits=n_splits)
     reports: list[FoldReport] = []
-    for train_idx, test_idx in tscv.split(X):
+    for train_idx, test_idx in tscv.split(features_df):
         m = factory()
-        m.fit(X.iloc[train_idx], y.iloc[train_idx])
-        acc = float(m.score(X.iloc[test_idx], y.iloc[test_idx]))
+        m.fit(features_df.iloc[train_idx], y.iloc[train_idx])
+        acc = float(m.score(features_df.iloc[test_idx], y.iloc[test_idx]))
         reports.append(FoldReport(
             train_indices=train_idx.tolist(),
             test_indices=test_idx.tolist(),
@@ -79,7 +79,7 @@ def _run_tscv(
 # ── public training functions ──────────────────────────────────────────────────
 
 def train_current_regime(
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     cv_splits: int = 5,
     n_estimators: int = 200,
@@ -106,27 +106,27 @@ def train_current_regime(
     to its training fold (walk-forward CV, no look-ahead).
     """
     rf_reports = _run_tscv(
-        lambda: _rf_factory(n_estimators, random_state), X, y, cv_splits
+        lambda: _rf_factory(n_estimators, random_state), features_df, y, cv_splits
     )
     dt_reports = _run_tscv(
-        lambda: _dt_factory(dt_max_depth, random_state), X, y, cv_splits
+        lambda: _dt_factory(dt_max_depth, random_state), features_df, y, cv_splits
     )
 
     rf_final = _rf_factory(n_estimators, random_state)
-    rf_final.fit(X, y)
+    rf_final.fit(features_df, y)
 
     dt_final = _dt_factory(dt_max_depth, random_state)
-    dt_final.fit(X, y)
+    dt_final.fit(features_df, y)
 
     models: dict = {"rf": rf_final, "dt": dt_final}
     cv_reports: dict = {"rf": rf_reports, "dt": dt_reports}
 
     if include_gb:
         gb_reports = _run_tscv(
-            lambda: _gb_factory(n_estimators, gb_max_depth, random_state), X, y, cv_splits
+            lambda: _gb_factory(n_estimators, gb_max_depth, random_state), features_df, y, cv_splits
         )
         gb_final = _gb_factory(n_estimators, gb_max_depth, random_state)
-        gb_final.fit(X, y)
+        gb_final.fit(features_df, y)
         models["gb"] = gb_final
         cv_reports["gb"] = gb_reports
 
@@ -140,7 +140,7 @@ def train_current_regime(
 
 
 def train_forward_classifiers(
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     horizons: list[int] | None = None,
     cv_splits: int = 5,
@@ -174,20 +174,20 @@ def train_forward_classifiers(
 
     for h in horizons:
         y_future = y.shift(-h).dropna().astype(int)
-        X_aligned = X.loc[y_future.index]
+        features_aligned = features_df.loc[y_future.index]
 
         rf_reports = _run_tscv(
-            lambda: _rf_factory(n_estimators, random_state), X_aligned, y_future, cv_splits
+            lambda: _rf_factory(n_estimators, random_state), features_aligned, y_future, cv_splits
         )
         dt_reports = _run_tscv(
-            lambda: _dt_factory(dt_max_depth, random_state), X_aligned, y_future, cv_splits
+            lambda: _dt_factory(dt_max_depth, random_state), features_aligned, y_future, cv_splits
         )
 
         rf_final = _rf_factory(n_estimators, random_state)
-        rf_final.fit(X_aligned, y_future)
+        rf_final.fit(features_aligned, y_future)
 
         dt_final = _dt_factory(dt_max_depth, random_state)
-        dt_final.fit(X_aligned, y_future)
+        dt_final.fit(features_aligned, y_future)
 
         models: dict = {"rf": rf_final, "dt": dt_final}
         cv_reports: dict = {"rf": rf_reports, "dt": dt_reports}
@@ -195,10 +195,10 @@ def train_forward_classifiers(
         if include_gb:
             gb_reports = _run_tscv(
                 lambda: _gb_factory(n_estimators, gb_max_depth, random_state),
-                X_aligned, y_future, cv_splits,
+                features_aligned, y_future, cv_splits,
             )
             gb_final = _gb_factory(n_estimators, gb_max_depth, random_state)
-            gb_final.fit(X_aligned, y_future)
+            gb_final.fit(features_aligned, y_future)
             models["gb"] = gb_final
             cv_reports["gb"] = gb_reports
 
@@ -234,7 +234,7 @@ def extract_top_features(
 
 
 def train_interpretability_tree(
-    X: pd.DataFrame,
+    features_df: pd.DataFrame,
     y: pd.Series,
     model: Any,
     top_k: int = 10,
@@ -250,11 +250,11 @@ def train_interpretability_tree(
     Returns:
         (fitted_tree, selected_feature_names)
     """
-    top = extract_top_features(model, list(X.columns), top_k=top_k)
+    top = extract_top_features(model, list(features_df.columns), top_k=top_k)
     selected = [name for name, _ in top]
-    X_reduced = X[selected]
+    selected_features = features_df[selected]
     tree = DecisionTreeClassifier(max_depth=max_depth, random_state=random_state)
-    tree.fit(X_reduced, y)
+    tree.fit(selected_features, y)
     return tree, selected
 
 
@@ -323,7 +323,12 @@ def model_metrics_summary(results: dict[str, Any]) -> dict[str, Any]:
                 # FoldReport objects from this module — build stub report dicts
                 report_dicts: list[dict] = []
                 for fr in fold_reports:
-                    report_dicts.append({"accuracy": fr.accuracy, "macro avg": {"f1-score": fr.accuracy}, "weighted avg": {"f1-score": fr.accuracy}})
+                    stub = {"f1-score": fr.accuracy}
+                    report_dicts.append({
+                        "accuracy": fr.accuracy,
+                        "macro avg": stub,
+                        "weighted avg": stub,
+                    })
                 current[model_name] = _aggregate_classification_reports(report_dicts)
             else:
                 # Already classification_report dicts
@@ -337,7 +342,12 @@ def model_metrics_summary(results: dict[str, Any]) -> dict[str, Any]:
             out[h] = {}
             for model_name, fold_reports in h_data.get("cv_reports", {}).items():
                 if fold_reports and isinstance(fold_reports[0], FoldReport):
-                    report_dicts = [{"accuracy": fr.accuracy, "macro avg": {"f1-score": fr.accuracy}, "weighted avg": {"f1-score": fr.accuracy}} for fr in fold_reports]
+                    report_dicts = [
+                        {"accuracy": fr.accuracy,
+                         "macro avg": {"f1-score": fr.accuracy},
+                         "weighted avg": {"f1-score": fr.accuracy}}
+                        for fr in fold_reports
+                    ]
                     out[h][model_name] = _aggregate_classification_reports(report_dicts)
                 else:
                     out[h][model_name] = _aggregate_classification_reports(list(fold_reports))
