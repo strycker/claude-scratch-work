@@ -1,5 +1,9 @@
 # Phase B — Decompose & Document
 
+> **⚠️ SUPERSEDED (July 2026).** Historical plan — kept for context, not active work.
+> The project's target and execution plan are now `platform_design/platform_design.md`
+> (v1.7) and `ROADMAP.md` Tier 0. Do not treat items below as current.
+
 **Branch:** `claude/phase-b-decompose`
 **Status:** In progress
 **Depends on:** Phase A (complete)
