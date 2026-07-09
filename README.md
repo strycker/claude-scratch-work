@@ -491,6 +491,15 @@ Full codebase audit comparing documentation, disk state, and code quality.
 
 ---
 
+## Regime Investment Platform Design
+
+Design document: [platform_design/platform_design.md](platform_design/platform_design.md)
+Architecture, mathematics, evaluation discipline, and build phases for the regime-conditional
+investment platform. Supersedes ad-hoc `trading-crab` design notes; see §11 for the
+trading-crab re-evaluation checklist. Current version: v1.7 (2026-07-08).
+
+---
+
 ## Prioritized Next Steps
 
 See **`ROADMAP.md`** for full details and effort estimates. Quick summary of what's next:
