@@ -1,0 +1,20 @@
+{
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    },
+    "fable-advisor": {
+      "source": {
+        "source": "github",
+        "repo": "DannyMac180/fable-advisor"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ponytail@ponytail": true,
+    "fable-advisor@fable-advisor": true
+  }
+}
