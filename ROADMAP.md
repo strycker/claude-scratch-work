@@ -29,6 +29,43 @@ Full reconciliation is deferred to the GSD planning pass (see "GSD planning" not
 
 ---
 
+## Tier 0 — Platform Build Backlog
+
+The concrete items behind Tier 0, in the design's §11 re-build order (dependency-correct).
+Each maps to a design section/R-number and a §14 phase. This is the backlog GSD planning will
+turn into `.planning/` phases; it is not yet decomposed into per-file plans.
+
+### T0.1  Phase-0 honesty infrastructure  `L`  (§8, §14 Phase 0 — **do first**)
+The design's stated prerequisite to *any* modeling — none of it exists today.
+- **2021+ holdout carve** — physically separate files/paths the pipeline cannot read by default; evaluated once at design freeze (`S`).
+- **Trial registry** — flat-file/SQLite `config-hash → metrics` store; the multiple-testing denominator for a deflated Sharpe (`S`/`M`).
+- **Walk-forward runner** — core infra: at each rebalance refit L1 labels + L2/L3 on data ≤ t, record decisions, step forward. Report the smoothed-vs-filtered gap (`L`).
+- `model_metrics_artifacts.py` (salvaged) = down payment on the KPI half (Brier / calibration / confusion).
+
+### T0.2  Monthly data spine  `L`  (R1, §9, §14 Phase 0)
+Move ingestion + transforms from quarterly to **monthly**; keep quarterly agency series with proper alignment. Quarterly starves the labeler and ~4× the detection lag in calendar time. Foundational — everything downstream inherits the frequency.
+
+### T0.3  1962+ spliced histories + ALFRED vintages  `XL`  (R13/R6, §9)
+- Splice ETF prices with index/futures/spot back to ~1962 (SPY←S&P TR, GLD←gold spot, TLT←CMT synthetics…); tradability applies to the present, not the history.
+- Replace revised FRED with **ALFRED point-in-time vintages** + publication-lag alignment; reclassify features into fast/slow/agency taxonomy (market-observed preferred for labeling).
+
+### T0.4  Jump-model labeler (L1)  `L`  (R2/R11/R14, §4)
+k-means **+ per-jump penalty λ** (Bemporad–Boyd), exact DP decode; existing balanced k-means = warm start, HMM (`hmm.py`) = the Student-t benchmark. Occupancy floor/cap + sojourn as **acceptance criteria** (§4.4), replacing forced-balance clustering. Recast naming heuristics as skeleton sign constraints.
+
+### T0.5  Purged & embargoed CV  `M`  (R7, §6.5)
+Add purging + embargo to all supervised CV; current `TimeSeriesSplit(5)` leaks through overlapping h-month labels. Report transition-window metrics (±3m) separately from overall accuracy.
+
+### T0.6  L2 split: nowcaster + transition model  `M`  (R8, §5)
+Split the single classifier into a **nowcaster** (recursive prior-state feature, γ sample weights, calibration) and a **transition model** (spreads/vol/**regime age** features). Keep the RF/DT/GBM zoo; the problem framing splits, not the models.
+
+### T0.7  Volatility & covariance layer (L3 half)  `L`  (R9, §6.2, §7)
+GARCH(1,1)/EWMA per asset; **vol targeting** overlay (size ∝ 1/σ̂); regime-conditional covariance with Ledoit–Wolf shrinkage. Replaces `tactics.py`'s fixed vol/trend thresholds; feeds model-driven vol-scaled stops (§27 policy stack).
+
+### T0.8  Wire in `feature_gating.py` (causal-feature guard)  `S`  (R5, §8.2, salvaged)
+Enforce `features_supervised.parquet` (causal) for L2 training; `--allow-noncausal-features` opt-in falls back with a loud warning. Cheap, and it locks in the L1-may-see-future / L2-may-not invariant the whole design rests on. Do early alongside T0.1.
+
+---
+
 ## Phase Progress
 
 | Phase | Name                                          | Plans Complete | Status      | Completed  |
