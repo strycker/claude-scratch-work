@@ -21,7 +21,7 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 - [ ] **DATA-01**: Monthly data spine — ingestion and transforms produce monthly features; quarterly agency series aligned with publication lags (design R1, D10)
 - [ ] **DATA-02**: Spliced USD histories back to ~1962 for core assets (S&P total return, Treasury total-return synthetic, gold, oil, cash), free sources, splicing rules documented per asset (design R13, §9)
-- [ ] **DATA-03**: ALFRED point-in-time vintages for agency series where archives exist; documented publication-lag alignment fallback pre-vintage era (design R6, D12)
+- [ ] **DATA-03**: ALFRED point-in-time vintages for agency series where archives exist, documented publication-lag alignment fallback pre-vintage era (design R6, D12)
 - [ ] **DATA-04**: Features classified into fast/slow/agency taxonomy in config; lean full-history (1962+) feature set defined for labeling (design §9, D11)
 - [ ] **DATA-05**: Key satellite ETFs and Glenn's holdings ingested with NULL-tolerant handling for shorter histories (design D11)
 - [ ] **DATA-06**: Paid-provider adapter seams documented (Norgate, Tiingo, EODHD) — placeholder notes only, no implementation; stockcharts.com/finviz.com noted as candidate feature sources
@@ -112,13 +112,40 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | | |
+| DATA-01 | Phase 1 | Pending |
+| DATA-02 | Phase 1 | Pending |
+| DATA-03 | Phase 1 | Pending |
+| DATA-04 | Phase 1 | Pending |
+| DATA-05 | Phase 1 | Pending |
+| DATA-06 | Phase 1 | Pending |
+| HON-01 | Phase 2 | Pending |
+| HON-02 | Phase 2 | Pending |
+| HON-03 | Phase 2 | Pending |
+| HON-04 | Phase 2 | Pending |
+| HON-05 | Phase 2 | Pending |
+| HON-06 | Phase 2 | Pending |
+| L1-01 | Phase 3 | Pending |
+| L1-02 | Phase 3 | Pending |
+| L1-03 | Phase 3 | Pending |
+| L2-01 | Phase 3 | Pending |
+| L2-02 | Phase 3 | Pending |
+| L3-01 | Phase 4 | Pending |
+| L3-02 | Phase 4 | Pending |
+| L4-01 | Phase 4 | Pending |
+| L4-02 | Phase 4 | Pending |
+| L4-03 | Phase 4 | Pending |
+| L4-04 | Phase 4 | Pending |
+| EVAL-01 | Phase 5 | Pending |
+| EVAL-02 | Phase 5 | Pending |
+| EVAL-03 | Phase 5 | Pending |
+| EVAL-04 | Phase 5 | Pending |
+| MIG-01 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 24 total
-- Mapped to phases: 0
-- Unmapped: 24 ⚠️ (pending roadmap)
+- v1 requirements: 28 total
+- Mapped to phases: 28
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-09*
-*Last updated: 2026-07-09 after initial definition*
+*Last updated: 2026-07-09 after roadmap creation (corrected v1 requirement count from 24 to 28 — recount of the itemized list above)*
