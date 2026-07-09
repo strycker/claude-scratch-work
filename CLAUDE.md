@@ -35,6 +35,32 @@ changes to the main repo:
 - `gsd-scratch-work/` — GSD framework version of the project (earlier checkpoint)
 - `trading-crab-lib/` — Separate trading-crab library repo
 
+**Both are now frozen archives** (unique code extracted to `ideas/gsd-salvage/`).
+Do not sync them further. `trading-crab` (the third submodule) stays live as the
+public/PyPI migration target — see `MIGRATION-PLAN.md`.
+
+---
+
+## AI Model Routing (Fable-led, Claude-only)
+
+This repo is the heavy-dev / GSD workbench. Default session model is **Fable**
+(`/model fable`). Fable is not just an orchestrator here — keep high-value work
+**on Fable** and delegate only routine work down. **No cross-vendor lanes** —
+the `fable-advisor` grok-implementer / codex-implementer agents are disabled; do
+not invoke them (Claude-only).
+
+- **Keep on Fable (do not delegate):** architecture & API design, code review,
+  writing unit tests that genuinely exercise behavior (no cheating/tautological
+  tests), correctness-critical or algorithmically hard sections (e.g. gap-fill
+  math, look-ahead-bias guards, CV splitting), and anything where Fable is more
+  accurate than Opus/Sonnet.
+- **Delegate to Sonnet subagents** (via `Task`/`Agent`, or GSD execution waves):
+  well-specified mechanical implementation, boilerplate, docs, routine refactors.
+- **Delegate to Opus** when a subtask needs strong reasoning but Fable-in-main is
+  busy or the task is parallelizable.
+- **fable-advisor** runs in advisor/lite mode: a read-only Fable second opinion at
+  commitment boundaries. **Ponytail** stays on (`full`) to keep diffs minimal.
+
 ---
 
 ## Repository Layout
