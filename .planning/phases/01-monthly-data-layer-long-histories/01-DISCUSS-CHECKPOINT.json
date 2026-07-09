@@ -1,0 +1,43 @@
+{
+  "phase": "1",
+  "phase_name": "Monthly Data Layer & Long Histories",
+  "timestamp": "2026-07-09T17:30:00Z",
+  "areas_completed": ["New-code architecture", "Splicing policy", "ALFRED scope"],
+  "areas_remaining": ["Universe tickers"],
+  "decisions": {
+    "New-code architecture": [
+      {
+        "question": "Where does the monthly data spine live? Quarterly incumbent is frozen (769 tests must stay green).",
+        "answer": "New parallel subpackage — e.g. trading_crab_lib/platform/ with its own ingestion, splicing, and checkpoint namespace (monthly_*). Reuses existing fetchers as imports where possible; incumbent code untouched. Cleaner migration unit for Phase 6.",
+        "options_presented": ["New parallel subpackage (Recommended)", "Frequency switch in existing modules", "You decide"]
+      }
+    ],
+    "Splicing policy": [
+      {
+        "question": "How do long histories relate to tradable tickers?",
+        "answer": "Model index, trade ETF — each asset CLASS gets one spliced research series (S&P TR from Shiller/multpl → SPY era; LBMA/macrotrends gold → GLD; WTI → oil proxy; CMT-derived Treasury TR → TLT). Models score the class; report maps to the tradable ticker.",
+        "options_presented": ["Model index, trade ETF (Recommended)", "Backfill ETF price series", "You decide"]
+      },
+      {
+        "question": "Store daily raw prices and derive monthly spine, or monthly only?",
+        "answer": "Daily raw → monthly spine — persist daily where sources provide it; resample to monthly modeling spine. Phase-4 daily tripwire needs daily data.",
+        "options_presented": ["Daily raw → monthly spine (Recommended)", "Monthly only for now", "You decide"]
+      }
+    ],
+    "ALFRED scope": [
+      {
+        "question": "Which agency series get true point-in-time vintage treatment in v1?",
+        "answer": "Minimal revision-prone set — vintages only for revision-heavy agency series used in labeling/features: GDP, CPI, UNRATE, INDPRO, PAYEMS (+GNP if kept). Everything else keeps publication-lag shift. Market-observed series never need vintages.",
+        "options_presented": ["Minimal revision-prone set (Recommended)", "All agency series", "You decide"]
+      }
+    ]
+  },
+  "deferred_ideas": [],
+  "canonical_refs": [
+    "platform_design/platform_design.md (§9 data spec, §11 R1/R6/R13, D10-D12)",
+    ".planning/REQUIREMENTS.md (DATA-01..06)",
+    ".planning/codebase/INTEGRATIONS.md (existing fetcher inventory)",
+    "ROADMAP.md (root — Tier 0 T0.2/T0.3 backlog framing)",
+    "CLAUDE.md (root — conventions, pipeline-order invariants)"
+  ]
+}
