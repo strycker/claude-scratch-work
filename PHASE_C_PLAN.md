@@ -1,5 +1,9 @@
 # PHASE_C_PLAN.md — Two-Package Infrastructure
 
+> **⚠️ SUPERSEDED (July 2026).** Historical plan — kept for context, not active work.
+> The project's target and execution plan are now `platform_design/platform_design.md`
+> (v1.7) and `ROADMAP.md` Tier 0. Do not treat items below as current.
+
 Created: 2026-03-28
 Branch: `claude/implement-phase-a2-SmHEA`
 

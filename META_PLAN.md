@@ -1,5 +1,9 @@
 # META_PLAN.md — Planning Phases for Project Audit & Improvement
 
+> **⚠️ SUPERSEDED (July 2026).** Historical plan — kept for context, not active work.
+> The project's target and execution plan are now `platform_design/platform_design.md`
+> (v1.7) and `ROADMAP.md` Tier 0. Do not treat items below as current.
+
 This file breaks a large planning/documentation effort into small, independent
 phases (P1–P8) that can each be completed in a single Claude Code session
 without hitting token limits. Each phase produces specific markdown files
