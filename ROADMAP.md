@@ -1,7 +1,31 @@
 # Trading-Crab — Product Roadmap
 
 Prioritized backlog of features, data sources, and improvements.
-Updated: March 2026.
+Updated: July 2026.
+
+---
+
+## Tier 0 — Platform Redesign (north star)
+
+**`platform_design/platform_design.md` (v1.7) is now the authoritative target** and supersedes
+the ad-hoc design behind Tiers 1–3 below. It reframes the project from "improve the quarterly
+clustering pipeline" into a monthly, walk-forward-honest, 5-layer regime-conditional allocation
+platform (L0 data → L1 labeling → L2 prediction → L3 asset MoE → L4 allocation). Verdict from
+§13: **enhance, don't restart** — keep the chassis (config, checkpoints, lib/pipeline split,
+tests, email report); rebuild the modeling core.
+
+Execution backbone lives in the design doc, not here — do not re-transcribe:
+- **Phases 0–6** — design §14 (tracer-bullet skeleton first, honesty framework before any tuning).
+- **R1–R15** — design §11 re-eval checklist; re-build order R6/R13 → R1 → R2/R11/R14 → R10/R12 → R8 → R9 → L3 → L4.
+
+Tiers 1–3 below are re-scoped against this: items become **near-term (still valid)**,
+**warm-start / baseline / diagnostic** (kept but demoted from the spine), or **superseded**.
+Full reconciliation is deferred to the GSD planning pass (see "GSD planning" note at bottom).
+
+**Salvaged modules to fold in** (from `ideas/gsd-salvage/`, extracted from `gsd-scratch-work`):
+- `feature_gating.py` → **Phase 0/1**: enforces causal (`features_supervised`) selection for L2 training; operationalizes P1 / design R5 / §8.2. Highest value.
+- `model_metrics_artifacts.py` → **Phase 1+**: Brier / calibration / confusion artifacts = design §8 honesty KPIs.
+- `dashboard_model.py` → **L4/reporting**: RF-vs-GB model-path resolution; minor, fold in when a GB dashboard model is saved.
 
 ---
 
@@ -423,3 +447,20 @@ Implementation approach (when ready):
 3. **Phase K — Migration prep** — config independence for library; Dockerfile; settings.yaml schema validation
 4. Add remaining FRED series (INDPRO, PAYEMS, DPCERA3Q086SBEA) — `S`, quick config additions
 5. Backtest framework (item 3.5) — `XL`, validates the full strategy end-to-end
+
+---
+
+## GSD planning (how the long-term plan gets built)
+
+This ROADMAP is the interim plan-of-record. The durable long-term plan will be generated
+**fresh** with GSD (installed in `.claude/`) — no `.planning/` copied from `gsd-scratch-work`.
+
+Recommended kickoff (each step is a Claude Code session on Fable):
+1. `/gsd-map-codebase` — analyze the existing repo into `.planning/codebase/` (tech, arch, quality).
+2. `/gsd-new-project` — deep context gathering → `.planning/PROJECT.md` + roadmap, feeding it
+   `platform_design/platform_design.md` as the design input. Adopt design §14 Phases 0–6 as the
+   milestone spine; map §11 R1–R15 and the Tier-0 salvage items into phases.
+3. Per phase: `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`.
+
+Phase 0 (honesty framework: holdout carve, trial registry, walk-forward runner) comes **before**
+any modeling — that ordering is the whole point of the design.
