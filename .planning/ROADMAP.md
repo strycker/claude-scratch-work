@@ -46,7 +46,14 @@ replacing the quarterly-only spine as the foundation for regime modeling.
   5. Satellite ETFs and Glenn's holdings ingest with NULL-tolerant handling for shorter
      histories; paid-provider adapter seams (Norgate/Tiingo/EODHD) are documented as
      placeholders only, with stockcharts.com/finviz.com noted as candidate sources.
-**Plans**: TBD
+**Plans**: 7 plans
+- [ ] 01-01-PLAN.md — Foundation: platform subpackage scaffold, checkpoint namespace, config loader, fast/slow/agency taxonomy (DATA-04)
+- [ ] 01-02-PLAN.md — Core-asset splicing engine + long-history synthetics + splicing_rules.md (DATA-02)
+- [ ] 01-03-PLAN.md — ALFRED point-in-time vintage fetch + reconstruction + fallback doc (DATA-03)
+- [ ] 01-04-PLAN.md — Paid-provider adapter seams (placeholder stubs + doc) (DATA-06)
+- [ ] 01-05-PLAN.md — Monthly macro ingestion (FRED/multpl/macrotrends at monthly cadence) (DATA-01)
+- [ ] 01-06-PLAN.md — Universe daily price ingestion, NULL-tolerant short histories (DATA-05)
+- [ ] 01-07-PLAN.md — Monthly transforms: agency alignment + lean feature assembly + tagging (DATA-01, DATA-03, DATA-04)
 
 ### Phase 2: Honesty Infrastructure
 **Goal**: Every subsequent modeling result is protected by structural honesty guarantees —
@@ -148,7 +155,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Monthly Data Layer & Long Histories | 0/TBD | Not started | - |
+| 1. Monthly Data Layer & Long Histories | 0/7 | Planned | - |
 | 2. Honesty Infrastructure | 0/TBD | Not started | - |
 | 3. Regime Labeling & Prediction | 0/TBD | Not started | - |
 | 4. Asset Prediction & Allocation | 0/TBD | Not started | - |
