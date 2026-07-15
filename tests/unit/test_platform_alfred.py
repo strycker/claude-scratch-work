@@ -12,16 +12,24 @@ import pytest
 
 
 def _make_all_releases_df() -> pd.DataFrame:
-    """Synthetic get_series_all_releases() response for one reference period
-    (2020-01-01) with two revisions: an original vintage (value=100, known
-    from 2020-02-01) and a later revision (value=150, known from 2020-05-01).
+    """Synthetic get_series_all_releases() response with two reference periods:
+
+    - 2020-01-01: two revisions — an original vintage (value=100, known from
+      2020-02-01) and a later revision (value=150, known from 2020-05-01).
+    - 2020-06-01: a single vintage (value=200, known from 2020-06-15) — used
+      to exercise the "at/after the earliest vintage" branch of
+      align_with_fallback with a matching reference period.
     """
     return pd.DataFrame(
         {
-            "realtime_start": pd.to_datetime(["2020-02-01", "2020-05-01"]),
-            "realtime_end": pd.to_datetime(["2020-05-01", "2099-12-31"]),
-            "date": pd.to_datetime(["2020-01-01", "2020-01-01"]),
-            "value": [100.0, 150.0],
+            "realtime_start": pd.to_datetime(
+                ["2020-02-01", "2020-05-01", "2020-06-15"]
+            ),
+            "realtime_end": pd.to_datetime(
+                ["2020-05-01", "2099-12-31", "2099-12-31"]
+            ),
+            "date": pd.to_datetime(["2020-01-01", "2020-01-01", "2020-06-01"]),
+            "value": [100.0, 150.0, 200.0],
         }
     )
 
@@ -86,9 +94,12 @@ def test_pre_vintage_fallback():
     from trading_crab_lib.platform.ingestion.alfred import align_with_fallback
 
     all_releases = _make_all_releases_df()  # earliest vintage: 2020-02-01
-    as_of_dates = pd.DatetimeIndex(["2019-01-01", "2020-06-01"])
+    # Second as-of date matches the 2020-06-01 reference period, which was
+    # first published (realtime_start) on 2020-06-15 — already known by
+    # 2020-06-20.
+    as_of_dates = pd.DatetimeIndex(["2019-01-01", "2020-06-20"])
     shift_series = pd.Series(
-        {pd.Timestamp("2019-01-01"): 42.0, pd.Timestamp("2020-06-01"): 999.0}
+        {pd.Timestamp("2019-01-01"): 42.0, pd.Timestamp("2020-06-20"): 999.0}
     )
 
     result = align_with_fallback(all_releases, as_of_dates, shift_series)
@@ -96,9 +107,9 @@ def test_pre_vintage_fallback():
     # Before the earliest recorded vintage: falls back to the shift value —
     # never NaN, never a raised error (D-06).
     assert result.loc[pd.Timestamp("2019-01-01")] == pytest.approx(42.0)
-    # At/after the vintage era: uses the reconstructed point-in-time value,
-    # not the fallback.
-    assert result.loc[pd.Timestamp("2020-06-01")] == pytest.approx(150.0)
+    # At/after the vintage era: uses the reconstructed point-in-time value
+    # for the matching reference period, not the fallback.
+    assert result.loc[pd.Timestamp("2020-06-20")] == pytest.approx(200.0)
 
 
 # ── fetch_vintage_series ──────────────────────────────────────────────────────
