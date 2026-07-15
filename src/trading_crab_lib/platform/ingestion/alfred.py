@@ -11,9 +11,10 @@ series in scope (GDP, CPI, UNRATE, INDPRO, PAYEMS).
 Bulk fetch, never per-date loop:
   ``fetch_vintage_series()`` calls ``fredapi.Fred.get_series_all_releases()``
   exactly ONCE per series — it returns every historical revision of every
-  observation in a single request. Looping ``get_series_as_of_date()`` per
-  historical month would be O(months) API calls (~750/series for 1962+
-  monthly) and is an explicit anti-pattern (RESEARCH Pattern 2 / Anti-Pattern).
+  observation in a single request. Looping the single-date vintage lookup
+  endpoint per historical month would be O(months) API calls (~750/series
+  for 1962+ monthly) and is an explicit anti-pattern (RESEARCH Pattern 2 /
+  Anti-Pattern).
 
 Pre-vintage-era fallback (D-06):
   ALFRED archives mostly begin decades after 1962. For dates earlier than a
@@ -77,9 +78,9 @@ def _detect_vintage_columns(df: pd.DataFrame) -> dict[str, str]:
 def fetch_vintage_series(fred: Fred, series_id: str) -> pd.DataFrame:
     """Pull the full revision history for one series in ONE bulk call.
 
-    Never loop ``get_series_as_of_date()`` per historical date — this is the
-    documented anti-pattern (RESEARCH Pattern 2). Column schema is validated
-    defensively (A1) before returning.
+    Never loop the single-date vintage lookup per historical date — this is
+    the documented anti-pattern (RESEARCH Pattern 2). Column schema is
+    validated defensively (A1) before returning.
     """
     all_releases = fred.get_series_all_releases(series_id)
     _detect_vintage_columns(all_releases)  # fail fast on an unexpected schema
