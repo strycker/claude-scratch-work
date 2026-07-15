@@ -87,7 +87,7 @@ class TestRatioSplice:
 
         result = ratio_splice(old, new, join_date)
 
-        last_pre_join = idx_old[-2]
+        last_pre_join = old.index[old.index < join_date][-1]
         assert abs(result.loc[last_pre_join] - old.loc[last_pre_join] * scale) < 1e-9
 
     def test_result_named_after_new(self):
