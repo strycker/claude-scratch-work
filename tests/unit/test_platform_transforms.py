@@ -243,3 +243,146 @@ class TestBuildMonthlySpineLeanFeatures:
         assert "curve_10y3m" in loaded.columns
         # Passthrough lean columns (e.g. gold/oil/fred_vix) are not duplicated.
         assert list(result.columns).count("fred_vix") == 1
+
+
+# ── build_monthly_spine — end-to-end cadence, alignment, coverage, NULL-tolerance ──
+
+
+def _make_gdp_vintages_with_look_ahead_gap() -> dict:
+    """A revision-free 2-quarter agency series exercising the look-ahead guard:
+    Q4-2017 known from 2018-01-30 (value=100.0); Q1-2018 known only from
+    2018-04-27 (value=200.0) — the Q1 value must be invisible before its own
+    realtime_start."""
+    return {
+        "fred_gdp": pd.DataFrame(
+            {
+                "realtime_start": pd.to_datetime(["2018-01-30", "2018-04-27"]),
+                "realtime_end": pd.to_datetime(["2099-12-31", "2099-12-31"]),
+                "date": pd.to_datetime(["2017-10-01", "2018-01-01"]),
+                "value": [100.0, 200.0],
+            }
+        )
+    }
+
+
+def _make_cpi_vintages_wide_history_late_cutover() -> dict:
+    """A constant-valued series whose entire ALFRED vintage archive was
+    bulk-recorded on one late date (2018-06-15) despite reference periods
+    reaching back to 2010 — models the real-world characteristic that ALFRED
+    vintage coverage starts well after the underlying economic history
+    (RESEARCH Pitfall 4 / A2). Constant value makes the fallback-vs-vintage
+    result trivially distinguishable regardless of resample/ffill mechanics.
+    """
+    dates = pd.date_range("2010-01-01", "2020-12-01", freq="MS")
+    return {
+        "fred_cpi": pd.DataFrame(
+            {
+                "realtime_start": pd.to_datetime(["2018-06-15"] * len(dates)),
+                "realtime_end": pd.to_datetime(["2099-12-31"] * len(dates)),
+                "date": dates,
+                "value": [42.0] * len(dates),
+            }
+        )
+    }
+
+
+class TestBuildMonthlySpineEndToEnd:
+    @patch("trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages")
+    @patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_universe_prices")
+    @patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_macro_monthly")
+    def test_monthly_row_count(self, mock_macro, mock_prices, mock_vintages):
+        """The assembled monthly frame has ~12 rows/year over its span —
+        monthly, not quarterly (DATA-01)."""
+        idx = _make_monthly_index(start="2015-01-31", periods=72)  # 6 years
+        mock_macro.return_value = _make_synthetic_macro(idx)
+        mock_prices.return_value = (pd.DataFrame(), pd.DataFrame())
+        mock_vintages.return_value = {}
+
+        cfg = _make_cfg(start="2015-01-01", end="2020-12-31")
+        result = build_monthly_spine(cfg)
+
+        quarterly_equivalent = len(pd.date_range("2015-01-01", "2020-12-31", freq="QE"))
+        assert len(result) == 72
+        assert len(result) > quarterly_equivalent * 2
+
+    @patch("trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages")
+    @patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_universe_prices")
+    @patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_macro_monthly")
+    def test_quarterly_series_alignment(self, mock_macro, mock_prices, mock_vintages):
+        """A synthetic agency series whose vintage becomes known mid-quarter
+        does NOT appear in the monthly frame in a month before its
+        realtime_start (no revision/timing look-ahead — DATA-01/DATA-03)."""
+        idx = _make_monthly_index(start="2017-01-31", periods=24)  # Jan2017..Dec2018
+        mock_macro.return_value = _make_synthetic_macro(idx)
+        mock_prices.return_value = (pd.DataFrame(), pd.DataFrame())
+        mock_vintages.return_value = _make_gdp_vintages_with_look_ahead_gap()
+
+        cfg = _make_cfg(start="2017-01-01", end="2018-12-31")
+        result = build_monthly_spine(cfg)
+
+        # March 2018: Q1-2018 GDP (200.0) not yet published (realtime_start
+        # 2018-04-27) — only the older Q4-2017 value (100.0) is visible.
+        assert result.loc[pd.Timestamp("2018-03-31"), "fred_gdp"] == pytest.approx(100.0)
+        # April 2018 (>= 2018-04-27): the newly-published Q1-2018 value appears.
+        assert result.loc[pd.Timestamp("2018-04-30"), "fred_gdp"] == pytest.approx(200.0)
+
+    @patch("trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages")
+    @patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_universe_prices")
+    @patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_macro_monthly")
+    def test_pre_vintage_fallback_applied(self, mock_macro, mock_prices, mock_vintages):
+        """Pre-vintage-era months use the publication-lag shift fallback value
+        — never NaN, never an error (D-06/DATA-03)."""
+        idx = _make_monthly_index(start="2015-01-31", periods=72)  # 2015-01..2020-12
+        mock_macro.return_value = _make_synthetic_macro(idx)
+        mock_prices.return_value = (pd.DataFrame(), pd.DataFrame())
+        mock_vintages.return_value = _make_cpi_vintages_wide_history_late_cutover()
+
+        cfg = _make_cfg(start="2015-01-01", end="2020-12-31")
+        result = build_monthly_spine(cfg)
+
+        # 2015-06 predates the earliest recorded vintage (2018-06-15).
+        val = result.loc[pd.Timestamp("2015-06-30"), "fred_cpi"]
+        assert not pd.isna(val)
+        assert val == pytest.approx(42.0)
+
+    @patch("trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages")
+    @patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_universe_prices")
+    @patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_macro_monthly")
+    def test_every_feature_tagged(self, mock_macro, mock_prices, mock_vintages):
+        """check_columns_tagged on the produced lean feature columns of the
+        persisted monthly_raw checkpoint returns empty (DATA-04)."""
+        idx = _make_monthly_index(start="2015-01-31", periods=24)
+        mock_macro.return_value = _make_synthetic_macro(idx)
+        mock_prices.return_value = (pd.DataFrame(), pd.DataFrame())
+        mock_vintages.return_value = {}
+
+        cfg = _make_cfg(start="2015-01-01", end="2016-12-31")
+        build_monthly_spine(cfg)
+
+        cm = get_platform_checkpoint_manager()
+        monthly_raw = cm.load("monthly_raw")
+        lean = compute_lean_features(monthly_raw, cfg)
+
+        assert taxonomy.check_columns_tagged(list(lean.columns), cfg) == []
+
+    @patch("trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages")
+    @patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_universe_prices")
+    @patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_macro_monthly")
+    def test_short_history_satellite_null_tolerant(self, mock_macro, mock_prices, mock_vintages):
+        """A short-history price column stays NaN-padded in the merged frame
+        — never dropped rows, never a crash (DATA-05, RESEARCH Pitfall 5)."""
+        idx = _make_monthly_index(start="2015-01-31", periods=24)
+        mock_macro.return_value = _make_synthetic_macro(idx)
+
+        short_idx = idx[-6:]  # only the last 6 months have data
+        monthly_prices = pd.DataFrame({"IAU": np.arange(6.0)}, index=short_idx)
+        mock_prices.return_value = (pd.DataFrame(), monthly_prices)
+        mock_vintages.return_value = {}
+
+        cfg = _make_cfg(start="2015-01-01", end="2016-12-31")
+        result = build_monthly_spine(cfg)
+
+        assert len(result) == 24  # no dropped rows
+        assert "IAU" in result.columns
+        assert pd.isna(result.loc[idx[0], "IAU"])  # pre-inception: NaN, not dropped
+        assert not pd.isna(result.loc[idx[-1], "IAU"])
