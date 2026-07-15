@@ -124,6 +124,73 @@ def align_agency_monthly(
     return df
 
 
+# ── Lean feature computation + taxonomy tagging (DATA-04) ──────────────────
+
+
+def compute_lean_features(monthly_raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+    """Compute the taxonomy-tagged full-history (1962+) lean feature set (DATA-04).
+
+    Simple, single-purpose derivations only — column names match
+    ``cfg['taxonomy']`` exactly, no speculative multi-scale expansion beyond
+    the concrete taxonomy list (design §9). A source column missing from
+    ``monthly_raw`` (e.g. a failed ingestion source) simply skips the
+    dependent feature rather than raising — mirrors the incumbent's
+    graceful-degradation convention.
+    """
+    cols = set(monthly_raw.columns)
+    features: dict[str, pd.Series] = {}
+
+    if {"fred_gs10", "fred_tb3ms"} <= cols:
+        features["curve_10y3m"] = monthly_raw["fred_gs10"] - monthly_raw["fred_tb3ms"]
+    if "fred_t10y2y" in cols:
+        # Already the 10Y-2Y spread as published by FRED — passthrough, no
+        # re-derivation (no GS2 series is ingested separately).
+        features["curve_10y2y"] = monthly_raw["fred_t10y2y"]
+    if {"fred_baa", "fred_aaa"} <= cols:
+        features["credit_spread_baa_aaa"] = monthly_raw["fred_baa"] - monthly_raw["fred_aaa"]
+    if "fred_vix" in cols:
+        features["fred_vix"] = monthly_raw["fred_vix"]
+    if "gold" in cols:
+        features["gold"] = monthly_raw["gold"]
+    if "oil" in cols:
+        features["oil"] = monthly_raw["oil"]
+
+    if "equities_tr" in cols:
+        equity_returns = monthly_raw["equities_tr"].pct_change()
+        features["trailing_return_1m"] = equity_returns
+        features["trailing_return_3m"] = monthly_raw["equities_tr"].pct_change(3)
+        # ponytail: naive single-period vol proxy (|1m return|) for
+        # realized_vol_1m — true intra-period vol needs daily equity prices,
+        # not available for the multpl-derived monthly equities_tr research
+        # series. Upgrade if/when a daily total-return series exists.
+        features["realized_vol_1m"] = equity_returns.abs()
+        features["realized_vol_3m"] = equity_returns.rolling(3).std(ddof=0)
+
+    if "cape_shiller" in cols:
+        features["cape_shiller"] = monthly_raw["cape_shiller"]
+    if "div_yield" in cols:
+        features["div_yield"] = monthly_raw["div_yield"]
+
+    if not features:
+        return pd.DataFrame(index=monthly_raw.index)
+    return pd.concat(features, axis=1)
+
+
+def tag_feature_columns(features_df: pd.DataFrame, cfg: dict[str, Any]) -> dict[str, str]:
+    """Map every produced feature column to its taxonomy tier (DATA-04).
+
+    Logs a WARNING listing any untagged column via
+    ``taxonomy.check_columns_tagged`` — ``compute_lean_features`` is designed
+    to only ever emit taxonomy-listed column names, so this is a defensive
+    gate, not expected to fire in normal operation.
+    """
+    columns = list(features_df.columns)
+    untagged = taxonomy.check_columns_tagged(columns, cfg)
+    if untagged:
+        log.warning("Untagged lean feature column(s) (DATA-04 gap): %s", untagged)
+    return {col: taxonomy.classify_feature(col, cfg) for col in columns}
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 
@@ -131,11 +198,12 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     """Assemble the monthly feature table (DATA-01, DATA-03 runtime, DATA-04).
 
     Orchestrates, in order: monthly macro ingestion, daily universe prices +
-    monthly spine, core research series (splice), and point-in-time agency
-    alignment — merged NULL-tolerantly via ``pd.concat([...], axis=1)`` onto a
-    canonical month-end index spanning ``cfg['data']['start_date']`` forward.
-    Persists ``daily_raw`` and ``monthly_raw`` checkpoints in the platform
-    namespace and returns the merged monthly frame.
+    monthly spine, core research series (splice), point-in-time agency
+    alignment, and lean feature computation — merged NULL-tolerantly via
+    ``pd.concat([...], axis=1)`` onto a canonical month-end index spanning
+    ``cfg['data']['start_date']`` forward. Persists ``daily_raw``,
+    ``monthly_raw``, and ``monthly_features`` checkpoints in the platform
+    namespace and returns the monthly_features frame.
     """
     monthly_freq = cfg["data"].get("monthly_freq", "ME")
     start = cfg["data"]["start_date"]
@@ -156,8 +224,19 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     cm.save(daily, "daily_raw")
     cm.save(monthly_raw, "monthly_raw")
 
+    lean = compute_lean_features(monthly_raw, cfg)
+    tag_feature_columns(lean, cfg)  # WARNING-only defensive taxonomy-coverage check
+
+    monthly_features = pd.concat([monthly_raw, lean], axis=1)
+    # Passthrough lean columns (gold/oil/fred_vix/cape_shiller/div_yield) are
+    # identical to their monthly_raw source — dedupe, keeping the lean copy.
+    monthly_features = monthly_features.loc[:, ~monthly_features.columns.duplicated(keep="last")]
+    monthly_features.index.name = "date"
+
+    cm.save(monthly_features, "monthly_features")
+
     log.info(
-        "build_monthly_spine: assembled %d months, %d columns (monthly_raw)",
-        len(monthly_raw), len(monthly_raw.columns),
+        "build_monthly_spine: assembled %d months, %d columns (monthly_features, %d lean)",
+        len(monthly_features), len(monthly_features.columns), len(lean.columns),
     )
-    return monthly_raw
+    return monthly_features
