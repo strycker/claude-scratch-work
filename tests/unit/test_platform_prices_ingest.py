@@ -146,9 +146,9 @@ def test_to_monthly_spine_yields_month_end_frequency():
     assert isinstance(monthly, pd.DataFrame)
     # Every index entry lands on a month-end date.
     assert all(monthly.index == monthly.index.to_series().apply(lambda d: d + pd.offsets.MonthEnd(0)))
-    # Row count collapses from ~90 daily rows to ~3 monthly rows.
+    # Row count collapses from 90 daily rows to one row per calendar month spanned.
     assert len(monthly) < len(daily_df)
-    assert len(monthly) == 3
+    assert len(monthly) == idx.to_series().dt.to_period("M").nunique()
 
 
 def test_to_monthly_spine_empty_input_returns_empty():
