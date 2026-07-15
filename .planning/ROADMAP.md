@@ -20,7 +20,7 @@ migrate the validated skeleton to the public `strycker/trading-crab` repo.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Monthly Data Layer & Long Histories** - Monthly-frequency ingestion, spliced 1962+ core-asset histories, ALFRED vintages, and a fast/slow/agency feature taxonomy
+- [x] **Phase 1: Monthly Data Layer & Long Histories** - Monthly-frequency ingestion, spliced 1962+ core-asset histories, ALFRED vintages, and a fast/slow/agency feature taxonomy (completed 2026-07-15)
 - [ ] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned
 - [ ] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe
 - [ ] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire
@@ -53,7 +53,7 @@ replacing the quarterly-only spine as the foundation for regime modeling.
   5. Satellite ETFs and Glenn's holdings ingest with NULL-tolerant handling for shorter
      histories; paid-provider adapter seams (Norgate/Tiingo/EODHD) are documented as
      placeholders only, with stockcharts.com/finviz.com noted as candidate sources.
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Foundation: platform subpackage scaffold, checkpoint namespace, config loader, fast/slow/agency taxonomy (DATA-04)
@@ -68,7 +68,7 @@ replacing the quarterly-only spine as the foundation for regime modeling.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-07-PLAN.md — Monthly transforms: agency alignment + lean feature assembly + tagging (DATA-01, DATA-03, DATA-04)
+- [x] 01-07-PLAN.md — Monthly transforms: agency alignment + lean feature assembly + tagging (DATA-01, DATA-03, DATA-04)
 
 ### Phase 2: Honesty Infrastructure
 
@@ -196,7 +196,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Monthly Data Layer & Long Histories | 6/7 | In Progress|  |
+| 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
 | 2. Honesty Infrastructure | 0/TBD | Not started | - |
 | 3. Regime Labeling & Prediction | 0/TBD | Not started | - |
 | 4. Asset Prediction & Allocation | 0/TBD | Not started | - |
