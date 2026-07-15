@@ -174,3 +174,7 @@ None - no external service configuration required. `FRED_API_KEY` reuse (D-07) i
 ---
 *Phase: 01-monthly-data-layer-long-histories*
 *Completed: 2026-07-15*
+
+## Self-Check: PASSED
+
+All 8 claimed files verified present on disk; all 5 claimed commits (`173ac1c`, `b50e30c`, `3b2fa05`, `f97e65e`, `8891a00`) verified present in `git log --oneline --all`.
