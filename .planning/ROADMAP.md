@@ -53,10 +53,10 @@ replacing the quarterly-only spine as the foundation for regime modeling.
   5. Satellite ETFs and Glenn's holdings ingest with NULL-tolerant handling for shorter
      histories; paid-provider adapter seams (Norgate/Tiingo/EODHD) are documented as
      placeholders only, with stockcharts.com/finviz.com noted as candidate sources.
-**Plans**: 7 plans
+**Plans**: 1/7 plans executed
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Foundation: platform subpackage scaffold, checkpoint namespace, config loader, fast/slow/agency taxonomy (DATA-04)
+- [x] 01-01-PLAN.md — Foundation: platform subpackage scaffold, checkpoint namespace, config loader, fast/slow/agency taxonomy (DATA-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -196,7 +196,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Monthly Data Layer & Long Histories | 0/7 | Planned | - |
+| 1. Monthly Data Layer & Long Histories | 1/7 | In Progress|  |
 | 2. Honesty Infrastructure | 0/TBD | Not started | - |
 | 3. Regime Labeling & Prediction | 0/TBD | Not started | - |
 | 4. Asset Prediction & Allocation | 0/TBD | Not started | - |
