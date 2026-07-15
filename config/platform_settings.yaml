@@ -1,0 +1,221 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Monthly Platform Settings — Phase 1: Monthly Data Layer & Long Histories
+#
+#  Independent of config/settings.yaml (D-02: the frozen quarterly incumbent's
+#  validate_config() schema is never touched by this file, and vice versa).
+#  Read exclusively by trading_crab_lib.platform.config.load_platform_config().
+# ─────────────────────────────────────────────────────────────────────────────
+
+data:
+  start_date:   "1962-01-01"   # D-08 core-asset splice target span
+  end_date:     null           # null → use today's date at runtime
+  monthly_freq: "ME"           # month-end resample rule (vs incumbent's "QE")
+  daily_persist: true          # D-05: store daily raw prices, derive monthly by resample
+
+# ── FRED market/fast-layer series (no ALFRED vintage needed) ──────────────────
+# Market-observed series (rates, spreads, prices) are never revised — plain
+# publication-lag `shift` (false here; none of these have meaningful lag) is
+# sufficient. `daily: true` marks series natively published at daily frequency
+# (persisted daily per D-05, then resampled to the monthly spine).
+fred_monthly:
+  series:
+    GS10:
+      name:  "fred_gs10"
+      shift: false
+    TB3MS:
+      name:  "fred_tb3ms"
+      shift: false
+    BAA:
+      name:  "fred_baa"
+      shift: false
+    AAA:
+      name:  "fred_aaa"
+      shift: false
+    T10Y3M:
+      name:  "fred_t10y3m"
+      shift: false
+      daily: true
+    T10Y2Y:
+      name:  "fred_t10y2y"
+      shift: false
+      daily: true
+    VIXCLS:
+      name:  "fred_vix"
+      shift: false
+      daily: true
+    WTISPLC:
+      name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
+      shift: false
+
+# ── ALFRED point-in-time vintage series (D-06) ─────────────────────────────────
+# Revision-heavy agency series used in labeling/features. Each gets a true
+# point-in-time reconstruction via fredapi.get_series_all_releases(); dates
+# before a series' earliest recorded vintage fall back to publication-lag
+# shift (documented accepted compromise — ALFRED vintages mostly start in the
+# 1990s, well after this phase's 1962 target start).
+fred_vintage:
+  series:
+    GDPC1:
+      name: "fred_gdp"
+      tier: agency
+    CPIAUCSL:
+      name: "fred_cpi"
+      tier: agency
+    UNRATE:
+      name: "fred_unrate"
+      tier: agency
+    INDPRO:
+      name: "fred_indpro"
+      tier: agency
+    PAYEMS:
+      name: "fred_payems"
+      tier: agency
+
+# ── multpl.com monthly series (S&P valuation anchors) ──────────────────────────
+multpl_monthly:
+  datasets:
+    - [sp500,          "SP500 Historical Prices",  "https://www.multpl.com/s-p-500-historical-prices/table/by-month", num]
+    - [div_yield,       "SP500 Dividend Yield",      "https://www.multpl.com/s-p-500-dividend-yield/table/by-month",    percent]
+    - [cape_shiller,    "Shiller PE 10 Ratio",       "https://www.multpl.com/shiller-pe/table/by-month",                num]
+
+# ── macrotrends.net monthly series (long-history commodities) ─────────────────
+# Reused verbatim from trading_crab_lib.ingestion.macrotrends (D-01: import,
+# never edit) — already returns monthly gold (1915+) and WTI (1946+).
+macrotrends_monthly:
+  base_url: "https://www.macrotrends.net"
+  series:
+    - name: gold_spot
+      path: "/1333/historical-gold-prices-100-year-chart"
+      resample: mean
+    - name: wti_crude
+      path: "/1369/crude-oil-price-history-chart"
+      resample: mean
+
+# ── Splicing rules (D-03/D-04): "Model the index, trade the ETF." ─────────────
+# One spliced research series per asset CLASS, used by all models. The weekly
+# report maps each class to Glenn's tradable ticker. Every rule below is a
+# DATA-02 deliverable — source, method, and tradable proxy per class.
+splice:
+  equities:
+    research_name: equities_tr
+    method:        total_return_from_price_div
+    price_col:     sp500
+    div_yield_col: div_yield
+    tradable:      SPY
+  long_duration:
+    research_name:  long_duration_tr
+    method:         cmt_par_bond_repricing
+    yield_col:      fred_gs10
+    maturity_years: 10
+    coupon_freq:    2
+    tradable:       TLT
+  gold:
+    research_name: gold
+    method:        single_source
+    source_col:    gold_spot
+    tradable:      IAU
+  oil:
+    research_name:  oil
+    method:         single_source
+    source_col:     wti_crude
+    cross_check_col: wti_fred
+    tradable:       USO
+  cash:
+    research_name: cash
+    method:        yield_as_return
+    yield_col:     fred_tb3ms
+    tradable:      FZFXX
+
+# ── Universe (tickers) ─────────────────────────────────────────────────────────
+universe:
+  core_classes:
+    - equities
+    - long_duration
+    - gold
+    - oil
+    - cash
+  satellites:
+    - QQQ
+    - IWM
+    - EFA
+    - IEF
+    - SHY
+    - VNQ
+    - VYM
+    - AGG
+    - HYG
+    - LQD
+    - EEM
+    - DBA
+    - MCD
+    - COST
+    - O
+    - TSM
+    - IAU
+    - SLV
+    - GDX
+  holdings:
+    - IAU
+    - SLV
+    - GDX
+    - DBA
+    - FZFXX
+    - SPAXX
+  watchlist:
+    - UNG
+    - UEC
+  no_price_ingest:      # NAV ≈ $1 money-market funds; map to the cash class instead
+    - FZFXX
+    - SPAXX
+
+# ── Feature taxonomy (DATA-04) ─────────────────────────────────────────────────
+# Every feature classified into exactly one tier. `lean_feature_set()` returns
+# fast ∪ slow as the full-history (1962+) labeling set; agency features are
+# used sparingly and excluded from the lean set (design §9).
+taxonomy:
+  fast:
+    - curve_10y3m
+    - curve_10y2y
+    - credit_spread_baa_aaa
+    - fred_vix
+    - gold
+    - oil
+    - trailing_return_1m
+    - trailing_return_3m
+    - realized_vol_1m
+    - realized_vol_3m
+  slow:
+    - cape_shiller
+    - div_yield
+    - buffett_indicator
+    - real_rate_level
+  agency:
+    - fred_gdp
+    - fred_cpi
+    - fred_unrate
+    - fred_indpro
+    - fred_payems
+
+# ── Paid-provider adapter seams (DATA-06) — documentation-only placeholders ───
+# No runtime code in v1. stockcharts.com/finviz.com (Glenn has subscriptions)
+# are candidate FEATURE sources for a later milestone, not price-history
+# sources — no adapter seam needed for them yet.
+paid_providers:
+  - name:   norgate
+    module: norgate.py
+    note: >
+      Survivorship-bias-free US equities/ETF data, end-of-day, subscription
+      desktop-database product (not a typical REST API). Stub module raises
+      NotImplementedError; no live integration in v1.
+  - name:   tiingo
+    module: tiingo.py
+    note: >
+      REST API, EOD + some intraday, equities/ETFs/mutual funds/forex/crypto,
+      free tier for basic EOD. Stub module raises NotImplementedError; no live
+      integration in v1.
+  - name:   eodhd
+    module: eodhd.py
+    note: >
+      REST API, 60+ exchanges, 150K+ tickers, fundamentals/options/news
+      add-ons. Stub module raises NotImplementedError; no live integration
+      in v1.
