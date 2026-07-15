@@ -22,7 +22,7 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 - [ ] **DATA-01**: Monthly data spine — ingestion and transforms produce monthly features; quarterly agency series aligned with publication lags (design R1, D10)
 - [ ] **DATA-02**: Spliced USD histories back to ~1962 for core assets (S&P total return, Treasury total-return synthetic, gold, oil, cash), free sources, splicing rules documented per asset (design R13, §9)
 - [ ] **DATA-03**: ALFRED point-in-time vintages for agency series where archives exist, documented publication-lag alignment fallback pre-vintage era (design R6, D12)
-- [ ] **DATA-04**: Features classified into fast/slow/agency taxonomy in config; lean full-history (1962+) feature set defined for labeling (design §9, D11)
+- [x] **DATA-04**: Features classified into fast/slow/agency taxonomy in config; lean full-history (1962+) feature set defined for labeling (design §9, D11)
 - [ ] **DATA-05**: Key satellite ETFs and Glenn's holdings ingested with NULL-tolerant handling for shorter histories (design D11)
 - [ ] **DATA-06**: Paid-provider adapter seams documented (Norgate, Tiingo, EODHD) — placeholder notes only, no implementation; stockcharts.com/finviz.com noted as candidate feature sources
 
@@ -65,25 +65,30 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 Deferred to later milestones. Tracked but not in the current roadmap.
 
 ### Regime Quality (design Phase 2)
+
 - **L1-V2-01**: (K, λ) grid against §4.4 acceptance criteria; subsample stability with Hungarian matching; t-HMM benchmark comparison (§22)
 
 ### Regime Prediction (design Phase 3)
+
 - **L2-V2-01**: Nowcaster upgrade — recursive prior-state feature, γ sample weights, transition-window metrics
 - **L2-V2-02**: Feature-conditional transition model with regime age (TVTP-style)
 - **L2-V2-03**: Full tripwire orchestrator with family-independence voting (§25)
 
 ### Asset Prediction (design Phase 4)
+
 - **L3-V2-01**: Regime-conditional covariance + Ledoit–Wolf; GARCH layer; DCC option
 - **L3-V2-02**: Mixture-of-experts (soft gating, partial pooling) + boosted ceiling model
 - **L3-V2-03**: Fair-value gap module with convergence KPI (§6.3)
 
 ### Allocation & Tactics (design Phase 5)
+
 - **L4-V2-01**: BL/HRP weights, fractional Kelly, no-trade bands (§21)
 - **L4-V2-02**: Model-driven vol-scaled regime-conditional stops + §27 policy stack (thesis-typed risk tools)
 - **L4-V2-03**: Crash-probability dashboard + crisis-TYPE conditioning (§23)
 - **L4-V2-04**: Tactical sleeve reporting (separate account) with time stops (§16.5)
 
 ### Data & Ops
+
 - **DATA-V2-01**: Paid data provider integration (Norgate/Tiingo/EODHD) when breadth features need survivorship-clean constituents
 - **DATA-V2-02**: stockcharts.com / finviz.com feature ingestion (existing subscriptions; root ROADMAP 3.6/3.7)
 - **OPS-V2-01**: Automated scheduled runs (cron/GitHub Actions) + email delivery of the weekly report
@@ -115,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-01 | Phase 1 | Pending |
 | DATA-02 | Phase 1 | Pending |
 | DATA-03 | Phase 1 | Pending |
-| DATA-04 | Phase 1 | Pending |
+| DATA-04 | Phase 1 | Complete |
 | DATA-05 | Phase 1 | Pending |
 | DATA-06 | Phase 1 | Pending |
 | HON-01 | Phase 2 | Pending |
@@ -142,6 +147,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIG-01 | Phase 6 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 28 total
 - Mapped to phases: 28
 - Unmapped: 0 ✓

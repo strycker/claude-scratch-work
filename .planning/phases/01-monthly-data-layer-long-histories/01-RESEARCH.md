@@ -633,7 +633,14 @@ seam needed for them yet; a one-line comment in the paid-provider doc noting the
 | A4 | Par-bond repricing is an acceptable/standard method for CMT-yield-to-total-return synthesis, semiannual compounding convention | Pattern 3 | If the method is non-standard or the compounding convention is wrong, the "long duration" research series' pre-2002 (pre-TLT) history could be subtly miscalibrated — flagged for explicit documentation and methodology cross-check per D-04, not silent adoption |
 | A5 | `fredapi>=0.5` (already pinned) exposes the ALFRED methods listed — confirmed via README, but the exact pinned version range wasn't tested against a live import in this sandbox (fredapi not installed here) | Standard Stack | Low risk — if methods are missing in an older installed version, `pip install -U fredapi` resolves it; no breaking API changes reported in search results |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three questions below are addressed in the Phase 1 plans (plan-checker verified,
+> 2026-07-10): (1) column schema → defensive `_detect_vintage_columns()` + mocked tests
+> in Plan 01-03; (2) GS10 vs TLT duration mismatch → accepted per locked D-03, documented
+> in `docs/splicing_rules.md` per Plan 01-02 Task 2; (3) multi-segment splices → 2-segment
+> default per D-03, extend only if coverage gaps found (Plan 01-02).
+
 
 1. **Exact column schema of `fredapi.get_series_all_releases()`**
    - What we know: The method exists and returns "all releases... with dates and

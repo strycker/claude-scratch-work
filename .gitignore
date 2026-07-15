@@ -47,3 +47,6 @@ Thumbs.db
 # .claude/settings.json holds the portable, shared plugin config.
 .claude/settings.local.json
 
+
+# GSD ephemeral agent worktrees (live isolation dirs; never commit)
+.claude/worktrees/
