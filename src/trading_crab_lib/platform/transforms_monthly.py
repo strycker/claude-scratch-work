@@ -170,6 +170,15 @@ def compute_lean_features(monthly_raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.
         features["cape_shiller"] = monthly_raw["cape_shiller"]
     if "div_yield" in cols:
         features["div_yield"] = monthly_raw["div_yield"]
+    if {"fred_gs10", "fred_cpi"} <= cols:
+        # Real rate = nominal 10Y yield minus trailing-12-month CPI inflation
+        # (YoY % change, percentage points) — both series are 1962+ and
+        # already present in monthly_raw (fred_gs10 fast-layer; fred_cpi via
+        # align_agency_monthly). No free 1962+ market-cap source exists yet
+        # for buffett_indicator (see taxonomy.slow comment in
+        # config/platform_settings.yaml) — real_rate_level has no such gap.
+        cpi_yoy_pct = monthly_raw["fred_cpi"].pct_change(periods=12) * 100.0
+        features["real_rate_level"] = monthly_raw["fred_gs10"] - cpi_yoy_pct
 
     if not features:
         return pd.DataFrame(index=monthly_raw.index)

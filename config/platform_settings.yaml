@@ -187,8 +187,12 @@ taxonomy:
   slow:
     - cape_shiller
     - div_yield
-    - buffett_indicator
     - real_rate_level
+  # buffett_indicator (market-cap/GDP) is a documented slow-layer *candidate*,
+  # not a lean-set member: no free 1962+ market-cap source exists in current
+  # ingestion (FRED's Wilshire series starts ~1970). Add it back to `slow`
+  # once a Wilshire/market-cap series is ingested and compute_lean_features()
+  # gains a matching derivation (see 01-VERIFICATION.md gap closure).
   agency:
     - fred_gdp
     - fred_cpi
