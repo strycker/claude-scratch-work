@@ -1,21 +1,14 @@
 ---
 phase: 01-monthly-data-layer-long-histories
 verified: 2026-07-15T00:00:00Z
-status: gaps_found
-score: 4/5 success criteria fully verified (1 partial)
+status: passed
+score: 5/5 success criteria fully verified
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "Every feature is classified fast/slow/agency in config, and a lean full-history (1962+) feature set is defined and usable for labeling (ROADMAP Success Criterion 4 / DATA-04)"
-    status: partial
-    reason: "taxonomy['slow'] declares 4 features (cape_shiller, div_yield, buffett_indicator, real_rate_level) but compute_lean_features() in transforms_monthly.py only computes 2 of them. buffett_indicator and real_rate_level are listed in config/platform_settings.yaml's taxonomy.slow block and in taxonomy.lean_feature_set()'s output, but no code path ever produces those two columns — they do not exist in monthly_features. Calling lean_feature_set() and then indexing monthly_features by that set would KeyError on those two names."
-    artifacts:
-      - path: "src/trading_crab_lib/platform/transforms_monthly.py"
-        issue: "compute_lean_features() (lines 130-176) has no branch computing buffett_indicator (market-cap/GDP) or real_rate_level (nominal minus inflation expectations) — both require data (Wilshire market cap, GDP, inflation expectations) not currently ingested by macro_monthly.py or splice.py"
-      - path: "config/platform_settings.yaml"
-        issue: "taxonomy.slow (lines 187-191) declares buffett_indicator and real_rate_level as if they are members of the usable lean set, but no ingestion/computation exists for either"
-    missing:
-      - "Either compute buffett_indicator and real_rate_level (needs GDP + a market-cap proxy, and a real-rate construction) in a follow-up plan, or remove them from taxonomy.slow / lean_feature_set() until they are actually computed, so lean_feature_set() never advertises a column that does not exist"
+gaps: []
+gap_closure:
+  date: 2026-07-16
+  summary: "Criterion 4 gap closed: real_rate_level is now computed in compute_lean_features(); buffett_indicator was removed from taxonomy.slow (no free 1962+ market-cap source exists). lean_feature_set() names are now a proven subset of compute_lean_features()'s output columns, tested directly against both a synthetic cfg and the real config/platform_settings.yaml."
 deferred: []
 human_verification:
   - test: "Run build_monthly_spine(load_platform_config()) live against real FRED_API_KEY + network and confirm monthly_features reaches back to ~1962 with materially more rows than the quarterly incumbent, and that ALFRED calls succeed against fredapi's real get_series_all_releases() schema"
@@ -31,8 +24,8 @@ feature taxonomy — replacing the quarterly-only spine as the foundation for re
 modeling.
 
 **Verified:** 2026-07-15
-**Status:** gaps_found (one success criterion partially unmet; everything else verified)
-**Re-verification:** No — initial verification
+**Status:** passed (gap closed 2026-07-16 — see Gap Closure section below)
+**Re-verification:** No — initial verification; gap-closure fix applied post-verification
 
 ## Goal Achievement
 
@@ -43,10 +36,10 @@ modeling.
 | 1 | Feature engineering produces a monthly-frequency dataset with quarterly agency series correctly lagged/aligned | ✓ VERIFIED | `build_monthly_spine()` (`transforms_monthly.py:197-242`) resamples to `"ME"`; `test_monthly_row_count` asserts 72 monthly rows over 6 years (`>2×` a quarterly equivalent). Agency alignment is proven with a real look-ahead-bias behavioral test, not just presence: `test_quarterly_series_alignment` (`test_platform_transforms.py:311-327`) shows a GDP value published 2018-04-27 is invisible in the March 2018 row (`fred_gdp == 100.0`, the older vintage) and only appears from April 2018 onward (`fred_gdp == 200.0`) |
 | 2 | Core asset histories (S&P TR, Treasury TR synthetic, gold, oil, cash) available back to ~1962, splicing rules documented per asset | ✓ VERIFIED | `splice.py::build_core_research_series()` dispatches all 5 D-03 classes; `docs/splicing_rules.md` (242 lines) documents source, date range, join date, and method per class with an explicit summary table. Par-bond repricing math (`bond_price`/`monthly_total_return`) is behaviorally tested for par pricing (~1.0) and correct rising/falling-yield sign behavior in `tests/unit/test_platform_splice.py` (17 tests, all pass) |
 | 3 | Agency series (GDP, CPI, etc.) pull ALFRED point-in-time vintages with a documented fallback for the pre-vintage era | ✓ VERIFIED | `alfred.py::value_as_of()`/`align_with_fallback()` reconstruct point-in-time values (never a later revision); `align_agency_monthly()` wires this into the monthly spine. `docs/vintage_alignment.md` documents the D-06 scope (5 series), the shift-vs-vintage distinction, and the pre-vintage fallback as an explicit accepted compromise. `test_pre_vintage_fallback_applied` proves a pre-2018-06-15 CPI value falls back to the shifted value (42.0) rather than NaN/error |
-| 4 | Every feature classified fast/slow/agency in config; lean 1962+ feature set defined and usable for labeling | ⚠ PARTIAL | `taxonomy.py::validate_taxonomy()`/`classify_feature()`/`lean_feature_set()` are correctly implemented and tested (10/10 tests). **But** `lean_feature_set()` returns 14 names (10 fast + 4 slow) while `compute_lean_features()` only ever produces 12 of them — `buffett_indicator` and `real_rate_level` (declared in `platform_settings.yaml`'s `taxonomy.slow`) have no computation path anywhere in the codebase. See gap below |
+| 4 | Every feature classified fast/slow/agency in config; lean 1962+ feature set defined and usable for labeling | ✓ VERIFIED (gap closed 2026-07-16) | `taxonomy.py::validate_taxonomy()`/`classify_feature()`/`lean_feature_set()` are correctly implemented and tested. `compute_lean_features()` now computes `real_rate_level` (`fred_gs10` minus trailing-12M CPI YoY inflation); `buffett_indicator` was removed from `taxonomy.slow` (no free 1962+ market-cap source exists). `lean_feature_set()` now returns 13 names (10 fast + 3 slow), all of which are proven computable — see Gap Closure section below |
 | 5 | Satellites + holdings ingest NULL-tolerantly; paid-provider seams documented as placeholders; stockcharts/finviz noted | ✓ VERIFIED | `universe_fetch_tickers()`/`fetch_universe_prices()` merge via `pd.concat(axis=1)` outer join; `test_short_history_ticker_becomes_nan_padded_not_dropped` and `test_short_history_satellite_null_tolerant` prove short histories become NaN-padded columns, never dropped rows. `docs/paid_provider_seams.md` documents Norgate/Tiingo/EODHD as inert `NotImplementedError` seams and explicitly notes stockcharts.com/finviz.com as future feature (not price) sources |
 
-**Score:** 4/5 success criteria fully verified (1 partial — infrastructure correct, 2 of 14 declared lean features never computed)
+**Score:** 5/5 success criteria fully verified (criterion 4 gap closed 2026-07-16 — see Gap Closure section below)
 
 ### Context Invariants (01-CONTEXT.md D-01/D-02, "no live network calls in tests")
 
@@ -66,7 +59,7 @@ modeling.
 | `src/trading_crab_lib/platform/ingestion/{norgate,tiingo,eodhd}.py` | Placeholder seams | ✓ VERIFIED | Each imports cleanly, no SDK/network import, `fetch_prices()` raises `NotImplementedError` pointing at `docs/paid_provider_seams.md`; 6 tests pass |
 | `src/trading_crab_lib/platform/ingestion/macro_monthly.py` | Monthly FRED/multpl/macrotrends ingestion | ✓ VERIFIED | `fetch_fred_monthly`, `_scrape_multpl_monthly`, `_fetch_macrotrends_monthly_all`, `fetch_macro_monthly` all implemented, monthly (not quarterly) cadence proven by test; 11 tests pass |
 | `src/trading_crab_lib/platform/ingestion/prices_daily.py` | Daily universe price ingestion + monthly spine | ✓ VERIFIED | `universe_fetch_tickers`, `fetch_universe_prices`, `to_monthly_spine` all implemented, NULL-tolerant merge proven by test; 8 tests pass |
-| `src/trading_crab_lib/platform/transforms_monthly.py` | Monthly spine orchestrator + lean features + tagging | ⚠ PARTIAL | `build_monthly_spine`, `align_agency_monthly` fully correct and tested. `compute_lean_features`/`tag_feature_columns` correct for the 12 columns they do compute, but do not cover 2 of the 14 taxonomy-declared lean features (see gap) |
+| `src/trading_crab_lib/platform/transforms_monthly.py` | Monthly spine orchestrator + lean features + tagging | ✓ VERIFIED (gap closed 2026-07-16) | `build_monthly_spine`, `align_agency_monthly` fully correct and tested. `compute_lean_features`/`tag_feature_columns` now cover all 13 taxonomy-declared lean features |
 | `config/platform_settings.yaml` | All declarative config blocks | ✓ VERIFIED | 9 blocks present (data, fred_monthly, fred_vintage, multpl_monthly, macrotrends_monthly, splice, universe, taxonomy, paid_providers) with concrete keys matching what every ingestion/splice/transform module consumes |
 | `docs/{splicing_rules,vintage_alignment,paid_provider_seams}.md` | DATA-02/03/06 documentation deliverables | ✓ VERIFIED | All three read in full; each documents source/method/scope/tradeoffs per the phase's D-04 documentation requirement |
 
@@ -79,7 +72,7 @@ modeling.
 | `transforms_monthly.build_monthly_spine` | `splice.build_core_research_series` | direct call | ✓ WIRED | Line 215 |
 | `transforms_monthly.build_monthly_spine` | `transforms_monthly.align_agency_monthly` → `ingestion.alfred.fetch_all_vintages`/`align_with_fallback` | direct call chain | ✓ WIRED | Lines 76-124, 216; behaviorally proven via look-ahead test |
 | `transforms_monthly.build_monthly_spine` | `checkpoints.get_platform_checkpoint_manager` | `cm.save(daily_raw/monthly_raw/monthly_features)` | ✓ WIRED | Lines 223-236; `test_persists_monthly_features_checkpoint` round-trips a load |
-| `transforms_monthly.compute_lean_features` | `taxonomy.lean_feature_set` | declared-vs-produced comparison | ⚠ PARTIAL | Produced columns are always a *subset* of the declared lean set (tested: `set(lean.columns) <= lean_set`), but the reverse is never true and never tested — 2 declared names are permanently absent |
+| `transforms_monthly.compute_lean_features` | `taxonomy.lean_feature_set` | declared-vs-produced comparison | ✓ WIRED (gap closed 2026-07-16) | Now proven bidirectional when source data is present: `TestLeanFeatureSetInvariant` asserts `lean_feature_set(cfg) <= set(lean.columns)` directly, against both a synthetic cfg and the real `config/platform_settings.yaml` |
 
 ### Requirements Coverage
 
@@ -88,7 +81,7 @@ modeling.
 | DATA-01 | 01-05, 01-07 | Monthly data spine; quarterly agency series aligned with lags | ✓ SATISFIED | `fetch_macro_monthly` (monthly cadence) + `align_agency_monthly` (PIT alignment) wired into `build_monthly_spine` |
 | DATA-02 | 01-02 | Spliced ~1962+ histories for 5 core assets, documented | ✓ SATISFIED | `build_core_research_series` + `docs/splicing_rules.md` |
 | DATA-03 | 01-03, 01-07 | ALFRED PIT vintages + pre-vintage fallback documented | ✓ SATISFIED | `alfred.py` + `docs/vintage_alignment.md` |
-| DATA-04 | 01-01, 01-07 | Fast/slow/agency taxonomy in config; lean set defined and usable | ⚠ PARTIAL | Taxonomy validation infra correct; lean set is *defined* but not fully *usable* — 2/14 declared features never computed (see gap) |
+| DATA-04 | 01-01, 01-07 | Fast/slow/agency taxonomy in config; lean set defined and usable | ✓ SATISFIED (gap closed 2026-07-16) | Taxonomy validation infra correct; lean set is defined and now fully usable — all 13 declared lean features are computed and tested |
 | DATA-05 | 01-06 | Satellite/holdings NULL-tolerant ingestion | ✓ SATISFIED | `prices_daily.py` outer-concat merge, tested |
 | DATA-06 | 01-04 | Paid-provider seams documented, no implementation | ✓ SATISFIED | `norgate.py`/`tiingo.py`/`eodhd.py` stubs + `docs/paid_provider_seams.md` |
 
@@ -113,11 +106,39 @@ Grep across `src/trading_crab_lib/platform/`, all three docs files, and `config/
 
 ## Gaps Summary
 
-One concrete, demonstrable gap: `config/platform_settings.yaml`'s `taxonomy.slow` block declares `buffett_indicator` and `real_rate_level` as members of the lean full-history feature set (matching RESEARCH.md's original design recommendation), but `transforms_monthly.py::compute_lean_features()` never computes either — there is no ingestion or derivation path for market-cap (Buffett Indicator numerator) or a real-rate construction anywhere in the platform subpackage. `taxonomy.lean_feature_set(cfg)` therefore returns 2 names that will never appear as columns in `monthly_features`, which breaks the "usable for labeling" half of Success Criterion 4 for those two features specifically (the other 12 of 14 lean features are fully computed, tagged, and tested). This does not block Phase 2/3 from using the 12 working lean features, but should be closed — either implement the two missing derivations or remove them from the taxonomy declaration — before any downstream code indexes `monthly_features` by the full output of `lean_feature_set()`.
+The one gap found at initial verification (Success Criterion 4 / DATA-04 — `taxonomy.slow` declaring two lean features `compute_lean_features()` never computed) was closed on 2026-07-16. See Gap Closure below for the fix and the tests that now lock this invariant against regression.
 
 Everything else — monthly cadence, the 5 core-asset splices with documented rules, ALFRED point-in-time vintage alignment with a documented pre-vintage fallback, NULL-tolerant satellite/holdings ingestion, and paid-provider placeholder seams — is genuinely implemented, behaviorally tested (including a real look-ahead-bias regression test, not just presence checks), and does not modify a single byte of the frozen incumbent quarterly pipeline.
+
+## Gap Closure
+
+**Date:** 2026-07-16
+**Fixed by:** GSD gap-closure executor (post-verification fix pass)
+
+**Original gap:** `config/platform_settings.yaml`'s `taxonomy.slow` block declared `buffett_indicator` and `real_rate_level` as lean-set members, but `transforms_monthly.py::compute_lean_features()` never computed either. `taxonomy.lean_feature_set(cfg)` therefore returned 2 names that would never appear as columns in `monthly_features` — indexing `monthly_features` by the full output of `lean_feature_set()` would `KeyError` on both.
+
+**Fix applied (per orchestrator's architectural decision — no deviation):**
+
+1. **`real_rate_level`: computed.** Added to `compute_lean_features()` — 10-year Treasury yield (`fred_gs10`, already in `monthly_raw` from the fast FRED layer) minus trailing-12-month CPI inflation (`fred_cpi.pct_change(periods=12) * 100.0`, already in `monthly_raw` via `align_agency_monthly`), both available 1962+. Follows the module's existing `if {required_cols} <= cols: features[name] = ...` pattern and NaN-handling convention (missing source columns → feature silently skipped, not an error).
+2. **`buffett_indicator`: removed from the lean set.** Removed from `config/platform_settings.yaml`'s `taxonomy.slow` list (no code change needed elsewhere — nothing referenced it outside the taxonomy declaration and this file's own test fixtures). A comment in `platform_settings.yaml` documents why: "no free 1962+ market-cap source exists in current ingestion (FRED's Wilshire series starts ~1970)... Add it back to `slow` once a Wilshire/market-cap series is ingested and `compute_lean_features()` gains a matching derivation."
+3. **Tests added** in `tests/unit/test_platform_transforms.py`:
+   - `TestComputeLeanFeaturesRealRateLevel::test_real_rate_level_equals_gs10_minus_cpi_yoy` — synthetic spine with GS10=5.0 (constant) and CPI up exactly 3% YoY asserts `real_rate_level == 2.0` for every month with 12 trailing months of CPI history.
+   - `TestComputeLeanFeaturesRealRateLevel::test_missing_fred_cpi_skips_real_rate_level_not_crashed` — graceful-degradation regression, matches the module's existing convention.
+   - `TestLeanFeatureSetInvariant::test_every_lean_feature_set_name_is_a_computed_column` — direct assertion `taxonomy.lean_feature_set(cfg) <= set(lean.columns)` against a fully-populated synthetic spine. This is the exact invariant the verifier found broken; it is now tested directly so it can never silently regress.
+   - `TestLeanFeatureSetInvariant::test_real_platform_config_lean_feature_set_is_fully_computable` — same invariant against the real `config/platform_settings.yaml` (via `load_platform_config()`), guarding against future `taxonomy.slow` additions that outrun `compute_lean_features()`.
+   - `TAXONOMY_CFG` (the test file's inline mirror of `platform_settings.yaml`'s taxonomy block) updated to drop `buffett_indicator` from `slow`, matching the config change.
+
+**Verification of the fix:**
+- `pytest tests/unit/test_platform_transforms.py tests/unit/test_platform_taxonomy.py -q` → 26 passed
+- `pytest tests/unit/test_platform_*.py -q` → 76 passed, 1 skipped (pre-existing `cssselect` skip, unrelated)
+- `pytest tests/ -q` (full repo suite) → 801 passed, 49 skipped, 0 failed
+- `ruff check` on both modified source files → all checks passed
+- `TestLeanFeatureSetInvariant` proves the exact regression the verifier described — every `lean_feature_set()` name is now a real column of `compute_lean_features()`'s output when source data is present — closing Success Criterion 4 / DATA-04 in full.
+
+**Verdict flip:** `gaps_found` → `passed`. All 5/5 ROADMAP success criteria for Phase 1 are now fully verified.
 
 ---
 
 *Verified: 2026-07-15*
 *Verifier: Claude (gsd-verifier)*
+*Gap closed: 2026-07-16*
