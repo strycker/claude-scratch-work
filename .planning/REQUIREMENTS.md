@@ -19,12 +19,12 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Data Layer (DATA)
 
-- [ ] **DATA-01**: Monthly data spine — ingestion and transforms produce monthly features; quarterly agency series aligned with publication lags (design R1, D10)
-- [ ] **DATA-02**: Spliced USD histories back to ~1962 for core assets (S&P total return, Treasury total-return synthetic, gold, oil, cash), free sources, splicing rules documented per asset (design R13, §9)
-- [ ] **DATA-03**: ALFRED point-in-time vintages for agency series where archives exist, documented publication-lag alignment fallback pre-vintage era (design R6, D12)
+- [x] **DATA-01**: Monthly data spine — ingestion and transforms produce monthly features; quarterly agency series aligned with publication lags (design R1, D10)
+- [x] **DATA-02**: Spliced USD histories back to ~1962 for core assets (S&P total return, Treasury total-return synthetic, gold, oil, cash), free sources, splicing rules documented per asset (design R13, §9)
+- [x] **DATA-03**: ALFRED point-in-time vintages for agency series where archives exist, documented publication-lag alignment fallback pre-vintage era (design R6, D12)
 - [x] **DATA-04**: Features classified into fast/slow/agency taxonomy in config; lean full-history (1962+) feature set defined for labeling (design §9, D11)
-- [ ] **DATA-05**: Key satellite ETFs and Glenn's holdings ingested with NULL-tolerant handling for shorter histories (design D11)
-- [ ] **DATA-06**: Paid-provider adapter seams documented (Norgate, Tiingo, EODHD) — placeholder notes only, no implementation; stockcharts.com/finviz.com noted as candidate feature sources
+- [x] **DATA-05**: Key satellite ETFs and Glenn's holdings ingested with NULL-tolerant handling for shorter histories (design D11)
+- [x] **DATA-06**: Paid-provider adapter seams documented (Norgate, Tiingo, EODHD) — placeholder notes only, no implementation; stockcharts.com/finviz.com noted as candidate feature sources
 
 ### Regime Labeling (L1)
 
