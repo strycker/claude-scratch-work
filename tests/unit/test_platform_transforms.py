@@ -70,7 +70,7 @@ TAXONOMY_CFG: dict = {
         "curve_10y3m", "curve_10y2y", "credit_spread_baa_aaa", "fred_vix", "gold", "oil",
         "trailing_return_1m", "trailing_return_3m", "realized_vol_1m", "realized_vol_3m",
     ],
-    "slow": ["cape_shiller", "div_yield", "buffett_indicator", "real_rate_level"],
+    "slow": ["cape_shiller", "div_yield", "real_rate_level"],
     "agency": ["fred_gdp", "fred_cpi", "fred_unrate", "fred_indpro", "fred_payems"],
 }
 
@@ -189,6 +189,83 @@ class TestComputeLeanFeatures:
 
         assert "curve_10y3m" not in lean.columns  # fred_tb3ms missing — skipped, not an error
         assert isinstance(lean, pd.DataFrame)
+
+
+# ── real_rate_level (DATA-04 gap closure — 01-VERIFICATION.md criterion 4) ──
+
+
+class TestComputeLeanFeaturesRealRateLevel:
+    def test_real_rate_level_equals_gs10_minus_cpi_yoy(self):
+        """real_rate_level = nominal 10Y yield minus trailing-12M CPI YoY
+        inflation (percentage points). GS10=5.0 constant; CPI up exactly 3%
+        year-over-year (flat within each 12-month block) → YoY=3.0 →
+        real_rate_level=2.0 for every month once 12 trailing months exist."""
+        idx = _make_monthly_index(periods=24)
+        cpi = pd.Series([100.0] * 12 + [103.0] * 12, index=idx)
+        macro = pd.DataFrame({"fred_gs10": [5.0] * len(idx), "fred_cpi": cpi}, index=idx)
+        cfg = _make_cfg()
+
+        lean = compute_lean_features(macro, cfg)
+
+        expected = pd.Series([float("nan")] * 12 + [2.0] * 12, index=idx)
+        pd.testing.assert_series_equal(lean["real_rate_level"], expected, check_names=False)
+
+    def test_missing_fred_cpi_skips_real_rate_level_not_crashed(self):
+        idx = _make_monthly_index(periods=6)
+        macro = pd.DataFrame({"fred_gs10": [5.0] * 6}, index=idx)  # no fred_cpi
+        cfg = _make_cfg()
+
+        lean = compute_lean_features(macro, cfg)
+
+        assert "real_rate_level" not in lean.columns
+        assert isinstance(lean, pd.DataFrame)
+
+
+# ── lean_feature_set() invariant (01-VERIFICATION.md gap closure) ───────────
+#
+# The verifier found that taxonomy.lean_feature_set() could declare column
+# names compute_lean_features() never produces (buffett_indicator,
+# real_rate_level), which would KeyError any downstream code indexing
+# monthly_features by lean_feature_set()'s output. Direct regression test:
+# every declared name must be an actual computed column when all required
+# source data is present.
+
+
+def _make_fully_populated_macro(idx: pd.DatetimeIndex) -> pd.DataFrame:
+    """`_make_synthetic_macro` plus splice-output columns (`equities_tr`,
+    `gold`, `oil`) and the agency `fred_cpi` column — enough source data for
+    every fast+slow lean feature to be computable."""
+    macro = _make_synthetic_macro(idx)
+    macro["equities_tr"] = 1.01 ** np.arange(len(idx))
+    macro["gold"] = macro["gold_spot"]
+    macro["oil"] = macro["wti_crude"]
+    macro["fred_cpi"] = 100.0 * (1.03 ** (np.arange(len(idx)) / 12))
+    return macro
+
+
+class TestLeanFeatureSetInvariant:
+    def test_every_lean_feature_set_name_is_a_computed_column(self):
+        idx = _make_monthly_index(periods=24)
+        macro = _make_fully_populated_macro(idx)
+        cfg = _make_cfg()
+
+        lean = compute_lean_features(macro, cfg)
+
+        assert taxonomy.lean_feature_set(cfg) <= set(lean.columns)
+
+    def test_real_platform_config_lean_feature_set_is_fully_computable(self):
+        """Same invariant against the real config/platform_settings.yaml —
+        guards against future taxonomy.slow additions that outrun
+        compute_lean_features()."""
+        from trading_crab_lib.platform.config import load_platform_config
+
+        idx = _make_monthly_index(periods=24)
+        macro = _make_fully_populated_macro(idx)
+        cfg = load_platform_config()
+
+        lean = compute_lean_features(macro, cfg)
+
+        assert taxonomy.lean_feature_set(cfg) <= set(lean.columns)
 
 
 # ── tag_feature_columns / check_columns_tagged (DATA-04) ────────────────────
