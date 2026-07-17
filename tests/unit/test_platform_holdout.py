@@ -61,7 +61,7 @@ class TestSplitByHoldoutBoundary:
         df = _synthetic_monthly_df()
         dev_df, holdout_df = split_by_holdout_boundary(df, cutoff=DEFAULT_HOLDOUT_CUTOFF)
         assert len(dev_df) + len(holdout_df) == len(df)
-        assert not dev_df.index.intersection(holdout_df.index).any()
+        assert len(dev_df.index.intersection(holdout_df.index)) == 0
 
     def test_dev_side_honors_cutoff_inclusive(self):
         """dev_df.index.max() <= cutoff."""
