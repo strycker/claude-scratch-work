@@ -94,7 +94,7 @@ causal-feature gating — installed before any model is tuned.
   5. Supervised training paths load causal (not centered/look-ahead) features by default
      with a loud opt-out; smoothed-vs-filtered gap and detection lag are computed and
      reported as first-class run outputs.
-**Plans**: 1/5 plans executed
+**Plans**: 4/5 plans executed
 
 **Wave 1**
 
@@ -102,9 +102,9 @@ causal-feature gating — installed before any model is tuned.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Append-only JSONL trial registry, git-tracked ledger (HON-02)
-- [ ] 02-03-PLAN.md — PurgedEmbargoedKFold BaseCrossValidator, hand-rolled (HON-04)
-- [ ] 02-04-PLAN.md — Causal-feature gating guard + smoothed-vs-filtered gap/detection-lag metrics + artifact surface (HON-05, HON-06)
+- [x] 02-02-PLAN.md — Append-only JSONL trial registry, git-tracked ledger (HON-02)
+- [x] 02-03-PLAN.md — PurgedEmbargoedKFold BaseCrossValidator, hand-rolled (HON-04)
+- [x] 02-04-PLAN.md — Causal-feature gating guard + smoothed-vs-filtered gap/detection-lag metrics + artifact surface (HON-05, HON-06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -211,7 +211,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
-| 2. Honesty Infrastructure | 1/5 | In Progress|  |
+| 2. Honesty Infrastructure | 4/5 | In Progress|  |
 | 3. Regime Labeling & Prediction | 0/TBD | Not started | - |
 | 4. Asset Prediction & Allocation | 0/TBD | Not started | - |
 | 5. Honest Backtest & Evaluation | 0/TBD | Not started | - |
