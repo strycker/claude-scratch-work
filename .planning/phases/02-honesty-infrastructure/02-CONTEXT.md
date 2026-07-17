@@ -33,7 +33,7 @@ Requirements HON-01…06. No modeling (Phase 3), no report wiring (Phase 4).
   pipeline cannot peek because the data is not in its files. Live-scoring mode explicitly
   loads the holdout tree (sanctioned opt-in per the PROJECT.md holdout rule: live refits
   on full history, results firewalled from selection until freeze).
-- **D-04:** The carve applies to the platform (monthly) checkpoint namespace built in
+- **D-04:** [informational] The carve applies to the platform (monthly) checkpoint namespace built in
   Phase 1. The frozen quarterly incumbent is exempt (it predates the holdout discipline
   and is baseline-only).
 
