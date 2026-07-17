@@ -21,11 +21,19 @@ reporting surface (D-05), proven end-to-end on synthetic series here. Phase
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from trading_crab_lib import OUTPUT_DIR
+
 log = logging.getLogger(__name__)
+
+# Schema-stable columns for the persisted gap/lag artifact (D-05) — always
+# present in the written parquet, even when metrics is empty (empty-safe
+# DataFrame idiom, ported from model_metrics_artifacts.py).
+_ARTIFACT_COLUMNS = ["gap", "detection_lag_median", "sojourn_lag_ratio"]
 
 
 def compute_gap(smoothed_perf: float, filtered_perf: float) -> float:
@@ -96,3 +104,70 @@ def sojourn_lag_ratio(median_sojourn_months: float, median_detection_lag_months:
     if median_detection_lag_months <= 0:
         raise ValueError("detection lag must be positive")
     return median_sojourn_months / median_detection_lag_months
+
+
+def report_gap_lag(metrics: dict, *, output_dir: Path | None = None) -> Path:
+    """Print a human-readable summary and persist the gap/lag artifact (D-05).
+
+    Writes a parquet artifact under ``OUTPUT_DIR/reports/model_metrics/``
+    (default; ``output_dir`` overrides the full target directory for
+    tests). Only keys in :data:`_ARTIFACT_COLUMNS` are written — schema is
+    stable even when ``metrics`` is empty (empty-safe DataFrame + to_parquet
+    idiom, ported from ``model_metrics_artifacts.py``).
+
+    Args:
+        metrics: dict of computed gap/lag metrics, any subset of
+            ``{"gap", "detection_lag_median", "sojourn_lag_ratio"}``.
+        output_dir: overrides the default artifact directory (for tests).
+
+    Returns:
+        Path: the written parquet artifact path.
+    """
+    target_dir = Path(output_dir) if output_dir is not None else OUTPUT_DIR / "reports" / "model_metrics"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = target_dir / "gap_lag_metrics.parquet"
+
+    rows = [{col: metrics.get(col) for col in _ARTIFACT_COLUMNS}] if metrics else []
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=_ARTIFACT_COLUMNS)
+    df.to_parquet(artifact_path, index=False)
+
+    summary = (
+        "Gap/Lag Honesty Metrics (design §5.4)\n"
+        f"  smoothed-vs-filtered gap:      {metrics.get('gap')}\n"
+        f"  median detection lag (months): {metrics.get('detection_lag_median')}\n"
+        f"  sojourn/lag ratio:             {metrics.get('sojourn_lag_ratio')}\n"
+        f"  artifact:                      {artifact_path}"
+    )
+    log.info(summary)
+    print(summary)  # noqa: T201 — first-class CLI run output (D-05), not debug noise
+
+    return artifact_path
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
+    # Synthetic smoothed/filtered example — proves the CLI + artifact path
+    # end-to-end with no network and no Phase 3 dependency (RESEARCH.md
+    # Pitfall 4). Phase 3 plugs real jump-model/nowcaster series into these
+    # same three compute functions with no interface change.
+    smoothed_perf = 0.12
+    filtered_perf = 0.09
+    gap = compute_gap(smoothed_perf, filtered_perf)
+
+    filtered_probs = pd.Series([0.1, 0.2, 0.3, 0.55, 0.7, 0.75, 0.2, 0.3, 0.6, 0.8])
+    transitions = [3, 6]
+    lag_result = compute_detection_lag(transitions, filtered_probs, threshold=0.5)
+
+    median_sojourn_months = 18.0
+    ratio = sojourn_lag_ratio(median_sojourn_months, lag_result["median"])
+
+    report_gap_lag(
+        {
+            "gap": gap,
+            "detection_lag_median": lag_result["median"],
+            "sojourn_lag_ratio": ratio,
+        }
+    )

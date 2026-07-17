@@ -15,8 +15,10 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.platform.honesty.gap_lag import (
+    _ARTIFACT_COLUMNS,
     compute_detection_lag,
     compute_gap,
+    report_gap_lag,
     sojourn_lag_ratio,
 )
 
@@ -109,3 +111,34 @@ class TestSojournLagRatio:
             sojourn_lag_ratio(10, 0)
         with pytest.raises(ValueError):
             sojourn_lag_ratio(10, -1)
+
+
+# ── report_gap_lag ────────────────────────────────────────────────────────────────
+
+
+class TestReportGapLag:
+    def test_report_writes_artifact(self, tmp_path):
+        """Writes a parquet under a 'model_metrics' directory carrying the gap/
+        detection-lag/sojourn-lag-ratio columns, round-trippable via read_parquet."""
+        metrics = {"gap": 0.05, "detection_lag_median": 2.0, "sojourn_lag_ratio": 9.0}
+        model_metrics_dir = tmp_path / "model_metrics"
+
+        path = report_gap_lag(metrics, output_dir=model_metrics_dir)
+
+        assert path.parent.name == "model_metrics"
+        df = pd.read_parquet(path)
+        assert list(df.columns) == _ARTIFACT_COLUMNS
+        assert len(df) == 1
+        assert df.iloc[0]["gap"] == pytest.approx(0.05)
+        assert df.iloc[0]["detection_lag_median"] == pytest.approx(2.0)
+        assert df.iloc[0]["sojourn_lag_ratio"] == pytest.approx(9.0)
+
+    def test_report_empty_metrics_schema_stable(self, tmp_path):
+        """An empty metrics dict still writes a parquet with the declared columns present."""
+        model_metrics_dir = tmp_path / "model_metrics"
+
+        path = report_gap_lag({}, output_dir=model_metrics_dir)
+
+        df = pd.read_parquet(path)
+        assert list(df.columns) == _ARTIFACT_COLUMNS
+        assert len(df) == 0
