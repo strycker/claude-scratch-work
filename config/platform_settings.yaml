@@ -200,6 +200,31 @@ taxonomy:
     - fred_indpro
     - fred_payems
 
+# ── Holdout carve (HON-01/D13) ─────────────────────────────────────────────────
+# Development/tuning/model-selection use only ≤cutoff walk-forward results.
+# Rows dated after `cutoff` are written exclusively to `holdout_dir` (relative
+# to DATA_DIR) — a tree the default platform checkpoint manager never reads.
+# Live-scoring mode opts in explicitly via get_holdout_checkpoint_manager().
+holdout:
+  cutoff:      "2020-12-31"
+  holdout_dir: "holdout"
+
+# ── Trial registry (HON-02/D-01) ────────────────────────────────────────────────
+# Append-only JSONL ledger of every evaluated configuration. Git-tracked (NOT
+# under gitignored data/) — the tracked history is the tamper-evidence for the
+# deflated Sharpe multiple-testing denominator at design freeze (design §8.4, §22).
+registry:
+  path: "registry/trials.jsonl"
+
+# ── Cross-validation conventions (HON-03) ───────────────────────────────────────
+# Documentation-only defaults sized in MONTHS (monthly modeling spine). These
+# are NOT silently applied — PurgedEmbargoedKFold requires label_horizon/embargo
+# as explicit constructor args (no implicit default; see Open Question 2 /
+# Pitfall 2 in 02-RESEARCH.md).
+cv:
+  default_label_horizon_months: 12
+  default_embargo_months: 1
+
 # ── Paid-provider adapter seams (DATA-06) — documentation-only placeholders ───
 # No runtime code in v1. stockcharts.com/finviz.com (Glenn has subscriptions)
 # are candidate FEATURE sources for a later milestone, not price-history
