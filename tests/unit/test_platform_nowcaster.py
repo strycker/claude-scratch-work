@@ -10,7 +10,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab_lib.platform.prediction.nowcaster import build_nowcaster_training_set
+from trading_crab_lib.platform.honesty.registry import read_trials
+from trading_crab_lib.platform.prediction.nowcaster import (
+    build_nowcaster_training_set,
+    evaluate_nowcaster,
+    fit_nowcaster,
+)
 
 N_MONTHS = 180
 N_FEATURES = 13
@@ -69,6 +74,55 @@ class TestEmbargoInvariant:
         features_df, labels = _make_synthetic_monthly()
         with pytest.raises(ValueError):
             build_nowcaster_training_set(features_df, labels, embargo_months=-1)
+
+
+class TestNowcasterCalibratedOutput:
+    def test_predict_proba_shape_and_rows_sum_to_one(self):
+        features_df, labels = _make_synthetic_monthly()
+        X, y = build_nowcaster_training_set(features_df, labels)
+        model = fit_nowcaster(X, y)
+        proba = model.predict_proba(X)
+        assert proba.shape == (len(X), len(y.unique()))
+        assert proba.sum(axis=1) == pytest.approx(np.ones(len(X)))
+
+    def test_predict_proba_is_a_distribution_never_argmax(self):
+        """Callers get predict_proba (a distribution) — not predict()/argmax."""
+        features_df, labels = _make_synthetic_monthly()
+        X, y = build_nowcaster_training_set(features_df, labels)
+        model = fit_nowcaster(X, y)
+        assert hasattr(model, "predict_proba")
+        proba = model.predict_proba(X)
+        assert proba.ndim == 2
+        assert (proba >= 0).all() and (proba <= 1).all()
+
+    def test_no_multi_class_kwarg_on_logistic_regression(self):
+        """installed sklearn 1.9.0 has no multi_class param — would TypeError."""
+        import inspect
+
+        from sklearn.linear_model import LogisticRegression
+
+        assert "multi_class" not in inspect.signature(LogisticRegression.__init__).parameters
+
+
+class TestRegistryLoggingOne:
+    def test_exactly_one_new_trial_per_evaluate_call(self, tmp_path):
+        features_df, labels = _make_synthetic_monthly()
+        registry_path = tmp_path / "trials.jsonl"
+
+        evaluate_nowcaster(features_df, labels, registry_path=registry_path)
+        assert len(read_trials(path=registry_path)) == 1
+
+        evaluate_nowcaster(features_df, labels, registry_path=registry_path)
+        assert len(read_trials(path=registry_path)) == 2
+
+    def test_model_persisted_via_joblib_never_raw_pickle(self):
+        """P27: never raw pickle for the model artifact."""
+        import inspect
+
+        import trading_crab_lib.platform.prediction.nowcaster as nowcaster_module
+
+        source = inspect.getsource(nowcaster_module)
+        assert "pickle.dump" not in source
 
 
 if __name__ == "__main__":
