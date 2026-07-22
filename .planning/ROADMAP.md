@@ -21,7 +21,7 @@ migrate the validated skeleton to the public `strycker/trading-crab` repo.
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Monthly Data Layer & Long Histories** - Monthly-frequency ingestion, spliced 1962+ core-asset histories, ALFRED vintages, and a fast/slow/agency feature taxonomy (completed 2026-07-15)
-- [ ] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned
+- [x] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned (completed 2026-07-22)
 - [ ] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe
 - [ ] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire
 - [ ] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics
@@ -94,7 +94,7 @@ causal-feature gating — installed before any model is tuned.
   5. Supervised training paths load causal (not centered/look-ahead) features by default
      with a loud opt-out; smoothed-vs-filtered gap and detection lag are computed and
      reported as first-class run outputs.
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 
 **Wave 1**
 
@@ -108,7 +108,7 @@ causal-feature gating — installed before any model is tuned.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-05-PLAN.md — Expanding-window walk-forward runner with automatic registry logging (HON-03)
+- [x] 02-05-PLAN.md — Expanding-window walk-forward runner with automatic registry logging (HON-03)
 
 ### Phase 3: Regime Labeling & Prediction
 
@@ -211,7 +211,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
-| 2. Honesty Infrastructure | 4/5 | In Progress|  |
+| 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 0/TBD | Not started | - |
 | 4. Asset Prediction & Allocation | 0/TBD | Not started | - |
 | 5. Honest Backtest & Evaluation | 0/TBD | Not started | - |
