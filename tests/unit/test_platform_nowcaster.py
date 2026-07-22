@@ -96,13 +96,16 @@ class TestNowcasterCalibratedOutput:
         assert proba.ndim == 2
         assert (proba >= 0).all() and (proba <= 1).all()
 
-    def test_no_multi_class_kwarg_on_logistic_regression(self):
-        """installed sklearn 1.9.0 has no multi_class param — would TypeError."""
+    def test_nowcaster_does_not_pass_multi_class_kwarg(self):
+        """Our code must never pass ``multi_class`` — it is deprecated (and removed in
+        sklearn>=1.7); multinomial is automatic for the lbfgs solver. Guarding our own
+        source is version-independent, unlike asserting on sklearn's signature (which
+        varies across the CI matrix: older sklearn still exposes multi_class='deprecated')."""
         import inspect
 
-        from sklearn.linear_model import LogisticRegression
+        import trading_crab_lib.platform.prediction.nowcaster as nowcaster_module
 
-        assert "multi_class" not in inspect.signature(LogisticRegression.__init__).parameters
+        assert "multi_class=" not in inspect.getsource(nowcaster_module)
 
 
 class TestRegistryLoggingOne:
