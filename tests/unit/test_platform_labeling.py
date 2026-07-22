@@ -7,12 +7,21 @@ tests/unit/test_platform_walkforward.py's synthetic-frame convention.
 from __future__ import annotations
 
 import itertools
+import math
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.labeling.diagnostics import (
+    _ARTIFACT_COLUMNS,
+    auto_profile,
+    label_churn,
+    label_regimes,
+    occupancy_and_sojourns,
+    report_labeling_diagnostics,
+)
 from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
     decode_states_dp,
@@ -242,6 +251,142 @@ class TestLabelingConfig:
         # Config with no "labeling" key at all must still validate fine.
         minimal_cfg = {section: {} for section in _REQUIRED_PLATFORM_SECTIONS}
         load_platform_config(minimal_cfg)  # must not raise
+
+
+# ── occupancy_and_sojourns: per-state occupancy + run-length sojourns ───────
+
+
+class TestOccupancySojourn:
+    def test_occupancy_sums_to_one_over_occupied_states(self):
+        states = np.array([0, 0, 1, 1, 1, 2, 0, 0])
+        result = occupancy_and_sojourns(states)
+        assert sum(result["occupancy_pct"].values()) == pytest.approx(1.0)
+
+    def test_never_occupied_state_is_zero_without_raising(self):
+        states = np.array([0, 0, 1, 1])
+        result = occupancy_and_sojourns(states, n_states=4)
+        assert result["occupancy_pct"][2] == 0.0
+        assert result["occupancy_pct"][3] == 0.0
+        assert math.isnan(result["sojourns"][2]["median_months"])
+
+    def test_sojourn_run_lengths(self):
+        # state 0: two runs (length 3, length 2); state 1: one run (length 2)
+        states = np.array([0, 0, 0, 1, 1, 0, 0])
+        result = occupancy_and_sojourns(states)
+        assert result["sojourns"][0]["n_runs"] == 2
+        assert result["sojourns"][0]["median_months"] == pytest.approx(2.5)
+        assert result["sojourns"][1]["n_runs"] == 1
+        assert result["sojourns"][1]["median_months"] == pytest.approx(2.0)
+
+
+# ── label_churn: identical -> 0.0, disjoint -> 1.0, empty -> nan ────────────
+
+
+class TestLabelChurn:
+    def test_identical_inputs_zero(self):
+        states = np.array([0, 1, 2, 1, 0] * 5)
+        assert label_churn(states, states) == 0.0
+
+    def test_disjoint_inputs_one(self):
+        prev = np.zeros(30, dtype=int)
+        new = np.ones(30, dtype=int)
+        assert label_churn(prev, new) == 1.0
+
+    def test_empty_inputs_return_nan(self):
+        assert math.isnan(label_churn(np.array([]), np.array([1, 2, 3])))
+        assert math.isnan(label_churn(np.array([1, 2, 3]), np.array([])))
+
+    def test_only_trailing_window_compared(self):
+        # first 10 differ entirely, trailing 10 identical -> churn over trailing_months=10 is 0.0
+        prev = np.concatenate([np.zeros(10), np.ones(10)])
+        new = np.concatenate([np.full(10, 5), np.ones(10)])
+        assert label_churn(prev, new, trailing_months=10) == 0.0
+
+
+# ── two-run invariant: proves load-before-save ordering (Pitfall 3) ─────────
+
+
+class TestChurnTwoRun:
+    def test_first_run_nan_second_run_zero(self, tmp_path):
+        cfg = load_platform_config()
+        monthly_features = _make_synthetic_monthly(n_months=120)
+
+        result1 = label_regimes(monthly_features, cfg, checkpoint_dir=tmp_path)
+        assert math.isnan(result1["churn"])
+
+        result2 = label_regimes(monthly_features, cfg, checkpoint_dir=tmp_path)
+        assert result2["churn"] == 0.0
+
+
+# ── auto_profile: deterministic, one entry per state, names real features ───
+
+
+class TestAutoProfile:
+    FEATURE_NAMES = ["trailing_return_1m", "realized_vol_3m", "credit_spread_baa_aaa"]
+
+    def test_one_entry_per_state(self):
+        centroids = np.array([[-2.0, 1.5, 0.1], [0.0, -0.2, 3.0], [1.8, 0.0, -0.5]])
+        profiles = auto_profile(centroids, self.FEATURE_NAMES)
+        assert set(profiles.keys()) == {0, 1, 2}
+        for state, text in profiles.items():
+            assert text.startswith(f"state {state}:")
+
+    def test_names_real_feature_identifiers(self):
+        centroids = np.array([[-2.0, 1.5, 0.1]])
+        profiles = auto_profile(centroids, self.FEATURE_NAMES)
+        # top-2 salient (largest |value|): trailing_return_1m (-2.0), realized_vol_3m (1.5)
+        assert "trailing_return_1m" in profiles[0]
+        assert "realized_vol_3m" in profiles[0]
+
+    def test_deterministic(self):
+        centroids = np.array([[-2.0, 1.5, 0.1], [0.0, -0.2, 3.0]])
+        first = auto_profile(centroids, self.FEATURE_NAMES)
+        second = auto_profile(centroids, self.FEATURE_NAMES)
+        assert first == second
+
+
+# ── report_labeling_diagnostics: §4.4 violation is report-only (D-02) ───────
+
+
+class TestReportDiagnosticsReportOnly:
+    def test_violation_warns_but_does_not_raise(self, tmp_path, caplog):
+        metrics = {
+            "occupancy": {0: 0.01, 1: 0.99},  # state 0 well below the 5% sanity threshold
+            "sojourns": {0: {"median_months": 1.0}, 1: {"median_months": 30.0}},
+            "profiles": {0: "state 0: low trailing_return_1m", 1: "state 1: high trailing_return_1m"},
+        }
+        with caplog.at_level("WARNING"):
+            path = report_labeling_diagnostics(metrics, output_dir=tmp_path)
+        assert path.exists()
+        assert any("§4.4" in record.message for record in caplog.records)
+
+    def test_artifact_has_stable_schema_even_when_empty(self, tmp_path):
+        path = report_labeling_diagnostics({}, output_dir=tmp_path)
+        df = pd.read_parquet(path)
+        assert list(df.columns) == _ARTIFACT_COLUMNS
+        assert df.empty
+
+
+# ── label_regimes: full persistence — reload + confidences row-stochastic ───
+
+
+class TestLabelRegimesPersistence:
+    def test_checkpoints_persist_and_reload(self, tmp_path):
+        from trading_crab_lib.checkpoints import CheckpointManager
+
+        cfg = load_platform_config()
+        monthly_features = _make_synthetic_monthly(n_months=96)
+        result = label_regimes(monthly_features, cfg, checkpoint_dir=tmp_path)
+
+        cm = CheckpointManager(checkpoint_dir=tmp_path)
+        labels_df = cm.load("regime_labels")
+        confidences_df = cm.load("regime_confidences")
+        profiles_df = cm.load("regime_profiles")
+
+        assert len(labels_df) == len(result["states"])
+        assert len(profiles_df) > 0
+        row_sums = confidences_df.sum(axis=1)
+        np.testing.assert_allclose(row_sums, 1.0, atol=1e-8)
 
 
 if __name__ == "__main__":
