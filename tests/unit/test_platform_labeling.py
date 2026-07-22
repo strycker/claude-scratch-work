@@ -7,12 +7,18 @@ tests/unit/test_platform_walkforward.py's synthetic-frame convention.
 from __future__ import annotations
 
 import itertools
+import math
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.labeling.diagnostics import (
+    label_churn,
+    label_regimes,
+    occupancy_and_sojourns,
+)
 from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
     decode_states_dp,
@@ -242,6 +248,71 @@ class TestLabelingConfig:
         # Config with no "labeling" key at all must still validate fine.
         minimal_cfg = {section: {} for section in _REQUIRED_PLATFORM_SECTIONS}
         load_platform_config(minimal_cfg)  # must not raise
+
+
+# ── occupancy_and_sojourns: per-state occupancy + run-length sojourns ───────
+
+
+class TestOccupancySojourn:
+    def test_occupancy_sums_to_one_over_occupied_states(self):
+        states = np.array([0, 0, 1, 1, 1, 2, 0, 0])
+        result = occupancy_and_sojourns(states)
+        assert sum(result["occupancy_pct"].values()) == pytest.approx(1.0)
+
+    def test_never_occupied_state_is_zero_without_raising(self):
+        states = np.array([0, 0, 1, 1])
+        result = occupancy_and_sojourns(states, n_states=4)
+        assert result["occupancy_pct"][2] == 0.0
+        assert result["occupancy_pct"][3] == 0.0
+        assert math.isnan(result["sojourns"][2]["median_months"])
+
+    def test_sojourn_run_lengths(self):
+        # state 0: two runs (length 3, length 2); state 1: one run (length 2)
+        states = np.array([0, 0, 0, 1, 1, 0, 0])
+        result = occupancy_and_sojourns(states)
+        assert result["sojourns"][0]["n_runs"] == 2
+        assert result["sojourns"][0]["median_months"] == pytest.approx(2.5)
+        assert result["sojourns"][1]["n_runs"] == 1
+        assert result["sojourns"][1]["median_months"] == pytest.approx(2.0)
+
+
+# ── label_churn: identical -> 0.0, disjoint -> 1.0, empty -> nan ────────────
+
+
+class TestLabelChurn:
+    def test_identical_inputs_zero(self):
+        states = np.array([0, 1, 2, 1, 0] * 5)
+        assert label_churn(states, states) == 0.0
+
+    def test_disjoint_inputs_one(self):
+        prev = np.zeros(30, dtype=int)
+        new = np.ones(30, dtype=int)
+        assert label_churn(prev, new) == 1.0
+
+    def test_empty_inputs_return_nan(self):
+        assert math.isnan(label_churn(np.array([]), np.array([1, 2, 3])))
+        assert math.isnan(label_churn(np.array([1, 2, 3]), np.array([])))
+
+    def test_only_trailing_window_compared(self):
+        # first 10 differ entirely, trailing 10 identical -> churn over trailing_months=10 is 0.0
+        prev = np.concatenate([np.zeros(10), np.ones(10)])
+        new = np.concatenate([np.full(10, 5), np.ones(10)])
+        assert label_churn(prev, new, trailing_months=10) == 0.0
+
+
+# ── two-run invariant: proves load-before-save ordering (Pitfall 3) ─────────
+
+
+class TestChurnTwoRun:
+    def test_first_run_nan_second_run_zero(self, tmp_path):
+        cfg = load_platform_config()
+        monthly_features = _make_synthetic_monthly(n_months=120)
+
+        result1 = label_regimes(monthly_features, cfg, checkpoint_dir=tmp_path)
+        assert math.isnan(result1["churn"])
+
+        result2 = label_regimes(monthly_features, cfg, checkpoint_dir=tmp_path)
+        assert result2["churn"] == 0.0
 
 
 if __name__ == "__main__":
