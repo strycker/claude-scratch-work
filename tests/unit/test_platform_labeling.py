@@ -12,7 +12,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab_lib.platform.labeling.jump_model import decode_states_dp, soft_confidences
+from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.labeling.jump_model import (
+    canonicalize_states,
+    decode_states_dp,
+    fit_jump_model,
+    soft_confidences,
+    standardize_features,
+)
 
 N_MONTHS = 120
 
@@ -121,6 +128,120 @@ class TestSoftConfidences:
         conf_unshifted = soft_confidences(d)
         conf_shifted = soft_confidences(d - shift)
         np.testing.assert_allclose(conf_unshifted, conf_shifted, atol=1e-10)
+
+
+# ── standardize_features: winsorize + zero-mean/unit-variance ───────────────
+
+
+class TestStandardizeFeatures:
+    def test_zero_mean_unit_variance_and_column_order(self):
+        df = _make_synthetic_monthly(n_months=60, seed=21)
+        X = standardize_features(df)
+        assert X.shape == df.shape
+        np.testing.assert_allclose(X.mean(axis=0), 0.0, atol=1e-8)
+        np.testing.assert_allclose(X.std(axis=0), 1.0, atol=1e-8)
+
+
+# ── fit_jump_model: determinism, K=5 separable blobs, empty-state safety ────
+
+
+def _make_blob_array(centers: np.ndarray, n_per_block: int, *, seed: int, spread: float = 0.5) -> np.ndarray:
+    """Contiguous blocks of tightly-clustered points around each center —
+    a jump model with a modest lambda should recover exactly len(centers) states."""
+    rng = np.random.default_rng(seed)
+    return np.vstack([rng.normal(c, spread, size=(n_per_block, centers.shape[1])) for c in centers])
+
+
+class TestFitJumpModel:
+    def test_k5_separable_blobs_returns_5_states(self):
+        centers = np.array([[0] * 13, [30] * 13, [60] * 13, [90] * 13, [120] * 13], dtype=float)
+        X = _make_blob_array(centers, n_per_block=20, seed=1)
+        result = fit_jump_model(X, K=5, lam=5.0, n_restarts=5, max_iter=50, random_state=1)
+        assert len(np.unique(result["states"])) == 5
+
+    def test_determinism(self):
+        centers = np.array([[0] * 5, [10] * 5, [20] * 5], dtype=float)
+        X = _make_blob_array(centers, n_per_block=15, seed=0)
+        r1 = fit_jump_model(X, K=6, lam=200.0, n_restarts=3, max_iter=50, random_state=42)
+        r2 = fit_jump_model(X, K=6, lam=200.0, n_restarts=3, max_iter=50, random_state=42)
+        assert np.array_equal(r1["states"], r2["states"])
+
+    def test_empty_state_freeze_produces_no_nan(self):
+        """K=6 requested but only 3 real clusters in the data — several states
+        end up with zero occupancy every alternation iteration. The freeze-
+        on-empty guard must keep centroids finite (Pitfall 2)."""
+        centers = np.array([[0] * 5, [10] * 5, [20] * 5], dtype=float)
+        X = _make_blob_array(centers, n_per_block=15, seed=0)
+        result = fit_jump_model(X, K=6, lam=200.0, n_restarts=3, max_iter=50, random_state=42)
+        assert np.isnan(result["centroids"]).any() == False  # noqa: E712 — explicit per acceptance criteria
+        assert len(np.unique(result["states"])) < 6  # confirms an empty state actually occurred
+
+
+# ── canonicalize_states: economic sort, idempotent, permutation-stable ──────
+
+
+class TestCanonicalize:
+    FEATURE_NAMES = ["gold", "trailing_return_1m", "oil"]
+
+    def test_orders_by_trailing_return_1m(self):
+        states = np.array([0, 1, 2, 1, 0])
+        # centroid col 1 (trailing_return_1m) descending by raw state index
+        centroids = np.array([[0.0, 5.0, 0.0], [0.0, -3.0, 0.0], [0.0, 1.0, 0.0]])
+        new_states, new_centroids = canonicalize_states(states, centroids, self.FEATURE_NAMES)
+        # ascending trailing_return_1m order should be: raw state 1 (-3) -> 0,
+        # raw state 2 (1) -> 1, raw state 0 (5) -> 2
+        assert np.array_equal(new_centroids[:, 1], np.array([-3.0, 1.0, 5.0]))
+        expected_remap = {1: 0, 2: 1, 0: 2}
+        expected_states = np.array([expected_remap[s] for s in states])
+        assert np.array_equal(new_states, expected_states)
+
+    def test_idempotent(self):
+        rng = np.random.default_rng(5)
+        states = rng.integers(0, 3, size=10)
+        centroids = rng.normal(0, 1, size=(3, 3))
+        once_states, once_centroids = canonicalize_states(states, centroids, self.FEATURE_NAMES)
+        twice_states, twice_centroids = canonicalize_states(once_states, once_centroids, self.FEATURE_NAMES)
+        assert np.array_equal(once_states, twice_states)
+        np.testing.assert_allclose(once_centroids, twice_centroids)
+
+    def test_permutation_stability(self):
+        """Two fits that are permutations of each other (same physical
+        clusters, different arbitrary integer labels) canonicalize identically."""
+        rng = np.random.default_rng(6)
+        base_states = rng.integers(0, 3, size=10)
+        base_centroids = rng.normal(0, 1, size=(3, 3))
+
+        perm = {0: 2, 1: 0, 2: 1}
+        permuted_states = np.array([perm[s] for s in base_states])
+        permuted_centroids = np.empty_like(base_centroids)
+        for old, new in perm.items():
+            permuted_centroids[new] = base_centroids[old]
+
+        canon_a, centroids_a = canonicalize_states(base_states, base_centroids, self.FEATURE_NAMES)
+        canon_b, centroids_b = canonicalize_states(permuted_states, permuted_centroids, self.FEATURE_NAMES)
+        assert np.array_equal(canon_a, canon_b)
+        np.testing.assert_allclose(centroids_a, centroids_b)
+
+
+# ── labeling config: defensive .get(), not a required section ───────────────
+
+
+class TestLabelingConfig:
+    def test_config_exposes_labeling_defaults_via_get(self):
+        cfg = load_platform_config()
+        labeling_cfg = cfg.get("labeling", {})
+        assert labeling_cfg.get("K", 5) == 5
+        assert labeling_cfg.get("lambda", 52.0) == 52.0
+        assert labeling_cfg.get("n_restarts", 10) == 10
+        assert labeling_cfg.get("embargo_months", 12) == 12
+
+    def test_labeling_not_a_required_section(self):
+        from trading_crab_lib.platform.config import _REQUIRED_PLATFORM_SECTIONS
+
+        assert "labeling" not in _REQUIRED_PLATFORM_SECTIONS
+        # Config with no "labeling" key at all must still validate fine.
+        minimal_cfg = {section: {} for section in _REQUIRED_PLATFORM_SECTIONS}
+        load_platform_config(minimal_cfg)  # must not raise
 
 
 if __name__ == "__main__":
