@@ -10,12 +10,12 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Honesty Infrastructure (HON)
 
-- [ ] **HON-01**: 2021+ holdout data is physically carved into separate files/paths that the dev pipeline cannot read by default; live scoring mode opts in explicitly (design §8.5, D13)
-- [ ] **HON-02**: Trial registry logs every evaluated configuration (config hash → features, params, metrics) to a flat file/SQLite store; all grid cells logged regardless of outcome (design §8.4, §22)
-- [ ] **HON-03**: Walk-forward runner refits L1 labels and downstream models on data ≤ t at each step, records decisions, and steps forward — runs a trivial model end-to-end (design §8.1, §14 Phase 0 exit)
-- [ ] **HON-04**: Purged + embargoed CV splitter available for all supervised components with overlapping labels, replacing plain TimeSeriesSplit (design §6.5, R7)
-- [ ] **HON-05**: Smoothed-vs-filtered gap and detection lag are computed and reported as first-class outputs (design §5.4)
-- [ ] **HON-06**: Causal-feature gating enforced for supervised training — supervised paths load causal features by default with loud opt-out (salvaged `feature_gating.py`; design R5, pitfall P1)
+- [x] **HON-01**: 2021+ holdout data is physically carved into separate files/paths that the dev pipeline cannot read by default; live scoring mode opts in explicitly (design §8.5, D13)
+- [x] **HON-02**: Trial registry logs every evaluated configuration (config hash → features, params, metrics) to a flat file/SQLite store; all grid cells logged regardless of outcome (design §8.4, §22)
+- [x] **HON-03**: Walk-forward runner refits L1 labels and downstream models on data ≤ t at each step, records decisions, and steps forward — runs a trivial model end-to-end (design §8.1, §14 Phase 0 exit)
+- [x] **HON-04**: Purged + embargoed CV splitter available for all supervised components with overlapping labels, replacing plain TimeSeriesSplit (design §6.5, R7)
+- [x] **HON-05**: Smoothed-vs-filtered gap and detection lag are computed and reported as first-class outputs (design §5.4)
+- [x] **HON-06**: Causal-feature gating enforced for supervised training — supervised paths load causal features by default with loud opt-out (salvaged `feature_gating.py`; design R5, pitfall P1)
 
 ### Data Layer (DATA)
 
@@ -117,18 +117,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 1 | Pending |
-| DATA-02 | Phase 1 | Pending |
-| DATA-03 | Phase 1 | Pending |
+| DATA-01 | Phase 1 | Complete |
+| DATA-02 | Phase 1 | Complete |
+| DATA-03 | Phase 1 | Complete |
 | DATA-04 | Phase 1 | Complete |
-| DATA-05 | Phase 1 | Pending |
-| DATA-06 | Phase 1 | Pending |
-| HON-01 | Phase 2 | Pending |
-| HON-02 | Phase 2 | Pending |
-| HON-03 | Phase 2 | Pending |
-| HON-04 | Phase 2 | Pending |
-| HON-05 | Phase 2 | Pending |
-| HON-06 | Phase 2 | Pending |
+| DATA-05 | Phase 1 | Complete |
+| DATA-06 | Phase 1 | Complete |
+| HON-01 | Phase 2 | Complete |
+| HON-02 | Phase 2 | Complete |
+| HON-03 | Phase 2 | Complete |
+| HON-04 | Phase 2 | Complete |
+| HON-05 | Phase 2 | Complete |
+| HON-06 | Phase 2 | Complete |
 | L1-01 | Phase 3 | Pending |
 | L1-02 | Phase 3 | Pending |
 | L1-03 | Phase 3 | Pending |
