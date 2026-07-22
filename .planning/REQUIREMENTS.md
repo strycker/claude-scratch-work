@@ -28,14 +28,14 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Regime Labeling (L1)
 
-- [ ] **L1-01**: Jump-model labeler (k-means + per-jump penalty λ, exact DP decode, multi-restart, k-means warm start) with default λ, K=5 (design §4.1, R2)
-- [ ] **L1-02**: Labels and soft confidences persisted; trailing 6–12 month labels embargoed from L2 training (design §3)
-- [ ] **L1-03**: Label churn (fraction of trailing labels revised per refresh) tracked as a monitoring metric (design §5.4)
+- [x] **L1-01**: Jump-model labeler (k-means + per-jump penalty λ, exact DP decode, multi-restart, k-means warm start) with default λ, K=5 (design §4.1, R2)
+- [x] **L1-02**: Labels and soft confidences persisted; trailing 6–12 month labels embargoed from L2 training (design §3)
+- [x] **L1-03**: Label churn (fraction of trailing labels revised per refresh) tracked as a monitoring metric (design §5.4)
 
 ### Regime Prediction (L2)
 
-- [ ] **L2-01**: Calibrated logistic nowcaster P(regime | causal features) — probabilities, not argmax (design §5.1, §14 Phase 1)
-- [ ] **L2-02**: Empirical transition matrix retained as diagnostic input for forward regime distribution (feature-conditional TVTP model deferred to v2; design R3)
+- [x] **L2-01**: Calibrated logistic nowcaster P(regime | causal features) — probabilities, not argmax (design §5.1, §14 Phase 1)
+- [x] **L2-02**: Empirical transition matrix retained as diagnostic input for forward regime distribution (feature-conditional TVTP model deferred to v2; design R3)
 
 ### Asset Prediction (L3)
 
@@ -129,11 +129,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HON-04 | Phase 2 | Complete |
 | HON-05 | Phase 2 | Complete |
 | HON-06 | Phase 2 | Complete |
-| L1-01 | Phase 3 | Pending |
-| L1-02 | Phase 3 | Pending |
-| L1-03 | Phase 3 | Pending |
-| L2-01 | Phase 3 | Pending |
-| L2-02 | Phase 3 | Pending |
+| L1-01 | Phase 3 | Complete |
+| L1-02 | Phase 3 | Complete |
+| L1-03 | Phase 3 | Complete |
+| L2-01 | Phase 3 | Complete |
+| L2-02 | Phase 3 | Complete |
 | L3-01 | Phase 4 | Pending |
 | L3-02 | Phase 4 | Pending |
 | L4-01 | Phase 4 | Pending |
