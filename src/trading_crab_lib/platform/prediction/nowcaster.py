@@ -120,6 +120,46 @@ def fit_nowcaster(
     return model
 
 
+def transition_window_accuracy(
+    y_true: pd.Series,
+    y_pred: pd.Series,
+    *,
+    window_months: int = 3,
+) -> dict[str, float]:
+    """Report overall/transition/steady-state accuracy TOGETHER (§5.1).
+
+    A trivial persistence classifier scores ~90% overall accuracy while
+    being wrong exactly at regime transitions — the moments that matter for
+    guidance. Never report overall_accuracy alone; always return all three
+    keys so the persistence-trap is visible.
+
+    Transitions are positions where ``y_true`` changes vs the prior month
+    (excluding the first row, which has no prior). ``near_transition``
+    covers ±``window_months`` around each transition date.
+
+    Returns:
+        dict[str, float]: ``overall_accuracy``, ``transition_accuracy``,
+        ``steady_state_accuracy``. The latter two are ``nan`` (never raise)
+        when their respective mask selects zero rows — e.g. a constant
+        ``y_true`` has no transitions, so ``transition_accuracy`` is nan.
+    """
+    transitions = y_true.index[y_true.ne(y_true.shift(1))][1:]  # skip t=0 (no prior)
+    near_transition = pd.Series(False, index=y_true.index)
+    for t in transitions:
+        lo = t - pd.DateOffset(months=window_months)
+        hi = t + pd.DateOffset(months=window_months)
+        near_transition |= (y_true.index >= lo) & (y_true.index <= hi)
+
+    correct = y_true.eq(y_pred)
+    return {
+        "overall_accuracy": float(correct.mean()),
+        "transition_accuracy": float(correct[near_transition].mean()) if near_transition.any() else float("nan"),
+        "steady_state_accuracy": (
+            float(correct[~near_transition].mean()) if (~near_transition).any() else float("nan")
+        ),
+    }
+
+
 def evaluate_nowcaster(
     features_df: pd.DataFrame,
     labels: pd.Series,
@@ -148,10 +188,7 @@ def evaluate_nowcaster(
     X, y = build_nowcaster_training_set(features_df, labels, embargo_months=embargo_months)
     model = fit_nowcaster(X, y)
     y_pred = pd.Series(model.predict(X), index=y.index)
-    # Overall accuracy only for now; transition_window_accuracy() (added in
-    # Task 3) replaces this with the full overall/transition/steady-state
-    # dict so the persistence-trap is never presented alone.
-    metrics = {"overall_accuracy": float(y.eq(y_pred).mean())}
+    metrics = transition_window_accuracy(y, y_pred)
 
     trial_config = dict(config or {})
     trial_config.update(
