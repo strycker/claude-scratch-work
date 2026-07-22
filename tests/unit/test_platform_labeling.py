@@ -15,9 +15,12 @@ import pytest
 
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.labeling.diagnostics import (
+    _ARTIFACT_COLUMNS,
+    auto_profile,
     label_churn,
     label_regimes,
     occupancy_and_sojourns,
+    report_labeling_diagnostics,
 )
 from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
@@ -313,6 +316,77 @@ class TestChurnTwoRun:
 
         result2 = label_regimes(monthly_features, cfg, checkpoint_dir=tmp_path)
         assert result2["churn"] == 0.0
+
+
+# ── auto_profile: deterministic, one entry per state, names real features ───
+
+
+class TestAutoProfile:
+    FEATURE_NAMES = ["trailing_return_1m", "realized_vol_3m", "credit_spread_baa_aaa"]
+
+    def test_one_entry_per_state(self):
+        centroids = np.array([[-2.0, 1.5, 0.1], [0.0, -0.2, 3.0], [1.8, 0.0, -0.5]])
+        profiles = auto_profile(centroids, self.FEATURE_NAMES)
+        assert set(profiles.keys()) == {0, 1, 2}
+        for state, text in profiles.items():
+            assert text.startswith(f"state {state}:")
+
+    def test_names_real_feature_identifiers(self):
+        centroids = np.array([[-2.0, 1.5, 0.1]])
+        profiles = auto_profile(centroids, self.FEATURE_NAMES)
+        # top-2 salient (largest |value|): trailing_return_1m (-2.0), realized_vol_3m (1.5)
+        assert "trailing_return_1m" in profiles[0]
+        assert "realized_vol_3m" in profiles[0]
+
+    def test_deterministic(self):
+        centroids = np.array([[-2.0, 1.5, 0.1], [0.0, -0.2, 3.0]])
+        first = auto_profile(centroids, self.FEATURE_NAMES)
+        second = auto_profile(centroids, self.FEATURE_NAMES)
+        assert first == second
+
+
+# ── report_labeling_diagnostics: §4.4 violation is report-only (D-02) ───────
+
+
+class TestReportDiagnosticsReportOnly:
+    def test_violation_warns_but_does_not_raise(self, tmp_path, caplog):
+        metrics = {
+            "occupancy": {0: 0.01, 1: 0.99},  # state 0 well below the 5% sanity threshold
+            "sojourns": {0: {"median_months": 1.0}, 1: {"median_months": 30.0}},
+            "profiles": {0: "state 0: low trailing_return_1m", 1: "state 1: high trailing_return_1m"},
+        }
+        with caplog.at_level("WARNING"):
+            path = report_labeling_diagnostics(metrics, output_dir=tmp_path)
+        assert path.exists()
+        assert any("§4.4" in record.message for record in caplog.records)
+
+    def test_artifact_has_stable_schema_even_when_empty(self, tmp_path):
+        path = report_labeling_diagnostics({}, output_dir=tmp_path)
+        df = pd.read_parquet(path)
+        assert list(df.columns) == _ARTIFACT_COLUMNS
+        assert df.empty
+
+
+# ── label_regimes: full persistence — reload + confidences row-stochastic ───
+
+
+class TestLabelRegimesPersistence:
+    def test_checkpoints_persist_and_reload(self, tmp_path):
+        from trading_crab_lib.checkpoints import CheckpointManager
+
+        cfg = load_platform_config()
+        monthly_features = _make_synthetic_monthly(n_months=96)
+        result = label_regimes(monthly_features, cfg, checkpoint_dir=tmp_path)
+
+        cm = CheckpointManager(checkpoint_dir=tmp_path)
+        labels_df = cm.load("regime_labels")
+        confidences_df = cm.load("regime_confidences")
+        profiles_df = cm.load("regime_profiles")
+
+        assert len(labels_df) == len(result["states"])
+        assert len(profiles_df) > 0
+        row_sums = confidences_df.sum(axis=1)
+        np.testing.assert_allclose(row_sums, 1.0, atol=1e-8)
 
 
 if __name__ == "__main__":
