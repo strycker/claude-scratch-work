@@ -160,3 +160,13 @@ None — no external service configuration required.
 ---
 *Phase: 03-regime-labeling-prediction*
 *Completed: 2026-07-22*
+
+## Self-Check: PASSED
+
+- FOUND: `src/trading_crab_lib/platform/labeling/diagnostics.py`
+- FOUND: `.planning/phases/03-regime-labeling-prediction/03-02-SUMMARY.md`
+- FOUND: commit `66e1009` (test RED — churn/occupancy tests)
+- FOUND: commit `f42bd62` (feat GREEN — diagnostics.py implementation)
+- FOUND: commit `de12616` (test — Task 2 coverage)
+- FOUND: `tests/unit/test_platform_labeling.py -q` → 34 passed
+- FOUND: `tests/unit/test_platform_*.py -q` → 184 passed, 1 skipped
