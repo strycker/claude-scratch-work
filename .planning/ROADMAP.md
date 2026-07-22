@@ -134,12 +134,12 @@ information.
 
   5. An empirical transition matrix is available as a diagnostic showing the forward
      regime distribution implied by history.
-**Plans**: 4 plans
+**Plans**: 2/4 plans executed
 
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Jump-model labeler core: exact DP decode, multi-restart alternation, k-means warm start, canonicalization, soft confidences + labeling config (L1-01)
-- [ ] 03-03-PLAN.md — Calibrated nowcaster: structural 12-month embargo, CalibratedClassifierCV + PurgedEmbargoedKFold, transition-window accuracy, registry logging (L2-01, L1-02)
+- [x] 03-01-PLAN.md — Jump-model labeler core: exact DP decode, multi-restart alternation, k-means warm start, canonicalization, soft confidences + labeling config (L1-01)
+- [x] 03-03-PLAN.md — Calibrated nowcaster: structural 12-month embargo, CalibratedClassifierCV + PurgedEmbargoedKFold, transition-window accuracy, registry logging (L2-01, L1-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -222,7 +222,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
-| 3. Regime Labeling & Prediction | 0/4 | Planned | - |
+| 3. Regime Labeling & Prediction | 2/4 | In Progress|  |
 | 4. Asset Prediction & Allocation | 0/TBD | Not started | - |
 | 5. Honest Backtest & Evaluation | 0/TBD | Not started | - |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |
