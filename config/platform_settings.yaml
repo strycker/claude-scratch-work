@@ -47,6 +47,23 @@ fred_monthly:
       name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
       shift: false
 
+# ── FRED daily-frequency credit series (L4-04, Phase 4 Pitfall 2) ─────────────
+# BAA/AAA above are monthly-only on FRED; the tripwire's credit-spread-velocity
+# signal needs genuinely daily data. DAAA/DBAA are FRED's daily counterparts
+# (Moody's Seasoned Corporate Bond Yields, daily series, available 1986-01-02+).
+# Fetched at native daily frequency (no resample) by
+# ``platform/ingestion/macro_daily.py::fetch_fred_daily`` — mirrors the
+# ``fred_monthly.series`` shape but is a separate section since these are never
+# resampled to month-end.
+fred_daily:
+  series:
+    DAAA:
+      name:  "fred_daaa"
+      shift: false
+    DBAA:
+      name:  "fred_dbaa"
+      shift: false
+
 # ── ALFRED point-in-time vintage series (D-06) ─────────────────────────────────
 # Revision-heavy agency series used in labeling/features. Each gets a true
 # point-in-time reconstruction via fredapi.get_series_all_releases(); dates
@@ -135,6 +152,10 @@ universe:
     - oil
     - cash
   satellites:
+    - SPY   # dual-purpose: tradable equities proxy (already documented in
+            # splice.equities.tradable: SPY) AND the Phase 4 tripwire
+            # drawdown-from-peak input (RESEARCH Pitfall 1) — this list feeds
+            # prices_daily.fetch_universe_prices() into the daily_raw checkpoint
     - QQQ
     - IWM
     - EFA
@@ -259,3 +280,43 @@ paid_providers:
       REST API, 60+ exchanges, 150K+ tickers, fundamentals/options/news
       add-ons. Stub module raises NotImplementedError; no live integration
       in v1.
+
+# ── Allocation (L4-01) — naive vol-targeted regime-tilt with hysteresis ──────
+# Read defensively via cfg.get("allocation", {}) everywhere; not added to
+# _REQUIRED_PLATFORM_SECTIONS (optional, defaulted section, RESEARCH explicit
+# constraint). Defaults per 04-CONTEXT.md D-03 and design §5.3.
+allocation:
+  target_vol_annual:  0.10   # D-03: 10% annualized target portfolio vol (defensive by design)
+  ewma_halflife_months: 6    # RESEARCH A2 — Claude's discretion: faster than RiskMetrics'
+                              # ~22.8-month monthly halflife (lambda=0.97), sized for a
+                              # monthly-rebalance tilt rather than long-horizon risk reporting
+  portfolio_vol_min_obs: 12  # min overlapping non-NaN months before trusting the blended
+                              # portfolio-return EWMA vol; below this, fall back to the
+                              # conservative linear-sum-of-vols estimate (RESEARCH Pattern 5)
+  hysteresis:
+    act_threshold:     0.70  # design §5.3: act when a regime's own P crosses ~0.7
+    unwind_threshold:  0.40  # design §5.3: unwind the active regime once its own P < 0.4
+
+# ── Tripwire (L4-04) — minimal 3-signal daily monitor, OR-logic escalation ──
+# Thresholds are provisional-until-Phase-5-backtest (RESEARCH A3: no
+# literature-sourced numeric anchor exists for these specific values — they
+# are Claude's Discretion per 04-CONTEXT.md, config-overridable). Read via
+# cfg.get("tripwire", {}); not added to _REQUIRED_PLATFORM_SECTIONS.
+tripwire:
+  vol_halflife_days:            11.2  # RiskMetrics lambda=0.94 daily convention (RESEARCH A2, cited)
+  vol_spike_short_window_days:  21    # ~1 trading month realized-vol window
+  vol_spike_baseline_days:      63    # ~1 trading quarter trailing baseline for the vol ratio
+  vol_spike_ratio:              1.5   # short/baseline realized-vol ratio that trips the signal — provisional (A3)
+  credit_velocity_lookback_days: 5    # BAA-AAA spread widening measured over this many trading days
+  credit_velocity_bps:          25    # widening (in bps) over the lookback window that trips the signal — provisional (A3)
+  spy_drawdown_pct:              0.10 # SPY drawdown-from-peak that trips the signal — provisional (A3)
+
+# ── Report (L4-02) — weekly report assembly knobs ────────────────────────────
+# Read via cfg.get("report", {}); not added to _REQUIRED_PLATFORM_SECTIONS.
+report:
+  trade_threshold_pct: 0.03  # flat no-trade band for the trades-implied table (design §21's
+                              # full band-width math is deferred to v2, L4-V2-01) — matches the
+                              # incumbent reporting.py::generate_recommendation() 3% default
+  min_obs_flag:        6     # returns-by-regime cells with n_obs below this are flagged
+                              # low-confidence in the report rather than suppressed (D11
+                              # NULL-tolerance — short-history assets stay visible)
