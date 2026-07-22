@@ -15,6 +15,7 @@ from trading_crab_lib.platform.prediction.nowcaster import (
     build_nowcaster_training_set,
     evaluate_nowcaster,
     fit_nowcaster,
+    transition_window_accuracy,
 )
 
 N_MONTHS = 180
@@ -123,6 +124,40 @@ class TestRegistryLoggingOne:
 
         source = inspect.getsource(nowcaster_module)
         assert "pickle.dump" not in source
+
+
+class TestTransitionWindowAccuracy:
+    def test_returns_exactly_three_keys(self):
+        idx = pd.date_range("2020-01-31", periods=10, freq="ME")
+        y_true = pd.Series([0, 0, 0, 0, 1, 1, 1, 1, 2, 2], index=idx)
+        result = transition_window_accuracy(y_true, y_true, window_months=1)
+        assert set(result.keys()) == {"overall_accuracy", "transition_accuracy", "steady_state_accuracy"}
+
+    def test_hand_computed_transition_vs_steady_state(self):
+        """Two transitions at positions 4 (0->1) and 8 (1->2), window=1 month.
+        near-transition positions: {3,4,5,7,8}; steady-state: {0,1,2,6,9}.
+        Errors deliberately placed at positions 1 (steady), 4 and 8 (transition).
+        """
+        idx = pd.date_range("2020-01-31", periods=10, freq="ME")
+        y_true = pd.Series([0, 0, 0, 0, 1, 1, 1, 1, 2, 2], index=idx)
+        y_pred = pd.Series([0, 1, 0, 0, 0, 1, 1, 1, 1, 2], index=idx)
+
+        result = transition_window_accuracy(y_true, y_pred, window_months=1)
+
+        assert result["overall_accuracy"] == pytest.approx(0.7)
+        assert result["transition_accuracy"] == pytest.approx(0.6)
+        assert result["steady_state_accuracy"] == pytest.approx(0.8)
+
+    def test_no_transitions_returns_nan_transition_accuracy_without_raising(self):
+        idx = pd.date_range("2020-01-31", periods=10, freq="ME")
+        y_true = pd.Series([1] * 10, index=idx)
+        y_pred = pd.Series([1] * 10, index=idx)
+
+        result = transition_window_accuracy(y_true, y_pred, window_months=1)
+
+        assert np.isnan(result["transition_accuracy"])
+        assert not np.isnan(result["steady_state_accuracy"])
+        assert result["overall_accuracy"] == pytest.approx(1.0)
 
 
 if __name__ == "__main__":
