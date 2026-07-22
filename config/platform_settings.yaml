@@ -187,14 +187,54 @@ taxonomy:
   slow:
     - cape_shiller
     - div_yield
-    - buffett_indicator
     - real_rate_level
+  # buffett_indicator (market-cap/GDP) is a documented slow-layer *candidate*,
+  # not a lean-set member: no free 1962+ market-cap source exists in current
+  # ingestion (FRED's Wilshire series starts ~1970). Add it back to `slow`
+  # once a Wilshire/market-cap series is ingested and compute_lean_features()
+  # gains a matching derivation (see 01-VERIFICATION.md gap closure).
   agency:
     - fred_gdp
     - fred_cpi
     - fred_unrate
     - fred_indpro
     - fred_payems
+
+# ── Holdout carve (HON-01/D13) ─────────────────────────────────────────────────
+# Development/tuning/model-selection use only ≤cutoff walk-forward results.
+# Rows dated after `cutoff` are written exclusively to `holdout_dir` (relative
+# to DATA_DIR) — a tree the default platform checkpoint manager never reads.
+# Live-scoring mode opts in explicitly via get_holdout_checkpoint_manager().
+holdout:
+  cutoff:      "2020-12-31"
+  holdout_dir: "holdout"
+
+# ── Trial registry (HON-02/D-01) ────────────────────────────────────────────────
+# Append-only JSONL ledger of every evaluated configuration. Git-tracked (NOT
+# under gitignored data/) — the tracked history is the tamper-evidence for the
+# deflated Sharpe multiple-testing denominator at design freeze (design §8.4, §22).
+registry:
+  path: "registry/trials.jsonl"
+
+# ── Cross-validation conventions (HON-03) ───────────────────────────────────────
+# Documentation-only defaults sized in MONTHS (monthly modeling spine). These
+# are NOT silently applied — PurgedEmbargoedKFold requires label_horizon/embargo
+# as explicit constructor args (no implicit default; see Open Question 2 /
+# Pitfall 2 in 02-RESEARCH.md).
+cv:
+  default_label_horizon_months: 12
+  default_embargo_months: 1
+
+# ── Jump-model labeling (L1-01/L1-02) ───────────────────────────────────────────
+# λ = 4 × len(lean_feature_set) is a feature-count-scaled starting default
+# (03-RESEARCH.md Pitfall 5) — re-derive, don't reuse the literal, if the lean
+# feature set's column count changes (currently 13: fast + slow taxonomy tiers).
+# Not added to _REQUIRED_PLATFORM_SECTIONS — read defensively via cfg.get().
+labeling:
+  K: 5
+  lambda: 52.0
+  n_restarts: 10
+  embargo_months: 12
 
 # ── Paid-provider adapter seams (DATA-06) — documentation-only placeholders ───
 # No runtime code in v1. stockcharts.com/finviz.com (Glenn has subscriptions)

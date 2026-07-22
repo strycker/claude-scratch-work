@@ -20,9 +20,9 @@ migrate the validated skeleton to the public `strycker/trading-crab` repo.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Monthly Data Layer & Long Histories** - Monthly-frequency ingestion, spliced 1962+ core-asset histories, ALFRED vintages, and a fast/slow/agency feature taxonomy
-- [ ] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned
-- [ ] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe
+- [x] **Phase 1: Monthly Data Layer & Long Histories** - Monthly-frequency ingestion, spliced 1962+ core-asset histories, ALFRED vintages, and a fast/slow/agency feature taxonomy (completed 2026-07-15)
+- [x] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned (completed 2026-07-22)
+- [x] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe (completed 2026-07-22)
 - [ ] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire
 - [ ] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics
 - [ ] **Phase 6: Migration to Public Repo** - Validated skeleton migrated to `strycker/trading-crab`, tests green, docs updated
@@ -53,22 +53,22 @@ replacing the quarterly-only spine as the foundation for regime modeling.
   5. Satellite ETFs and Glenn's holdings ingest with NULL-tolerant handling for shorter
      histories; paid-provider adapter seams (Norgate/Tiingo/EODHD) are documented as
      placeholders only, with stockcharts.com/finviz.com noted as candidate sources.
-**Plans**: 1/7 plans executed
+**Plans**: 7/7 plans complete
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Foundation: platform subpackage scaffold, checkpoint namespace, config loader, fast/slow/agency taxonomy (DATA-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Core-asset splicing engine + long-history synthetics + splicing_rules.md (DATA-02)
-- [ ] 01-03-PLAN.md — ALFRED point-in-time vintage fetch + reconstruction + fallback doc (DATA-03)
-- [ ] 01-04-PLAN.md — Paid-provider adapter seams (placeholder stubs + doc) (DATA-06)
-- [ ] 01-05-PLAN.md — Monthly macro ingestion (FRED/multpl/macrotrends at monthly cadence) (DATA-01)
-- [ ] 01-06-PLAN.md — Universe daily price ingestion, NULL-tolerant short histories (DATA-05)
+- [x] 01-02-PLAN.md — Core-asset splicing engine + long-history synthetics + splicing_rules.md (DATA-02)
+- [x] 01-03-PLAN.md — ALFRED point-in-time vintage fetch + reconstruction + fallback doc (DATA-03)
+- [x] 01-04-PLAN.md — Paid-provider adapter seams (placeholder stubs + doc) (DATA-06)
+- [x] 01-05-PLAN.md — Monthly macro ingestion (FRED/multpl/macrotrends at monthly cadence) (DATA-01)
+- [x] 01-06-PLAN.md — Universe daily price ingestion, NULL-tolerant short histories (DATA-05)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-07-PLAN.md — Monthly transforms: agency alignment + lean feature assembly + tagging (DATA-01, DATA-03, DATA-04)
+- [x] 01-07-PLAN.md — Monthly transforms: agency alignment + lean feature assembly + tagging (DATA-01, DATA-03, DATA-04)
 
 ### Phase 2: Honesty Infrastructure
 
@@ -94,7 +94,21 @@ causal-feature gating — installed before any model is tuned.
   5. Supervised training paths load causal (not centered/look-ahead) features by default
      with a loud opt-out; smoothed-vs-filtered gap and detection lag are computed and
      reported as first-class run outputs.
-**Plans**: TBD
+**Plans**: 5/5 plans complete
+
+**Wave 1**
+
+- [x] 02-01-PLAN.md — Foundation config sections + honesty package + physical 2021+ holdout carve (HON-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 02-02-PLAN.md — Append-only JSONL trial registry, git-tracked ledger (HON-02)
+- [x] 02-03-PLAN.md — PurgedEmbargoedKFold BaseCrossValidator, hand-rolled (HON-04)
+- [x] 02-04-PLAN.md — Causal-feature gating guard + smoothed-vs-filtered gap/detection-lag metrics + artifact surface (HON-05, HON-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 02-05-PLAN.md — Expanding-window walk-forward runner with automatic registry logging (HON-03)
 
 ### Phase 3: Regime Labeling & Prediction
 
@@ -120,7 +134,17 @@ information.
 
   5. An empirical transition matrix is available as a diagnostic showing the forward
      regime distribution implied by history.
-**Plans**: TBD
+**Plans**: 4/4 plans complete
+
+**Wave 1**
+
+- [x] 03-01-PLAN.md — Jump-model labeler core: exact DP decode, multi-restart alternation, k-means warm start, canonicalization, soft confidences + labeling config (L1-01)
+- [x] 03-03-PLAN.md — Calibrated nowcaster: structural 12-month embargo, CalibratedClassifierCV + PurgedEmbargoedKFold, transition-window accuracy, registry logging (L2-01, L1-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 03-02-PLAN.md — Labeling persistence + label churn + report-only §4.4 diagnostics + auto profiles (L1-02, L1-03)
+- [x] 03-04-PLAN.md — Empirical transition matrix diagnostic (L2-02)
 
 ### Phase 4: Asset Prediction & Allocation
 
@@ -148,7 +172,21 @@ his current holdings, and whether any tripwire condition demands he act sooner.
   5. A minimal daily tripwire monitor combines 3 independent signals (e.g. vol spike,
      credit-spread velocity, drawdown-from-peak) with OR-logic into one escalation output:
      none / "run weekly scoring early" / "Tier-1 de-risk review."
-**Plans**: TBD
+**Plans**: 5 plans (0/5 complete)
+
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Data gaps + config foundation: SPY into universe, daily DAAA/DBAA ingestion (macro_daily.py), allocation/tripwire/report config sections (L4-04)
+- [ ] 04-02-PLAN.md — Returns-by-regime tables + EWMA vol forecasts (L3-01, L3-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-03-PLAN.md — Vol-targeted regime-tilt allocation + hysteresis state machine (L4-01)
+- [ ] 04-04-PLAN.md — Daily tripwire monitor: 3-signal OR-logic escalation CLI (L4-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 04-05-PLAN.md — Weekly report (regime dist + trajectory + trades implied) + per-account holdings YAML (L4-02, L4-03)
 
 ### Phase 5: Honest Backtest & Evaluation
 
@@ -196,9 +234,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Monthly Data Layer & Long Histories | 1/7 | In Progress|  |
-| 2. Honesty Infrastructure | 0/TBD | Not started | - |
-| 3. Regime Labeling & Prediction | 0/TBD | Not started | - |
-| 4. Asset Prediction & Allocation | 0/TBD | Not started | - |
+| 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
+| 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
+| 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
+| 4. Asset Prediction & Allocation | 0/5 | Planned | - |
 | 5. Honest Backtest & Evaluation | 0/TBD | Not started | - |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |

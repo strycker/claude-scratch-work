@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Monthly Data Layer & Long Histories
-status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-07-15T15:07:01.254Z"
-last_activity: 2026-07-15
-last_activity_desc: Phase 1 execution started
+current_phase: 3
+current_phase_name: Regime Labeling & Prediction
+status: phase_complete
+stopped_at: Phase 4 planned (5 plans, verification passed)
+last_updated: "2026-07-22T21:46:24.551Z"
+last_activity: 2026-07-22
+last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 7
-  completed_plans: 0
-  percent: 0
+  completed_phases: 3
+  total_plans: 21
+  completed_plans: 16
+  percent: 50
 ---
 
 # Project State
@@ -25,35 +25,30 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 1 — Monthly Data Layer & Long Histories
+**Current focus:** Phase 3 — Regime Labeling & Prediction
 
 ## Current Position
 
-Phase: 1 (Monthly Data Layer & Long Histories) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 1
-Last activity: 2026-07-15 — Phase 1 execution started
+Phase: 3 (Regime Labeling & Prediction) — EXECUTING
+Plan: 4 of 4 complete
+Status: Executing Phase 3
+Last activity: 2026-07-22 — Phase 3 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: - min
-- Total execution time: 0 hours
+- Total plans completed: 12 (7 Phase 1 + 5 Phase 2)
+- Full test suite: 863 passed, 49 skipped
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 1 — Monthly Data Layer | 7/7 | Verified passed (one human item: live 1962+ run pending FRED_API_KEY) |
+| 2 — Honesty Infrastructure | 5/5 | Verified passed 5/5 |
 
 *Updated after each plan completion*
 
@@ -75,13 +70,19 @@ Recent decisions affecting current work:
 - Roadmap: MIG-01 kept as its own final phase (6) per explicit orchestrator instruction,
   despite being a single requirement.
 
+- Phase 2: walk-forward interface frozen (expanding_steps + run_walkforward with
+  automatic single append_trial per run); Phase 3 models plug into this interface.
+
 ### Pending Todos
 
-None yet.
+- Verifier informational note: `holdout.py`/`registry.py` use hardcoded constants that
+  match `config/platform_settings.yaml` sections rather than reading them — wire to
+  config if/when the values ever need to change (future-divergence risk only).
 
 ### Blockers/Concerns
 
-None yet.
+- Live 1962+ data run still pending FRED_API_KEY in the claude.ai/code environment
+  (Phase 1 human-verification item).
 
 ## Deferred Items
 
@@ -93,6 +94,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-10T00:12:05.827Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-monthly-data-layer-long-histories/01-CONTEXT.md
+Last session: 2026-07-22T21:46:24.540Z
+Stopped at: Phase 4 planned (5 plans, verification passed)
+Resume file: .planning/phases/04-asset-prediction-allocation/04-01-PLAN.md

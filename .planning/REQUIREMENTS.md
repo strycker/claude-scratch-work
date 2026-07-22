@@ -10,32 +10,32 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Honesty Infrastructure (HON)
 
-- [ ] **HON-01**: 2021+ holdout data is physically carved into separate files/paths that the dev pipeline cannot read by default; live scoring mode opts in explicitly (design §8.5, D13)
-- [ ] **HON-02**: Trial registry logs every evaluated configuration (config hash → features, params, metrics) to a flat file/SQLite store; all grid cells logged regardless of outcome (design §8.4, §22)
-- [ ] **HON-03**: Walk-forward runner refits L1 labels and downstream models on data ≤ t at each step, records decisions, and steps forward — runs a trivial model end-to-end (design §8.1, §14 Phase 0 exit)
-- [ ] **HON-04**: Purged + embargoed CV splitter available for all supervised components with overlapping labels, replacing plain TimeSeriesSplit (design §6.5, R7)
-- [ ] **HON-05**: Smoothed-vs-filtered gap and detection lag are computed and reported as first-class outputs (design §5.4)
-- [ ] **HON-06**: Causal-feature gating enforced for supervised training — supervised paths load causal features by default with loud opt-out (salvaged `feature_gating.py`; design R5, pitfall P1)
+- [x] **HON-01**: 2021+ holdout data is physically carved into separate files/paths that the dev pipeline cannot read by default; live scoring mode opts in explicitly (design §8.5, D13)
+- [x] **HON-02**: Trial registry logs every evaluated configuration (config hash → features, params, metrics) to a flat file/SQLite store; all grid cells logged regardless of outcome (design §8.4, §22)
+- [x] **HON-03**: Walk-forward runner refits L1 labels and downstream models on data ≤ t at each step, records decisions, and steps forward — runs a trivial model end-to-end (design §8.1, §14 Phase 0 exit)
+- [x] **HON-04**: Purged + embargoed CV splitter available for all supervised components with overlapping labels, replacing plain TimeSeriesSplit (design §6.5, R7)
+- [x] **HON-05**: Smoothed-vs-filtered gap and detection lag are computed and reported as first-class outputs (design §5.4)
+- [x] **HON-06**: Causal-feature gating enforced for supervised training — supervised paths load causal features by default with loud opt-out (salvaged `feature_gating.py`; design R5, pitfall P1)
 
 ### Data Layer (DATA)
 
-- [ ] **DATA-01**: Monthly data spine — ingestion and transforms produce monthly features; quarterly agency series aligned with publication lags (design R1, D10)
-- [ ] **DATA-02**: Spliced USD histories back to ~1962 for core assets (S&P total return, Treasury total-return synthetic, gold, oil, cash), free sources, splicing rules documented per asset (design R13, §9)
-- [ ] **DATA-03**: ALFRED point-in-time vintages for agency series where archives exist, documented publication-lag alignment fallback pre-vintage era (design R6, D12)
+- [x] **DATA-01**: Monthly data spine — ingestion and transforms produce monthly features; quarterly agency series aligned with publication lags (design R1, D10)
+- [x] **DATA-02**: Spliced USD histories back to ~1962 for core assets (S&P total return, Treasury total-return synthetic, gold, oil, cash), free sources, splicing rules documented per asset (design R13, §9)
+- [x] **DATA-03**: ALFRED point-in-time vintages for agency series where archives exist, documented publication-lag alignment fallback pre-vintage era (design R6, D12)
 - [x] **DATA-04**: Features classified into fast/slow/agency taxonomy in config; lean full-history (1962+) feature set defined for labeling (design §9, D11)
-- [ ] **DATA-05**: Key satellite ETFs and Glenn's holdings ingested with NULL-tolerant handling for shorter histories (design D11)
-- [ ] **DATA-06**: Paid-provider adapter seams documented (Norgate, Tiingo, EODHD) — placeholder notes only, no implementation; stockcharts.com/finviz.com noted as candidate feature sources
+- [x] **DATA-05**: Key satellite ETFs and Glenn's holdings ingested with NULL-tolerant handling for shorter histories (design D11)
+- [x] **DATA-06**: Paid-provider adapter seams documented (Norgate, Tiingo, EODHD) — placeholder notes only, no implementation; stockcharts.com/finviz.com noted as candidate feature sources
 
 ### Regime Labeling (L1)
 
-- [ ] **L1-01**: Jump-model labeler (k-means + per-jump penalty λ, exact DP decode, multi-restart, k-means warm start) with default λ, K=5 (design §4.1, R2)
-- [ ] **L1-02**: Labels and soft confidences persisted; trailing 6–12 month labels embargoed from L2 training (design §3)
-- [ ] **L1-03**: Label churn (fraction of trailing labels revised per refresh) tracked as a monitoring metric (design §5.4)
+- [x] **L1-01**: Jump-model labeler (k-means + per-jump penalty λ, exact DP decode, multi-restart, k-means warm start) with default λ, K=5 (design §4.1, R2)
+- [x] **L1-02**: Labels and soft confidences persisted; trailing 6–12 month labels embargoed from L2 training (design §3)
+- [x] **L1-03**: Label churn (fraction of trailing labels revised per refresh) tracked as a monitoring metric (design §5.4)
 
 ### Regime Prediction (L2)
 
-- [ ] **L2-01**: Calibrated logistic nowcaster P(regime | causal features) — probabilities, not argmax (design §5.1, §14 Phase 1)
-- [ ] **L2-02**: Empirical transition matrix retained as diagnostic input for forward regime distribution (feature-conditional TVTP model deferred to v2; design R3)
+- [x] **L2-01**: Calibrated logistic nowcaster P(regime | causal features) — probabilities, not argmax (design §5.1, §14 Phase 1)
+- [x] **L2-02**: Empirical transition matrix retained as diagnostic input for forward regime distribution (feature-conditional TVTP model deferred to v2; design R3)
 
 ### Asset Prediction (L3)
 
@@ -117,23 +117,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 1 | Pending |
-| DATA-02 | Phase 1 | Pending |
-| DATA-03 | Phase 1 | Pending |
+| DATA-01 | Phase 1 | Complete |
+| DATA-02 | Phase 1 | Complete |
+| DATA-03 | Phase 1 | Complete |
 | DATA-04 | Phase 1 | Complete |
-| DATA-05 | Phase 1 | Pending |
-| DATA-06 | Phase 1 | Pending |
-| HON-01 | Phase 2 | Pending |
-| HON-02 | Phase 2 | Pending |
-| HON-03 | Phase 2 | Pending |
-| HON-04 | Phase 2 | Pending |
-| HON-05 | Phase 2 | Pending |
-| HON-06 | Phase 2 | Pending |
-| L1-01 | Phase 3 | Pending |
-| L1-02 | Phase 3 | Pending |
-| L1-03 | Phase 3 | Pending |
-| L2-01 | Phase 3 | Pending |
-| L2-02 | Phase 3 | Pending |
+| DATA-05 | Phase 1 | Complete |
+| DATA-06 | Phase 1 | Complete |
+| HON-01 | Phase 2 | Complete |
+| HON-02 | Phase 2 | Complete |
+| HON-03 | Phase 2 | Complete |
+| HON-04 | Phase 2 | Complete |
+| HON-05 | Phase 2 | Complete |
+| HON-06 | Phase 2 | Complete |
+| L1-01 | Phase 3 | Complete |
+| L1-02 | Phase 3 | Complete |
+| L1-03 | Phase 3 | Complete |
+| L2-01 | Phase 3 | Complete |
+| L2-02 | Phase 3 | Complete |
 | L3-01 | Phase 4 | Pending |
 | L3-02 | Phase 4 | Pending |
 | L4-01 | Phase 4 | Pending |
