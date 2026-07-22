@@ -30,6 +30,9 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 log = logging.getLogger(__name__)
 
@@ -104,3 +107,119 @@ def soft_confidences(d: np.ndarray) -> np.ndarray:
     neg_d = neg_d - neg_d.max(axis=1, keepdims=True)  # numeric stability only
     exp = np.exp(neg_d)
     return exp / exp.sum(axis=1, keepdims=True)
+
+
+def standardize_features(X: pd.DataFrame) -> np.ndarray:
+    """Winsorize to [1%, 99%] per column, then zero-mean/unit-variance scale.
+
+    Args:
+        X: lean feature DataFrame (columns in a fixed, caller-determined order).
+
+    Returns:
+        (T, d) numpy array, winsorized then StandardScaler-transformed. Column
+        order is preserved from X (caller retains X.columns for canonicalization).
+    """
+    winsorized = X.clip(lower=X.quantile(0.01), upper=X.quantile(0.99), axis=1)
+    return StandardScaler().fit_transform(winsorized)
+
+
+def _recompute_centroids(
+    X: np.ndarray, states: np.ndarray, K: int, prev_centroids: np.ndarray
+) -> np.ndarray:
+    """Per-state mean of X, freezing any zero-occupancy state at its previous
+    centroid (Pitfall 2 — prevents NaN from poisoning subsequent DP iterations)."""
+    centroids = prev_centroids.copy()
+    for k in range(K):
+        mask = states == k
+        if mask.any():
+            centroids[k] = X[mask].mean(axis=0)
+        # else: keep previous centroids[k] unchanged (frozen-centroid fallback)
+    return centroids
+
+
+def fit_jump_model(
+    X: np.ndarray,
+    K: int,
+    lam: float,
+    *,
+    n_restarts: int = 10,
+    max_iter: int = 50,
+    random_state: int = 42,
+) -> dict:
+    """Multi-restart k-means-warm-started jump-model alternation (design §4.1).
+
+    Per restart: k-means warm start -> exact DP decode -> recompute centroids
+    (freeze-on-empty) -> repeat until the state sequence stops changing or
+    max_iter is hit. The lowest-total_cost restart is kept.
+
+    Args:
+        X: (T, d) standardized feature array (see standardize_features).
+        K: number of states.
+        lam: per-jump penalty.
+        n_restarts: number of independent k-means-warm-started attempts.
+        max_iter: hard cap on alternation iterations per restart.
+        random_state: base seed; restart r uses random_state + r.
+
+    Returns:
+        dict with keys ``states`` (len-T int array), ``centroids`` ((K, d)
+        array, no NaN even if a state was ever empty mid-alternation),
+        ``total_cost`` (float), ``restart`` (int, winning restart index).
+
+    Determinism: two calls with the same random_state return
+    np.array_equal-identical states (KMeans n_init=1 + fixed seed per restart,
+    deterministic DP decode, deterministic alternation order).
+    """
+    best: dict | None = None
+    for r in range(n_restarts):
+        km = KMeans(n_clusters=K, n_init=1, init="k-means++", random_state=random_state + r).fit(X)
+        centroids = km.cluster_centers_.copy()
+        prev_states = None
+        states, total_cost = None, None
+        for _ in range(max_iter):
+            d = ((X[:, None, :] - centroids[None, :, :]) ** 2).sum(axis=2)
+            states, total_cost = decode_states_dp(d, lam)
+            if prev_states is not None and np.array_equal(states, prev_states):
+                break  # converged
+            centroids = _recompute_centroids(X, states, K, centroids)
+            prev_states = states
+        if best is None or total_cost < best["total_cost"]:
+            best = {"states": states, "centroids": centroids, "total_cost": total_cost, "restart": r}
+    return best
+
+
+def canonicalize_states(
+    states: np.ndarray, centroids: np.ndarray, feature_names: list[str]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Relabel state indices into a fixed, economically meaningful order.
+
+    Sorts states by ascending centroid coordinate of trailing_return_1m (bear
+    -> bull) so state numbering is stable across restarts and refreshes —
+    otherwise the label-churn metric (L1-03) and D-04 auto profiles are
+    meaningless, since k-means/jump-model cluster indices are arbitrary
+    permutations by construction. Applying this twice is idempotent (the
+    second call is already sorted, so order == identity).
+
+    Falls back to centroid column 0 with a WARNING if trailing_return_1m is
+    absent from feature_names (e.g. a caller running on a reduced feature set).
+
+    Args:
+        states: length-T int array of raw (pre-canonicalization) state labels.
+        centroids: (K, d) array in the same raw state-index order as states.
+        feature_names: column names matching centroids' second axis, in order.
+
+    Returns:
+        (new_states, new_centroids) — states relabeled 0..K-1 by ascending
+        sort_col, centroids reordered to match.
+    """
+    if "trailing_return_1m" in feature_names:
+        sort_col = feature_names.index("trailing_return_1m")
+    else:
+        sort_col = 0
+        log.warning(
+            "trailing_return_1m not in feature_names — falling back to centroid "
+            "column 0 for canonicalization sort order"
+        )
+    order = np.argsort(centroids[:, sort_col])
+    remap = {old: new for new, old in enumerate(order)}
+    new_states = np.array([remap[s] for s in states])
+    return new_states, centroids[order]
