@@ -48,6 +48,7 @@ ingestion = [
     "fredapi>=0.5",
     "requests>=2.31",
     "lxml>=4.9",
+    "cssselect>=1.2",
     "beautifulsoup4>=4.12",
     "yfinance>=0.2",
     "certifi>=2024.0",
@@ -117,6 +118,7 @@ optional = true
 fredapi = ">=0.5"
 requests = ">=2.31"
 lxml = ">=4.9"
+cssselect = ">=1.2"
 beautifulsoup4 = ">=4.12"
 yfinance = ">=0.2"
 certifi = ">=2024.0"
