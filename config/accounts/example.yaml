@@ -1,0 +1,20 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Example account holdings — SCHEMA DOCUMENTATION ONLY (L4-03, 04-CONTEXT D-01)
+#
+#  This file is committed to git with OBVIOUSLY-FAKE tickers/weights. Real
+#  account files (config/accounts/<account>.yaml) are gitignored — never
+#  commit Glenn's actual holdings (Information Disclosure control, T-04-16).
+#
+#  Schema:
+#    weights: {TICKER: fraction, ...}  — one entry per held position
+#    cash:    fraction                  — cash sleeve (FZFXX/SPAXX)
+#
+#  weights + cash should sum to ~1.0. Sums outside a small tolerance log a
+#  WARNING but are NEVER silently normalized — see
+#  trading_crab_lib.platform.report.holdings.load_account_weights().
+# ─────────────────────────────────────────────────────────────────────────────
+weights:
+  ZZZZ: 0.30   # fake ticker — not a real holding
+  YYYY: 0.20   # fake ticker — not a real holding
+  XXXX: 0.15   # fake ticker — not a real holding
+cash: 0.35
