@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 4
 current_phase_name: Asset Prediction & Allocation
-status: executing
-stopped_at: Phase 4 planned (5 plans, verification passed)
+status: phase_complete
+stopped_at: Phase 4 verified — ready for Phase 5
 last_updated: "2026-07-22T23:43:32.417Z"
 last_activity: 2026-07-22
-last_activity_desc: Phase 4 execution started
+last_activity_desc: Phase 4 verified (passed 5/5) — L3-01..L4-04 complete
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 21
-  completed_plans: 16
-  percent: 50
+  completed_plans: 21
+  percent: 67
 ---
 
 # Project State
@@ -25,16 +25,16 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 4 — Asset Prediction & Allocation
+**Current focus:** Phase 4 complete — next: Phase 5 (Honest Backtest & Evaluation)
 
 ## Current Position
 
-Phase: 4 (Asset Prediction & Allocation) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 4
+Phase: 4 (Asset Prediction & Allocation) — COMPLETE & VERIFIED (passed 5/5)
+Plan: 5 of 5 complete
+Status: Phase 4 verified; ready for /gsd-discuss-phase 5
 Last activity: 2026-07-22 — Phase 4 execution started
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 67%
 
 ## Performance Metrics
 
@@ -95,5 +95,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-07-22T21:46:24.540Z
-Stopped at: Phase 4 planned (5 plans, verification passed)
-Resume file: .planning/phases/04-asset-prediction-allocation/04-01-PLAN.md
+Stopped at: Phase 4 verified — ready for Phase 5 (discuss → plan → execute)
+Resume file: .planning/phases/04-asset-prediction-allocation/04-VERIFICATION.md
