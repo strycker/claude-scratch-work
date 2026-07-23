@@ -47,7 +47,7 @@ Progress: [██████░░░░] 67%
 
 | Phase | Plans | Status |
 |-------|-------|--------|
-| 1 — Monthly Data Layer | 7/7 | Verified passed (one human item: live 1962+ run pending FRED_API_KEY) |
+| 1 — Monthly Data Layer | 7/7 | Verified passed (FRED_API_KEY verified 2026-07-23 — human item cleared) |
 | 2 — Honesty Infrastructure | 5/5 | Verified passed 5/5 |
 
 *Updated after each plan completion*
@@ -81,8 +81,10 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-- Live 1962+ data run still pending FRED_API_KEY in the claude.ai/code environment
-  (Phase 1 human-verification item).
+- ~~Live 1962+ data run still pending FRED_API_KEY in the claude.ai/code environment
+  (Phase 1 human-verification item).~~ **RESOLVED 2026-07-23** — `FRED_API_KEY` is present
+  in the environment (32-char key) and functionally verified against the live FRED API
+  (authenticated GDP series fetch succeeded). No longer a blocker; do not re-flag.
 
 ## Deferred Items
 
