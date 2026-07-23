@@ -24,8 +24,10 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.10
     hooks:
+      # Check-only: the `ruff` hook's entry is already `ruff check`, so with no
+      # `--fix` arg it fails (without mutating files) on exactly what CI flags
+      # via `ruff check src/ tests/` in .github/workflows/python-package.yml.
       - id: ruff
-        args: ["--fix"]
         exclude: "^(gsd-scratch-work|trading-crab-lib|legacy)/"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
