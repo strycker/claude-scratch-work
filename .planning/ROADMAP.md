@@ -172,7 +172,7 @@ his current holdings, and whether any tripwire condition demands he act sooner.
   5. A minimal daily tripwire monitor combines 3 independent signals (e.g. vol spike,
      credit-spread velocity, drawdown-from-peak) with OR-logic into one escalation output:
      none / "run weekly scoring early" / "Tier-1 de-risk review."
-**Plans**: 2/5 plans executed
+**Plans**: 4/5 plans executed
 
 **Wave 1**
 
@@ -181,8 +181,8 @@ his current holdings, and whether any tripwire condition demands he act sooner.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-03-PLAN.md — Vol-targeted regime-tilt allocation + hysteresis state machine (L4-01)
-- [ ] 04-04-PLAN.md — Daily tripwire monitor: 3-signal OR-logic escalation CLI (L4-04)
+- [x] 04-03-PLAN.md — Vol-targeted regime-tilt allocation + hysteresis state machine (L4-01)
+- [x] 04-04-PLAN.md — Daily tripwire monitor: 3-signal OR-logic escalation CLI (L4-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -237,6 +237,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
-| 4. Asset Prediction & Allocation | 2/5 | In Progress|  |
+| 4. Asset Prediction & Allocation | 4/5 | In Progress|  |
 | 5. Honest Backtest & Evaluation | 0/TBD | Not started | - |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |
