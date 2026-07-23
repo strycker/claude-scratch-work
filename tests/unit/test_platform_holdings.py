@@ -103,4 +103,5 @@ class TestSecurityConvention:
         from trading_crab_lib.platform.report import holdings
 
         source = inspect.getsource(holdings)
-        assert "load_portfolio" not in source
+        assert "import load_portfolio" not in source
+        assert "from trading_crab_lib.config import" not in source
