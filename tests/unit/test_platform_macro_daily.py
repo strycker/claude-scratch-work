@@ -182,7 +182,7 @@ def test_fetch_fred_daily_falls_back_to_fred_monthly_api_key(mock_fred_cls):
 def test_report_fred_daily_writes_parquet_artifact(tmp_path):
     from trading_crab_lib.platform.ingestion.macro_daily import report_fred_daily
 
-    df = assemble_frame = pd.DataFrame(
+    assemble_frame = pd.DataFrame(
         {"fred_daaa": [3.0, 3.1]}, index=pd.bdate_range("2024-01-01", periods=2)
     )
     path = report_fred_daily(assemble_frame, output_dir=tmp_path)
