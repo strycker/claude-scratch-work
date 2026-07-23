@@ -172,12 +172,12 @@ his current holdings, and whether any tripwire condition demands he act sooner.
   5. A minimal daily tripwire monitor combines 3 independent signals (e.g. vol spike,
      credit-spread velocity, drawdown-from-peak) with OR-logic into one escalation output:
      none / "run weekly scoring early" / "Tier-1 de-risk review."
-**Plans**: 5 plans (0/5 complete)
+**Plans**: 2/5 plans executed
 
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Data gaps + config foundation: SPY into universe, daily DAAA/DBAA ingestion (macro_daily.py), allocation/tripwire/report config sections (L4-04)
-- [ ] 04-02-PLAN.md — Returns-by-regime tables + EWMA vol forecasts (L3-01, L3-02)
+- [x] 04-01-PLAN.md — Data gaps + config foundation: SPY into universe, daily DAAA/DBAA ingestion (macro_daily.py), allocation/tripwire/report config sections (L4-04)
+- [x] 04-02-PLAN.md — Returns-by-regime tables + EWMA vol forecasts (L3-01, L3-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -237,6 +237,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
-| 4. Asset Prediction & Allocation | 0/5 | Planned | - |
+| 4. Asset Prediction & Allocation | 2/5 | In Progress|  |
 | 5. Honest Backtest & Evaluation | 0/TBD | Not started | - |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |
