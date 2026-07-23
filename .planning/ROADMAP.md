@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Monthly Data Layer & Long Histories** - Monthly-frequency ingestion, spliced 1962+ core-asset histories, ALFRED vintages, and a fast/slow/agency feature taxonomy (completed 2026-07-15)
 - [x] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned (completed 2026-07-22)
 - [x] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe (completed 2026-07-22)
-- [ ] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire
+- [x] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire (completed 2026-07-23)
 - [ ] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics
 - [ ] **Phase 6: Migration to Public Repo** - Validated skeleton migrated to `strycker/trading-crab`, tests green, docs updated
 
@@ -172,7 +172,7 @@ his current holdings, and whether any tripwire condition demands he act sooner.
   5. A minimal daily tripwire monitor combines 3 independent signals (e.g. vol spike,
      credit-spread velocity, drawdown-from-peak) with OR-logic into one escalation output:
      none / "run weekly scoring early" / "Tier-1 de-risk review."
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 
 **Wave 1**
 
@@ -186,7 +186,7 @@ his current holdings, and whether any tripwire condition demands he act sooner.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 04-05-PLAN.md — Weekly report (regime dist + trajectory + trades implied) + per-account holdings YAML (L4-02, L4-03)
+- [x] 04-05-PLAN.md — Weekly report (regime dist + trajectory + trades implied) + per-account holdings YAML (L4-02, L4-03)
 
 ### Phase 5: Honest Backtest & Evaluation
 
@@ -237,6 +237,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Monthly Data Layer & Long Histories | 7/7 | Complete   | 2026-07-15 |
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
-| 4. Asset Prediction & Allocation | 4/5 | In Progress|  |
+| 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 0/TBD | Not started | - |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |
