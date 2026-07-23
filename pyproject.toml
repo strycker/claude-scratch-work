@@ -94,6 +94,12 @@ ignore = ["E741"]
 [tool.uv.workspace]
 members = ["src/trading_crab_lib"]
 
+# Resolve the `trading-crab-lib` dependency to the local workspace member
+# (source) instead of PyPI. Required for `uv sync` / `uv pip install -e .`
+# to build the app against the in-repo library. Ignored by pip and Poetry.
+[tool.uv.sources]
+trading-crab-lib = { workspace = true }
+
 # ── Poetry ──────────────────────────────────────────────────────────────────
 # Poetry 2.x reads [project] for metadata. This section adds Poetry-specific
 # overrides — in particular, the path dependency for trading-crab-lib so that
