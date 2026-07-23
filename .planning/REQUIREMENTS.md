@@ -39,15 +39,15 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Asset Prediction (L3)
 
-- [ ] **L3-01**: Returns-by-regime tables (the trading-crab baseline) for the v1 universe (design §14 Phase 1)
-- [ ] **L3-02**: EWMA volatility forecasts per asset feeding sizing and the tripwire (design §6.2)
+- [x] **L3-01**: Returns-by-regime tables (the trading-crab baseline) for the v1 universe (design §14 Phase 1)
+- [x] **L3-02**: EWMA volatility forecasts per asset feeding sizing and the tripwire (design §6.2)
 
 ### Allocation & Report (L4)
 
-- [ ] **L4-01**: Naive vol-targeted regime-tilt allocation with hysteresis bands (act ~0.7 / unwind ~0.4) (design §5.3, §14 Phase 1)
-- [ ] **L4-02**: Weekly report: current regime distribution + trajectory, per-asset signals, target mix vs current mix with trades implied — reusing existing report/email machinery (design §7)
-- [ ] **L4-03**: Current holdings input via manual YAML per account; Fidelity CSV parser seam documented as placeholder (§16.7 accounts)
-- [ ] **L4-04**: Minimal daily tripwire monitor — 3 signals from independent families (e.g. vol spike, credit-spread velocity, drawdown-from-peak) with OR-logic escalation output: none / "run weekly scoring early" / "Tier-1 de-risk review" (design §23.2, §25)
+- [x] **L4-01**: Naive vol-targeted regime-tilt allocation with hysteresis bands (act ~0.7 / unwind ~0.4) (design §5.3, §14 Phase 1)
+- [x] **L4-02**: Weekly report: current regime distribution + trajectory, per-asset signals, target mix vs current mix with trades implied — reusing existing report/email machinery (design §7)
+- [x] **L4-03**: Current holdings input via manual YAML per account; Fidelity CSV parser seam documented as placeholder (§16.7 accounts)
+- [x] **L4-04**: Minimal daily tripwire monitor — 3 signals from independent families (e.g. vol spike, credit-spread velocity, drawdown-from-peak) with OR-logic escalation output: none / "run weekly scoring early" / "Tier-1 de-risk review" (design §23.2, §25)
 
 ### Evaluation (EVAL)
 
@@ -134,12 +134,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | L1-03 | Phase 3 | Complete |
 | L2-01 | Phase 3 | Complete |
 | L2-02 | Phase 3 | Complete |
-| L3-01 | Phase 4 | Pending |
-| L3-02 | Phase 4 | Pending |
-| L4-01 | Phase 4 | Pending |
-| L4-02 | Phase 4 | Pending |
-| L4-03 | Phase 4 | Pending |
-| L4-04 | Phase 4 | Pending |
+| L3-01 | Phase 4 | Complete |
+| L3-02 | Phase 4 | Complete |
+| L4-01 | Phase 4 | Complete |
+| L4-02 | Phase 4 | Complete |
+| L4-03 | Phase 4 | Complete |
+| L4-04 | Phase 4 | Complete |
 | EVAL-01 | Phase 5 | Pending |
 | EVAL-02 | Phase 5 | Pending |
 | EVAL-03 | Phase 5 | Pending |

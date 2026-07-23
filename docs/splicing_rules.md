@@ -240,3 +240,39 @@ segment only if a coverage gap is found; none was found). `ratio_splice()` is
 implemented and tested (`tests/unit/test_platform_splice.py`) and available
 for any future class or source substitution that does need to stitch two
 segments at a literal, documented join date.
+
+---
+
+## 6. Phase 4 additions — SPY dual-purpose, DAAA/DBAA credit source, Fidelity-CSV seam
+
+**SPY is now dual-purpose (Phase 4, RESEARCH Pitfall 1).** SPY was added to
+`config/platform_settings.yaml`'s `universe.satellites`, so it is now
+ingested as a daily universe ticker via
+`platform/ingestion/prices_daily.py::fetch_universe_prices()` into the
+`daily_raw` checkpoint. This is in addition to — not a replacement for —
+SPY's existing role as the documented **tradable proxy** for the `equities`
+research class (`splice.equities.tradable: SPY`, §1 above). The monthly
+`equities_tr` splice (multpl-derived total return) is unchanged and remains
+the modeling series used by every model; SPY's daily closes exist solely to
+feed the Phase 4 tripwire's drawdown-from-peak signal (L4-04, design §23.2)
+— they are never used as a substitute for `equities_tr` in any model input.
+
+**DAAA/DBAA — daily credit-spread source (Phase 4, RESEARCH Pitfall 2).**
+`fred_monthly`'s `BAA`/`AAA` series (Moody's Seasoned Corporate Bond Yields)
+are monthly-frequency only on FRED. The tripwire's credit-spread-velocity
+signal needs genuinely daily data, so `platform/ingestion/macro_daily.py`
+fetches FRED's daily counterparts `DAAA`/`DBAA` at native frequency (no
+resample) and persists them as the `fred_daily_raw` platform checkpoint.
+This is a new, separate daily credit source — it does not replace or alter
+the monthly `fred_baa`/`fred_aaa` series used elsewhere.
+
+**Fidelity positions-CSV parser — documentation-only placeholder seam
+(v2, L4-V2-05).** Holdings in v1 come exclusively from manual per-account
+YAML files (`config/accounts/<account>.yaml`, D-01) — ticker → weight
+fraction, validated with tolerance against a ~1.0 sum (weights + cash).
+No CSV parsing of Fidelity's exported positions report is implemented in
+v1; this is deliberately deferred to a future milestone (L4-V2-05). If
+implemented later, a CSV-parsing loader would live alongside
+`platform/report/holdings.py` and produce the same `{"weights": {...},
+"cash": frac}` shape the YAML loader already returns, so downstream
+report code would not need to change.
