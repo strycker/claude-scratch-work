@@ -132,3 +132,8 @@ None - no external service configuration required.
 ---
 *Phase: 05-honest-backtest-evaluation*
 *Completed: 2026-07-24*
+
+## Self-Check: PASSED
+
+All 5 created/modified files confirmed present on disk; all 4 commit hashes
+(a91bd35, 7137229, e012ac3, 492606a) confirmed present in `git log --oneline --all`.
