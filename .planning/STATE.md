@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: honest-backtest-evaluation
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-24T21:55:17.358Z"
+stopped_at: Phase 5 Plan 3 complete (evaluation KPIs + sojourn/lag headline, review F1 fix)
+last_updated: "2026-07-24T22:18:00.000Z"
 last_activity: 2026-07-24
-last_activity_desc: Phase 05 execution started
+last_activity_desc: Completed 05-03-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 28
-  completed_plans: 23
+  completed_plans: 24
   percent: 67
 ---
 
@@ -30,9 +30,9 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 05 (honest-backtest-evaluation) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
-Last activity: 2026-07-24 — Phase 05 execution started
+Last activity: 2026-07-24 — Completed 05-03-PLAN.md (evaluation KPIs + sojourn/lag headline)
 
 Progress: [██████░░░░] 67%
 
@@ -40,8 +40,8 @@ Progress: [██████░░░░] 67%
 
 **Velocity:**
 
-- Total plans completed: 12 (7 Phase 1 + 5 Phase 2)
-- Full test suite: 863 passed, 49 skipped
+- Total plans completed: 12 (7 Phase 1 + 5 Phase 2) + 3 in Phase 05
+- Full test suite: 1096 passed (post 05-03)
 
 **By Phase:**
 
@@ -53,6 +53,7 @@ Progress: [██████░░░░] 67%
 *Updated after each plan completion*
 | Phase 05 P01 | 3min | 2 tasks | 5 files |
 | Phase 05 P02 | 12min | 3 tasks | 2 files |
+| Phase 05 P03 | 18min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Phase 5 Plan 1: crisis_windows default list hard-bounded to 4 in-sample crises (1973-74, 1980-82, 2000-02, 2008-09), no 2020/2022 window; compute_turnover uses index-union reindex(fill_value=0.0), not positional diffing — Keeps holdout discipline (Pitfall 4) and correctly handles cold starts / asset-set changes
 - [Phase 05-02]: Task boundary matched the plan literally: Task 2 lands the core loop without holdout split/L2 resilience (TestHoldoutBoundary intentionally RED); Task 3 adds split_by_holdout_boundary + try/except degrade-and-continue, turning it GREEN — Makes the incremental TDD narrative visible in git history rather than one large commit
 - [Phase 05-02]: All 6 driver tests monkeypatch module-level _refit_l1/_refit_l2 (and vol_targeted_tilt for the cash-residual test) instead of exercising the real jump-model/nowcaster fit — Keeps orchestration-invariant tests fast/deterministic and isolated from real-fit degeneracy (Pitfall 2 territory); the real fit path is separately proven via the module's __main__ self-check
+- [Phase 05-03]: compute_sojourn_lag_headline groups ex-post transitions by their OWN target state and checks each against only that state's own filtered-probs column, never a class-agnostic max-across-classes series — Review F1 fix — class-agnostic max would systematically understate detection lag ('fooled by its own backtest')
+- [Phase 05-03]: max_drawdown_and_duration's duration_months is the longest run of consecutive underwater periods (drawdown < 0), not strictly peak-to-trough — Matches the plan's literal <action> text; a never-recovered drawdown extends duration to end of series
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24T21:54:58.804Z
+Last session: 2026-07-24T22:06:14.578Z
 Stopped at: Phase 5 context gathered
 Resume file: .planning/phases/05-honest-backtest-evaluation/05-CONTEXT.md
