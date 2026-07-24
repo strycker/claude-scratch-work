@@ -25,9 +25,16 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
+
+from trading_crab_lib import OUTPUT_DIR
+
+log = logging.getLogger(__name__)
 
 # 5 fixed calibration bins (design §8.8) — the top bin is inclusive of 1.0.
 BIN_EDGES = np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0], dtype=float)
@@ -157,3 +164,172 @@ def confusion_tidy(y_true: list[Any], y_pred: list[Any], classes: list[Any]) -> 
             rows.append({"true_label": str(t), "pred_label": str(p), "count": cnt})
 
     return rows
+
+
+def _reconcile_and_stack_proba(
+    proba_rows: list[np.ndarray], classes_rows: list[list[Any]]
+) -> tuple[np.ndarray, list[Any]]:
+    """Union-of-classes reconciliation (review F3): pad every per-step proba
+    row to a single rectangular ``(n_steps, K)`` array before scoring.
+
+    A given step's ``classes`` may be a strict subset of the union of every
+    state ever observed across all steps (e.g. an early, small train window
+    whose nowcaster only saw 3 of 5 canonical states, fixed K=5 by
+    ``labeling/jump_model.py::canonicalize_states`` in production). Any state
+    missing from a step's own ``classes`` list is padded with ``0.0`` in that
+    step's row — never dropped, never left to corrupt the stack shape.
+
+    Args:
+        proba_rows: list of 1-D probability arrays, one per walk-forward
+            step, in the SAME order as ``classes_rows``.
+        classes_rows: list of per-step class-label lists, matching each
+            ``proba_rows`` entry's column order.
+
+    Returns:
+        tuple[np.ndarray, list]: ``(stacked, classes)`` — ``stacked`` is a
+        rectangular ``(n_steps, K)`` array; ``classes`` is the reconciled,
+        ascending-sorted union of every state observed across all steps
+        (the single column order shared by every row of ``stacked``).
+    """
+    all_states = sorted({state for classes in classes_rows for state in classes})
+    state_to_col = {state: i for i, state in enumerate(all_states)}
+
+    stacked = np.zeros((len(proba_rows), len(all_states)), dtype=float)
+    for row_i, (proba, classes) in enumerate(zip(proba_rows, classes_rows)):
+        for state, p in zip(classes, proba):
+            stacked[row_i, state_to_col[state]] = float(p)
+
+    return stacked, all_states
+
+
+def report_model_metrics(per_step_metrics: dict, *, output_dir: Path | None = None) -> dict[str, Path]:
+    """Score and persist the EVAL-04 model-metrics artifacts for one full
+    walk-forward run.
+
+    ``per_step_metrics`` is the walk-forward driver's return contract
+    (``backtest/driver.py::run_backtest``) — keys ``"dates"``, ``"proba"``,
+    ``"classes"`` — plus a ``"y_true"`` list that the REPORT LAYER (not this
+    function, not the walk-forward loop) has already joined by date from the
+    full-sample smoothed reference labeling (review F2). This function
+    asserts ``len(y_true) == len(dates) == len(proba)`` and raises
+    ``ValueError`` on any mismatch — a silent length mismatch would corrupt
+    every downstream Brier/calibration/confusion number without ever raising.
+
+    Per-step proba rows are reconciled to a rectangular ``(n_steps, K)``
+    array via ``_reconcile_and_stack_proba`` (review F3) before scoring, so a
+    ragged early-history step never corrupts or misaligns the stack.
+    ``y_pred`` is derived as the argmax reconciled class per step.
+
+    Writes three parquet files under ``output_dir`` (or, by default,
+    ``OUTPUT_DIR/reports/platform/``): ``model_metrics_brier.parquet``,
+    ``model_metrics_calibration.parquet``, ``model_metrics_confusion.parquet``.
+    Each is schema-stable (declared columns always present) even when there
+    are no predictions at all (empty-safe DataFrame + to_parquet idiom,
+    ported from ``honesty/gap_lag.py``).
+
+    Args:
+        per_step_metrics: dict with keys ``"dates"``, ``"proba"``,
+            ``"classes"``, ``"y_true"`` (see above).
+        output_dir: overrides the default artifact directory (for tests).
+
+    Returns:
+        dict[str, Path]: ``{"brier": ..., "calibration": ..., "confusion": ...}``
+        — the three written parquet paths.
+
+    Raises:
+        ValueError: if ``len(y_true)`` does not equal ``len(dates)`` and
+            ``len(proba)``.
+    """
+    dates = per_step_metrics["dates"]
+    proba_rows = per_step_metrics["proba"]
+    classes_rows = per_step_metrics["classes"]
+    y_true = per_step_metrics["y_true"]
+
+    if not (len(y_true) == len(dates) == len(proba_rows)):
+        raise ValueError(
+            f"y_true/dates/proba length mismatch: len(y_true)={len(y_true)}, "
+            f"len(dates)={len(dates)}, len(proba)={len(proba_rows)} — y_true "
+            "must be joined by date from the full-sample smoothed reference "
+            "labeling by the report layer (review F2), never sourced from "
+            "the in-progress walk-forward loop."
+        )
+
+    target_dir = Path(output_dir) if output_dir is not None else OUTPUT_DIR / "reports" / "platform"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    brier_path = target_dir / "model_metrics_brier.parquet"
+    calibration_path = target_dir / "model_metrics_calibration.parquet"
+    confusion_path = target_dir / "model_metrics_confusion.parquet"
+
+    brier_value: float | None = None
+    if not dates:
+        brier_df = pd.DataFrame(columns=_BRIER_COLUMNS)
+        calibration_df = pd.DataFrame(columns=_CALIBRATION_COLUMNS)
+        confusion_df = pd.DataFrame(columns=_CONFUSION_COLUMNS)
+    else:
+        stacked_proba, classes = _reconcile_and_stack_proba(proba_rows, classes_rows)
+        y_pred = [classes[i] for i in np.argmax(stacked_proba, axis=1)]
+
+        brier_value = compute_brier_multiclass(y_true, stacked_proba, classes)
+        calibration_rows = calibration_bins(y_true, stacked_proba, classes)
+        confusion_rows = confusion_tidy(y_true, y_pred, classes)
+
+        brier_df = pd.DataFrame([{"brier": brier_value}])
+        calibration_df = (
+            pd.DataFrame(calibration_rows) if calibration_rows else pd.DataFrame(columns=_CALIBRATION_COLUMNS)
+        )
+        confusion_df = (
+            pd.DataFrame(confusion_rows) if confusion_rows else pd.DataFrame(columns=_CONFUSION_COLUMNS)
+        )
+
+    brier_df.to_parquet(brier_path, index=False)
+    calibration_df.to_parquet(calibration_path, index=False)
+    confusion_df.to_parquet(confusion_path, index=False)
+
+    summary = (
+        "Model Metrics Artifacts (design §8.8)\n"
+        f"  n_steps:              {len(dates)}\n"
+        f"  brier:                {brier_value}\n"
+        f"  brier artifact:       {brier_path}\n"
+        f"  calibration artifact: {calibration_path}\n"
+        f"  confusion artifact:   {confusion_path}"
+    )
+    log.info(summary)
+    print(summary)  # noqa: T201 — first-class CLI run output, not debug noise
+
+    return {"brier": brier_path, "calibration": calibration_path, "confusion": confusion_path}
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
+    # Synthetic self-check — no network, no checkpoint dependency, no
+    # Phase-1..4 execution required. Builds a tiny per_step_metrics dict
+    # (dates + ragged proba/classes + a date-joined y_true) and writes the
+    # three artifacts to a temp dir.
+    import tempfile
+
+    _demo_dates = list(pd.date_range("1972-01-31", periods=4, freq="ME"))
+    _demo_per_step_metrics = {
+        "dates": _demo_dates,
+        # Step 0 only observed 3 of 5 canonical states (early small-sample
+        # nowcaster window) — review F3 reconciliation pads the rest.
+        "proba": [
+            np.array([0.6, 0.3, 0.1]),
+            np.array([0.1, 0.1, 0.1, 0.6, 0.1]),
+            np.array([0.2, 0.2, 0.2, 0.2, 0.2]),
+            np.array([0.05, 0.05, 0.1, 0.1, 0.7]),
+        ],
+        "classes": [
+            [0, 1, 2],
+            [0, 1, 2, 3, 4],
+            [0, 1, 2, 3, 4],
+            [0, 1, 2, 3, 4],
+        ],
+        # A date-joined y_true (review F2) — in production this comes from
+        # the report layer's full-sample smoothed reference labeling.
+        "y_true": [0, 3, 2, 4],
+    }
+
+    with tempfile.TemporaryDirectory() as _tmp:
+        _artifacts = report_model_metrics(_demo_per_step_metrics, output_dir=Path(_tmp))
+        print(f"Self-check artifacts written to: {_artifacts}")  # noqa: T201
