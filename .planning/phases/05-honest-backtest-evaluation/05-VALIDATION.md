@@ -51,6 +51,12 @@ Task IDs are assigned by the planner; rows below are requirement-level and map t
 | EVAL-03 | sojourn/lag orchestration wires `occupancy_and_sojourns` → `gap_lag.sojourn_lag_ratio` correctly | unit known-answer | `pytest tests/unit/test_platform_evaluation_sojourn_lag.py -x` | ❌ W0 |
 | EVAL-04 | Multiclass Brier ~0 for perfect one-hot, >0 for miscalibrated (known-answer) | unit | `pytest tests/unit/test_platform_evaluation_model_metrics.py::TestBrierKnownAnswer -x` | ❌ W0 |
 | EVAL-04 | Confusion-table counts sum to n | unit invariant | `pytest tests/unit/test_platform_evaluation_model_metrics.py::TestConfusionSumsToN -x` | ❌ W0 |
+| EVAL-03 (review F1) | Headline filtered-probs conversion checks each transition against P(its own target state), not a class-agnostic max (per-target-state median > max-across-classes) | unit known-answer | `pytest tests/unit/test_platform_evaluation_sojourn_lag.py::TestPerTransitionTargetStateProbs -x` | ❌ W0 |
+| EVAL-04 (review F3) | Ragged per-step classes are union-reconciled and 0-padded to K=5 before stacking (early-history step with < K classes does not crash) | unit invariant | `pytest tests/unit/test_platform_evaluation_model_metrics.py::TestRaggedClassesReconciliation -x` | ❌ W0 |
+| EVAL-04 (review F2) | Metrics y_true is date-joined from the smoothed reference; len(y_true)==len(dates)==len(proba) guard fires on mismatch | unit invariant | `pytest tests/unit/test_platform_evaluation_model_metrics.py::TestYTrueDateAlignment -x` | ❌ W0 |
+| EVAL-01 (review F4) | Strategy cash residual earns the supplied cash_ret (not 0%) — symmetric with baselines | unit known-answer | `pytest tests/unit/test_platform_backtest_driver.py::TestCashResidualEarnsCashReturn -x` | ❌ W0 |
+| EVAL-02 (review F5) | No-regime ablation with skip_l1l2_for_ablation True vs False yields identical equity curve; L1/L2 refits not invoked when skipped | unit invariant | `pytest tests/unit/test_platform_backtest_driver.py::TestAblationSkipInvariant -x` | ❌ W0 |
+| all (review F2) | End-to-end metrics y_true aligns by date to per_step_metrics dates (smoothed reference at each decision month) | integration | `pytest tests/integration/test_mini_backtest.py -x` | ❌ W0 |
 | KPIs | Crisis-window capture ratios bounded to in-sample crises (≤ 2020-12; never 2020/2022) | unit | `pytest tests/unit/test_platform_evaluation_kpis.py -x` | ❌ W0 |
 | all | End-to-end: full backtest + 4 baselines + report on a small synthetic monthly frame, no network | integration | `pytest tests/integration/test_mini_backtest.py -x` | ❌ W0 |
 
