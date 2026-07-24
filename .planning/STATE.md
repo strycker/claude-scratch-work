@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Asset Prediction & Allocation
-status: phase_complete
+current_phase: 05
+current_phase_name: honest-backtest-evaluation
+status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-07-23T21:03:41.161Z"
-last_activity: 2026-07-22
-last_activity_desc: Phase 4 execution started
+last_updated: "2026-07-24T21:40:58.956Z"
+last_activity: 2026-07-24
+last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 28
+  completed_plans: 22
   percent: 67
 ---
 
@@ -25,14 +25,14 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 4 complete — next: Phase 5 (Honest Backtest & Evaluation)
+**Current focus:** Phase 05 — honest-backtest-evaluation
 
 ## Current Position
 
-Phase: 4 (Asset Prediction & Allocation) — COMPLETE & VERIFIED (passed 5/5)
-Plan: 5 of 5 complete
-Status: Phase 4 verified; ready for /gsd-discuss-phase 5
-Last activity: 2026-07-22 — Phase 4 execution started
+Phase: 05 (honest-backtest-evaluation) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-07-24 — Phase 05 execution started
 
 Progress: [██████░░░░] 67%
 
@@ -51,6 +51,7 @@ Progress: [██████░░░░] 67%
 | 2 — Honesty Infrastructure | 5/5 | Verified passed 5/5 |
 
 *Updated after each plan completion*
+| Phase 05 P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 
 - Phase 2: walk-forward interface frozen (expanding_steps + run_walkforward with
   automatic single append_trial per run); Phase 3 models plug into this interface.
+
+- [Phase 05]: Phase 5 Plan 1: crisis_windows default list hard-bounded to 4 in-sample crises (1973-74, 1980-82, 2000-02, 2008-09), no 2020/2022 window; compute_turnover uses index-union reindex(fill_value=0.0), not positional diffing — Keeps holdout discipline (Pitfall 4) and correctly handles cold starts / asset-set changes
 
 ### Pending Todos
 
@@ -96,6 +99,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-23T21:03:41.138Z
+Last session: 2026-07-24T21:40:19.141Z
 Stopped at: Phase 5 context gathered
 Resume file: .planning/phases/05-honest-backtest-evaluation/05-CONTEXT.md
