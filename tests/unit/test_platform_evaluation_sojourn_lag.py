@@ -19,11 +19,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab_lib.platform.honesty.gap_lag import compute_detection_lag, sojourn_lag_ratio
 from trading_crab_lib.platform.evaluation.sojourn_lag import (
     build_filtered_probs_matrix,
     compute_sojourn_lag_headline,
 )
+from trading_crab_lib.platform.honesty.gap_lag import compute_detection_lag, sojourn_lag_ratio
 
 # ── compute_sojourn_lag_headline ──────────────────────────────────────────────────
 
