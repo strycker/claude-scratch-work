@@ -320,3 +320,46 @@ report:
   min_obs_flag:        6     # returns-by-regime cells with n_obs below this are flagged
                               # low-confidence in the report rather than suppressed (D11
                               # NULL-tolerance — short-history assets stay visible)
+
+# ── Backtest & evaluation (EVAL-01..04, D-03) — honest walk-forward 1972-2020 ─
+# Read defensively via cfg.get("backtest", {}) everywhere; deliberately NOT
+# added to _REQUIRED_PLATFORM_SECTIONS in platform/config.py (optional,
+# defaulted section, same pattern as allocation/tripwire/report above).
+backtest:
+  cost_bps: 10               # D-03: light-touch per-rebalance haircut on traded notional —
+                              # a monthly regime tilt must not look free. Not full tax/friction
+                              # modeling (out of scope); hysteresis (Phase 4) already keeps
+                              # turnover low so this should be a light touch. Derivation: a
+                              # round-trip-inclusive ballpark for a diversified ETF sleeve
+                              # (SPY/TLT/IAU/USO/cash), applied to |turnover| once per rebalance.
+  min_train_months: 120      # yields the 1972-01 first walk-forward decision from the 1962-01
+                              # monthly spine (expanding_steps(min_train=120)) — 10 years warmup.
+  refit_frequency_months: 1  # A2 escape hatch: monthly L1/L2 refit by default; raise this to
+                              # reduce wall-clock cost of the ~588-refit walk-forward gauntlet.
+  sixty_forty_rebalance: monthly  # 60/40 baseline reconstitution cadence (Claude's discretion,
+                              # 05-CONTEXT.md).
+  apply_cost_to_baselines: true  # A5: same bps convention applied to every rebalancing
+                              # baseline (60/40, Faber SMA) for an apples-to-apples comparison —
+                              # only buy-and-hold SPY has zero turnover by construction.
+  skip_l1l2_for_ablation: true  # review F5: the no-regime ablation discards L1/L2 output when
+                              # use_regime_tilt is False, so the driver may skip the expensive
+                              # jump-model + nowcaster refits entirely for the ablation path —
+                              # this halves the ~588-refit gauntlet cost and does NOT change the
+                              # tilt-off result, because those outputs are unused when the tilt
+                              # is off. Read via cfg["backtest"].get("skip_l1l2_for_ablation", True).
+  crisis_windows:             # In-sample crisis windows only (Pitfall 4) — every end date MUST
+                              # be on or before 2020-12-31 (DEFAULT_HOLDOUT_CUTOFF,
+                              # honesty/holdout.py). NO 2020-02 COVID window and NO 2022 window
+                              # are permitted here — both are in the locked 2021+ holdout.
+    - name:  "1973-74_oil_shock"
+      start: "1973-01-01"
+      end:   "1974-12-31"
+    - name:  "1980-82_volcker_recession"
+      start: "1980-01-01"
+      end:   "1982-12-31"
+    - name:  "2000-02_dotcom_bust"
+      start: "2000-01-01"
+      end:   "2002-12-31"
+    - name:  "2008-09_gfc"
+      start: "2008-01-01"
+      end:   "2009-12-31"
