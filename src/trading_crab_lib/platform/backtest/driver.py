@@ -12,9 +12,14 @@ hysteresis-gated vol-targeted regime tilt (``allocation/hysteresis.py`` +
 ``allocation/tilt.py``), and compounds a cost-adjusted
 (``backtest/costs.py``) equity curve.
 
-Two honesty fixes from cross-AI review are load-bearing here (see the
+Three honesty fixes from cross-AI review are load-bearing here (see the
 plan's ``must_haves``):
 
+- F2: the accumulated ``per_step_metrics`` never sources ``y_true`` from
+  this in-progress loop (the label at ``t`` was never in ``train_index``,
+  which is strictly before ``t`` — sourcing "ground truth" from here would
+  be off-by-one). The report layer (Plan 06) joins ``y_true`` retroactively
+  against the full-sample smoothed reference labeling by decision date.
 - F4: the strategy's cash residual (``tilt["cash"]``) earns the SAME
   ``cash_returns`` series the baseline legs use for their own cash sleeve —
   not a hard 0% — so the strategy/baseline comparison is symmetric.
@@ -31,9 +36,15 @@ duplicating, ``run_walkforward``'s single-trial convention) — this loop is
 NOT a call to ``run_walkforward`` (A1: the per-step body is new code; only
 the ``expanding_steps`` spine is reused).
 
-The holdout boundary (F2/T-05-03) and per-step L2-failure resilience
-(T-05-05, RESEARCH.md Pitfall 2) are added in Plan 05-02 Task 3 — see that
-task's docstring updates for the ``must_haves`` they close.
+``split_by_holdout_boundary`` is applied to BOTH ``monthly_features`` and
+``asset_returns`` BEFORE ``expanding_steps`` is constructed (T-05-03) — the
+visited index never exceeds ``DEFAULT_HOLDOUT_CUTOFF`` (2020-12-31) even if
+the input frames physically extend past it; no code path in this module
+calls the holdout-namespace checkpoint manager getter. A per-step L2 refit failure
+(T-05-05, RESEARCH.md Pitfall 2 — an early small post-embargo window
+starving a K-fold) is caught, logged at WARNING, and degrades that step to
+holding the previous weights/active regime rather than crashing the
+1972-2020 run.
 
 Usage::
 
@@ -57,6 +68,7 @@ from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
 from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.backtest.costs import apply_transaction_cost, compute_turnover
 from trading_crab_lib.platform.honesty import registry
+from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
 from trading_crab_lib.platform.honesty.walkforward import expanding_steps
 from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
@@ -67,6 +79,10 @@ from trading_crab_lib.platform.prediction.nowcaster import build_nowcaster_train
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
+
+# The only exception CalibratedClassifierCV/LogisticRegression raise for a
+# degenerate (too-few-samples-per-class) fold — see RESEARCH.md Pitfall 2.
+_L2_DEGRADE_EXCEPTIONS: tuple[type[Exception], ...] = (ValueError,)
 
 
 def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
@@ -156,9 +172,14 @@ def run_backtest(
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """Run the L1->L4 expanding-window walk-forward loop, log exactly one trial.
 
-    Refits L1 (``_refit_l1``) and L2 (``_refit_l2``) on ``train_index``-only
-    data at every step (T-05-04) — no code path in this module loads the
-    single Phase 3/4 nowcaster checkpoint.
+    Applies ``split_by_holdout_boundary`` to both ``monthly_features`` and
+    ``asset_returns`` BEFORE constructing ``expanding_steps`` (T-05-03) — the
+    visited index never exceeds ``DEFAULT_HOLDOUT_CUTOFF`` (2020-12-31) even
+    when the input frames physically extend past it; this module never
+    calls the holdout-namespace checkpoint manager getter. Refits L1 (``_refit_l1``)
+    and L2 (``_refit_l2``) on ``train_index``-only data at every step
+    (T-05-04) — no code path in this module loads the single Phase 3/4
+    nowcaster checkpoint.
 
     When ``use_regime_tilt`` is False, a degenerate constant single-state
     label/probability pair feeds the SAME tilt code (regime-agnostic /
@@ -168,8 +189,16 @@ def run_backtest(
     refits are skipped entirely for that step (review F5) since their
     output would be discarded anyway.
 
+    An L2 refit failure (RESEARCH.md Pitfall 2 — an early small
+    post-embargo window starving a K-fold) is caught per step, logged at
+    WARNING, and degrades that step to holding the previous
+    weights/active-regime/cash (T-05-05) rather than crashing the run; the
+    record's ``degraded`` field is set True and the step is excluded from
+    ``per_step_metrics``.
+
     Args:
-        monthly_features: causal monthly features (Phase 1 checkpoint shape).
+        monthly_features: causal monthly features (Phase 1 checkpoint
+            shape) — may physically extend past the holdout cutoff.
         asset_returns: monthly simple returns per tradable asset, aligned
             (by index) to ``monthly_features``.
         cfg: platform config (``load_platform_config()`` output).
@@ -202,6 +231,12 @@ def run_backtest(
     act_threshold = hysteresis_cfg.get("act_threshold", 0.70)
     unwind_threshold = hysteresis_cfg.get("unwind_threshold", 0.40)
 
+    # T-05-03: apply the holdout boundary BEFORE constructing expanding_steps
+    # — no call to the holdout-namespace checkpoint manager getter anywhere in this module,
+    # and no reliance on the config end_date to bound the loop.
+    dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_asset_returns, _ = split_by_holdout_boundary(asset_returns, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+
     records: list[dict[str, Any]] = []
     per_step_metrics: dict[str, list] = {"dates": [], "proba": [], "classes": []}
 
@@ -209,8 +244,8 @@ def run_backtest(
     prev_active_regime: int | None = None
     prev_cash: float = 1.0
 
-    for t, train_index, test_index in expanding_steps(monthly_features.index, min_train=min_train):
-        train_features = monthly_features.loc[train_index]
+    for t, train_index, test_index in expanding_steps(dev_features.index, min_train=min_train):
+        train_features = dev_features.loc[train_index]
         degraded = False
 
         if not use_regime_tilt:
@@ -218,37 +253,57 @@ def run_backtest(
                 # Still pay the refit cost (for debugging/comparison
                 # parity) but the output below is discarded either way —
                 # review F5.
-                train_states = _refit_l1(train_features, cfg)
-                feature_row = monthly_features.loc[[t]]
-                _refit_l2(train_features, train_states, feature_row, cfg)
+                try:
+                    train_states = _refit_l1(train_features, cfg)
+                    feature_row = dev_features.loc[[t]]
+                    _refit_l2(train_features, train_states, feature_row, cfg)
+                except _L2_DEGRADE_EXCEPTIONS as exc:
+                    log.warning(
+                        "Step %s: L1/L2 refit failed on the tilt-off (non-skip) path (%s) — "
+                        "output discarded anyway", t, exc,
+                    )
             states = pd.Series(0, index=train_index)
             regime_probs = pd.Series({0: 1.0})
         else:
-            states = _refit_l1(train_features, cfg)
-            feature_row = monthly_features.loc[[t]]
-            regime_probs = _refit_l2(train_features, states, feature_row, cfg)
+            try:
+                states = _refit_l1(train_features, cfg)
+                feature_row = dev_features.loc[[t]]
+                regime_probs = _refit_l2(train_features, states, feature_row, cfg)
+            except _L2_DEGRADE_EXCEPTIONS as exc:
+                log.warning(
+                    "Step %s: L2 refit degraded (early small post-embargo window, "
+                    "RESEARCH Pitfall 2) — holding previous weights: %s", t, exc,
+                )
+                degraded = True
+                states = pd.Series(dtype=float)
+                regime_probs = pd.Series(dtype=float)
 
-        stats = returns_by_regime_stats(asset_returns.loc[train_index], states)
-        new_active_regime = update_active_regime(
-            regime_probs,
-            prev_active_regime,
-            act_threshold=act_threshold,
-            unwind_threshold=unwind_threshold,
-        )
-        tilt = vol_targeted_tilt(
-            regime_probs,
-            stats,
-            asset_returns.loc[train_index],
-            target_vol_annual=target_vol_annual,
-            halflife=halflife,
-            min_obs=portfolio_vol_min_obs,
-        )
-        new_weights = tilt["weights"]
-        new_cash = tilt["cash"]
+        if degraded:
+            new_weights = prev_weights
+            new_active_regime = prev_active_regime
+            new_cash = prev_cash
+        else:
+            stats = returns_by_regime_stats(dev_asset_returns.loc[train_index], states)
+            new_active_regime = update_active_regime(
+                regime_probs,
+                prev_active_regime,
+                act_threshold=act_threshold,
+                unwind_threshold=unwind_threshold,
+            )
+            tilt = vol_targeted_tilt(
+                regime_probs,
+                stats,
+                dev_asset_returns.loc[train_index],
+                target_vol_annual=target_vol_annual,
+                halflife=halflife,
+                min_obs=portfolio_vol_min_obs,
+            )
+            new_weights = tilt["weights"]
+            new_cash = tilt["cash"]
 
         turnover = compute_turnover(prev_weights, new_weights)
         test_date = test_index[0]
-        asset_return_row = asset_returns.loc[test_date]
+        asset_return_row = dev_asset_returns.loc[test_date]
         cash_ret = float(cash_returns.loc[test_date]) if cash_returns is not None else 0.0
         gross = _realized_return(new_weights, new_cash, asset_return_row, cash_return=cash_ret)
         net = apply_transaction_cost(gross, turnover, cost_bps)
@@ -265,11 +320,12 @@ def run_backtest(
             }
         )
 
-        # EVAL-04 accumulators (review F2) — NO loop-sourced y_true; the
-        # report layer (Plan 06) joins ground truth retroactively.
-        per_step_metrics["dates"].append(t)
-        per_step_metrics["proba"].append(regime_probs.values)
-        per_step_metrics["classes"].append(list(regime_probs.index))
+        if not degraded:
+            # EVAL-04 accumulators (review F2) — NO loop-sourced y_true; the
+            # report layer (Plan 06) joins ground truth retroactively.
+            per_step_metrics["dates"].append(t)
+            per_step_metrics["proba"].append(regime_probs.values)
+            per_step_metrics["classes"].append(list(regime_probs.index))
 
         prev_weights = new_weights
         prev_active_regime = new_active_regime
@@ -317,6 +373,11 @@ if __name__ == "__main__":
     )
     _cash_returns = pd.Series(_rng.normal(0.001, 0.0005, 48), index=_idx)
     _cfg = {
+        "taxonomy": {
+            "fast": _lean_cols[:10],
+            "slow": _lean_cols[10:],
+            "agency": [],
+        },
         "labeling": {"K": 2, "lambda": 5.0, "n_restarts": 2, "embargo_months": 3},
         "allocation": {
             "target_vol_annual": 0.10, "ewma_halflife_months": 6, "portfolio_vol_min_obs": 3,
