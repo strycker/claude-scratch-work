@@ -5,16 +5,16 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: honest-backtest-evaluation
 status: executing
-stopped_at: Phase 5 Plan 4 complete (model-metrics artifacts, review F2/F3 fixes)
-last_updated: "2026-07-24T22:17:08.329Z"
-last_activity: 2026-07-24
-last_activity_desc: Completed 05-04-PLAN.md (model-metrics artifacts, review F2/F3 fixes)
+stopped_at: Phase 5 Plan 5 complete (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)
+last_updated: "2026-07-25T14:37:32.365Z"
+last_activity: 2026-07-25
+last_activity_desc: Completed 05-05-PLAN.md (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 28
-  completed_plans: 25
-  percent: 67
+  completed_plans: 26
+  percent: 93
 ---
 
 # Project State
@@ -30,18 +30,18 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 05 (honest-backtest-evaluation) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
-Last activity: 2026-07-25 — Completed 05-04-PLAN.md (model-metrics artifacts, review F2/F3 fixes)
+Last activity: 2026-07-25 — Completed 05-05-PLAN.md (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)
 
-Progress: [██████░░░░] 67%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12 (7 Phase 1 + 5 Phase 2) + 3 in Phase 05
-- Full test suite: 1096 passed (post 05-03)
+- Total plans completed: 12 (7 Phase 1 + 5 Phase 2) + 4 in Phase 05
+- Full test suite: 1120 passed (post 05-05)
 
 **By Phase:**
 
@@ -55,6 +55,7 @@ Progress: [██████░░░░] 67%
 | Phase 05 P02 | 12min | 3 tasks | 2 files |
 | Phase 05 P03 | 18min | 2 tasks | 4 files |
 | Phase 05 P04 | 15min | 2 tasks | 2 files |
+| Phase 05 P05 | 22min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,7 @@ Recent decisions affecting current work:
 - [Phase 05-03]: max_drawdown_and_duration's duration_months is the longest run of consecutive underwater periods (drawdown < 0), not strictly peak-to-trough — Matches the plan's literal <action> text; a never-recovered drawdown extends duration to end of series
 - [Phase 05-04]: model_metrics.py implements its own _reconcile_and_stack_proba rather than importing sojourn_lag.py's build_filtered_probs_matrix — the plan's numpy/pandas/stdlib-only import constraint keeps the two evaluation modules independently grep-gated, even though both implement the same union-of-classes/K-padding pattern (review F3).
 - [Phase 05-04]: report_model_metrics indexes per_step_metrics['y_true'] via direct dict access (not .get()), and asserts len(y_true)==len(dates)==len(proba), raising ValueError on mismatch — y_true is always joined by date by the report layer, never sourced from the walk-forward loop (review F2).
+- [Phase 05-05]: no_regime_ablation adds a cash_returns passthrough kwarg not in the plan's literal one-line-delegation snippet (Rule 2 auto-fix) - omitting it would silently default the ablation's cash residual to 0%, breaking F4 cash-return symmetry; the function stays a single delegating return statement.
 
 ### Pending Todos
 
@@ -108,6 +110,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24T22:16:52.546Z
-Stopped at: Phase 5 Plan 4 complete (model-metrics artifacts, review F2/F3 fixes)
+Last session: 2026-07-25T14:35:23.065Z
+Stopped at: Phase 5 Plan 5 complete (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)
 Resume file: None
