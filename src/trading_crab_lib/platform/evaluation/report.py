@@ -57,12 +57,33 @@ Usage::
 
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 from trading_crab_lib import OUTPUT_DIR
+from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
+from trading_crab_lib.platform.assets.returns import compute_monthly_returns, returns_by_regime_stats
+from trading_crab_lib.platform.backtest.baselines import faber_sma, no_regime_ablation, sixty_forty, spy_buy_hold
+from trading_crab_lib.platform.backtest.driver import run_backtest
+from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.evaluation.kpis import (
+    crisis_capture_ratio,
+    cvar,
+    max_drawdown_and_duration,
+    terminal_log_wealth,
+)
+from trading_crab_lib.platform.evaluation.model_metrics import report_model_metrics
+from trading_crab_lib.platform.evaluation.sojourn_lag import build_filtered_probs_matrix, compute_sojourn_lag_headline
+from trading_crab_lib.platform.honesty.gap_lag import compute_gap
+from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+from trading_crab_lib.platform.labeling.jump_model import canonicalize_states, fit_jump_model, standardize_features
+from trading_crab_lib.platform.splice import build_core_research_series
+from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
 
@@ -298,38 +319,307 @@ def write_backtest_report(
     return report_path
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+# ── run_full_backtest_evaluation ──────────────────────────────────────────────
 
-    # Synthetic self-check — no network, no checkpoint dependency. Mirrors
-    # the unit test's precomputed-inputs convention.
-    import tempfile
 
-    _demo_sojourn_lag = {"median_sojourn": 18.0, "median_lag": 2.0, "ratio": 9.0}
-    _demo_strategy_kpis = {
-        "terminal_log_wealth": 0.55,
-        "max_drawdown": -0.12,
-        "duration_months": 8,
-        "cvar": -0.08,
-        "turnover": 0.15,
-        "crisis_capture": {"2008-09_gfc": 0.6},
-    }
-    _demo_ablation_kpis = {"terminal_log_wealth": 0.40, "max_drawdown": -0.18}
-    _demo_baseline_kpis = {
-        "spy_buy_hold": {"terminal_log_wealth": 0.45, "max_drawdown": -0.30},
-        "sixty_forty": {"terminal_log_wealth": 0.35, "max_drawdown": -0.15},
-        "faber_sma": {"terminal_log_wealth": 0.42, "max_drawdown": -0.10},
+def _leg_kpis(returns: pd.Series) -> dict[str, float]:
+    """terminal_log_wealth + max_drawdown + duration_months for one baseline/ablation leg."""
+    clean = returns.dropna()
+    dd = max_drawdown_and_duration(clean)
+    return {
+        "terminal_log_wealth": terminal_log_wealth(clean),
+        "max_drawdown": dd["max_drawdown"],
+        "duration_months": dd["duration_months"],
     }
 
-    _markdown = assemble_backtest_report(
-        sojourn_lag=_demo_sojourn_lag,
-        strategy_kpis=_demo_strategy_kpis,
-        ablation_kpis=_demo_ablation_kpis,
-        baseline_kpis=_demo_baseline_kpis,
-        gap=0.03,
+
+def _build_kpi_table(strategy_kpis: dict, ablation_kpis: dict, baseline_kpis: dict) -> pd.DataFrame:
+    """One row per leg: leg/terminal_log_wealth/max_drawdown (KPI-table artifact)."""
+    rows = [
+        {
+            "leg": "strategy",
+            "terminal_log_wealth": strategy_kpis["terminal_log_wealth"],
+            "max_drawdown": strategy_kpis["max_drawdown"],
+        },
+        {
+            "leg": "no_regime_ablation",
+            "terminal_log_wealth": ablation_kpis["terminal_log_wealth"],
+            "max_drawdown": ablation_kpis["max_drawdown"],
+        },
+    ]
+    for name, kpi in baseline_kpis.items():
+        rows.append(
+            {
+                "leg": name,
+                "terminal_log_wealth": kpi["terminal_log_wealth"],
+                "max_drawdown": kpi["max_drawdown"],
+            }
+        )
+    return pd.DataFrame(rows, columns=["leg", "terminal_log_wealth", "max_drawdown"])
+
+
+def _smoothed_hindsight_perf(
+    full_sample_states: pd.Series,
+    asset_returns: pd.DataFrame,
+    cash_ret: pd.Series,
+    decision_dates: list,
+    allocation_cfg: dict[str, Any],
+) -> float:
+    """Terminal log wealth of a hindsight oracle that knows the FULL-SAMPLE
+    smoothed regime label at every decision date (but not future returns) —
+    the "smoothed" half of the smoothed-vs-filtered gap (§5.4, Pitfall 1).
+
+    At each of the SAME decision dates the walk-forward driver actually
+    visited, drives ``vol_targeted_tilt`` (the SAME allocation math, no new
+    formula) with a one-hot probability on the smoothed state instead of the
+    real-time nowcaster's probability — using regime-conditional stats
+    computed over the ENTIRE smoothed labeling (non-causal by construction,
+    exactly the "labeler is intentionally non-causal at the batch level"
+    behavior the labeler's own docstring documents).
+    """
+    smoothed_stats = returns_by_regime_stats(asset_returns, full_sample_states)
+    step_returns: list[float] = []
+    for t in decision_dates:
+        state = int(full_sample_states.loc[t])
+        tilt = vol_targeted_tilt(
+            {state: 1.0},
+            smoothed_stats,
+            asset_returns.loc[:t],
+            target_vol_annual=allocation_cfg.get("target_vol_annual", 0.10),
+            halflife=allocation_cfg.get("ewma_halflife_months", 6),
+            min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
+        )
+        common = tilt["weights"].index.intersection(asset_returns.columns)
+        asset_leg = float((tilt["weights"][common] * asset_returns.loc[t, common]).sum()) if len(common) else 0.0
+        cash_leg = tilt["cash"] * float(cash_ret.loc[t]) if t in cash_ret.index else 0.0
+        step_returns.append(asset_leg + cash_leg)
+
+    return terminal_log_wealth(pd.Series(step_returns))
+
+
+def run_full_backtest_evaluation(
+    monthly_features: pd.DataFrame,
+    monthly_raw: pd.DataFrame,
+    cfg: dict[str, Any],
+    *,
+    registry_path: Any = None,
+    output_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Drive the whole EVAL-01..04 chain end-to-end and write the report.
+
+    (a) ``build_core_research_series`` + ``compute_monthly_returns`` ->
+        equity/bond/cash return series (and the equity LEVEL for Faber);
+        ``run_backtest`` for the regime-tilt strategy, passing
+        ``cash_returns=cash_ret`` so the strategy's cash residual earns the
+        SAME series the baselines earn (review F4).
+    (b) ``no_regime_ablation`` for the ablation leg (same ``cash_ret``).
+    (c) the three price baselines over the SAME holdout-bounded window
+        (baselines do not enforce the cutoff internally — the report layer
+        must slice them, per ``backtest/baselines.py``'s own docstring).
+    (d) ONE full-sample ``fit_jump_model`` + ``canonicalize_states`` over the
+        holdout-bounded dev window for the SMOOTHED reference labeling — a
+        genuinely distinct series from the walk-forward ``per_step_metrics``
+        (Pitfall 1). The multiclass filtered-probs matrix
+        (``build_filtered_probs_matrix``) feeds ``compute_sojourn_lag_headline``
+        so each transition is scored against P(its own target state), never
+        a class-agnostic max (review F1).
+    (e) ``y_true`` for the model-metrics artifacts is joined by REINDEXING
+        the smoothed reference states onto ``per_step_metrics["dates"]``
+        (review F2) — asserted to align length-for-length before proceeding.
+    (f) per-leg KPIs (``evaluation/kpis.py``) + the smoothed-vs-filtered gap
+        (``honesty/gap_lag.py::compute_gap``, using a hindsight-oracle
+        performance number distinct from the actual walk-forward run).
+    (g) ``report_model_metrics`` on the date-joined ``per_step_metrics``.
+    (h) assemble + write the report + artifacts.
+
+    Args:
+        monthly_features: causal monthly features (Phase 1 checkpoint
+            shape) — may physically extend past the holdout cutoff.
+        monthly_raw: raw monthly ingest DataFrame (Phase 1 checkpoint
+            shape) — the source for ``build_core_research_series``.
+        cfg: platform config (``load_platform_config()`` output).
+        registry_path: overrides the default trial registry ledger path.
+        output_dir: overrides the default artifact directory (for tests).
+
+    Returns:
+        dict with keys ``report_path``, ``sojourn_lag``, ``strategy_kpis``,
+        ``ablation_kpis``, ``baseline_kpis``, ``gap``, ``model_metrics_paths``,
+        ``equity_curve``, ``ablation_curve``, ``per_step_metrics``,
+        ``full_sample_states``.
+    """
+    backtest_cfg = cfg.get("backtest", {})
+    allocation_cfg = cfg.get("allocation", {})
+    labeling_cfg = cfg.get("labeling", {})
+    cost_bps = backtest_cfg.get("cost_bps", 10)
+    baseline_cost_bps = cost_bps if backtest_cfg.get("apply_cost_to_baselines", True) else 0.0
+    rebalance = backtest_cfg.get("sixty_forty_rebalance", "monthly")
+    crisis_windows = backtest_cfg.get("crisis_windows", [])
+    act_threshold = allocation_cfg.get("hysteresis", {}).get("act_threshold", 0.70)
+
+    splice_cfg = cfg["splice"]
+    research = build_core_research_series(monthly_raw, cfg)
+    returns = compute_monthly_returns(research)
+
+    equity_name = splice_cfg["equities"]["research_name"]
+    bond_name = splice_cfg["long_duration"]["research_name"]
+    cash_name = splice_cfg["cash"]["research_name"]
+
+    equity_ret = returns[equity_name]
+    bond_ret = returns[bond_name]
+    cash_ret = returns[cash_name]
+    equity_level = research[equity_name]
+
+    # (a) Investable asset universe for run_backtest — the risk classes only
+    # (excludes "cash": cash is never tilted into as a position, it is the
+    # vol-target residual that earns cash_ret via cash_returns, review F4).
+    asset_returns = pd.DataFrame(
+        {params["tradable"]: returns[params["research_name"]] for name, params in splice_cfg.items() if name != "cash"}
     )
 
-    with tempfile.TemporaryDirectory() as _tmp:
-        _path = write_backtest_report(_markdown, {}, output_dir=Path(_tmp))
-        print(f"Self-check report written to: {_path}")  # noqa: T201
-        print(_markdown)  # noqa: T201 — first-class self-check output
+    equity_curve, per_step_metrics = run_backtest(
+        monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True, registry_path=registry_path,
+    )
+
+    # (b) No-regime ablation — same cash_ret series (review F4).
+    ablation_curve, _ablation_metrics = no_regime_ablation(
+        monthly_features, asset_returns, cfg, cash_returns=cash_ret, registry_path=registry_path,
+    )
+
+    # (c) Three price baselines — the report layer holdout-bounds them
+    # (baselines.py does not enforce the cutoff internally).
+    dev_equity_ret, _ = split_by_holdout_boundary(equity_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_bond_ret, _ = split_by_holdout_boundary(bond_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_cash_ret, _ = split_by_holdout_boundary(cash_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_equity_level, _ = split_by_holdout_boundary(equity_level, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+
+    spy_ret = spy_buy_hold(dev_equity_ret)
+    sixty_forty_ret = sixty_forty(dev_equity_ret, dev_bond_ret, rebalance=rebalance, cost_bps=baseline_cost_bps)
+    faber_ret = faber_sma(dev_equity_level, dev_cash_ret, cost_bps=baseline_cost_bps)
+
+    # (d) The SMOOTHED reference labeling — ONE full-sample fit, distinct
+    # from the walk-forward per_step_metrics (Pitfall 1).
+    dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    lean_cols = sorted(lean_feature_set(cfg) & set(dev_features.columns))
+    X_df = dev_features[lean_cols].dropna()
+    X = standardize_features(X_df)
+    fit = fit_jump_model(
+        X,
+        K=labeling_cfg.get("K", 5),
+        lam=labeling_cfg.get("lambda", 52.0),
+        n_restarts=labeling_cfg.get("n_restarts", 10),
+    )
+    smoothed_states_arr, _centroids = canonicalize_states(fit["states"], fit["centroids"], lean_cols)
+    full_sample_states = pd.Series(smoothed_states_arr, index=X_df.index, name="state")
+
+    filtered_probs_matrix = build_filtered_probs_matrix(per_step_metrics)
+    headline = compute_sojourn_lag_headline(full_sample_states, filtered_probs_matrix, act_threshold=act_threshold)
+
+    # (e) Join y_true by REINDEXING the smoothed reference onto the
+    # walk-forward's own decision dates (review F2) — never loop-sourced.
+    dates_index = pd.DatetimeIndex(per_step_metrics["dates"])
+    y_true_series = full_sample_states.reindex(dates_index)
+    if y_true_series.isna().any():
+        missing = list(dates_index[y_true_series.isna()])
+        raise ValueError(
+            f"y_true date-join failed — no smoothed reference state for decision "
+            f"dates: {missing} (review F2: y_true must be joined by date, never "
+            "loop-sourced)."
+        )
+    per_step_metrics = dict(per_step_metrics)
+    per_step_metrics["y_true"] = [int(v) for v in y_true_series.tolist()]
+    if not (len(per_step_metrics["y_true"]) == len(per_step_metrics["dates"]) == len(per_step_metrics["proba"])):
+        raise ValueError("y_true/dates/proba length mismatch after date-join (review F2).")
+
+    # (f) Per-leg KPIs + the smoothed-vs-filtered gap.
+    strategy_returns = equity_curve["return"] if not equity_curve.empty else pd.Series(dtype=float)
+    ablation_returns = ablation_curve["return"] if not ablation_curve.empty else pd.Series(dtype=float)
+
+    strategy_dd = max_drawdown_and_duration(strategy_returns) if len(strategy_returns) else {
+        "max_drawdown": 0.0, "duration_months": 0,
+    }
+    strategy_kpis = {
+        "terminal_log_wealth": terminal_log_wealth(strategy_returns),
+        "max_drawdown": strategy_dd["max_drawdown"],
+        "duration_months": strategy_dd["duration_months"],
+        "cvar": cvar(strategy_returns) if len(strategy_returns) else float("nan"),
+        "turnover": float(equity_curve["turnover"].mean()) if not equity_curve.empty else float("nan"),
+        "crisis_capture": (
+            crisis_capture_ratio(strategy_returns, spy_ret, crisis_windows)
+            if crisis_windows and len(strategy_returns)
+            else {}
+        ),
+    }
+    ablation_kpis = _leg_kpis(ablation_returns) if len(ablation_returns) else {
+        "terminal_log_wealth": 0.0, "max_drawdown": 0.0, "duration_months": 0,
+    }
+    baseline_kpis = {
+        "spy_buy_hold": _leg_kpis(spy_ret),
+        "sixty_forty": _leg_kpis(sixty_forty_ret),
+        "faber_sma": _leg_kpis(faber_ret),
+    }
+
+    smoothed_perf = _smoothed_hindsight_perf(
+        full_sample_states, asset_returns, cash_ret, list(per_step_metrics["dates"]), allocation_cfg,
+    )
+    filtered_perf = strategy_kpis["terminal_log_wealth"]
+    gap = compute_gap(smoothed_perf, filtered_perf)
+
+    # (g) Model-metrics artifacts (Brier/calibration/confusion).
+    model_metrics_paths = report_model_metrics(per_step_metrics, output_dir=output_dir)
+
+    # (h) Assemble + write the report + artifacts.
+    markdown = assemble_backtest_report(
+        sojourn_lag=headline,
+        strategy_kpis=strategy_kpis,
+        ablation_kpis=ablation_kpis,
+        baseline_kpis=baseline_kpis,
+        gap=gap,
+    )
+    kpi_table = _build_kpi_table(strategy_kpis, ablation_kpis, baseline_kpis)
+    report_path = write_backtest_report(
+        markdown,
+        {
+            "equity_curve_strategy": equity_curve,
+            "equity_curve_ablation": ablation_curve,
+            "kpi_table": kpi_table,
+        },
+        output_dir=output_dir,
+    )
+
+    return {
+        "report_path": report_path,
+        "sojourn_lag": headline,
+        "strategy_kpis": strategy_kpis,
+        "ablation_kpis": ablation_kpis,
+        "baseline_kpis": baseline_kpis,
+        "gap": gap,
+        "model_metrics_paths": model_metrics_paths,
+        "equity_curve": equity_curve,
+        "ablation_curve": ablation_curve,
+        "per_step_metrics": per_step_metrics,
+        "full_sample_states": full_sample_states,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: load platform config + checkpoints, run the full
+    EVAL-01..04 evaluation, write the report."""
+    parser = argparse.ArgumentParser(
+        description="Assemble the honest backtest evaluation report (EVAL-01..04)"
+    )
+    parser.parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO)
+
+    cfg = load_platform_config()
+    cm = get_platform_checkpoint_manager()
+    monthly_features = cm.load("monthly_features")
+    monthly_raw = cm.load("monthly_raw")
+
+    result = run_full_backtest_evaluation(monthly_features, monthly_raw, cfg)
+    print(f"Backtest report written: {result['report_path']}")  # noqa: T201 — first-class CLI output
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
