@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: honest-backtest-evaluation
 status: executing
-stopped_at: Phase 5 Plan 3 complete (evaluation KPIs + sojourn/lag headline, review F1 fix)
-last_updated: "2026-07-24T22:18:00.000Z"
+stopped_at: Phase 5 Plan 4 complete (model-metrics artifacts, review F2/F3 fixes)
+last_updated: "2026-07-24T22:17:08.329Z"
 last_activity: 2026-07-24
-last_activity_desc: Completed 05-03-PLAN.md
+last_activity_desc: Completed 05-04-PLAN.md (model-metrics artifacts, review F2/F3 fixes)
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 28
-  completed_plans: 24
+  completed_plans: 25
   percent: 67
 ---
 
@@ -30,9 +30,9 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 05 (honest-backtest-evaluation) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
-Last activity: 2026-07-24 — Completed 05-03-PLAN.md (evaluation KPIs + sojourn/lag headline)
+Last activity: 2026-07-25 — Completed 05-04-PLAN.md (model-metrics artifacts, review F2/F3 fixes)
 
 Progress: [██████░░░░] 67%
 
@@ -54,6 +54,7 @@ Progress: [██████░░░░] 67%
 | Phase 05 P01 | 3min | 2 tasks | 5 files |
 | Phase 05 P02 | 12min | 3 tasks | 2 files |
 | Phase 05 P03 | 18min | 2 tasks | 4 files |
+| Phase 05 P04 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 05-02]: All 6 driver tests monkeypatch module-level _refit_l1/_refit_l2 (and vol_targeted_tilt for the cash-residual test) instead of exercising the real jump-model/nowcaster fit — Keeps orchestration-invariant tests fast/deterministic and isolated from real-fit degeneracy (Pitfall 2 territory); the real fit path is separately proven via the module's __main__ self-check
 - [Phase 05-03]: compute_sojourn_lag_headline groups ex-post transitions by their OWN target state and checks each against only that state's own filtered-probs column, never a class-agnostic max-across-classes series — Review F1 fix — class-agnostic max would systematically understate detection lag ('fooled by its own backtest')
 - [Phase 05-03]: max_drawdown_and_duration's duration_months is the longest run of consecutive underwater periods (drawdown < 0), not strictly peak-to-trough — Matches the plan's literal <action> text; a never-recovered drawdown extends duration to end of series
+- [Phase 05-04]: model_metrics.py implements its own _reconcile_and_stack_proba rather than importing sojourn_lag.py's build_filtered_probs_matrix — the plan's numpy/pandas/stdlib-only import constraint keeps the two evaluation modules independently grep-gated, even though both implement the same union-of-classes/K-padding pattern (review F3).
+- [Phase 05-04]: report_model_metrics indexes per_step_metrics['y_true'] via direct dict access (not .get()), and asserts len(y_true)==len(dates)==len(proba), raising ValueError on mismatch — y_true is always joined by date by the report layer, never sourced from the walk-forward loop (review F2).
 
 ### Pending Todos
 
@@ -105,6 +108,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24T22:06:14.578Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-honest-backtest-evaluation/05-CONTEXT.md
+Last session: 2026-07-24T22:16:52.546Z
+Stopped at: Phase 5 Plan 4 complete (model-metrics artifacts, review F2/F3 fixes)
+Resume file: None

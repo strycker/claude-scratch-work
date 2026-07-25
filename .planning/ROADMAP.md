@@ -209,7 +209,7 @@ whether regime timing is actually worth anything.
 
   4. Model metrics artifacts (multiclass Brier score, calibration bins, confusion tables)
      are persisted to disk per run for later inspection and comparison.
-**Plans**: 3/7 plans executed
+**Plans**: 4/7 plans executed
 
 **Wave 1**
 
@@ -219,7 +219,7 @@ whether regime timing is actually worth anything.
 
 - [x] 05-02-PLAN.md — Walk-forward backtest driver: refit L1→L4 on data ≤ t, holdout-bounded, one registry trial (EVAL-01)
 - [x] 05-03-PLAN.md — Strategy KPIs + sojourn/detection-lag headline orchestration (EVAL-01, EVAL-03)
-- [ ] 05-04-PLAN.md — Model-metrics artifacts: multiclass Brier, calibration bins, confusion tables (EVAL-04)
+- [x] 05-04-PLAN.md — Model-metrics artifacts: multiclass Brier, calibration bins, confusion tables (EVAL-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -260,5 +260,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
-| 5. Honest Backtest & Evaluation | 3/7 | In Progress|  |
+| 5. Honest Backtest & Evaluation | 4/7 | In Progress|  |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |
