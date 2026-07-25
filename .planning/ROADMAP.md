@@ -209,7 +209,7 @@ whether regime timing is actually worth anything.
 
   4. Model metrics artifacts (multiclass Brier score, calibration bins, confusion tables)
      are persisted to disk per run for later inspection and comparison.
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 **Wave 1**
 
@@ -227,7 +227,7 @@ whether regime timing is actually worth anything.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 05-06-PLAN.md — Backtest report assembly (headline-first) + synthetic end-to-end integration (EVAL-01, EVAL-02, EVAL-03, EVAL-04)
+- [x] 05-06-PLAN.md — Backtest report assembly (headline-first) + synthetic end-to-end integration (EVAL-01, EVAL-02, EVAL-03, EVAL-04)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -260,5 +260,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
-| 5. Honest Backtest & Evaluation | 5/7 | In Progress|  |
+| 5. Honest Backtest & Evaluation | 6/7 | In Progress|  |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |
