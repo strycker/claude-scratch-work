@@ -15,29 +15,45 @@ design §23.1 Faber comparison and the "does the regime layer pay rent" delta
   target), with a strict 1-step decision lag (A4): the position for month
   ``t+1`` is decided from the SMA signal computed through month ``t`` only —
   never the same month's own level (no look-ahead).
-- ``no_regime_ablation`` (added in a later task) — design §8.7's "the regime
-  layer must pay rent" ablation, delegating to
-  ``backtest.driver.run_backtest(..., use_regime_tilt=False)``.
+- :func:`no_regime_ablation` — design §8.7's "the regime layer must pay rent"
+  ablation. This is NOT a hand-rolled parallel equal-weight implementation
+  (RESEARCH Anti-Pattern; D-02) — it is a one-line delegation to
+  ``backtest.driver.run_backtest(..., use_regime_tilt=False)``, the SAME
+  audited L1-L4 code path with the regime tilt disabled. When
+  ``cfg["backtest"].get("skip_l1l2_for_ablation", True)`` (review F5), the
+  driver additionally skips the discarded L1/L2 refits for that path, so
+  building this ablation does not double the ~588-refit walk-forward
+  gauntlet's cost, while the equity curve stays byte-identical to the
+  vol-target baseline either way.
 
 Cost convention (A5, review F4): ``cost_bps`` and the 60/40 rebalance cadence
 are read from ``cfg["backtest"]`` by the CALL SITE (the report layer, Plan
 06) — never hard-coded here — so ``apply_cost_to_baselines`` toggles the
 SAME bps haircut on every rebalancing baseline as the strategy leg. The cash
-sleeve these baselines earn on their non-invested legs (``cash_ret``) is the
-SAME series ``run_backtest``'s strategy cash residual now earns (review F4)
-— the cash-return convention is symmetric across the strategy and the
-baselines, so the Faber comparison is not quietly biased over the
-double-digit-yield 1970s-80s.
+sleeve these baselines earn on their non-invested legs (``cash_ret`` /
+``cash_returns``) is the SAME series ``run_backtest``'s strategy cash
+residual now earns (review F4) — the cash-return convention is symmetric
+across the strategy and the baselines, so the Faber comparison is not
+quietly biased over the double-digit-yield 1970s-80s.
+
+Trial-registry scope (review F7, resolving RESEARCH.md Open Question 2,
+never locked in CONTEXT.md): only the regime-tilt strategy and
+``no_regime_ablation`` (via its delegation to ``run_backtest``) log a
+registry trial — both are genuinely evaluated configurations with a fitted
+(possibly degenerate) model path. ``spy_buy_hold``, ``sixty_forty``, and
+``faber_sma`` are deterministic price arithmetic with no tunable parameters;
+they log NO trial — they are report-only comparisons, not part of the
+multiple-testing surface the registry bounds.
 
 Callers (the report layer) are responsible for supplying already
-holdout-bounded (<=2020-12-31) series to these functions — the same
-discipline ``run_backtest`` enforces internally via
-``split_by_holdout_boundary``.
+holdout-bounded (<=2020-12-31) series to ``spy_buy_hold``/``sixty_forty``/
+``faber_sma`` — the same discipline ``run_backtest`` already enforces
+internally for ``no_regime_ablation`` via ``split_by_holdout_boundary``.
 
 Usage::
 
     from trading_crab_lib.platform.backtest.baselines import (
-        faber_sma, sixty_forty, spy_buy_hold,
+        faber_sma, no_regime_ablation, sixty_forty, spy_buy_hold,
     )
 
     spy_ret = spy_buy_hold(research["equities_tr"].pct_change())
@@ -46,14 +62,20 @@ Usage::
         cost_bps=cfg["backtest"]["cost_bps"] if cfg["backtest"]["apply_cost_to_baselines"] else 0.0,
     )
     faber_ret = faber_sma(research["equities_tr"], cash_ret, cost_bps=cost_bps)
+    equity_curve, per_step_metrics = no_regime_ablation(
+        monthly_features, asset_returns, cfg, cash_returns=cash_returns,
+    )
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from trading_crab_lib.platform.backtest.costs import apply_transaction_cost, compute_turnover
+from trading_crab_lib.platform.backtest.driver import run_backtest
 
 _SUPPORTED_REBALANCE_CONVENTIONS = ("monthly",)
 
@@ -204,6 +226,60 @@ def faber_sma(
     return net
 
 
+# ── No-regime ablation (design §8.7, F5, D-02) ───────────────────────────────
+
+
+def no_regime_ablation(
+    monthly_features: pd.DataFrame,
+    asset_returns: pd.DataFrame,
+    cfg: dict[str, Any],
+    *,
+    cash_returns: pd.Series | None = None,
+    registry_path: Any = None,
+) -> tuple[pd.DataFrame, dict[str, list]]:
+    """The no-regime ablation — a ONE-LINE delegation to the tilt-off driver path.
+
+    This is the SAME ``run_backtest`` code path with ``use_regime_tilt=False``
+    — NOT a hand-rolled parallel equal-weight implementation (RESEARCH
+    Anti-Pattern; D-02). No allocation math is reimplemented here; that is
+    exactly what makes the "ablation reproduces the vol-target baseline"
+    invariant hold (``TestNoRegimeAblationInvariant``).
+
+    ``cash_returns`` is passed straight through so the ablation's cash
+    residual earns the SAME series the strategy leg does (review F4) —
+    omitting it would silently default the ablation's cash sleeve to 0%,
+    which would break the cash-return symmetry this whole plan documents.
+
+    When ``cfg["backtest"].get("skip_l1l2_for_ablation", True)`` (review F5),
+    ``run_backtest`` skips the discarded L1 jump-model + L2 nowcaster
+    refits for this tilt-off path (their output is unused when the tilt is
+    off), so building this ablation does NOT double the ~588-refit
+    walk-forward gauntlet's cost — and the ablation equity curve remains
+    byte-identical to the vol-target baseline either way (the invariant
+    still holds regardless of the skip).
+
+    Trial-registry scope (review F7): unlike ``spy_buy_hold``/
+    ``sixty_forty``/``faber_sma`` (deterministic price arithmetic, no
+    tunable parameters, no registry trial logged), this ablation DOES log
+    its own registry trial via ``run_backtest``'s single ``append_trial``
+    call — it is a genuine evaluated configuration with a fitted (here,
+    degenerate single-state) model path, and therefore is part of the
+    multiple-testing surface the registry bounds.
+
+    Returns:
+        tuple[pd.DataFrame, dict[str, list]]: the SAME
+        ``(equity_curve, per_step_metrics)`` contract as ``run_backtest``.
+    """
+    return run_backtest(
+        monthly_features,
+        asset_returns,
+        cfg,
+        cash_returns=cash_returns,
+        use_regime_tilt=False,
+        registry_path=registry_path,
+    )
+
+
 if __name__ == "__main__":
     import logging
 
@@ -225,3 +301,24 @@ if __name__ == "__main__":
     print("spy_buy_hold terminal wealth:  ", float((1 + _spy.dropna()).prod()))  # noqa: T201
     print("sixty_forty terminal wealth:   ", float((1 + _sixty_forty.dropna()).prod()))  # noqa: T201
     print("faber_sma terminal wealth:     ", float((1 + _faber.dropna()).prod()))  # noqa: T201
+
+    _lean_cols = [
+        "curve_10y3m", "curve_10y2y", "credit_spread_baa_aaa", "fred_vix", "gold", "oil",
+        "trailing_return_1m", "trailing_return_3m", "realized_vol_1m", "realized_vol_3m",
+        "cape_shiller", "div_yield", "real_rate_level",
+    ]
+    _monthly_features = pd.DataFrame({c: _rng.normal(0, 1, 48) for c in _lean_cols}, index=_idx)
+    _asset_returns = pd.DataFrame(
+        {"SPY": _rng.normal(0.006, 0.03, 48), "TLT": _rng.normal(0.001, 0.02, 48)}, index=_idx
+    )
+    _cfg = {
+        "taxonomy": {"fast": _lean_cols[:10], "slow": _lean_cols[10:], "agency": []},
+        "labeling": {"K": 2, "lambda": 5.0, "n_restarts": 2, "embargo_months": 3},
+        "allocation": {
+            "target_vol_annual": 0.10, "ewma_halflife_months": 6, "portfolio_vol_min_obs": 3,
+            "hysteresis": {"act_threshold": 0.70, "unwind_threshold": 0.40},
+        },
+        "backtest": {"cost_bps": 10, "min_train_months": 24, "skip_l1l2_for_ablation": True},
+    }
+    _ablation_equity, _ = no_regime_ablation(_monthly_features, _asset_returns, _cfg, cash_returns=_cash_ret)
+    print("no_regime_ablation equity curve:\n", _ablation_equity)  # noqa: T201
