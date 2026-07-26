@@ -224,3 +224,27 @@ class TestBuildCoreResearchSeries:
 
         with pytest.raises(ValueError, match="Unknown splice method"):
             build_core_research_series(raw, bad_cfg)
+
+    def test_missing_source_column_raises_clear_error(self):
+        # Simulate a failed macrotrends fetch: gold_spot / wti_crude never arrive.
+        # The preflight must raise ONE actionable ValueError naming both missing
+        # columns (and the likely cause) rather than a bare KeyError deep in the loop.
+        idx = _monthly_index("1962-01-31", 24)
+        raw = pd.DataFrame(
+            {
+                "sp500": [100 * (1.01**i) for i in range(24)],
+                "div_yield": [0.03] * 24,
+                "fred_gs10": [0.04 + 0.0005 * i for i in range(24)],
+                "fred_tb3ms": [0.02] * 24,
+                # gold_spot and wti_crude intentionally absent
+            },
+            index=idx,
+        )
+
+        with pytest.raises(ValueError, match="required source columns are missing") as exc:
+            build_core_research_series(raw, SPLICE_CFG)
+
+        message = str(exc.value)
+        assert "gold_spot" in message
+        assert "wti_crude" in message
+        assert "macrotrends" in message  # actionable cause hint
