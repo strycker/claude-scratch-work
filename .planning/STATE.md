@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Asset Prediction & Allocation
-status: phase_complete
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-23T21:03:41.161Z"
-last_activity: 2026-07-22
-last_activity_desc: Phase 4 execution started
+current_phase: 05
+current_phase_name: honest-backtest-evaluation
+status: executing
+stopped_at: "Completed 05-06-PLAN.md (honest backtest report capstone: assemble_backtest_report + write_backtest_report + run_full_backtest_evaluation + main CLI)"
+last_updated: "2026-07-25T14:57:32.540Z"
+last_activity: 2026-07-25
+last_activity_desc: "Completed 05-05-PLAN.md (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)"
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 28
+  completed_plans: 27
   percent: 67
 ---
 
@@ -25,23 +25,23 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 4 complete — next: Phase 5 (Honest Backtest & Evaluation)
+**Current focus:** Phase 05 — honest-backtest-evaluation
 
 ## Current Position
 
-Phase: 4 (Asset Prediction & Allocation) — COMPLETE & VERIFIED (passed 5/5)
-Plan: 5 of 5 complete
-Status: Phase 4 verified; ready for /gsd-discuss-phase 5
-Last activity: 2026-07-22 — Phase 4 execution started
+Phase: 05 (honest-backtest-evaluation) — EXECUTING
+Plan: 7 of 7
+Status: Ready to execute
+Last activity: 2026-07-25 — Completed 05-05-PLAN.md (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)
 
-Progress: [██████░░░░] 67%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12 (7 Phase 1 + 5 Phase 2)
-- Full test suite: 863 passed, 49 skipped
+- Total plans completed: 12 (7 Phase 1 + 5 Phase 2) + 4 in Phase 05
+- Full test suite: 1120 passed (post 05-05)
 
 **By Phase:**
 
@@ -51,6 +51,12 @@ Progress: [██████░░░░] 67%
 | 2 — Honesty Infrastructure | 5/5 | Verified passed 5/5 |
 
 *Updated after each plan completion*
+| Phase 05 P01 | 3min | 2 tasks | 5 files |
+| Phase 05 P02 | 12min | 3 tasks | 2 files |
+| Phase 05 P03 | 18min | 2 tasks | 4 files |
+| Phase 05 P04 | 15min | 2 tasks | 2 files |
+| Phase 05 P05 | 22min | 3 tasks | 2 files |
+| Phase 05 P06 | 7min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -72,6 +78,17 @@ Recent decisions affecting current work:
 
 - Phase 2: walk-forward interface frozen (expanding_steps + run_walkforward with
   automatic single append_trial per run); Phase 3 models plug into this interface.
+
+- [Phase 05]: Phase 5 Plan 1: crisis_windows default list hard-bounded to 4 in-sample crises (1973-74, 1980-82, 2000-02, 2008-09), no 2020/2022 window; compute_turnover uses index-union reindex(fill_value=0.0), not positional diffing — Keeps holdout discipline (Pitfall 4) and correctly handles cold starts / asset-set changes
+- [Phase 05-02]: Task boundary matched the plan literally: Task 2 lands the core loop without holdout split/L2 resilience (TestHoldoutBoundary intentionally RED); Task 3 adds split_by_holdout_boundary + try/except degrade-and-continue, turning it GREEN — Makes the incremental TDD narrative visible in git history rather than one large commit
+- [Phase 05-02]: All 6 driver tests monkeypatch module-level _refit_l1/_refit_l2 (and vol_targeted_tilt for the cash-residual test) instead of exercising the real jump-model/nowcaster fit — Keeps orchestration-invariant tests fast/deterministic and isolated from real-fit degeneracy (Pitfall 2 territory); the real fit path is separately proven via the module's __main__ self-check
+- [Phase 05-03]: compute_sojourn_lag_headline groups ex-post transitions by their OWN target state and checks each against only that state's own filtered-probs column, never a class-agnostic max-across-classes series — Review F1 fix — class-agnostic max would systematically understate detection lag ('fooled by its own backtest')
+- [Phase 05-03]: max_drawdown_and_duration's duration_months is the longest run of consecutive underwater periods (drawdown < 0), not strictly peak-to-trough — Matches the plan's literal <action> text; a never-recovered drawdown extends duration to end of series
+- [Phase 05-04]: model_metrics.py implements its own _reconcile_and_stack_proba rather than importing sojourn_lag.py's build_filtered_probs_matrix — the plan's numpy/pandas/stdlib-only import constraint keeps the two evaluation modules independently grep-gated, even though both implement the same union-of-classes/K-padding pattern (review F3).
+- [Phase 05-04]: report_model_metrics indexes per_step_metrics['y_true'] via direct dict access (not .get()), and asserts len(y_true)==len(dates)==len(proba), raising ValueError on mismatch — y_true is always joined by date by the report layer, never sourced from the walk-forward loop (review F2).
+- [Phase 05-05]: no_regime_ablation adds a cash_returns passthrough kwarg not in the plan's literal one-line-delegation snippet (Rule 2 auto-fix) - omitting it would silently default the ablation's cash residual to 0%, breaking F4 cash-return symmetry; the function stays a single delegating return statement.
+- [Phase 05-06]: run_full_backtest_evaluation computes the smoothed-vs-filtered gap via a hindsight-oracle vol_targeted_tilt driven by the full-sample smoothed states at each real walk-forward decision date (never inventing new allocation math) rather than a simpler point-estimate proxy — matches the design's non-causal batch-labeling doctrine and keeps the gap input genuinely distinct from the filtered strategy performance (Pitfall 1).
+- [Phase 05-06]: The investable asset_returns universe fed to run_backtest excludes the 'cash' splice class (FZFXX) — cash is never tilted into as a risk position; it is the vol-target residual that earns cash_ret directly via run_backtest's cash_returns parameter (review F4).
 
 ### Pending Todos
 
@@ -96,6 +113,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-23T21:03:41.138Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-honest-backtest-evaluation/05-CONTEXT.md
+Last session: 2026-07-25T14:56:06.038Z
+Stopped at: Completed 05-06-PLAN.md (honest backtest report capstone: assemble_backtest_report + write_backtest_report + run_full_backtest_evaluation + main CLI)
+Resume file: None

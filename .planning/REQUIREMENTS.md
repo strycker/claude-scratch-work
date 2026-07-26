@@ -51,10 +51,10 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Evaluation (EVAL)
 
-- [ ] **EVAL-01**: Honest walk-forward backtest 1972–2020 runs end-to-end through all layers (design §14 Phase 1 exit)
-- [ ] **EVAL-02**: Baseline gauntlet in the backtest report: buy-and-hold SPY, 60/40, Faber 10-month SMA (design §8.7, §23.1)
-- [ ] **EVAL-03**: Sojourn/detection-lag ratio reported prominently — the go/no-go number for regime timing (design §5.4)
-- [ ] **EVAL-04**: Model metrics artifacts (multiclass Brier, calibration bins, confusion tables) persisted per run (salvaged `model_metrics_artifacts.py`; design §8.8)
+- [x] **EVAL-01**: Honest walk-forward backtest 1972–2020 runs end-to-end through all layers (design §14 Phase 1 exit)
+- [x] **EVAL-02**: Baseline gauntlet in the backtest report: buy-and-hold SPY, 60/40, Faber 10-month SMA (design §8.7, §23.1)
+- [x] **EVAL-03**: Sojourn/detection-lag ratio reported prominently — the go/no-go number for regime timing (design §5.4)
+- [x] **EVAL-04**: Model metrics artifacts (multiclass Brier, calibration bins, confusion tables) persisted per run (salvaged `model_metrics_artifacts.py`; design §8.8)
 
 ### Migration (MIG)
 
@@ -140,10 +140,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | L4-02 | Phase 4 | Complete |
 | L4-03 | Phase 4 | Complete |
 | L4-04 | Phase 4 | Complete |
-| EVAL-01 | Phase 5 | Pending |
-| EVAL-02 | Phase 5 | Pending |
-| EVAL-03 | Phase 5 | Pending |
-| EVAL-04 | Phase 5 | Pending |
+| EVAL-01 | Phase 5 | Complete |
+| EVAL-02 | Phase 5 | Complete |
+| EVAL-03 | Phase 5 | Complete |
+| EVAL-04 | Phase 5 | Complete |
 | MIG-01 | Phase 6 | Pending |
 
 **Coverage:**
