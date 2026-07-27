@@ -25,6 +25,10 @@ data/raw/
 # outputs/plots/
 # outputs/reports/
 
+# Trial registry — machine/run-specific ledger (git_sha + timestamp per row),
+# regenerated per environment like data/ and outputs/; never versioned.
+registry/
+
 # Secrets / API keys (always use .env instead)
 *.key
 config/secrets.yaml
