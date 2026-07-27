@@ -98,6 +98,7 @@ def assemble_backtest_report(
     ablation_kpis: dict,
     baseline_kpis: dict,
     gap: float,
+    excluded_assets: list[str] | None = None,
 ) -> str:
     """Assemble the honest backtest report markdown from precomputed inputs.
 
@@ -272,6 +273,15 @@ def assemble_backtest_report(
         "`backtest/costs.py::apply_transaction_cost` — only SPY buy-and-hold "
         "is cost-free by construction (no rebalancing ever occurs)."
     )
+    if excluded_assets:
+        lines.append(
+            "**⚠ Excluded assets:** the following research classes were EXCLUDED "
+            "from this run because their source data was unavailable "
+            "(e.g. gold when macrotrends is IP-blocked): "
+            f"`{', '.join(excluded_assets)}`. The backtest ran on the remaining "
+            "assets only — treat cross-run comparisons that include these assets "
+            "as not directly comparable."
+        )
     lines.append("")
 
     return "\n".join(lines)
@@ -472,9 +482,23 @@ def run_full_backtest_evaluation(
     # (a) Investable asset universe for run_backtest — the risk classes only
     # (excludes "cash": cash is never tilted into as a position, it is the
     # vol-target residual that earns cash_ret via cash_returns, review F4).
+    # An optional research class (e.g. gold when macrotrends is blocked) may be
+    # absent from `returns` — skip it here so the backtest runs on the assets
+    # that DO have data instead of KeyError-ing on the missing series.
     asset_returns = pd.DataFrame(
-        {params["tradable"]: returns[params["research_name"]] for name, params in splice_cfg.items() if name != "cash"}
+        {
+            params["tradable"]: returns[params["research_name"]]
+            for name, params in splice_cfg.items()
+            if name != "cash" and params["research_name"] in returns.columns
+        }
     )
+    _excluded = [
+        params["research_name"]
+        for name, params in splice_cfg.items()
+        if name != "cash" and params["research_name"] not in returns.columns
+    ]
+    if _excluded:
+        log.warning("Backtest asset universe EXCLUDES unavailable research classes: %s", _excluded)
 
     equity_curve, per_step_metrics = run_backtest(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True, registry_path=registry_path,
@@ -574,6 +598,7 @@ def run_full_backtest_evaluation(
         ablation_kpis=ablation_kpis,
         baseline_kpis=baseline_kpis,
         gap=gap,
+        excluded_assets=_excluded,
     )
     kpi_table = _build_kpi_table(strategy_kpis, ablation_kpis, baseline_kpis)
     report_path = write_backtest_report(

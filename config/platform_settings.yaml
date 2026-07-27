@@ -130,12 +130,19 @@ splice:
     research_name: gold
     method:        single_source
     source_col:    gold_spot
+    # gold_spot has no reliable free source right now (macrotrends 403-blocks
+    # datacenter/VPN IPs; FRED delisted its LBMA gold series). optional:true lets
+    # the build SKIP gold (with a WARNING) instead of crashing when the source is
+    # unavailable — the backtest then runs on the other core assets. Set to false
+    # (or delete) to make gold required again once a source is reachable.
+    optional:      true
     tradable:      IAU
   oil:
     research_name:  oil
     method:         single_source
     source_col:     wti_crude
     cross_check_col: wti_fred
+    fallback_col:   wti_fred    # use FRED WTI (1946+) when macrotrends is blocked (403 on datacenter/VPN IPs)
     tradable:       USO
   cash:
     research_name: cash

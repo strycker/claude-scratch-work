@@ -167,5 +167,22 @@ class TestArtifactsWritten:
         assert report_path.exists()
 
 
+class TestExcludedAssets:
+    def test_excluded_assets_flagged_in_report(self):
+        md = report.assemble_backtest_report(
+            sojourn_lag=_sojourn_lag(),
+            strategy_kpis=_strategy_kpis(),
+            ablation_kpis=_ablation_kpis(),
+            baseline_kpis=_baseline_kpis(),
+            gap=0.03,
+            excluded_assets=["gold"],
+        )
+        assert "Excluded assets" in md
+        assert "gold" in md
+
+    def test_no_excluded_note_when_none(self):
+        assert "Excluded assets" not in _assemble()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-x", "-q"])
