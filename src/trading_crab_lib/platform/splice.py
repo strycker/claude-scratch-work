@@ -170,16 +170,23 @@ def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.Dat
     splice_cfg = cfg["splice"]
 
     # ── Preflight: report all missing source columns at once ──
+    # A single_source class whose primary source_col is absent is still
+    # satisfiable if its optional ``fallback_col`` (e.g. a FRED cross-check
+    # series) IS present — so it is only flagged missing when both are absent.
     available = set(raw.columns)
     missing: list[str] = []
     for class_name, params in splice_cfg.items():
-        for key in _SPLICE_SOURCE_COL_KEYS.get(params.get("method", ""), ()):
+        method = params.get("method", "")
+        for key in _SPLICE_SOURCE_COL_KEYS.get(method, ()):
             col = params.get(key)
-            if col is not None and col not in available:
-                missing.append(
-                    f"  - {params.get('research_name', class_name)} "
-                    f"({params['method']}): missing column '{col}'"
-                )
+            if col is None or col in available:
+                continue
+            if method == "single_source" and params.get("fallback_col") in available:
+                continue
+            missing.append(
+                f"  - {params.get('research_name', class_name)} "
+                f"({method}): missing column '{col}'"
+            )
     if missing:
         raise ValueError(
             "build_core_research_series: required source columns are missing from the "
@@ -201,7 +208,15 @@ def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.Dat
         elif method == "cmt_par_bond_repricing":
             series = build_treasury_tr_synthetic(raw[params["yield_col"]], cfg)
         elif method == "single_source":
-            series = raw[params["source_col"]].dropna().rename(research_name)
+            col = params["source_col"]
+            fallback = params.get("fallback_col")
+            if col not in raw.columns and fallback in raw.columns:
+                log.warning(
+                    "splice '%s': primary source '%s' missing — falling back to '%s'",
+                    research_name, col, fallback,
+                )
+                col = fallback
+            series = raw[col].dropna().rename(research_name)
         elif method == "yield_as_return":
             series = raw[params["yield_col"]].dropna().rename(research_name)
         elif method == "ratio_splice":

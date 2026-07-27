@@ -248,3 +248,31 @@ class TestBuildCoreResearchSeries:
         assert "gold_spot" in message
         assert "wti_crude" in message
         assert "macrotrends" in message  # actionable cause hint
+
+    def test_single_source_falls_back_to_fallback_col(self):
+        # oil's primary source (macrotrends wti_crude) is absent, but its
+        # configured fallback_col (FRED wti_fred) is present — the class must be
+        # assembled from the fallback with NO error, mirroring a macrotrends block.
+        idx = _monthly_index("1962-01-31", 12)
+        raw = pd.DataFrame(
+            {
+                "wti_fred": [20.0 + i for i in range(12)],  # FRED oil present
+                # wti_crude (macrotrends) intentionally absent
+            },
+            index=idx,
+        )
+        cfg = {
+            "splice": {
+                "oil": {
+                    "research_name": "oil",
+                    "method": "single_source",
+                    "source_col": "wti_crude",
+                    "fallback_col": "wti_fred",
+                },
+            }
+        }
+
+        result = build_core_research_series(raw, cfg)
+
+        assert "oil" in result.columns
+        assert list(result["oil"].dropna().values) == [20.0 + i for i in range(12)]

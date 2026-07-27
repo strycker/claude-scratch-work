@@ -136,6 +136,7 @@ splice:
     method:         single_source
     source_col:     wti_crude
     cross_check_col: wti_fred
+    fallback_col:   wti_fred    # use FRED WTI (1946+) when macrotrends is blocked (403 on datacenter/VPN IPs)
     tradable:       USO
   cash:
     research_name: cash
