@@ -90,6 +90,32 @@ log = logging.getLogger(__name__)
 _L2_DEGRADE_EXCEPTIONS: tuple[type[Exception], ...] = (ValueError, IndexError)
 
 
+def _window_usable_columns(
+    features: pd.DataFrame, cols: list[str], *, warmup: int = 3
+) -> list[str]:
+    """Columns with data across the whole window except at most ``warmup`` leading rows.
+
+    Distinguishes a *bounded rolling-warmup* NaN (``realized_vol_*`` /
+    ``trailing_return_*`` are NaN only for the first ≤3 months — KEEP the column)
+    from a *structural late start* (``fred_vix`` is NaN for every month before its
+    1990 inception — DROP the column). Because the walk-forward window always
+    expands from ~1962, a late-start feature is NaN across most of every window;
+    keeping it would force an any-NaN row drop that discards the entire pre-1990
+    history and starves the regime model. Dropping it instead lets L1/L2 train on
+    the long-history features across the FULL window, consistently at every step
+    (no 1990 discontinuity). Uses only in-window data — causal, no look-ahead.
+
+    ``warmup`` is the maximum rolling-feature warmup (Phase 1's 3-month
+    realized-vol / trailing-return windows).
+    """
+    usable: list[str] = []
+    for c in cols:
+        tail = features[c].iloc[warmup:] if len(features[c]) > warmup else features[c]
+        if tail.notna().all():
+            usable.append(c)
+    return usable
+
+
 def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
     """Refit the L1 jump-model labeler on ``train_features`` ONLY.
 
@@ -107,11 +133,17 @@ def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
     n_restarts = labeling_cfg.get("n_restarts", 10)
 
     lean_cols = sorted(lean_feature_set(cfg) & set(train_features.columns))
-    X_df = train_features[lean_cols].dropna()
+    # Keep only long-history columns (drop structural late-starts like fred_vix,
+    # NaN before 1990) so the pre-1990 window is not discarded wholesale; then
+    # drop the ≤warmup leading rolling-warmup rows. Labels stay comparable across
+    # the boundary because canonicalize_states sorts by trailing_return_1m,
+    # present in every window.
+    used_cols = _window_usable_columns(train_features, lean_cols)
+    X_df = train_features[used_cols].dropna(axis=0, how="any")
     X = standardize_features(X_df)
 
     fit = fit_jump_model(X, K=K, lam=lam, n_restarts=n_restarts)
-    states, _centroids = canonicalize_states(fit["states"], fit["centroids"], lean_cols)
+    states, _centroids = canonicalize_states(fit["states"], fit["centroids"], used_cols)
     return pd.Series(states, index=X_df.index, name="state")
 
 
@@ -141,8 +173,16 @@ def _refit_l2(
     """
     embargo_months = cfg.get("labeling", {}).get("embargo_months", 12)
     X, y = build_nowcaster_training_set(train_features, train_states, embargo_months=embargo_months)
+    # Keep only long-history columns (drop structural late-starts like fred_vix),
+    # applied to BOTH the training matrix and the prediction row so their columns
+    # align. This lets the nowcaster train pre-1990 on the long-history features
+    # instead of holding naive weights until VIX exists. fit_nowcaster's own
+    # non-finite-row drop then removes the ≤warmup rolling-warmup rows. Derived
+    # from in-window training data only (strictly before t) — causal.
+    used_cols = _window_usable_columns(X, list(X.columns))
+    X = X[used_cols]
     model = fit_nowcaster(X, y)
-    proba = model.predict_proba(feature_row[X.columns])
+    proba = model.predict_proba(feature_row[used_cols])
     return pd.Series(proba[0], index=model.classes_)
 
 

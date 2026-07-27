@@ -318,3 +318,45 @@ class TestAblationSkipInvariant:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-x", "-q"])
+
+
+class TestWindowUsableColumns:
+    """Pre-1990 regime-activation fix: distinguish bounded rolling-warmup NaN
+    (keep) from a structural late start like VIX (drop) so the walk-forward
+    trains on long-history features across the full window instead of discarding
+    every pre-1990 row."""
+
+    def test_keeps_leading_warmup_nan_drops_structural_late_start(self):
+        idx = pd.date_range("1962-01-31", periods=120, freq="ME")
+        df = pd.DataFrame(index=idx)
+        df["trailing_return_3m"] = np.arange(120, dtype=float)
+        df.iloc[:3, df.columns.get_loc("trailing_return_3m")] = np.nan  # 3-month warmup
+        df["credit_spread_baa_aaa"] = np.arange(120, dtype=float)       # fully present
+        df["fred_vix"] = np.arange(120, dtype=float)
+        df.iloc[:96, df.columns.get_loc("fred_vix")] = np.nan            # structural late start
+
+        usable = driver._window_usable_columns(df, list(df.columns), warmup=3)
+
+        assert "trailing_return_3m" in usable      # bounded warmup → kept
+        assert "credit_spread_baa_aaa" in usable   # fully present → kept
+        assert "fred_vix" not in usable            # late start → dropped
+
+    def test_refit_l1_retains_pre_vix_rows(self):
+        from trading_crab_lib.platform.config import load_platform_config
+        from trading_crab_lib.platform.taxonomy import lean_feature_set
+
+        cfg = load_platform_config()
+        cfg = {**cfg, "labeling": {**cfg.get("labeling", {}), "n_restarts": 2, "K": 4}}
+        lean = sorted(lean_feature_set(cfg))
+        idx = pd.date_range("1962-01-31", periods=120, freq="ME")
+        rng = np.random.default_rng(0)
+        df = pd.DataFrame(rng.normal(0, 1, (120, len(lean))), index=idx, columns=lean)
+        if "fred_vix" in df.columns:
+            df.iloc[:96, df.columns.get_loc("fred_vix")] = np.nan  # VIX-like late start
+
+        states = driver._refit_l1(df, cfg)
+
+        # Without the fix the first 96 (VIX-NaN) rows would be dropped → ~24 states.
+        # With the fix VIX is dropped as a column and the early rows are retained.
+        assert len(states) >= 110
+        assert states.index.min() == idx.min()
