@@ -60,6 +60,11 @@ class PurgedEmbargoedKFold(BaseCrossValidator):
         indices = np.arange(n)
         fold_bounds = np.array_split(indices, self.n_splits)
         for test_idx in fold_bounds:
+            # np.array_split emits empty sub-arrays when n < n_splits (tiny early
+            # walk-forward windows). An empty test fold is meaningless and would
+            # IndexError on test_idx[0] — skip it rather than crash.
+            if len(test_idx) == 0:
+                continue
             test_start, test_end = test_idx[0], test_idx[-1]
             purge_start = max(0, test_start - self.label_horizon)
             embargo_end = min(n, test_end + 1 + self.embargo)

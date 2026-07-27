@@ -82,7 +82,12 @@ log = logging.getLogger(__name__)
 
 # The only exception CalibratedClassifierCV/LogisticRegression raise for a
 # degenerate (too-few-samples-per-class) fold — see RESEARCH.md Pitfall 2.
-_L2_DEGRADE_EXCEPTIONS: tuple[type[Exception], ...] = (ValueError,)
+# ValueError: degenerate fold fit (0 samples / n_samples < n_clusters).
+# IndexError: an empty CV test fold on a tiny early window (belt-and-suspenders;
+#   cv.PurgedEmbargoedKFold now skips empty folds, but a data-starved early
+#   window — e.g. VIX-driven NaN collapse before 1990 — must still degrade
+#   gracefully rather than crash the whole 1972-2020 run).
+_L2_DEGRADE_EXCEPTIONS: tuple[type[Exception], ...] = (ValueError, IndexError)
 
 
 def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
