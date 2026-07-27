@@ -1,0 +1,26 @@
+{
+  "name": "monthly_raw",
+  "created": "2026-07-27T14:25:43.619152",
+  "config_hash": "6c209fad",
+  "rows": 774,
+  "columns": 15,
+  "col_names": [
+    "fred_gs10",
+    "fred_baa",
+    "fred_aaa",
+    "fred_tb3ms",
+    "wti_fred",
+    "fred_vix",
+    "fred_t10y3m",
+    "fred_t10y2y",
+    "sp500",
+    "div_yield",
+    "cape_shiller",
+    "equities_tr",
+    "long_duration_tr",
+    "oil",
+    "cash"
+  ],
+  "index_start": "1962-01-31 00:00:00",
+  "index_end": "2026-06-30 00:00:00"
+}

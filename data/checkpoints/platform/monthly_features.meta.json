@@ -1,0 +1,33 @@
+{
+  "name": "monthly_features",
+  "created": "2026-07-27T14:25:43.631768",
+  "config_hash": "6c209fad",
+  "rows": 774,
+  "columns": 22,
+  "col_names": [
+    "fred_gs10",
+    "fred_baa",
+    "fred_aaa",
+    "fred_tb3ms",
+    "wti_fred",
+    "fred_t10y3m",
+    "fred_t10y2y",
+    "sp500",
+    "equities_tr",
+    "long_duration_tr",
+    "cash",
+    "curve_10y3m",
+    "curve_10y2y",
+    "credit_spread_baa_aaa",
+    "fred_vix",
+    "oil",
+    "trailing_return_1m",
+    "trailing_return_3m",
+    "realized_vol_1m",
+    "realized_vol_3m",
+    "cape_shiller",
+    "div_yield"
+  ],
+  "index_start": "1962-01-31 00:00:00",
+  "index_end": "2026-06-30 00:00:00"
+}
