@@ -157,6 +157,23 @@ _SPLICE_SOURCE_COL_KEYS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _class_sources_available(params: dict[str, Any], available: set[str]) -> bool:
+    """True if every source column a splice class needs is present in *available*.
+
+    A ``single_source`` class is satisfied by its primary ``source_col`` OR its
+    optional ``fallback_col``.
+    """
+    method = params.get("method", "")
+    for key in _SPLICE_SOURCE_COL_KEYS.get(method, ()):
+        col = params.get(key)
+        if col is None or col in available:
+            continue
+        if method == "single_source" and params.get("fallback_col") in available:
+            continue
+        return False
+    return True
+
+
 def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
     """Dispatch on each core class's `method` and assemble the 5
     `research_name` columns from `cfg['splice']` (D-03/D-04).
@@ -176,6 +193,11 @@ def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.Dat
     available = set(raw.columns)
     missing: list[str] = []
     for class_name, params in splice_cfg.items():
+        # Optional classes (e.g. gold when its only free source, macrotrends, is
+        # IP-blocked) never block the build — they are skipped at assembly time
+        # if their data is absent (with a WARNING), not raised here.
+        if params.get("optional", False):
+            continue
         method = params.get("method", "")
         for key in _SPLICE_SOURCE_COL_KEYS.get(method, ()):
             col = params.get(key)
@@ -202,6 +224,15 @@ def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.Dat
     for class_name, params in splice_cfg.items():
         method = params["method"]
         research_name = params["research_name"]
+
+        # Optional class whose source data never arrived → skip it entirely.
+        if params.get("optional", False) and not _class_sources_available(params, available):
+            log.warning(
+                "splice '%s': OPTIONAL class skipped — source data unavailable "
+                "(e.g. macrotrends blocked). The backtest will run without this asset.",
+                research_name,
+            )
+            continue
 
         if method == "total_return_from_price_div":
             series = build_equity_total_return(raw[params["price_col"]], raw[params["div_yield_col"]], cfg)
