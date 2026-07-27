@@ -136,6 +136,73 @@ def _batch_yfinance_daily(
     return results
 
 
+# ── Stooq daily fallback (no API key; used when yfinance yields nothing) ─────
+
+def _batch_stooq_daily(
+    tickers: list[str], start: str, end: str
+) -> dict[str, pd.Series]:
+    """Fallback daily fetch from Stooq's per-ticker CSV endpoint.
+
+    Fetches ``https://stooq.com/q/d/l/?s=<sym>.us&i=d`` for each ticker and
+    returns a dict of ticker -> daily Close Series (successfully fetched only).
+    No API key required.
+
+    Stooq serves a JavaScript anti-bot *challenge page* (not CSV) to some
+    datacenter / VPN IPs. A real CSV response begins with the ``Date,`` header;
+    anything else (an HTML challenge, an empty body, an error) is detected and
+    skipped rather than parsed as data — so this degrades cleanly to ``{}``
+    when Stooq is unreachable or challenges the caller.
+    """
+    try:
+        import requests  # noqa: PLC0415 — optional-at-call-time network dep
+    except ImportError:
+        log.warning("requests is not installed — Stooq daily fallback skipped.")
+        return {}
+
+    d1 = pd.Timestamp(start).strftime("%Y%m%d")
+    d2 = pd.Timestamp(end).strftime("%Y%m%d")
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; trading-crab/1.0)"}
+
+    log.info("Stooq daily fallback: fetching %d tickers ...", len(tickers))
+    results: dict[str, pd.Series] = {}
+    for ticker in tickers:
+        sym = f"{ticker.lower().replace('.', '-')}.us"
+        url = f"https://stooq.com/q/d/l/?s={sym}&i=d&d1={d1}&d2={d2}"
+        try:
+            resp = requests.get(url, headers=headers, timeout=30)
+            text = resp.text
+        except requests.RequestException as exc:  # noqa: BLE001 — network degradation
+            log.warning("Stooq fetch failed for %s: %s", ticker, exc)
+            continue
+
+        # A genuine CSV starts with the 'Date,' header. Anything else is Stooq's
+        # JS challenge page, an empty body, or 'No data' — skip, don't parse.
+        if not text.lstrip().lower().startswith("date,"):
+            log.warning("Stooq returned non-CSV for %s (anti-bot challenge or no data) — skipping", ticker)
+            continue
+
+        try:
+            from io import StringIO
+
+            df = pd.read_csv(StringIO(text))
+        except (ValueError, pd.errors.ParserError) as exc:
+            log.warning("Stooq CSV parse failed for %s: %s", ticker, exc)
+            continue
+
+        if df.empty or "Close" not in df.columns or "Date" not in df.columns:
+            continue
+        s = pd.Series(
+            df["Close"].to_numpy(),
+            index=pd.to_datetime(df["Date"]),
+            name=ticker,
+        ).dropna()
+        if not s.empty:
+            results[ticker] = s
+
+    log.info("Stooq daily fallback: recovered %d/%d tickers", len(results), len(tickers))
+    return results
+
+
 # ── monthly spine derivation ────────────────────────────────────────────────
 
 def to_monthly_spine(daily_df: pd.DataFrame, monthly_freq: str = "ME") -> pd.DataFrame:
@@ -186,9 +253,14 @@ def fetch_universe_prices(cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFra
     results = _batch_yfinance_daily(tickers, start, end, session=session)
 
     if not results:
+        log.warning("yfinance universe fetch returned nothing (rate-limit/block?) — trying Stooq daily fallback ...")
+        results = _batch_stooq_daily(tickers, start, end)
+
+    if not results:
         log.warning(
-            "All universe price fetches failed — degrading to empty/NaN frame. "
-            "(Future fallback: Stooq/OpenBB daily chain — not implemented here.)"
+            "All universe price fetches failed (yfinance + Stooq) — degrading to empty/NaN frame. "
+            "Both sources are commonly blocked on datacenter / VPN IPs; retry from a residential "
+            "connection or wait out the yfinance rate-limit."
         )
         empty = pd.DataFrame()
         return empty, empty

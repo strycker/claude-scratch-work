@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from trading_crab_lib.platform.ingestion.prices_daily import (
+    _batch_stooq_daily,
     fetch_universe_prices,
     to_monthly_spine,
     universe_fetch_tickers,
@@ -107,16 +108,56 @@ def test_fetch_universe_prices_no_crash_on_short_history(mock_batch, mock_sessio
     assert not monthly.empty
 
 
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_stooq_daily")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
-def test_fetch_universe_prices_all_fail_returns_empty(mock_batch, mock_session):
+def test_fetch_universe_prices_all_fail_returns_empty(mock_batch, mock_session, mock_stooq):
     cfg = _make_universe_cfg()
-    mock_batch.return_value = {}
+    mock_batch.return_value = {}       # yfinance yields nothing
+    mock_stooq.return_value = {}       # Stooq fallback also yields nothing
     mock_session.return_value = MagicMock()
 
     daily, monthly = fetch_universe_prices(cfg)
     assert daily.empty
     assert monthly.empty
+    mock_stooq.assert_called_once()  # fallback WAS attempted after yfinance failed
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_stooq_daily")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
+def test_fetch_universe_prices_falls_back_to_stooq_when_yfinance_empty(mock_batch, mock_session, mock_stooq):
+    cfg = _make_universe_cfg()
+    mock_batch.return_value = {}  # yfinance rate-limited
+    mock_session.return_value = MagicMock()
+    idx = pd.date_range("2020-01-02", periods=5, freq="D")
+    mock_stooq.return_value = {"QQQ": pd.Series(range(5), index=idx, name="QQQ", dtype=float)}
+
+    daily, monthly = fetch_universe_prices(cfg)
+    assert not daily.empty
+    assert "QQQ" in daily.columns
+    mock_stooq.assert_called_once()
+
+
+@patch("requests.get")
+def test_batch_stooq_daily_parses_csv_close(mock_get):
+    csv = "Date,Open,High,Low,Close,Volume\n2020-01-02,100,101,99,100.5,1000\n2020-01-03,100.5,102,100,101.2,1200\n"
+    mock_get.return_value = MagicMock(text=csv)
+
+    out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+    assert "SPY" in out
+    assert list(out["SPY"].values) == [100.5, 101.2]
+    assert str(out["SPY"].index[0].date()) == "2020-01-02"
+
+
+@patch("requests.get")
+def test_batch_stooq_daily_skips_js_challenge_page(mock_get):
+    # Stooq's anti-bot page (served to some datacenter/VPN IPs) — must NOT be parsed as data.
+    challenge = "<!DOCTYPE html><html><head></head><body><noscript>This site requires JavaScript</noscript></body></html>"
+    mock_get.return_value = MagicMock(text=challenge)
+
+    out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+    assert out == {}
 
 
 def test_fetch_universe_prices_no_tickers_returns_empty():
