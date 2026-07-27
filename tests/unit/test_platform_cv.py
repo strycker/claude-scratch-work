@@ -73,6 +73,20 @@ class TestFoldsPartitionAllIndices:
         assert sorted(all_test.tolist()) == list(range(n))
 
 
+class TestTinyWindowNoEmptyFold:
+    @pytest.mark.parametrize("n", [1, 2, 3, 4])
+    def test_no_indexerror_and_no_empty_test_fold_when_n_below_n_splits(self, n):
+        # Tiny early walk-forward windows (n < n_splits) made np.array_split emit
+        # empty folds → IndexError on test_idx[0]. The splitter must skip them.
+        X = _synthetic_monthly_frame(n)
+        cv = PurgedEmbargoedKFold(n_splits=5, label_horizon=6, embargo=1)
+        folds = list(cv.split(X))  # must not raise IndexError
+        assert all(len(test_idx) > 0 for _, test_idx in folds)
+        # every yielded test fold still covers real rows within [0, n)
+        for _, test_idx in folds:
+            assert test_idx.min() >= 0 and test_idx.max() < n
+
+
 class TestGetNSplitsMatches:
     def test_get_n_splits_matches(self):
         n = 100
