@@ -24,7 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned (completed 2026-07-22)
 - [x] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe (completed 2026-07-22)
 - [x] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire (completed 2026-07-23)
-- [ ] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics
+- [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27)
 - [ ] **Phase 6: Migration to Public Repo** - Validated skeleton migrated to `strycker/trading-crab`, tests green, docs updated
 
 ## Phase Details
@@ -209,7 +209,7 @@ whether regime timing is actually worth anything.
 
   4. Model metrics artifacts (multiclass Brier score, calibration bins, confusion tables)
      are persisted to disk per run for later inspection and comparison.
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 
 **Wave 1**
 
@@ -231,7 +231,7 @@ whether regime timing is actually worth anything.
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 05-07-PLAN.md — Real 1972–2020 run against live checkpoints — blocking human-verify (design §14 Phase 1 exit) (EVAL-01..04)
+- [x] 05-07-PLAN.md — Real 1972–2020 run against live checkpoints — blocking human-verify (design §14 Phase 1 exit) (EVAL-01..04)
 
 ### Phase 6: Migration to Public Repo
 
@@ -260,5 +260,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
-| 5. Honest Backtest & Evaluation | 6/7 | In Progress|  |
+| 5. Honest Backtest & Evaluation | 7/7 | Complete    | 2026-07-27 |
 | 6. Migration to Public Repo | 0/TBD | Not started | - |

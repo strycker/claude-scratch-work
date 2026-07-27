@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 05
-current_phase_name: honest-backtest-evaluation
+current_phase: 6
+current_phase_name: Migration to Public Repo
 status: executing
 stopped_at: "Completed 05-06-PLAN.md (honest backtest report capstone: assemble_backtest_report + write_backtest_report + run_full_backtest_evaluation + main CLI)"
-last_updated: "2026-07-25T14:57:32.540Z"
-last_activity: 2026-07-25
-last_activity_desc: "Completed 05-05-PLAN.md (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)"
+last_updated: "2026-07-27T22:08:02.218Z"
+last_activity: 2026-07-27
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 28
-  completed_plans: 27
-  percent: 67
+  completed_plans: 28
+  percent: 83
 ---
 
 # Project State
@@ -29,10 +29,10 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 05 (honest-backtest-evaluation) — EXECUTING
-Plan: 7 of 7
+Phase: 6 — Migration to Public Repo
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-25 — Completed 05-05-PLAN.md (baseline gauntlet: SPY, 60/40, Faber SMA, no-regime ablation)
+Last activity: 2026-07-27 — Phase 05 complete, transitioned to Phase 6
 
 Progress: [█████████░] 93%
 
