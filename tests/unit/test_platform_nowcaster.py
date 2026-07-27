@@ -96,6 +96,30 @@ class TestNowcasterCalibratedOutput:
         assert proba.ndim == 2
         assert (proba >= 0).all() and (proba <= 1).all()
 
+    def test_fits_cleanly_on_nan_and_multiscale_features(self):
+        """Reproduces the real-run failure: a late-starting NaN feature (like VIX
+        before 1990) plus a wildly-scaled column made lbfgs fail at iteration 0
+        (status=2 ABNORMAL) and emit a ConvergenceWarning, leaving an UNFIT model.
+        fit_nowcaster must drop the non-finite rows and scale, so it fits cleanly
+        with no ConvergenceWarning."""
+        import warnings
+
+        from sklearn.exceptions import ConvergenceWarning
+
+        features_df, labels = _make_synthetic_monthly(n_months=240)
+        features_df.iloc[:60, 0] = np.nan                      # col0 NaN for first 60 months (VIX-like)
+        features_df.iloc[:, 1] = features_df.iloc[:, 1] * 5000 + 20000  # col1 huge, unscaled
+        X, y = build_nowcaster_training_set(features_df, labels)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", ConvergenceWarning)
+            model = fit_nowcaster(X, y)  # must NOT raise ConvergenceWarning
+
+        finite = np.isfinite(X.to_numpy(dtype=float)).all(axis=1)
+        proba = model.predict_proba(X.loc[finite])
+        assert proba.shape[0] == int(finite.sum())
+        assert proba.sum(axis=1) == pytest.approx(np.ones(int(finite.sum())))
+
     def test_nowcaster_does_not_pass_multi_class_kwarg(self):
         """Our code must never pass ``multi_class`` — it is deprecated (and removed in
         sklearn>=1.7); multinomial is automatic for the lbfgs solver. Guarding our own

@@ -38,9 +38,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.honesty import registry
@@ -110,12 +113,26 @@ def fit_nowcaster(
     """
     assert_causal_features(X.columns)  # guards the nowcaster's INPUTS —
     # distinct from build_nowcaster_training_set's label embargo above.
+
+    # Drop rows with any non-finite feature (VIX is NaN before 1990; rolling
+    # features are NaN at the series start). Feeding NaN/inf to lbfgs makes it
+    # fail at iteration 0 ("status=2: ABNORMAL") and return an UNFIT model with
+    # garbage probabilities. Dropping rows (not imputing) keeps the fit honest —
+    # no fabricated feature values enter the regime model.
+    finite = np.isfinite(X.to_numpy(dtype=float)).all(axis=1)
+    X, y = X.loc[finite], y.loc[finite]
+
     cv = PurgedEmbargoedKFold(n_splits=n_splits, label_horizon=label_horizon, embargo=embargo)
-    model = CalibratedClassifierCV(
+    # StandardScaler BEFORE LogisticRegression: the lean features live on very
+    # different scales (VIX ~10-80, curves ~-3..5, returns ~0.01..0.2); unscaled
+    # lbfgs converges poorly or abnormally (the ConvergenceWarning literally
+    # recommends scaling). The scaler is fit per CV-fold inside the pipeline, so
+    # it never leaks test-fold statistics into training — the fit stays causal.
+    base = make_pipeline(
+        StandardScaler(),
         LogisticRegression(max_iter=1000, random_state=random_state),
-        method="sigmoid",
-        cv=cv,
     )
+    model = CalibratedClassifierCV(base, method="sigmoid", cv=cv)
     model.fit(X, y)
     return model
 
