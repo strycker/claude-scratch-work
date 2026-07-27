@@ -20,7 +20,10 @@ fredapi>=0.5
 requests>=2.31
 beautifulsoup4>=4.12
 lxml>=4.9
+cssselect>=1.2        # lxml CSS-selector scraping (multpl.com #datatable)
 yfinance>=0.2
+curl_cffi>=0.5        # yfinance's HTTP/SSL backend (imported directly in ingestion/assets.py)
+html5lib>=1.1         # pandas.read_html fallback parser (macrotrends/multpl HTML tables)
 
 # Feature engineering / ML
 scikit-learn>=1.4

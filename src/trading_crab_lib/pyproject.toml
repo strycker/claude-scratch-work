@@ -51,6 +51,8 @@ ingestion = [
     "cssselect>=1.2",
     "beautifulsoup4>=4.12",
     "yfinance>=0.2",
+    "curl_cffi>=0.5",
+    "html5lib>=1.1",
     "certifi>=2024.0",
 ]
 plotting = [

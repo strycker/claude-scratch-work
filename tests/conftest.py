@@ -173,7 +173,14 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     prod_dir = ckpt_mod.CHECKPOINT_DIR
     if prod_dir.exists():
         for src in prod_dir.iterdir():
-            shutil.copy2(src, session_dir / src.name)
+            dst = session_dir / src.name
+            # Handle subdirectories (e.g. the platform/ namespace created by the
+            # platform data build) recursively — a bare copy2 on a directory
+            # raises IsADirectoryError and breaks the whole session.
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src, dst)
 
     # Redirect all CheckpointManager() instances to session_dir
     original_checkpoint_dir = ckpt_mod.CHECKPOINT_DIR

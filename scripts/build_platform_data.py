@@ -40,6 +40,17 @@ def main() -> int:
     )
     log = logging.getLogger("build_platform_data")
 
+    # Load .env so FRED_API_KEY (and any other secrets) are available before we
+    # check for them — mirrors load_platform_config()/config.py. Without this the
+    # check below runs before python-dotenv has populated os.environ, so a key
+    # that IS present in .env looks missing. Env vars already set win over .env.
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass  # python-dotenv is a core dep; if absent, fall back to real os.environ
+
     if not os.environ.get("FRED_API_KEY"):
         log.error(
             "FRED_API_KEY is not set. Add it to your environment or .env "

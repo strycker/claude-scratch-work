@@ -145,11 +145,51 @@ def build_equity_total_return(price: pd.Series, div_yield: pd.Series, cfg: dict[
 
 # ── Per-class assembly ────────────────────────────────────────────────────────
 
+# Maps each splice ``method`` to the param keys whose values name required
+# columns in the raw monthly ingest frame. Used to preflight-validate that every
+# upstream source actually arrived before assembling research series.
+_SPLICE_SOURCE_COL_KEYS: dict[str, tuple[str, ...]] = {
+    "total_return_from_price_div": ("price_col", "div_yield_col"),
+    "cmt_par_bond_repricing": ("yield_col",),
+    "single_source": ("source_col",),
+    "yield_as_return": ("yield_col",),
+    "ratio_splice": ("old_col", "new_col"),
+}
+
+
 def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
     """Dispatch on each core class's `method` and assemble the 5
     `research_name` columns from `cfg['splice']` (D-03/D-04).
+
+    Preflight-validates that every required source column is present before
+    assembling, so a failed upstream fetch (e.g. macrotrends returning no
+    gold_spot/wti_crude, or a yfinance rate-limit) yields one clear, actionable
+    error naming every missing column instead of a bare ``KeyError`` deep in
+    the loop.
     """
     splice_cfg = cfg["splice"]
+
+    # ── Preflight: report all missing source columns at once ──
+    available = set(raw.columns)
+    missing: list[str] = []
+    for class_name, params in splice_cfg.items():
+        for key in _SPLICE_SOURCE_COL_KEYS.get(params.get("method", ""), ()):
+            col = params.get(key)
+            if col is not None and col not in available:
+                missing.append(
+                    f"  - {params.get('research_name', class_name)} "
+                    f"({params['method']}): missing column '{col}'"
+                )
+    if missing:
+        raise ValueError(
+            "build_core_research_series: required source columns are missing from the "
+            "monthly ingest frame:\n" + "\n".join(missing) + "\n\n"
+            "These columns come from upstream ingestion (FRED / multpl.com / "
+            "macrotrends.net / yfinance). One or more sources failed to fetch — check the "
+            "WARNING logs above (e.g. 'No tables found' for macrotrends, or a yfinance "
+            "rate-limit). Wait for the source(s) to become reachable, then re-run the data build."
+        )
+
     columns: dict[str, pd.Series] = {}
 
     for class_name, params in splice_cfg.items():
