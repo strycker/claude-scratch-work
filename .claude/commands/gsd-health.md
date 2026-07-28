@@ -22,7 +22,7 @@ Validate `.planning/` directory integrity and report actionable issues. Checks f
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/health.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/health.md
 </execution_context>
 
 <process>

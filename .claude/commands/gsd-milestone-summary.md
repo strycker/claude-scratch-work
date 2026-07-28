@@ -19,7 +19,7 @@ Output: MILESTONE_SUMMARY written to `.planning/reports/`, presented inline, opt
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/milestone-summary.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/milestone-summary.md
 </execution_context>
 
 <context>

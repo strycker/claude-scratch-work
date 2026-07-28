@@ -20,7 +20,7 @@ planning via /gsd-plan-phase --reviews.
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/review.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/review.md
 </execution_context>
 
 <context>
@@ -35,6 +35,12 @@ Phase number: extracted from $ARGUMENTS (required)
 - `--cursor` — Include Cursor agent review
 - `--agy` / `--antigravity` — Include Antigravity CLI review
 - `--all` — Include all available CLIs
+
+**No flags** — if `review.default_reviewers` is set, review with only those configured
+reviewers that are detected; otherwise review with all available CLIs. Configured
+`review.reviewer_instances` names may appear in `review.default_reviewers`; each runs as an
+independent reviewer identity backed by its configured adapter+model (see
+`docs/CONFIGURATION.md`). Instance names are not valid as flags.
 </context>
 
 <process>

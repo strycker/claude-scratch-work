@@ -69,7 +69,7 @@ Each item disabled removes its schema from every subsequent turn for the rest of
 
 ### How to toggle
 
-The keys live in `.claude/settings.json` (project) or `/home/user/claude-scratch-work/.claude/settings.json` (global) — **not** in `.planning/config.json`:
+The keys live in `.claude/settings.json` (project) or `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/settings.json` (global) — **not** in `.planning/config.json`:
 
 ```json
 {

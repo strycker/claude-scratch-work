@@ -77,7 +77,7 @@ This prevents the "scavenger hunt" anti-pattern where executors explore the code
 
 ## Specificity
 
-**Test:** Could a different Claude instance execute without asking clarifying questions? If not, add specificity. See @/home/user/claude-scratch-work/.claude/gsd-core/references/planner-antipatterns.md for vague-vs-specific comparison table.
+**Test:** Could a different Claude instance execute without asking clarifying questions? If not, add specificity. See @/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/planner-antipatterns.md for vague-vs-specific comparison table.
 
 ## User Setup Detection
 

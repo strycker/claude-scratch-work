@@ -16,7 +16,7 @@ Output ONLY the reference content of the chosen tier. Do NOT add:
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/help.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/help.md
 </execution_context>
 
 <context>
@@ -24,5 +24,5 @@ Arguments: $ARGUMENTS
 </context>
 
 <process>
-Follow /home/user/claude-scratch-work/.claude/gsd-core/workflows/help.md with $ARGUMENTS.
+Follow /Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/help.md with $ARGUMENTS.
 </process>

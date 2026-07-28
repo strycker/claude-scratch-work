@@ -22,13 +22,13 @@ Flow: Select Framework → Research Docs → Research Domain → Design Eval Str
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/ai-integration-phase.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ai-frameworks.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ai-evals.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/ai-integration-phase.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ai-frameworks.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ai-evals.md
 </execution_context>
 
 <context>
-Phase number: $ARGUMENTS — optional, auto-detects next unplanned phase if omitted.
+Phase number: $ARGUMENTS — optional; when omitted, the orchestrating workflow reads ROADMAP.md and selects the next unplanned phase. This is not a `gsd-tools.cjs` CLI feature — the CLI's phase-lookup primitives require an explicit phase number.
 </context>
 
 <process>

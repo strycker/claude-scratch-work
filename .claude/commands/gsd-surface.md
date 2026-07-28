@@ -10,9 +10,9 @@ requires: [config, update]
 ---
 
 <objective>
-Manage the runtime skill surface without reinstall. Reads/writes `/home/user/claude-scratch-work/.claude/.gsd-surface.json`
-(sibling to `/home/user/claude-scratch-work/.claude/.gsd-profile`) and re-stages the active skills directory in place.
-Skill dirs live at `/home/user/claude-scratch-work/.claude/skills/gsd-*/`.
+Manage the runtime skill surface without reinstall. Reads/writes `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/.gsd-surface.json`
+(sibling to `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/.gsd-profile`) and re-stages the active skills directory in place.
+Skill dirs live at `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/skills/gsd-*/`.
 
 Sub-commands: list · status · profile · disable · enable · reset
 </objective>
@@ -37,9 +37,9 @@ Parse the first token of $ARGUMENTS:
 ## list / status
 
 Load the capability registry and call `listSurface(runtimeConfigDir, manifest, CLUSTERS, registry)` from
-`gsd-core/bin/lib/surface.cjs`. The registry is loaded via:
+the engine module at `${runtimeConfigDir}/gsd-core/bin/lib/surface.cjs`. The registry is loaded via:
 ```js
-const registry = require('gsd-core/bin/lib/capability-registry.cjs');
+const registry = require(runtimeConfigDir + '/gsd-core/bin/lib/capability-registry.cjs');
 ```
 Display:
 
@@ -71,7 +71,7 @@ Install profile: standard  (from .gsd-profile)
 3. `writeSurface(runtimeConfigDir, surfaceState)`.
 4. Resolve and re-apply:
    ```js
-   const registry = require('gsd-core/bin/lib/capability-registry.cjs');
+   const registry = require(runtimeConfigDir + '/gsd-core/bin/lib/capability-registry.cjs');
    const layout = resolveRuntimeArtifactLayout(runtime, runtimeConfigDir, scope);
    applySurface(runtimeConfigDir, layout, manifest, CLUSTERS, registry);
    ```
@@ -89,7 +89,7 @@ Valid cluster names: `core_loop`, `audit_review`, `milestone`, `research_ideate`
 3. Add cluster to `surfaceState.disabledClusters` (deduplicate).
 4. `writeSurface` → resolve layout → `applySurface`:
    ```js
-   const registry = require('gsd-core/bin/lib/capability-registry.cjs');
+   const registry = require(runtimeConfigDir + '/gsd-core/bin/lib/capability-registry.cjs');
    const layout = resolveRuntimeArtifactLayout(runtime, runtimeConfigDir, scope);
    applySurface(runtimeConfigDir, layout, manifest, CLUSTERS, registry);
    ```
@@ -103,7 +103,7 @@ Valid cluster names: `core_loop`, `audit_review`, `milestone`, `research_ideate`
 2. Remove cluster from `surfaceState.disabledClusters`.
 3. `writeSurface` → resolve layout → `applySurface`:
    ```js
-   const registry = require('gsd-core/bin/lib/capability-registry.cjs');
+   const registry = require(runtimeConfigDir + '/gsd-core/bin/lib/capability-registry.cjs');
    const layout = resolveRuntimeArtifactLayout(runtime, runtimeConfigDir, scope);
    applySurface(runtimeConfigDir, layout, manifest, CLUSTERS, registry);
    ```
@@ -123,11 +123,11 @@ Valid cluster names: `core_loop`, `audit_review`, `milestone`, `research_ideate`
 ## runtimeConfigDir resolution
 
 The `runtimeConfigDir` for `applySurface` is the **base Claude config directory**
-(`~/.claude`), NOT the skills sub-directory (`/home/user/claude-scratch-work/.claude/skills`).
+(`~/.claude`), NOT the skills sub-directory (`/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/skills`).
 
 This matches `installRuntimeArtifacts` and `uninstallRuntimeArtifacts`, which also
 receive `~/.claude` as `configDir`. The skill dirs themselves live at
-`/home/user/claude-scratch-work/.claude/skills/gsd-*/` because the `claude global` layout has `destSubpath =
+`/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/skills/gsd-*/` because the `claude global` layout has `destSubpath =
 'skills'` — they are derived from `configDir`, not the root for it.
 
 ```bash
@@ -141,7 +141,7 @@ SCOPE="global"
 ```
 
 Surface state is stored at `${RUNTIME_CONFIG_DIR}/.gsd-surface.json`
-(i.e. `/home/user/claude-scratch-work/.claude/.gsd-surface.json`).
+(i.e. `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/.gsd-surface.json`).
 
 All paths can be overridden by reading the `CLAUDE_CONFIG_DIR` env var if set.
 
@@ -151,12 +151,12 @@ All paths can be overridden by reading the `CLAUDE_CONFIG_DIR` env var if set.
 
 - Unknown cluster name → list valid cluster names, exit without writing.
 - Unknown profile name → list known profiles (`core`, `standard`, `full`), exit.
-- Missing `surface.cjs` → prompt: "Run `npm i -g gsd-core` to reinstall GSD."
+- Missing `surface.cjs` → prompt: "Run `npm i -g @opengsd/gsd-core` to reinstall GSD."
 
 <execution_context>
-Surface state file: `/home/user/claude-scratch-work/.claude/.gsd-surface.json`
-Install profile marker: `/home/user/claude-scratch-work/.claude/.gsd-profile`
-Skill dirs: `/home/user/claude-scratch-work/.claude/skills/gsd-*/`
-Engine module: `/home/user/claude-scratch-work/.claude/gsd-core/bin/lib/surface.cjs`
-Cluster definitions: `/home/user/claude-scratch-work/.claude/gsd-core/bin/lib/clusters.cjs`
+Surface state file: `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/.gsd-surface.json`
+Install profile marker: `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/.gsd-profile`
+Skill dirs: `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/skills/gsd-*/`
+Engine module: `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/bin/lib/surface.cjs`
+Cluster definitions: `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/bin/lib/clusters.cjs`
 </execution_context>

@@ -19,8 +19,8 @@ Output: {phase_num}-UI-REVIEW.md
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/ui-review.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/ui-review.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

@@ -21,7 +21,7 @@ Routes to the settings workflow which handles:
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/settings.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/settings.md
 </execution_context>
 
 <process>

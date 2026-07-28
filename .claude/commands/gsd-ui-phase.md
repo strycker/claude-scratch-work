@@ -21,8 +21,8 @@ Flow: Validate → Research UI → Verify UI-SPEC → Done
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/ui-phase.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/ui-phase.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

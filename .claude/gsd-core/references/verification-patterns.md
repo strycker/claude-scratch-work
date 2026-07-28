@@ -600,7 +600,7 @@ Some things can't be verified programmatically. Flag these for human testing:
 
 For automation-first checkpoint patterns, server lifecycle management, CLI installation handling, and error recovery protocols, see:
 
-**@/home/user/claude-scratch-work/.claude/gsd-core/references/checkpoints.md** → `<automation_reference>` section
+**@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/checkpoints.md** → `<automation_reference>` section
 
 Key principles:
 - Claude sets up verification environment BEFORE presenting checkpoints

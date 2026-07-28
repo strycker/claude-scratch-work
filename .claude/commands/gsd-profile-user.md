@@ -19,8 +19,8 @@ Routes to the profile-user workflow which orchestrates the full flow: consent ga
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/profile-user.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/profile-user.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

@@ -26,7 +26,7 @@ Flags:
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/audit-fix.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/audit-fix.md
 </execution_context>
 
 <process>

@@ -1,0 +1,21 @@
+<objective>
+Audit Nyquist validation coverage for a completed phase. Three states:
+- (A) VALIDATION.md exists — audit and fill gaps
+- (B) No VALIDATION.md, SUMMARY.md exists — reconstruct from artifacts
+- (C) Phase not executed — exit with guidance
+
+Output: updated VALIDATION.md + generated test files.
+</objective>
+
+<execution_context>
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.cursor/gsd-core/workflows/validate-phase.md
+</execution_context>
+
+<context>
+Phase: {{GSD_ARGS}} — optional, defaults to last completed phase.
+</context>
+
+<process>
+Execute end-to-end.
+Preserve all workflow gates.
+</process>

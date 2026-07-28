@@ -21,7 +21,7 @@ Routes to the pause-work workflow which handles:
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/pause-work.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/pause-work.md
 </execution_context>
 
 <context>
@@ -30,7 +30,7 @@ State and phase progress are gathered in-workflow with targeted reads.
 
 <process>
 If `--report` is in $ARGUMENTS:
-Read and execute `/home/user/claude-scratch-work/.claude/gsd-core/workflows/session-report.md` end-to-end.
+Read and execute `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/session-report.md` end-to-end.
 
 **Follow the pause-work workflow**.
 

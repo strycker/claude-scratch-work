@@ -38,13 +38,13 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/add-todo.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/note.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/add-backlog.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/plant-seed.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/check-todos.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/list-seeds.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/add-todo.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/note.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/add-backlog.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/plant-seed.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/check-todos.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/list-seeds.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

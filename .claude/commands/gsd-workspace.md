@@ -29,10 +29,10 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/new-workspace.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/list-workspaces.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/remove-workspace.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/new-workspace.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/list-workspaces.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/remove-workspace.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

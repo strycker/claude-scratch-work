@@ -12,7 +12,7 @@ Default: `balanced` if not set or config missing.
 
 ## Lookup Table
 
-@/home/user/claude-scratch-work/.claude/gsd-core/references/model-profiles.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/model-profiles.md
 
 Look up the agent in the table for the resolved profile. Pass the model parameter to Task calls:
 

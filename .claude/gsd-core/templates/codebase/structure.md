@@ -216,7 +216,7 @@ gsd-core/
 
 **New Workflow:**
 - Implementation: `gsd-core/workflows/{name}.md`
-- Usage: Reference from command with `@/home/user/claude-scratch-work/.claude/gsd-core/workflows/{name}.md`
+- Usage: Reference from command with `@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/{name}.md`
 
 **New Reference Document:**
 - Implementation: `gsd-core/references/{name}.md`
@@ -229,12 +229,12 @@ gsd-core/
 ## Special Directories
 
 **gsd-core/**
-- Purpose: Resources installed to /home/user/claude-scratch-work/.claude/
+- Purpose: Resources installed to /Users/glestryc/personal/github_repos/claude-scratch-work/.claude/
 - Source: Copied by bin/install.js during installation
 - Committed: Yes (source of truth)
 
 **commands/**
-- Purpose: Slash commands installed to /home/user/claude-scratch-work/.claude/commands/
+- Purpose: Slash commands installed to /Users/glestryc/personal/github_repos/claude-scratch-work/.claude/commands/
 - Source: Copied by bin/install.js during installation
 - Committed: Yes (source of truth)
 

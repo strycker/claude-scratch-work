@@ -21,9 +21,9 @@ Three modes:
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/undo.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/gate-prompts.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/undo.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/gate-prompts.md
 </execution_context>
 
 <context>

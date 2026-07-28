@@ -30,13 +30,13 @@ Does not require prior new-project setup — auto-creates `.planning/sketches/` 
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/sketch.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/sketch-wrap-up.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/sketch-theme-system.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/sketch-interactivity.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/sketch-tooling.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/sketch-variant-patterns.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/sketch.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/sketch-wrap-up.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/sketch-theme-system.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/sketch-interactivity.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/sketch-tooling.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/sketch-variant-patterns.md
 </execution_context>
 
 <runtime_note>

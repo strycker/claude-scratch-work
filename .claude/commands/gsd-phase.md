@@ -31,10 +31,10 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/add-phase.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/insert-phase.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/remove-phase.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/edit-phase.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/add-phase.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/insert-phase.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/remove-phase.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/edit-phase.md
 </execution_context>
 
 <context>

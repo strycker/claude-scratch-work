@@ -8,7 +8,7 @@
 ## Dispatch
 
 ```
-Read @/home/user/claude-scratch-work/.claude/gsd-core/workflows/discuss-phase-power.md
+Read @/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/discuss-phase-power.md
 ```
 
 Execute it end-to-end. Do not continue with the standard interactive steps.

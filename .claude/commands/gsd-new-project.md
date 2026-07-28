@@ -34,11 +34,11 @@ Initialize a new project through unified flow: questioning → research (optiona
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/new-project.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/questioning.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
-@/home/user/claude-scratch-work/.claude/gsd-core/templates/project.md
-@/home/user/claude-scratch-work/.claude/gsd-core/templates/requirements.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/new-project.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/questioning.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/ui-brand.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/templates/project.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/templates/requirements.md
 </execution_context>
 
 <process>

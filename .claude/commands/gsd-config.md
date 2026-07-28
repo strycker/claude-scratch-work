@@ -32,9 +32,9 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/settings.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/settings-advanced.md
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/settings-integrations.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/settings.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/settings-advanced.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/settings-integrations.md
 </execution_context>
 
 <context>

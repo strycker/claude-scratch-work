@@ -1,0 +1,20 @@
+<objective>
+Create an AI design contract (AI-SPEC.md) for a phase involving AI system development.
+Orchestrates gsd-framework-selector → gsd-ai-researcher → gsd-domain-researcher → gsd-eval-planner.
+Flow: Select Framework → Research Docs → Research Domain → Design Eval Strategy → Done
+</objective>
+
+<execution_context>
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.cursor/gsd-core/workflows/ai-integration-phase.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.cursor/gsd-core/references/ai-frameworks.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.cursor/gsd-core/references/ai-evals.md
+</execution_context>
+
+<context>
+Phase number: {{GSD_ARGS}} — optional; when omitted, the orchestrating workflow reads ROADMAP.md and selects the next unplanned phase. This is not a `gsd-tools.cjs` CLI feature — the CLI's phase-lookup primitives require an explicit phase number.
+</context>
+
+<process>
+Execute end-to-end.
+Preserve all workflow gates.
+</process>

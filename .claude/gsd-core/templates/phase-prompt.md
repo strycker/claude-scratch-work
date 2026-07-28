@@ -38,10 +38,10 @@ Output: [What artifacts will be created]
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/execute-plan.md
-@/home/user/claude-scratch-work/.claude/gsd-core/templates/summary.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/execute-plan.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/templates/summary.md
 [If plan contains checkpoint tasks (type="checkpoint:*"), add:]
-@/home/user/claude-scratch-work/.claude/gsd-core/references/checkpoints.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/checkpoints.md
 </execution_context>
 
 <context>
@@ -85,7 +85,7 @@ Output: [What artifacts will be created]
   <done>[Acceptance criteria]</done>
 </task>
 
-<!-- For checkpoint task examples and patterns, see @/home/user/claude-scratch-work/.claude/gsd-core/references/checkpoints.md -->
+<!-- For checkpoint task examples and patterns, see @/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/checkpoints.md -->
 
 <task type="checkpoint:decision" gate="blocking">
   <decision>[What needs deciding]</decision>
@@ -278,7 +278,7 @@ TDD features get dedicated plans with `type: tdd`.
 → Yes: Create a TDD plan
 → No: Standard task in standard plan
 
-See `/home/user/claude-scratch-work/.claude/gsd-core/references/tdd.md` for TDD plan structure.
+See `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/tdd.md` for TDD plan structure.
 
 ---
 
@@ -382,9 +382,9 @@ Output: Working dashboard component.
 </objective>
 
 <execution_context>
-@/home/user/claude-scratch-work/.claude/gsd-core/workflows/execute-plan.md
-@/home/user/claude-scratch-work/.claude/gsd-core/templates/summary.md
-@/home/user/claude-scratch-work/.claude/gsd-core/references/checkpoints.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/execute-plan.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/templates/summary.md
+@/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/references/checkpoints.md
 </execution_context>
 
 <context>
@@ -540,7 +540,7 @@ user_setup:
 
 **Result:** Execute-plan generates `{phase}-USER-SETUP.md` with checklist for the user.
 
-See `/home/user/claude-scratch-work/.claude/gsd-core/templates/user-setup.md` for full schema and examples
+See `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/templates/user-setup.md` for full schema and examples
 
 ---
 
@@ -607,4 +607,4 @@ Task completion ≠ Goal achievement. A task "create chat component" can complet
 5. Gaps found → fix plans created → execute → re-verify
 6. All must_haves pass → phase complete
 
-See `/home/user/claude-scratch-work/.claude/gsd-core/workflows/verify-phase.md` for verification logic.
+See `/Users/glestryc/personal/github_repos/claude-scratch-work/.claude/gsd-core/workflows/verify-phase.md` for verification logic.
