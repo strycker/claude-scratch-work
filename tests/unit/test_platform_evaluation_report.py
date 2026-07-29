@@ -18,6 +18,7 @@ Three behaviors under test (Task 1, RED):
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -182,6 +183,41 @@ class TestExcludedAssets:
 
     def test_no_excluded_note_when_none(self):
         assert "Excluded assets" not in _assemble()
+
+
+class TestReferenceLabelColumns:
+    """The full-sample smoothed reference must span EVERY decision date (the
+    walk-forward now labels pre-1990 under approach ii), so it keeps long-history
+    columns and drops structural late-starts."""
+
+    def test_drops_late_start_keeps_warmup_and_complete(self):
+        idx = pd.date_range("1962-01-31", periods=240, freq="ME")
+        first_decision = idx[120]  # ~1972, like min_train=120
+        df = pd.DataFrame(index=idx)
+        df["complete"] = np.arange(240, dtype=float)
+        df["warmup_only"] = np.arange(240, dtype=float)
+        df.iloc[:3, df.columns.get_loc("warmup_only")] = np.nan       # NaN only pre-1962Q1 (< first_decision)
+        df["late_start"] = np.arange(240, dtype=float)
+        df.iloc[:180, df.columns.get_loc("late_start")] = np.nan       # NaN through ~1977 (> first_decision)
+
+        ref = report._reference_label_columns(df, list(df.columns), first_decision)
+
+        assert "complete" in ref        # present across decision range
+        assert "warmup_only" in ref     # NaN only before the first decision → kept
+        assert "late_start" not in ref  # NaN within the decision range → dropped
+
+    def test_selected_columns_cover_all_decision_dates(self):
+        idx = pd.date_range("1962-01-31", periods=240, freq="ME")
+        first_decision = idx[120]
+        df = pd.DataFrame(
+            {"a": np.arange(240, dtype=float), "b": np.arange(240, dtype=float)}, index=idx
+        )
+        df.iloc[:3, df.columns.get_loc("a")] = np.nan  # warmup only
+        ref = report._reference_label_columns(df, list(df.columns), first_decision)
+        # dropna over the selected cols must retain every decision-date row
+        covered = df[ref].dropna().index
+        assert covered.max() == idx.max()
+        assert (pd.DatetimeIndex(idx[120:]).isin(covered)).all()
 
 
 if __name__ == "__main__":

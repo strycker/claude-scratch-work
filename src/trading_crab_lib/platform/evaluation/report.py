@@ -407,6 +407,24 @@ def _smoothed_hindsight_perf(
     return terminal_log_wealth(pd.Series(step_returns))
 
 
+def _reference_label_columns(
+    dev_features: pd.DataFrame, lean_cols: list[str], first_decision: pd.Timestamp
+) -> list[str]:
+    """Feature columns for the full-sample smoothed reference labeling.
+
+    A column qualifies only if it is non-NaN for every month from
+    ``first_decision`` onward, so the reference (one hindsight fit) yields a state
+    for EVERY walk-forward decision date. This drops structural late-starts
+    (``fred_vix`` from 1990, a 2Y curve from 1976) while keeping features whose
+    only NaN is the pre-decision rolling warmup (``realized_vol_*`` /
+    ``trailing_return_*``, NaN only in 1962 before any decision). Deliberately
+    distinct from the walk-forward's per-window ``min_history`` set: the reference
+    must span the whole decision range, so it uses the long-history features.
+    """
+    decision_slice = dev_features.loc[dev_features.index >= first_decision]
+    return [c for c in lean_cols if bool(decision_slice[c].notna().all())]
+
+
 def run_full_backtest_evaluation(
     monthly_features: pd.DataFrame,
     monthly_raw: pd.DataFrame,
@@ -521,10 +539,17 @@ def run_full_backtest_evaluation(
     faber_ret = faber_sma(dev_equity_level, dev_cash_ret, cost_bps=baseline_cost_bps)
 
     # (d) The SMOOTHED reference labeling — ONE full-sample fit, distinct
-    # from the walk-forward per_step_metrics (Pitfall 1).
+    # from the walk-forward per_step_metrics (Pitfall 1). It must yield a state
+    # for EVERY walk-forward decision date, so it labels on the long-history
+    # features that span the whole decision range (dropping structural late-starts
+    # like fred_vix that begin in 1990) and keeps all rows — NOT the walk-forward's
+    # per-window min_history set. Otherwise an any-NaN row drop would strand every
+    # pre-1990 decision date (which the walk-forward now labels under approach ii).
     dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
     lean_cols = sorted(lean_feature_set(cfg) & set(dev_features.columns))
-    X_df = dev_features[lean_cols].dropna()
+    first_decision = pd.DatetimeIndex(per_step_metrics["dates"]).min()
+    ref_cols = _reference_label_columns(dev_features, lean_cols, first_decision)
+    X_df = dev_features[ref_cols].dropna()
     X = standardize_features(X_df)
     fit = fit_jump_model(
         X,
@@ -532,7 +557,7 @@ def run_full_backtest_evaluation(
         lam=labeling_cfg.get("lambda", 52.0),
         n_restarts=labeling_cfg.get("n_restarts", 10),
     )
-    smoothed_states_arr, _centroids = canonicalize_states(fit["states"], fit["centroids"], lean_cols)
+    smoothed_states_arr, _centroids = canonicalize_states(fit["states"], fit["centroids"], ref_cols)
     full_sample_states = pd.Series(smoothed_states_arr, index=X_df.index, name="state")
 
     filtered_probs_matrix = build_filtered_probs_matrix(per_step_metrics)
