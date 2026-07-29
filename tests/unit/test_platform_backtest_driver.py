@@ -320,43 +320,57 @@ if __name__ == "__main__":
     pytest.main([__file__, "-x", "-q"])
 
 
-class TestWindowUsableColumns:
-    """Pre-1990 regime-activation fix: distinguish bounded rolling-warmup NaN
-    (keep) from a structural late start like VIX (drop) so the walk-forward
-    trains on long-history features across the full window instead of discarding
-    every pre-1990 row."""
+class TestWindowActiveFeatures:
+    """Per-feature min_history activation (approach ii): a late-starting feature
+    (VIX, extra curve tenors, any post-1990 ticker) enters the regime model once
+    it has ≥ min_history months of data; windows without it use the features that
+    exist then, so recent features are leveraged where available without
+    discarding pre-1990 rows where they are not."""
 
-    def test_keeps_leading_warmup_nan_drops_structural_late_start(self):
+    def test_activation_by_min_history(self):
         idx = pd.date_range("1962-01-31", periods=120, freq="ME")
         df = pd.DataFrame(index=idx)
-        df["trailing_return_3m"] = np.arange(120, dtype=float)
-        df.iloc[:3, df.columns.get_loc("trailing_return_3m")] = np.nan  # 3-month warmup
-        df["credit_spread_baa_aaa"] = np.arange(120, dtype=float)       # fully present
-        df["fred_vix"] = np.arange(120, dtype=float)
-        df.iloc[:96, df.columns.get_loc("fred_vix")] = np.nan            # structural late start
+        df["long_feature"] = np.arange(120, dtype=float)            # 120 obs
+        df["mid_feature"] = np.arange(120, dtype=float)
+        df.iloc[:30, df.columns.get_loc("mid_feature")] = np.nan     # 90 obs
+        df["too_recent"] = np.arange(120, dtype=float)
+        df.iloc[:110, df.columns.get_loc("too_recent")] = np.nan     # 10 obs
+        df["not_started"] = np.nan                                   # 0 obs
 
-        usable = driver._window_usable_columns(df, list(df.columns), warmup=3)
+        active = driver._window_active_features(df, list(df.columns), min_history=60)
 
-        assert "trailing_return_3m" in usable      # bounded warmup → kept
-        assert "credit_spread_baa_aaa" in usable   # fully present → kept
-        assert "fred_vix" not in usable            # late start → dropped
+        assert "long_feature" in active     # 120 ≥ 60
+        assert "mid_feature" in active       # 90 ≥ 60 → leveraged
+        assert "too_recent" not in active    # 10 < 60 → not yet
+        assert "not_started" not in active   # 0 < 60
 
-    def test_refit_l1_retains_pre_vix_rows(self):
+    def _lean_frame(self, n=180, vix_obs=0, seed=0):
         from trading_crab_lib.platform.config import load_platform_config
         from trading_crab_lib.platform.taxonomy import lean_feature_set
 
         cfg = load_platform_config()
         cfg = {**cfg, "labeling": {**cfg.get("labeling", {}), "n_restarts": 2, "K": 4}}
         lean = sorted(lean_feature_set(cfg))
-        idx = pd.date_range("1962-01-31", periods=120, freq="ME")
-        rng = np.random.default_rng(0)
-        df = pd.DataFrame(rng.normal(0, 1, (120, len(lean))), index=idx, columns=lean)
-        if "fred_vix" in df.columns:
-            df.iloc[:96, df.columns.get_loc("fred_vix")] = np.nan  # VIX-like late start
+        idx = pd.date_range("1962-01-31", periods=n, freq="ME")
+        rng = np.random.default_rng(seed)
+        df = pd.DataFrame(rng.normal(0, 1, (n, len(lean))), index=idx, columns=lean)
+        if "fred_vix" in df.columns:  # VIX-like: only the trailing `vix_obs` months present
+            df.iloc[: n - vix_obs, df.columns.get_loc("fred_vix")] = np.nan
+        return df, cfg
 
+    def test_too_recent_feature_excluded_long_history_kept(self):
+        # VIX present only 24 months (< default 120) → excluded; the long-history
+        # features train across the full window (early rows retained).
+        df, cfg = self._lean_frame(n=180, vix_obs=24)
         states = driver._refit_l1(df, cfg)
+        assert states.index.min() == df.index.min()   # pre-VIX rows retained
+        assert len(states) >= 170
 
-        # Without the fix the first 96 (VIX-NaN) rows would be dropped → ~24 states.
-        # With the fix VIX is dropped as a column and the early rows are retained.
-        assert len(states) >= 110
-        assert states.index.min() == idx.min()
+    def test_qualified_late_feature_is_leveraged(self):
+        # VIX present 150 of 180 months (≥ 120) → ACTIVE; training block becomes
+        # the rectangular VIX-era block (its start onward), so it IS used.
+        df, cfg = self._lean_frame(n=180, vix_obs=150)
+        states = driver._refit_l1(df, cfg)
+        # block starts where VIX begins (row 30) → far fewer than the full 180 rows
+        assert states.index.min() == df.index[30]
+        assert len(states) <= 155
