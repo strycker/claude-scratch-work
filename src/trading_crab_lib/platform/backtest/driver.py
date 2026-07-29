@@ -90,6 +90,28 @@ log = logging.getLogger(__name__)
 _L2_DEGRADE_EXCEPTIONS: tuple[type[Exception], ...] = (ValueError, IndexError)
 
 
+def _window_active_features(
+    features: pd.DataFrame, cols: list[str], *, min_history: int
+) -> list[str]:
+    """Features usable in this window: those with ≥ ``min_history`` non-NaN months.
+
+    A late-starting feature (``fred_vix`` from 1990, extra bond-curve tenors like
+    a 20Y/30Y, any post-1990 ticker) ENTERS the regime model once it has
+    accumulated ``min_history`` months of data; earlier windows simply use the
+    features that exist then. So recent features are leveraged wherever they have
+    enough history, without discarding pre-1990 rows in the windows where they do
+    not yet qualify.
+
+    The caller then trains on the rectangular block of rows where every active
+    feature is present (governed by the latest-starting active feature), so
+    ``min_history`` also floors the training-row count — a feature never enters
+    with too little data to fit on. Computed from in-window data only
+    (``train_index`` is strictly before the decision date) — causal, no
+    look-ahead.
+    """
+    return [c for c in cols if int(features[c].notna().sum()) >= min_history]
+
+
 def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
     """Refit the L1 jump-model labeler on ``train_features`` ONLY.
 
@@ -107,11 +129,20 @@ def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
     n_restarts = labeling_cfg.get("n_restarts", 10)
 
     lean_cols = sorted(lean_feature_set(cfg) & set(train_features.columns))
-    X_df = train_features[lean_cols].dropna()
+    # Use the features that have ≥ feature_min_history months of data in THIS
+    # window (a late feature like VIX enters once it qualifies), then train on the
+    # rectangular block where every active feature is present — the block start is
+    # governed by the latest-starting active feature. Labels stay comparable
+    # across feature-set transitions because canonicalize_states sorts by
+    # trailing_return_1m, present in every window.
+    min_history = int(cfg.get("backtest", {}).get("feature_min_history", 120))
+    active = _window_active_features(train_features, lean_cols, min_history=min_history)
+    X_df = train_features[active].dropna(axis=0, how="any")
+    used_cols = list(X_df.columns)
     X = standardize_features(X_df)
 
     fit = fit_jump_model(X, K=K, lam=lam, n_restarts=n_restarts)
-    states, _centroids = canonicalize_states(fit["states"], fit["centroids"], lean_cols)
+    states, _centroids = canonicalize_states(fit["states"], fit["centroids"], used_cols)
     return pd.Series(states, index=X_df.index, name="state")
 
 
@@ -141,8 +172,16 @@ def _refit_l2(
     """
     embargo_months = cfg.get("labeling", {}).get("embargo_months", 12)
     X, y = build_nowcaster_training_set(train_features, train_states, embargo_months=embargo_months)
+    # Use the features with ≥ feature_min_history months in this window (late
+    # features like VIX enter once they qualify), applied to BOTH the training
+    # matrix and the prediction row so their columns align. fit_nowcaster's own
+    # non-finite-row drop then restricts training to the rectangular block where
+    # every active feature is present. Causal — in-window data only (before t).
+    min_history = int(cfg.get("backtest", {}).get("feature_min_history", 120))
+    active = _window_active_features(X, list(X.columns), min_history=min_history)
+    X = X[active]
     model = fit_nowcaster(X, y)
-    proba = model.predict_proba(feature_row[X.columns])
+    proba = model.predict_proba(feature_row[active])
     return pd.Series(proba[0], index=model.classes_)
 
 

@@ -341,6 +341,12 @@ backtest:
                               # (SPY/TLT/IAU/USO/cash), applied to |turnover| once per rebalance.
   min_train_months: 120      # yields the 1972-01 first walk-forward decision from the 1962-01
                               # monthly spine (expanding_steps(min_train=120)) — 10 years warmup.
+  feature_min_history: 120   # per-feature min months of data before a feature enters the regime
+                              # model in a given window. Late-starting features (fred_vix from 1990,
+                              # extra bond-curve tenors, any post-1990 ticker) are leveraged once
+                              # they accumulate this much history; earlier windows use the features
+                              # that exist then. Also floors the training-row block (=latest active
+                              # feature's history). Raise for more training rows / fewer features.
   refit_frequency_months: 1  # A2 escape hatch: monthly L1/L2 refit by default; raise this to
                               # reduce wall-clock cost of the ~588-refit walk-forward gauntlet.
   sixty_forty_rebalance: monthly  # 60/40 baseline reconstitution cadence (Claude's discretion,
