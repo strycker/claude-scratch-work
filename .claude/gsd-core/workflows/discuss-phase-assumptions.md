@@ -48,14 +48,12 @@ Capture the idea in "Deferred Ideas". Don't lose it, don't act on it.
 </scope_guardrail>
 
 <answer_validation>
-**IMPORTANT: Answer validation** — After every AskUserQuestion call, check if the response
-is empty or whitespace-only. If so:
-1. Retry the question once with the same parameters
-2. If still empty, present the options as a plain-text numbered list
+**IMPORTANT: Answer validation** — After every AskUserQuestion call, if the response is empty/whitespace-only:
 
-**Text mode (`workflow.text_mode: true` in config or `--text` flag):**
-When text mode is active, do not use AskUserQuestion at all. Present every question as a
-plain-text numbered list and ask the user to type their choice number.
+- **"Other" with empty text** (the user wants to type freeform): output `"What would you like to discuss?"`, STOP generating, wait for the user's next message, then reflect it back and continue. Do NOT retry AskUserQuestion or call any tools.
+- **Any other empty response:** retry once with the same parameters; if still empty, present options as a plain-text numbered list. Never proceed with empty input.
+
+**Text mode** (`--text` or `workflow.text_mode: true`): follow `workflows/discuss-phase/modes/text.md` — do not use AskUserQuestion at all.
 </answer_validation>
 
 <process>
@@ -259,6 +257,14 @@ Map to calibration tier:
 If no USER-PROFILE.md: calibration_tier = "standard"
 
 **Spawn Explore subagent** (runs in a subagent — no output until it returns, ~1–5 min; expected, not a freeze)**:**
+
+<!-- #2508 runtime-aware-dispatch -->
+
+> **Runtime-aware dispatch (#2508 Phase 4).** GSD workflows dispatch specialized subagents by role. Before dispatching on a built-in-only runtime (kimi-code — three built-ins only), resolve the role to a built-in via `gsd_run query resolve-dispatch-type --requested <role> --raw`. On named-dispatch runtimes (Claude/OpenCode/…) the role is returned unchanged; on kimi-code it maps to `coder`/`explore`/`plan` by role-suffix. The persona rides `${AGENT_SKILLS_<ROLE>}` (Phase 3) regardless. See @gsd-core/references/runtime-aware-dispatch.md.
+
+<!-- #2517 model-omit-on-inherit -->
+
+> **Model omission (#2517).** Omit the `model` parameter entirely when the value it would carry (`ANALYZER_MODEL`) is `"inherit"` or empty. An empty value 404s on runtimes without native tier aliases — the default on non-Claude runtimes. Omitting it inherits the orchestrator's model. See @gsd-core/references/model-profile-resolution.md.
 
 ```
 Agent(subagent_type="gsd-assumptions-analyzer", model="{ANALYZER_MODEL}", prompt="""
@@ -660,7 +666,7 @@ Handle return: PHASE COMPLETE / PLANNING COMPLETE / INCONCLUSIVE / GAPS FOUND
 (identical handling to discuss-phase.md auto_advance step)
 
 **If neither `--auto` nor config enabled:**
-Route to confirm_creation step.
+End here — `confirm_creation` already ran; do not route back to it.
 </step>
 
 </process>

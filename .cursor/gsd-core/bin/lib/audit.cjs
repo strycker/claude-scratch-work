@@ -66,7 +66,7 @@ function scanDebugSessions(planDir) {
         const content = (0, shell_command_projection_cjs_1.platformReadSync)(safeFilePath);
         if (content === null)
             continue;
-        const fm = extractFrontmatter(content);
+        const fm = extractFrontmatter(content, safeFilePath);
         const status = (fm.status || 'unknown').toLowerCase();
         if (status === 'resolved' || status === 'complete')
             continue;
@@ -148,7 +148,7 @@ function scanQuickTasks(planDir) {
                 status = 'unreadable';
             }
             else {
-                const fm = extractFrontmatter(content);
+                const fm = extractFrontmatter(content, safeSum);
                 status = (fm.status || 'unknown').toLowerCase();
             }
         }
@@ -205,7 +205,7 @@ function scanThreads(planDir) {
         const content = (0, shell_command_projection_cjs_1.platformReadSync)(safeFilePath);
         if (content === null)
             continue;
-        const fm = extractFrontmatter(content);
+        const fm = extractFrontmatter(content, safeFilePath);
         let status = (fm.status || '').toLowerCase().trim();
         // Fall back to scanning body for ## Status: OPEN / IN PROGRESS
         if (!status) {
@@ -266,7 +266,7 @@ function scanTodos(planDir) {
         const content = (0, shell_command_projection_cjs_1.platformReadSync)(safeFilePath);
         if (content === null)
             continue;
-        const fm = extractFrontmatter(content);
+        const fm = extractFrontmatter(content, safeFilePath);
         // Extract first line of body after frontmatter
         const bodyMatch = content.replace(/^---[\s\S]*?---\n?/, '');
         const firstLine = bodyMatch.trim().split('\n')[0] || '';
@@ -317,7 +317,7 @@ function scanSeeds(planDir) {
         const content = (0, shell_command_projection_cjs_1.platformReadSync)(safeFilePath);
         if (content === null)
             continue;
-        const fm = extractFrontmatter(content);
+        const fm = extractFrontmatter(content, safeFilePath);
         const status = (fm.status || 'dormant').toLowerCase();
         if (!unimplementedStatuses.has(status))
             continue;
@@ -382,7 +382,7 @@ function scanUatGaps(planDir) {
             const content = (0, shell_command_projection_cjs_1.platformReadSync)(safeFilePath);
             if (content === null)
                 continue;
-            const fm = extractFrontmatter(content);
+            const fm = extractFrontmatter(content, safeFilePath);
             const status = (fm.status || 'unknown').toLowerCase();
             const result = (fm.result || '').toLowerCase();
             // Also accept `result: all_pass` as a fallback when status is absent
@@ -445,7 +445,7 @@ function scanVerificationGaps(planDir) {
             const content = (0, shell_command_projection_cjs_1.platformReadSync)(safeFilePath);
             if (content === null)
                 continue;
-            const fm = extractFrontmatter(content);
+            const fm = extractFrontmatter(content, safeFilePath);
             const status = (fm.status || 'unknown').toLowerCase();
             if (status !== 'gaps_found' && status !== 'human_needed')
                 continue;
@@ -500,7 +500,7 @@ function scanContextQuestions(planDir) {
             const content = (0, shell_command_projection_cjs_1.platformReadSync)(safeFilePath);
             if (content === null)
                 continue;
-            const fm = extractFrontmatter(content);
+            const fm = extractFrontmatter(content, safeFilePath);
             // Check frontmatter open_questions field
             let questions = [];
             if (fm.open_questions) {

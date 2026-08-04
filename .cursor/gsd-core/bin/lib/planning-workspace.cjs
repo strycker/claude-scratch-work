@@ -369,8 +369,15 @@ function findContextMdIn(absDirOrFiles) {
             return 'CONTEXT.md';
         return files.find((f) => f.endsWith('-CONTEXT.md')) ?? null;
     }
-    catch {
-        return null;
+    catch (err) {
+        // #1883: distinguish genuine absence from a permission/I-O failure. ENOENT
+        // ("nothing there") keeps the long-standing null contract the callers rely
+        // on; every other error (EACCES, EIO, …) is a real read failure that must
+        // propagate — otherwise an unreadable phase dir is silently reported as
+        // "no CONTEXT.md" and the discuss/plan gates wrongly skip context.
+        if (err.code === 'ENOENT')
+            return null;
+        throw err;
     }
 }
 module.exports = {

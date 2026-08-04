@@ -115,6 +115,7 @@ function convertClaudeCommandToKiloSkill(content, skillName) {
 const SKILLS_CONVERTER_REGISTRY = {
     convertClaudeCommandToOpencodeSkill,
     convertClaudeCommandToKiloSkill,
+    convertClaudeCommandToKimiCodeSkill: runtimeArtifactConversion.convertClaudeCommandToKimiCodeSkill,
 };
 // ---------------------------------------------------------------------------
 // User-artifact preservation helpers

@@ -41,6 +41,7 @@ const frontmatterMod = require("./frontmatter.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- plan-scan.cjs is an export= CommonJS module
 const scanPhasePlans = require("./plan-scan.cjs");
 const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs");
+const runtime_slash_cjs_1 = require("./runtime-slash.cjs");
 const { output, error } = io;
 const { extractPhaseToken } = phaseId;
 const { extractFrontmatter } = frontmatterMod;
@@ -61,6 +62,12 @@ const VERIFIER_STATUSES = ['passed', 'gaps_found', 'human_needed'];
  *
  * For 'gaps_found', next_command is built at call time in readVerificationStatus
  * by substituting the phase number — it is NOT stored as a function in the table.
+ *
+ * #2617: `next_command` here holds a BARE command name (`execute-phase`), never a
+ * prefixed one. Every return path projects it through `formatGsdSlash` with the
+ * caller's runtime, so Codex sees `$gsd-execute-phase` and slash-hyphen runtimes
+ * see `/gsd-execute-phase`. Storing a prefixed literal is what leaked the
+ * hard-coded (and deprecated) `/gsd-` colon form to every runtime.
  */
 const VERIFICATION_ROUTING_TABLE = {
     passed: {
@@ -77,7 +84,12 @@ const VERIFICATION_ROUTING_TABLE = {
     human_needed: {
         status: 'human_needed',
         next_action: "Human verification required. Complete the manual tests in the phase's *-UAT.md, then re-run the verify step until status is passed.",
-        next_command: '',
+        // #2617: was '' — next_action told the user to "re-run the verify step" but
+        // named no command, while init.cts's parallel projector emitted
+        // `verify-work <N>` for this same state. The two surfaces disagreed on
+        // whether a next command existed at all; init's answer was the useful one,
+        // and init now delegates here rather than re-deriving it.
+        next_command: 'verify-work',
     },
     stale: {
         status: 'stale',
@@ -89,16 +101,30 @@ const VERIFICATION_ROUTING_TABLE = {
     missing: {
         status: 'missing',
         next_action: 'No verification report found — the verify step never completed. Re-run execute-phase.',
-        next_command: '/gsd-execute-phase',
+        next_command: 'execute-phase',
     },
     // INTERNAL SENTINEL: constructed when the file has a status value not in
     // VERIFIER_STATUSES. Never emitted by the verifier.
     unknown: {
         status: 'unknown',
         next_action: '', // filled in dynamically with the raw value
-        next_command: '/gsd-execute-phase',
+        next_command: 'execute-phase',
     },
 };
+/**
+ * Project a BARE command name (plus optional argument tail) into the surface the
+ * given runtime actually installs (#2617).
+ *
+ * `formatGsdSlash` owns the per-runtime shape (`$gsd-<cmd>` for shell-var
+ * runtimes like Codex, `/gsd-<cmd>` otherwise) and is idempotent, so passing an
+ * already-prefixed string is safe. An empty command stays empty — "no next
+ * command" must not become a bare prefix.
+ */
+function projectNextCommand(bare, runtime, tail = '') {
+    if (!bare)
+        return '';
+    return `${(0, runtime_slash_cjs_1.formatGsdSlash)(bare, runtime)}${tail}`;
+}
 /** Normalize separators to posix (git emits `/`; callers may pass `\` on Windows). */
 function toPosix(p) {
     return p.replace(/\\/g, '/');
@@ -177,12 +203,12 @@ function defaultPhaseCleanCommitTimesMs(phaseDir, files, execGitFn = shell_comma
  * Used for two early-return paths: no *-VERIFICATION.md file found, and
  * file present but no parseable frontmatter status.
  */
-function missingResult() {
+function missingResult(runtime, phaseArg) {
     const route = VERIFICATION_ROUTING_TABLE['missing'];
     return {
         status: route.status,
         next_action: route.next_action,
-        next_command: route.next_command,
+        next_command: projectNextCommand(route.next_command, runtime, phaseArg),
     };
 }
 function findStaleVerificationSummary(phaseDir, fsImpl = node_fs_1.default, phaseCleanCommitTimesMs = defaultPhaseCleanCommitTimesMs) {
@@ -241,14 +267,25 @@ function findStaleVerificationSummary(phaseDir, fsImpl = node_fs_1.default, phas
  *
  * @param phaseDir - Absolute path to the phase directory.
  * @param opts     - Options. `opts.fs` allows test injection (defaults to node:fs).
+ *                   `opts.runtime` selects the command surface `next_command` is
+ *                   projected into (#2617).
  */
 function readVerificationStatus(phaseDir, opts = {}) {
     const fsImpl = opts.fs ?? node_fs_1.default;
     const phaseCleanCommitTimesMs = opts.phaseCleanCommitTimesMs ?? defaultPhaseCleanCommitTimesMs;
+    const runtime = opts.runtime ?? 'claude';
     // Phase token for the gaps_found command
     const baseName = node_path_1.default.basename(phaseDir);
     const phaseToken = extractPhaseToken(baseName);
-    const phaseNumber = phaseToken.length > 0 ? phaseToken : baseName;
+    const derivedPhaseNumber = phaseToken.length > 0 ? phaseToken : baseName;
+    // #2617: the phase number becomes a COMMAND ARGUMENT, so it is appended only
+    // when it is unambiguously one. extractPhaseToken also returns project-code
+    // forms (`PROJ-07`), which are indistinguishable by shape from an ordinary
+    // directory name — `gsd-651-parent` yields `gsd-651` — and emitting
+    // `execute-phase gsd-651` is worse than emitting no argument at all. Callers
+    // that already know the number (init) pass it explicitly and always get it.
+    const phaseArgSource = opts.phaseNumber ?? (/^\d+(\.\d+)*$/.test(derivedPhaseNumber) ? derivedPhaseNumber : '');
+    const phaseArg = phaseArgSource ? ` ${phaseArgSource}` : '';
     // 1. Find *-VERIFICATION.md
     let verificationFile = null;
     try {
@@ -261,7 +298,7 @@ function readVerificationStatus(phaseDir, opts = {}) {
         verificationFile = null;
     }
     if (!verificationFile) {
-        return missingResult();
+        return missingResult(runtime, phaseArg);
     }
     // 2. Read and parse frontmatter using the shared parser.
     // extractFrontmatter anchors at byte 0, so body `status:` lines are ignored.
@@ -269,7 +306,7 @@ function readVerificationStatus(phaseDir, opts = {}) {
     let rawStatus = null;
     try {
         const content = fsImpl.readFileSync(filePath, 'utf-8');
-        const fm = extractFrontmatter(content);
+        const fm = extractFrontmatter(content, filePath);
         const statusVal = fm['status'];
         // status is always a scalar string in a well-formed VERIFICATION.md frontmatter;
         // only accept string values — arrays and objects are not valid status values.
@@ -282,7 +319,7 @@ function readVerificationStatus(phaseDir, opts = {}) {
         rawStatus = null;
     }
     if (!rawStatus) {
-        return missingResult();
+        return missingResult(runtime, phaseArg);
     }
     // gaps_found takes priority over stale — gap closure is the correct next
     // step regardless of whether summaries are newer than the verification file.
@@ -291,7 +328,7 @@ function readVerificationStatus(phaseDir, opts = {}) {
         return {
             status: entry.status,
             next_action: entry.next_action,
-            next_command: `/gsd-plan-phase ${phaseNumber} --gaps`,
+            next_command: projectNextCommand('plan-phase', runtime, `${phaseArg} --gaps`),
         };
     }
     const staleVerification = findStaleVerificationSummary(phaseDir, fsImpl, phaseCleanCommitTimesMs);
@@ -300,7 +337,7 @@ function readVerificationStatus(phaseDir, opts = {}) {
         return {
             status: entry.status,
             next_action: entry.next_action,
-            next_command: `/gsd-verify-work ${phaseNumber}`,
+            next_command: projectNextCommand('verify-work', runtime, phaseArg),
         };
     }
     // 3. Route — exclude internal sentinels from raw-file lookup (they are
@@ -314,7 +351,7 @@ function readVerificationStatus(phaseDir, opts = {}) {
         return {
             status: entry.status,
             next_action: entry.next_action,
-            next_command: entry.next_command,
+            next_command: projectNextCommand(entry.next_command, runtime, phaseArg),
         };
     }
     // Unknown value
@@ -322,7 +359,7 @@ function readVerificationStatus(phaseDir, opts = {}) {
     return {
         status: unknownRoute.status,
         next_action: `Unexpected verification status '${rawStatus}'. Re-run execute-phase verification.`,
-        next_command: unknownRoute.next_command,
+        next_command: projectNextCommand(unknownRoute.next_command, runtime, phaseArg),
     };
 }
 /**
@@ -339,7 +376,7 @@ function cmdVerificationStatus(cwd, phaseDirArg, raw) {
         return;
     }
     const phaseDir = node_path_1.default.resolve(cwd, phaseDirArg);
-    const result = readVerificationStatus(phaseDir);
+    const result = readVerificationStatus(phaseDir, { runtime: (0, runtime_slash_cjs_1.resolveRuntime)(cwd) });
     output(result, raw);
 }
 module.exports = {

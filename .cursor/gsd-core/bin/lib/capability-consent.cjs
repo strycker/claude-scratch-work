@@ -399,6 +399,10 @@ function isValidConsentRecord(rec) {
         return false;
     if (typeof r['consentedAt'] !== 'string' || !r['consentedAt'])
         return false;
+    // Optional (see ConsentRecord.reviewerHost): absent is valid and is the common case. Present but
+    // non-string is a corrupt record — reject rather than silently comparing against a non-host.
+    if (r['reviewerHost'] !== undefined && typeof r['reviewerHost'] !== 'string')
+        return false;
     return true;
 }
 /**
@@ -645,7 +649,7 @@ function writeConsentStore(gsdHome, store) {
  * written. (The OLD code returned a null handle and proceeded unlocked — that is the bug.)
  */
 function recordProjectConsent(args) {
-    const { gsdHome, projectRoot, id, integrity, disclosureSignature, contentHash } = args;
+    const { gsdHome, projectRoot, id, integrity, disclosureSignature, contentHash, reviewerHost } = args;
     if (isUnsafeCapabilityId(id)) {
         throw new Error(`Invalid capability id "${String(id)}": must match /^[a-z][a-z0-9-]*$/ (kebab-case, lowercase). ` +
             `Unsafe or non-kebab ids are rejected to keep the consent store prototype-pollution-safe.`);
@@ -685,6 +689,9 @@ function recordProjectConsent(args) {
             disclosureSignature,
             contentHash,
             consentedAt: new Date().toISOString(),
+            // Written only when the capability actually declares an egress destination, so a spawn lane
+            // or a non-lane capability keeps a byte-identical record shape.
+            ...(typeof reviewerHost === 'string' && reviewerHost ? { reviewerHost } : {}),
         };
         writeConsentStore(gsdHome, store);
     }
@@ -731,6 +738,37 @@ function revokeProjectConsent(args) {
     }
 }
 /**
+ * The egress destination a capability's consent was granted against, or `undefined`.
+ *
+ * ADR-2782 D5 rule 4 (#2799) — read on the INVOCATION path, not only at install, because
+ * `hostConfigKey` names a key in `.planning/config.json`: the one consent-bound value that lives
+ * outside the SHA-pinned bundle and can be changed by an ordinary pull request with no re-install
+ * and no integrity check.
+ *
+ * `undefined` means "nothing to compare", and the caller MUST treat that as allow, not deny. Two
+ * legitimate ways to get it: the capability has no consent record at all (first-party lanes ship
+ * inside the SHA-pinned distribution and are never consent-gated), or the record predates this
+ * field. Denying on absence would break every existing local-model user on upgrade.
+ *
+ * Non-throwing: a missing, corrupt, or oversized store yields `undefined` like any other absence.
+ */
+function readConsentedReviewerHost(args) {
+    const { gsdHome, projectRoot, id } = args;
+    if (isUnsafeCapabilityId(id))
+        return undefined;
+    try {
+        const store = readConsentStore(gsdHome);
+        const key = consentKey(realpathProject(projectRoot), id);
+        if (!Object.prototype.hasOwnProperty.call(store.records, key))
+            return undefined;
+        const host = store.records[key].reviewerHost;
+        return typeof host === 'string' && host ? host : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+/**
  * #1459 finding 2 (round 6): TEST-ONLY — override the cumulative bundle entry-count cap and return a
  * restore() that resets it to the production default. Lets a test prove the streaming walk fails closed
  * at the bound without planting 100k real files. Never called by production code.
@@ -744,6 +782,7 @@ module.exports = {
     consentStorePath,
     bundleContentHash,
     readConsentStore,
+    readConsentedReviewerHost,
     hasProjectConsent,
     recordProjectConsent,
     revokeProjectConsent,

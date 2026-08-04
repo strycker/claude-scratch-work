@@ -10,10 +10,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RUNTIMES_WITH_FAST_MODE = exports.EFFORT_RENDERING = exports.KNOWN_PROVIDERS = exports.PROVIDER_PRESETS = exports.RUNTIMES_WITH_REASONING_EFFORT = exports.KNOWN_RUNTIMES = exports.RUNTIME_PROFILE_MAP = exports.MODEL_ALIAS_MAP = exports.AGENT_DEFAULT_TIERS = exports.AGENT_TO_PHASE_TYPE = exports.MODEL_PROFILES = exports.ADAPTIVE_TIER_VALUES = exports.VALID_TIERS = exports.VALID_AGENT_TIERS = exports.VALID_PHASE_TYPES = exports.VALID_PROFILES = exports.catalog = void 0;
+exports.RUNTIMES_WITH_FAST_MODE = exports.EFFORT_ARGV = exports.EFFORT_RENDERING = exports.KNOWN_PROVIDERS = exports.PROVIDER_PRESETS = exports.RUNTIMES_WITH_REASONING_EFFORT = exports.KNOWN_RUNTIMES = exports.RUNTIME_PROFILE_MAP = exports.MODEL_ALIAS_MAP = exports.AGENT_DEFAULT_TIERS = exports.AGENT_TO_PHASE_TYPE = exports.MODEL_PROFILES = exports.ADAPTIVE_TIER_VALUES = exports.VALID_TIERS = exports.VALID_AGENT_TIERS = exports.VALID_PHASE_TYPES = exports.VALID_PROFILES = exports.catalog = void 0;
 exports.nextTier = nextTier;
 exports.formatAgentToModelMapAsTable = formatAgentToModelMapAsTable;
 exports.getAgentToModelMapForProfile = getAgentToModelMapForProfile;
+exports.renderEffortArgv = renderEffortArgv;
 exports.renderEffortForRuntime = renderEffortForRuntime;
 const node_path_1 = __importDefault(require("node:path"));
 // In .cts (CommonJS output) files, `require` is available as a global;
@@ -151,6 +152,55 @@ exports.EFFORT_RENDERING = {
         },
     },
 };
+exports.EFFORT_ARGV = {
+    // Verified against `claude --help`: `--effort <level>`.
+    claude: {
+        render: (level) => ['--effort', level],
+        supported: new Set(['low', 'medium', 'high', 'xhigh', 'max']),
+        clamp: (level) => (level === 'minimal' ? 'low' : level),
+    },
+    // Verified against `opencode run --help`: `--variant` — "model variant
+    // (provider-specific reasoning effort, e.g., high, max, minimal)".
+    opencode: {
+        render: (level) => ['--variant', level],
+        supported: new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']),
+        clamp: (level) => level,
+    },
+    // First-party Codex docs: `model_reasoning_effort` is a config-only key with no
+    // dedicated flag, so the generic `-c key=value` override is the only argv route.
+    codex: {
+        render: (level) => ['-c', `model_reasoning_effort=${level}`],
+        supported: new Set(['minimal', 'low', 'medium', 'high', 'xhigh']),
+        clamp: (level) => (level === 'max' ? 'xhigh' : level),
+    },
+};
+/**
+ * Render the invocation-time effort argument for a host.
+ *
+ * `effortSurface` is the host's negotiated axis value. Only `argv` produces an
+ * argument; `none`, `undocumented`, and anything unrecognised produce nothing.
+ * Never throws.
+ */
+function renderEffortArgv(host, universalEffort, effortSurface) {
+    const empty = { argv: [], value: null, host };
+    if (effortSurface !== 'argv')
+        return empty;
+    // Own-property lookup only. A plain `EFFORT_ARGV[host]` resolves `__proto__`
+    // (and `constructor`/`toString`) to inherited members, which are truthy but
+    // carry no `clamp`/`render` — a hostile host id would throw instead of
+    // degrading. The host id reaches here from a descriptor, i.e. untrusted JSON.
+    if (typeof host !== 'string' || !Object.prototype.hasOwnProperty.call(exports.EFFORT_ARGV, host))
+        return empty;
+    const spec = exports.EFFORT_ARGV[host];
+    if (!spec || typeof spec.clamp !== 'function' || typeof spec.render !== 'function')
+        return empty;
+    if (typeof universalEffort !== 'string' || universalEffort.length === 0)
+        return empty;
+    const clamped = spec.clamp(universalEffort);
+    if (!spec.supported.has(clamped))
+        return empty;
+    return { argv: spec.render(clamped), value: clamped, host };
+}
 /**
  * Render a universal effort string for a specific runtime.
  */

@@ -316,7 +316,7 @@ function dispatchKindEntry(entry, runtime, configDir, scope, capabilityRegistry)
         default:
             throw new TypeError(`resolveRuntimeArtifactLayout: unknown kind '${kind}' in descriptor for runtime '${runtime}'`);
     }
-    if (typeof entry.home === 'string' && entry.home !== '') {
+    if (scope === 'global' && typeof entry.home === 'string' && entry.home !== '') {
         result.home = node_path_1.default.join(node_os_1.default.homedir(), entry.home);
     }
     return result;

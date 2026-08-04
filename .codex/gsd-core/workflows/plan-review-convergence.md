@@ -18,22 +18,11 @@ Read all files referenced by the invoking prompt's execution_context before star
 
 ## 1. Parse and Normalize Arguments
 
-Extract from {{GSD_ARGS}}: phase number, reviewer flags (`--codex`, `--gemini`, `--agy`/`--antigravity`, `--claude`, `--opencode`, `--ollama`, `--lm-studio`, `--llama-cpp`, `--all`), `--max-cycles N`, `--text`, `--ws`.
+Extract from {{GSD_ARGS}}: phase number, reviewer flags (the declared reviewer lane flags, plus `--all`), `--max-cycles N`, `--text`, `--ws`.
 
 ```bash
 PHASE=$(echo "{{GSD_ARGS}}" | grep -oE '[0-9]+\.?[0-9]*' | head -1)
 
-REVIEWER_FLAGS=""
-echo "{{GSD_ARGS}}" | grep -q '\-\-codex' && REVIEWER_FLAGS="$REVIEWER_FLAGS --codex"
-echo "{{GSD_ARGS}}" | grep -q '\-\-gemini' && REVIEWER_FLAGS="$REVIEWER_FLAGS --gemini"
-echo "{{GSD_ARGS}}" | grep -q '\-\-agy' && REVIEWER_FLAGS="$REVIEWER_FLAGS --agy"
-echo "{{GSD_ARGS}}" | grep -q '\-\-antigravity' && REVIEWER_FLAGS="$REVIEWER_FLAGS --antigravity"
-echo "{{GSD_ARGS}}" | grep -q '\-\-claude' && REVIEWER_FLAGS="$REVIEWER_FLAGS --claude"
-echo "{{GSD_ARGS}}" | grep -q '\-\-opencode' && REVIEWER_FLAGS="$REVIEWER_FLAGS --opencode"
-echo "{{GSD_ARGS}}" | grep -q '\-\-ollama' && REVIEWER_FLAGS="$REVIEWER_FLAGS --ollama"
-echo "{{GSD_ARGS}}" | grep -q '\-\-lm-studio' && REVIEWER_FLAGS="$REVIEWER_FLAGS --lm-studio"
-echo "{{GSD_ARGS}}" | grep -q '\-\-llama-cpp' && REVIEWER_FLAGS="$REVIEWER_FLAGS --llama-cpp"
-echo "{{GSD_ARGS}}" | grep -q '\-\-all' && REVIEWER_FLAGS="$REVIEWER_FLAGS --all"
 # #2315: do NOT default REVIEWER_FLAGS to --codex here. The default is resolved
 # against review.default_reviewers in step 1.5 (after the config gate) so a bare
 # invocation respects the configured reviewer lineup per ADR-0011 / ADR-0015.
@@ -66,6 +55,20 @@ Then re-run: $gsd-plan-review-convergence {PHASE}
 ```
 
 ```bash
+# Reviewer flags are DERIVED from the declared lane roster (#2800/#2272), never hand-listed.
+# Three surfaces used to enumerate them independently and had drifted: --coderabbit was missing
+# from all three, --qwen/--cursor/--kimi-code from this one, and the old unanchored
+# `grep -q '\-\-agy'` matched INSIDE --antigravity, appending both for one user flag.
+# `--all` is a selection control, not a lane, so it stays literal.
+# This block must stay AFTER the launcher preamble (below) because it calls `gsd_run` —
+# do not move it back above the preamble in a future edit.
+REVIEWER_FLAGS=""
+for REVIEW_FLAG in $(gsd_run review-lane flags) --all; do
+  if echo "{{GSD_ARGS}}" | grep -qE "(^|[[:space:]])${REVIEW_FLAG}([[:space:]]|$)"; then
+    REVIEWER_FLAGS="$REVIEWER_FLAGS $REVIEW_FLAG"
+  fi
+done
+
 # #2315: Resolve reviewer selection when no explicit flag was given.
 # The pre-fix bug unconditionally set REVIEWER_FLAGS="--codex" in step 1, BEFORE
 # the config gate — silently overriding any configured review.default_reviewers
@@ -82,8 +85,9 @@ Then re-run: $gsd-plan-review-convergence {PHASE}
 if [ -z "$REVIEWER_FLAGS" ]; then
   DEFAULT_REVIEWERS_JSON=$(gsd_run query config-get review.default_reviewers 2>/dev/null || echo "")
   if ! command -v jq >/dev/null 2>&1; then
-    # jq is a documented production dependency (review.md:244 — "install jq if
-    # missing"). If it is absent we cannot inspect the configured default, so
+    # jq is a documented production dependency (review.md, detect_clis — the
+    # "jq-dependent reviewer lanes" note). If it is absent we cannot inspect
+    # the configured default (it is a JSON array, not a --raw/--pick scalar), so
     # fail safe with --codex and surface the reason rather than silently
     # reproducing the #2315 override under degraded conditions.
     echo "WARNING: jq not on PATH — cannot read review.default_reviewers; falling back to --codex (#2315)" >&2

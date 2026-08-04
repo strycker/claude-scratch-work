@@ -47,7 +47,6 @@ RESPONSE_LANGUAGE=$(gsd_run query config-get response_language --default "" 2>/d
 
 If `$DESCRIPTION` is empty after parsing, prompt user interactively:
 
-
 **Text mode (`workflow.text_mode: true` in config or `--text` flag):** Set `TEXT_MODE=true` if `--text` is present in `$ARGUMENTS` OR `text_mode` from init JSON is `true`. When TEXT_MODE is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for non-Claude runtimes (OpenAI Codex, Gemini CLI, etc.) where `AskUserQuestion` is not available.
 
 ```
@@ -237,7 +236,11 @@ else
   # On success HEAD is exactly at origin/$DEFAULT_BRANCH, so a post-creation
   # merge-base / "ahead-of" guard would be unreachable — the explicit base
   # argument here is the single source of correctness for #2916.
-  git checkout -b "$branch_name" "origin/$DEFAULT_BRANCH" \
+  # --no-track: with the default branch.autoSetupMerge=true, checkout -b from a
+  # remote-tracking ref wires branch.<name>.merge to refs/heads/$DEFAULT_BRANCH
+  # (origin/master), so a GUI sync pushes quick-task commits straight onto
+  # origin/$DEFAULT_BRANCH, bypassing PR review (#2498).
+  git checkout -b "$branch_name" "origin/$DEFAULT_BRANCH" --no-track \
     || { echo "ERROR: Could not create '$branch_name' from origin/$DEFAULT_BRANCH (#2916)." >&2; exit 1; }
 fi
 ```
@@ -415,6 +418,10 @@ Display banner:
 
 Spawn a single focused researcher (not 4 parallel researchers like full phases — quick tasks need targeted research, not broad domain surveys):
 
+<!-- #2517 model-omit-on-inherit -->
+
+> **Model omission (#2517).** Omit the `model` parameter entirely when the value it would carry (`planner_model`, `checker_model`, `executor_model`, `reviewer_model`, `verifier_model`) is `"inherit"` or empty. An empty value 404s on runtimes without native tier aliases — the default on non-Claude runtimes. Omitting it inherits the orchestrator's model. See @gsd-core/references/model-profile-resolution.md.
+
 ```
 Agent(
   prompt="
@@ -444,6 +451,10 @@ This is a quick task, not a full phase. Research should be concise and targeted:
 
 Do NOT produce a full domain survey. Target 1-2 pages of actionable findings.
 </focus>
+
+<!-- #2508 runtime-aware-dispatch -->
+
+> **Runtime-aware dispatch (#2508 Phase 4).** GSD workflows dispatch specialized subagents by role. Before dispatching on a built-in-only runtime (kimi-code — three built-ins only), resolve the role to a built-in via `gsd_run query resolve-dispatch-type --requested <role> --raw`. On named-dispatch runtimes (Claude/OpenCode/…) the role is returned unchanged; on kimi-code it maps to `coder`/`explore`/`plan` by role-suffix. The persona rides `${AGENT_SKILLS_<ROLE>}` (Phase 3) regardless. See @gsd-core/references/runtime-aware-dispatch.md.
 
 <output>
 Write research to: ${QUICK_DIR}/${quick_id}-RESEARCH.md
@@ -983,7 +994,7 @@ Use `date` from init:
 | ${quick_id} | ${DESCRIPTION} | ${date} | ${commit_hash} | [${quick_id}-${slug}](./quick/${quick_id}-${slug}/) |
 ```
 
-For a schema-safe append outside this workflow (e.g. from fast.md), `gsd-tools quick-tasks-append --task <text>` performs the equivalent write via the shared, schema-backed `appendQuickTaskRow` helper (#2133, ADR-2143 §3/§7).
+For a schema-safe append outside this workflow (e.g. from fast.md), `gsd_run quick-tasks-append --task <text>` performs the equivalent write via the shared, schema-backed `appendQuickTaskRow` helper (#2133, ADR-2143 §3/§7).
 
 **7d. Update "Last activity" line:**
 

@@ -518,6 +518,28 @@ function convertClaudeCommandToKimiSkill(content, skillName, _runtime = null, cm
     const normalizedBody = convertGsdCommandReferencesToKimiSkillInvocations(frontmatter ? body : content, names);
     return `---\nname: ${kimiSkillName}\ndescription: ${yamlQuote(toSingleLine(description))}\n---\nInvoke this Kimi skill with \`/skill:${kimiSkillName}\`.\n\n${normalizedBody}`;
 }
+/**
+ * Convert a Claude command-markdown source into a Kimi Code Agent Skill.
+ *
+ * Kimi Code (Moonshot's Node CLI) uses the standard Agent Skills format —
+ * a directory containing SKILL.md with frontmatter (name/description) and
+ * body — auto-discovered from `~/.kimi-code/skills/` (per Kimi Code docs:
+ * "Agent Skills is an open format for adding specialized knowledge and
+ * workflows to AI agents"). The invocation prefix is `/skill:<name>`,
+ * identical to Python kimi-cli.
+ *
+ * Today the output is byte-identical to `convertClaudeCommandToKimiSkill`
+ * (the Python kimi-cli converter) because both products consume the same
+ * Agent Skills format + `/skill:` invocation. The distinct function name
+ * lets a future divergence land cleanly if Kimi Code's skill format evolves
+ * independently of Python kimi-cli.
+ *
+ * Registered as `convertClaudeCommandToKimiCodeSkill` in the capabilities/
+ * kimi-code/capability.json `artifactLayout` `converter` field (#2454 PR 2).
+ */
+function convertClaudeCommandToKimiCodeSkill(content, skillName, _runtime = null, cmdNames = null) {
+    return convertClaudeCommandToKimiSkill(content, skillName, _runtime, cmdNames);
+}
 const KIMI_CANONICAL_GSD_AGENT_RE = /^gsd-[a-z0-9-]+$/;
 function parseKimiAgentSource(source) {
     if (typeof source === 'string') {
@@ -1391,10 +1413,14 @@ Typed mapping (agent_type-capable schema only):
   inherited, or unsupported values; do not invent one-off effort literals in
   workflow prose.
 - \`fork_context: false\` by default — GSD agents load their own context via \`<files_to_read>\` blocks
-- \`Task(isolation="worktree")\` / \`Agent(isolation="worktree")\` → no direct Codex mapping.
-  Codex \`spawn_agent\` does not create or bind a git worktree automatically.
-  Workflows that require this isolation must fail closed or use an explicit
-  manual worktree protocol before spawning (#3360).
+- \`Task(isolation="worktree")\` / \`Agent(isolation="worktree")\` → no direct \`spawn_agent\` mapping,
+  but Codex declares \`dispatch.isolation: orchestrator-worktree\` (#2584). Codex
+  \`spawn_agent\` still does not create or bind a git worktree; instead GSD itself
+  creates the worktree and process-spawns the executor into it with
+  \`codex exec --cd <dir>\`, performing every git operation on the executor's behalf
+  (its \`workspace-write\` sandbox makes \`.git\` read-only). Workflows must therefore
+  never fabricate a manual worktree protocol — route through the negotiated
+  isolation adapter, which still fails closed for hosts declaring \`none\` (#3360).
 
 Generic-agent workaround (multi_agent_v1 schema — NO agent_type field):
 When only the generic \`multi_agent_v1\` schema is available, typed GSD agent dispatch
@@ -2603,6 +2629,7 @@ module.exports = {
     convertClaudeCommandToAntigravitySkill,
     convertClaudeCommandToClaudeSkill,
     convertClaudeCommandToKimiSkill,
+    convertClaudeCommandToKimiCodeSkill,
     buildKimiAgentArtifacts,
     convertClaudeToCursorMarkdown,
     convertClaudeCommandToCursorSkill,

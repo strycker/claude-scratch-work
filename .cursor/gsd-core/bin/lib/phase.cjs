@@ -56,6 +56,11 @@ const uatPredicate = require("./uat-predicate.cjs");
 const { evaluateUatPassed } = uatPredicate;
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- verification.cjs is an export= CommonJS module
 const verificationMod = require("./verification.cjs");
+// #2572: the artifact↔disk core behind the `verify-summary` verb. `verify.cts`
+// has no transitive import path back to `phase.cts`, so this edge introduces no
+// cycle (the reverse edge, `state.cts → verify.cjs`, would).
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- verify.cjs is an export= CommonJS module
+const verifyMod = require("./verify.cjs");
 const { readVerificationStatus } = verificationMod;
 const { planningDir, withPlanningLock, listAvailableWorkstreams, getActiveWorkstream } = planningWorkspace;
 const { extractFrontmatter } = frontmatterMod;
@@ -512,7 +517,8 @@ function cmdPhasePlanIndex(cwd, phase, raw) {
         const planId = planFile.replace('-PLAN.md', '').replace('PLAN.md', '');
         const planPath = node_path_1.default.join(phaseDir, planFile);
         const content = node_fs_1.default.readFileSync(planPath, 'utf-8');
-        const fm = extractFrontmatter(content);
+        // Pass planPath so a truncated PLAN.md names the file in the #1882 diagnostic.
+        const fm = extractFrontmatter(content, planPath);
         const xmlTasks = content.match(/<task[\s>]/gi) || [];
         const mdTasks = content.match(/##\s*Task\s*\d+/gi) || [];
         const taskCount = xmlTasks.length || mdTasks.length;
@@ -1402,13 +1408,14 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
                 warnings.push(`${file}: has diagnosed gaps`);
         }
         for (const file of phaseFiles.filter((f) => f.includes('-VERIFICATION') && f.endsWith('.md'))) {
-            const content = node_fs_1.default.readFileSync(node_path_1.default.join(phaseFullDir, file), 'utf-8');
+            const verificationFilePath = node_path_1.default.join(phaseFullDir, file);
+            const content = node_fs_1.default.readFileSync(verificationFilePath, 'utf-8');
             // #1159 (Defect A): read ONLY the frontmatter `status` key to avoid false positives
             // from historical metadata in the file body (e.g. `previous_status: gaps_found`).
             // A full-text regex like /status: gaps_found/ matches the substring inside
             // `previous_status: gaps_found`, producing spurious warnings even when the
             // current frontmatter status is `passed`.
-            const verFm = extractFrontmatter(content);
+            const verFm = extractFrontmatter(content, verificationFilePath);
             // Normalise to lower-case so `status: Passed` (title-case) is not missed.
             const verStatus = typeof verFm['status'] === 'string' ? verFm['status'].trim().toLowerCase() : '';
             if (verStatus === 'human_needed')
@@ -1424,11 +1431,51 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
          * mechanism). A readdirSync/readFileSync failure here just means fewer
          * warnings are surfaced this run, not a blocked or corrupted completion. */
     }
+    // #2572: artifact↔disk advisory for the SUMMARYs of the phase being completed.
+    //
+    // A SUMMARY asserts "I created these files". Nothing checked that claim for
+    // phase summaries — the `verify-summary` verb has existed since the beginning
+    // but was only ever pointed at `.planning/research/SUMMARY.md`. An interrupted
+    // or over-reported phase therefore counted toward 100% silently.
+    //
+    // Joins the same ADVISORY channel as the pre-scan above: findings land in
+    // `warnings[]` (rendered by execute-phase.md's "If has_warnings is true"
+    // step), never in the completion GATE (readVerificationStatus below).
+    // Completion is never blocked.
+    //
+    // `checkCommits: false` — only the file-existence half is surfaced here, so
+    // the `git cat-file` probes would be spawned and their result discarded. The
+    // hash pattern is a loose `\b[0-9a-f]{7,40}\b` that matches any hex-shaped
+    // token in prose, too noisy to put in front of a user even as a warning.
+    //
+    // `Infinity` — report every referenced file, not the CLI verb's default first
+    // two, so a phase that lists twelve files and landed three says so. The verb
+    // keeps its 2-file default; only this caller opts out of the cap.
+    try {
+        const phaseDirRel = phaseInfo['directory'];
+        // `summaries` arrives pre-sorted from the phase locator, so warning order is
+        // deterministic across platforms rather than readdir-dependent.
+        const summaryNames = phaseInfo['summaries'] || [];
+        for (const summaryName of summaryNames) {
+            const v = verifyMod.verifySummaryCore(cwd, `${phaseDirRel}/${summaryName}`, Infinity, { checkCommits: false });
+            const missing = v.checks.files_created.missing;
+            if (missing.length > 0) {
+                warnings.push(`${summaryName}: references ${missing.length} file(s) not on disk: ${missing.join(', ')}`);
+            }
+        }
+    }
+    catch {
+        /* best-effort, same posture as the #2245 pre-scan above: an unreadable
+         * SUMMARY means one fewer advisory this run, never a blocked completion. */
+    }
     let nextPhaseNum = null;
     let nextPhaseName = null;
     let isLastPhase = true;
     const verificationBlocked = withPlanningLock(cwd, () => {
-        const verificationStatus = readVerificationStatus(phaseFullDir);
+        // #2617: pass the project's runtime so the blocked-completion error below
+        // suggests the command surface this runtime actually installs
+        // ($gsd-… on Codex) rather than a hard-coded Claude-style string.
+        const verificationStatus = readVerificationStatus(phaseFullDir, { runtime: (0, runtime_slash_cjs_1.resolveRuntime)(cwd) });
         if (verificationStatus.status !== 'passed') {
             return verificationStatus;
         }
@@ -1651,7 +1698,10 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
                             // requirement's write. The "only flip Pending/In Progress ->
                             // Complete" gate is folded into the newValue callback so one
                             // updateTableCell call both probes and writes.
-                            const reqUpdate = updateTraceabilityCell(reqContent, reqRowMatch, 'Status', (current) => /^(?:pending|in progress)$/i.test(current.trim()) ? ' Complete ' : current);
+                            const reqUpdate = updateTraceabilityCell(reqContent, reqRowMatch, 'Status', (current) => 
+                            // #2788: accept `Gaps Found` too so a phase stranded by revert-phase (the
+                            // gaps_found response) can complete without hand-editing the table.
+                            /^(?:pending|in progress|gaps found)$/i.test(current.trim()) ? ' Complete ' : current);
                             if (reqUpdate.ok) {
                                 reqContent = reqUpdate.value;
                             }
@@ -1991,10 +2041,15 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
                     clock: clock_cjs_1.realClock,
                     progressProvider: () => null, // completePhase derives progress from the roadmap, not disk
                     roadmapProvider: () => roadmapContent,
+                    sourcePath: statePath,
                 });
                 stateContent = completeResult.content;
                 stateContent = updatePerformanceMetricsSection(stateContent, cwd, phaseNum, planCount, summaryCount);
-                stateContent = syncStateFrontmatter(stateContent, cwd);
+                // #2736: the transition holds the next phase's exact display name in
+                // the intent; pass it as authoritative so the sync's prose
+                // re-derivation cannot rewrite current_phase_name to the name's own
+                // parenthetical (`Closer-ruling measurement (D1a)` → `D1a`).
+                stateContent = syncStateFrontmatter(stateContent, cwd, nextPhaseDisplayName ? { current_phase_name: nextPhaseDisplayName } : undefined);
                 writes.push({ filePath: statePath, before: originalStateContent, after: stateContent });
             }
             writePlanningFileSet(writes);

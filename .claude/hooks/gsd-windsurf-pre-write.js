@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.8.0
+// gsd-hook-version: 1.9.1
 // gsd-windsurf-pre-write.js — Windsurf/Cascade pre_write_code hook (ADR-1239 / #2100)
 //
 // Cascade (Windsurf's agent) invokes this script before each file-write tool

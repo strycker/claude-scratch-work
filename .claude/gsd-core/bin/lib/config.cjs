@@ -21,7 +21,7 @@ const { CONFIG_DEFAULTS } = configLoader;
 const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const planningWorkspace = require("./planning-workspace.cjs");
-const { planningDir, withPlanningLock } = planningWorkspace;
+const { planningDir, planningRoot, withPlanningLock } = planningWorkspace;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const modelProfiles = require("./model-profiles.cjs");
 const { VALID_PROFILES, getAgentToModelMapForProfile, formatAgentToModelMapAsTable } = modelProfiles;
@@ -66,6 +66,9 @@ const SCHEMA_DEFAULTS = {
     'executor.stall_detect_interval_minutes': 5,
     'executor.stall_threshold_minutes': 10,
     'git.create_tag': true,
+    // Derived from the defaults manifest rather than restated, so the manifest
+    // stays the single source of truth for the smart-zone budget (#2630).
+    'workflow.smart_zone_tokens': CONFIG_DEFAULTS.smart_zone_tokens,
 };
 /**
  * Resolve a schema-level default for an absent key (#2256). Checks the legacy
@@ -704,6 +707,18 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
             error(`Invalid context_window '${val}'. Must be a positive integer (token count).`, ERROR_REASON.USAGE);
         }
     }
+    // Smart-zone token budget (#2630, ADR-2629). Same shape as context_window:
+    // a positive integer token count. A POLICY default, not a benchmark constant.
+    // Number.isSafeInteger, NOT Number.isInteger: the read side
+    // (estimate-cli readSmartZoneBudget) accepts only safe integers, so an
+    // isInteger-only gate would let config-set 'succeed' on a value past 2^53
+    // that estimate-check then silently ignores in favour of the default.
+    // Accept and honour must agree.
+    if (kp === 'workflow.smart_zone_tokens') {
+        if (typeof parsedValue !== 'number' || !Number.isSafeInteger(parsedValue) || parsedValue < 1) {
+            error(`Invalid workflow.smart_zone_tokens '${val}'. Must be a positive integer (token count).`, ERROR_REASON.USAGE);
+        }
+    }
     // Post-planning gap checker (#2493)
     if (kp === 'workflow.post_planning_gaps') {
         if (typeof parsedValue !== 'boolean') {
@@ -867,11 +882,21 @@ function cmdConfigGet(cwd, keyPath, raw, defaultValue) {
         if (node_fs_1.default.existsSync(configPath)) {
             config = JSON.parse(node_fs_1.default.readFileSync(configPath, 'utf-8'));
         }
-        else if (hasDefault) {
-            emitResolvedDefault(kp, defaultValue, raw);
-            return;
-        }
         else {
+            // #2702: when a workstream is active and has no config.json of its own, fall
+            // back to the project ROOT config first — a key the user configured at root is
+            // a real, present value and must inherit (per #1893: a present key wins over
+            // --default). Only when root also misses do --default / schema default apply.
+            // (When no workstream is active, resolveFromRootConfig is a no-op: same file.)
+            const rootVal = resolveFromRootConfig(cwd, kp);
+            if (rootVal.found) {
+                emitResolvedDefault(kp, rootVal.value, raw);
+                return;
+            }
+            if (hasDefault) {
+                emitResolvedDefault(kp, defaultValue, raw);
+                return;
+            }
             const sd = resolveSchemaDefault(cwd, kp);
             if (sd.found) {
                 emitResolvedDefault(kp, sd.value, raw);
@@ -890,6 +915,12 @@ function cmdConfigGet(cwd, keyPath, raw, defaultValue) {
     let current = config;
     for (const key of keys) {
         if (current === undefined || current === null || typeof current !== 'object') {
+            // #2702: root-config inheritance before --default / schema default (see above).
+            const rootVal = resolveFromRootConfig(cwd, kp);
+            if (rootVal.found) {
+                emitResolvedDefault(kp, rootVal.value, raw);
+                return;
+            }
             if (hasDefault) {
                 emitResolvedDefault(kp, defaultValue, raw);
                 return;
@@ -915,6 +946,12 @@ function cmdConfigGet(cwd, keyPath, raw, defaultValue) {
             : undefined;
     }
     if (current === undefined) {
+        // #2702: root-config inheritance before --default / schema default (see above).
+        const rootVal = resolveFromRootConfig(cwd, kp);
+        if (rootVal.found) {
+            emitResolvedDefault(kp, rootVal.value, raw);
+            return;
+        }
         if (hasDefault) {
             emitResolvedDefault(kp, defaultValue, raw);
             return;
@@ -934,6 +971,54 @@ function cmdConfigGet(cwd, keyPath, raw, defaultValue) {
         return;
     }
     output(current, raw, String(current));
+}
+/**
+ * #2702: resolve a dot-notation key against the project ROOT config
+ * (`.planning/config.json`), ignoring any active workstream scope. Returns
+ * `{found:false}` when the root config is absent, unparseable, or does not
+ * contain the key. This is the inheritance rung `cmdConfigGet` was missing —
+ * when a workstream's own config doesn't set a key, the project root value
+ * must show through (workstream overrides root; it never fully replaces it),
+ * exactly as `loadConfigResolved`'s root+workstream merge already does for
+ * every other config consumer. No-op (found:false) when no workstream is
+ * active, because `planningDir === planningRoot` and the caller already read
+ * that file directly.
+ */
+function resolveFromRootConfig(cwd, kp) {
+    // Only meaningful when a workstream is active (GSD_WORKSTREAM set) — that is what
+    // redirects planningDir away from root AND what loadConfigResolved gates root-reading
+    // on. Gating on `process.env.GSD_WORKSTREAM` (not on a planningDir !== planningRoot
+    // path inequality) avoids a false trigger under GSD_PROJECT alone, where planningDir
+    // diverges from planningRoot without a workstream and loadConfigResolved does NOT
+    // inherit root — matching the runtime's own `if (ws)` gate keeps the two surfaces
+    // from diverging on the project-scoped (non-workstream) case.
+    if (!process.env['GSD_WORKSTREAM'])
+        return { found: false, value: undefined };
+    const root = planningRoot(cwd);
+    const rootConfigPath = node_path_1.default.join(root, 'config.json');
+    let rootConfig;
+    try {
+        if (!node_fs_1.default.existsSync(rootConfigPath))
+            return { found: false, value: undefined };
+        rootConfig = JSON.parse(node_fs_1.default.readFileSync(rootConfigPath, 'utf-8'));
+    }
+    catch {
+        // Unparseable root config → don't inherit (do not let a corrupt root file
+        // change config-get's verdict). Fall through to schema default / error.
+        return { found: false, value: undefined };
+    }
+    let current = rootConfig;
+    for (const key of kp.split('.')) {
+        if (current === undefined || current === null || typeof current !== 'object') {
+            return { found: false, value: undefined };
+        }
+        current = Object.prototype.hasOwnProperty.call(current, key)
+            ? current[key]
+            : undefined;
+    }
+    if (current === undefined)
+        return { found: false, value: undefined };
+    return { found: true, value: current };
 }
 /**
  * Command to set the model profile in the config file.

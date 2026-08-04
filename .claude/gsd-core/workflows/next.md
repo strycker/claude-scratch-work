@@ -187,7 +187,8 @@ Choice [S]:
 ```
 2. Commit the deferral record:
 ```bash
-gsd_run query commit "docs: defer incomplete Phase {src} items to backlog"
+gsd_run query commit "docs: defer incomplete Phase {src} items to backlog" \
+  --files .planning/ROADMAP.md
 ```
 3. Continue routing to `determine_next_action` immediately — no second prompt.
 
@@ -263,7 +264,9 @@ if echo "$ARGUMENTS" | grep -qE '(^|[[:space:]])\-\-(converge|cross-ai)([[:space
 fi
 
 CONVERGENCE_ARGS=""
-for REVIEW_FLAG in --codex --gemini --claude --opencode --ollama --lm-studio --llama-cpp --all --text; do
+# Lane flags derived from the declared roster (#2800/#2272); --all and --text are convergence
+# controls, not reviewer lanes, so they stay literal.
+for REVIEW_FLAG in $(gsd_run review-lane flags) --all --text; do
   if echo "$ARGUMENTS" | grep -qE "(^|[[:space:]])${REVIEW_FLAG}([[:space:]]|$)"; then
     CONVERGENCE_ARGS="${CONVERGENCE_ARGS} ${REVIEW_FLAG}"
   fi

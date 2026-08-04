@@ -118,7 +118,7 @@ Parse REVIEW.md frontmatter to check status and extract context for --auto loop:
 REVIEW_STATUS=$(REVIEW_PATH="${REVIEW_PATH}" node -e "
   const fs = require('fs');
   const content = fs.readFileSync(process.env.REVIEW_PATH, 'utf-8');
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/);
   if (match && /status:\s*(\S+)/.test(match[1])) {
     console.log(match[1].match(/status:\s*(\S+)/)[1]);
   } else {
@@ -144,7 +144,7 @@ Extract review depth for --auto re-review:
 REVIEW_DEPTH=$(REVIEW_PATH="${REVIEW_PATH}" node -e "
   const fs = require('fs');
   const content = fs.readFileSync(process.env.REVIEW_PATH, 'utf-8');
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/);
   if (match && /depth:\s*(\S+)/.test(match[1])) {
     console.log(match[1].match(/depth:\s*(\S+)/)[1]);
   } else {
@@ -163,7 +163,7 @@ while IFS= read -r line; do
 done < <(REVIEW_PATH="${REVIEW_PATH}" node -e "
   const fs = require('fs');
   const content = fs.readFileSync(process.env.REVIEW_PATH, 'utf-8');
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/);
   if (match) {
     const fm = match[1];
     // Try YAML array format: files_reviewed_list: [file1, file2]
@@ -196,6 +196,14 @@ echo "Fix scope: ${FIX_SCOPE}"
 ```
 
 Use Agent() to spawn agent:
+
+<!-- #2508 runtime-aware-dispatch -->
+
+> **Runtime-aware dispatch (#2508 Phase 4).** GSD workflows dispatch specialized subagents by role. Before dispatching on a built-in-only runtime (kimi-code — three built-ins only), resolve the role to a built-in via `gsd_run query resolve-dispatch-type --requested <role> --raw`. On named-dispatch runtimes (Claude/OpenCode/…) the role is returned unchanged; on kimi-code it maps to `coder`/`explore`/`plan` by role-suffix. The persona rides `${AGENT_SKILLS_<ROLE>}` (Phase 3) regardless. See @gsd-core/references/runtime-aware-dispatch.md.
+
+<!-- #2517 model-omit-on-inherit -->
+
+> **Model omission (#2517).** Omit the `model` parameter entirely when the value it would carry (`FIXER_MODEL`, `REVIEWER_MODEL`) is `"inherit"` or empty. An empty value 404s on runtimes without native tier aliases — the default on non-Claude runtimes. Omitting it inherits the orchestrator's model. See @gsd-core/references/model-profile-resolution.md.
 
 ```text
 Agent(subagent_type="gsd-code-fixer", model="{FIXER_MODEL}", prompt="
@@ -298,7 +306,7 @@ ${AGENT_SKILLS_REVIEWER}")
     NEW_STATUS=$(REVIEW_PATH="${REVIEW_PATH}" node -e "
       const fs = require('fs');
       const content = fs.readFileSync(process.env.REVIEW_PATH, 'utf-8');
-      const match = content.match(/^---\n([\s\S]*?)\n---/);
+      const match = content.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/);
       if (match && /status:\s*(\S+)/.test(match[1])) {
         console.log(match[1].match(/status:\s*(\S+)/)[1]);
       } else {
@@ -364,7 +372,7 @@ if [ -f "${FIX_REPORT_PATH}" ]; then
   HAS_STATUS=$(REVIEW_PATH="${REVIEW_PATH}" node -e "
     const fs = require('fs');
     const content = fs.readFileSync(process.env.FIX_REPORT_PATH, 'utf-8');
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
+    const match = content.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/);
     if (match && /status:/.test(match[1])) { console.log('valid'); } else { console.log('invalid'); }
   " 2>/dev/null)
   
@@ -421,7 +429,7 @@ Extract frontmatter fields:
 FIX_FRONTMATTER=$(REVIEW_PATH="${REVIEW_PATH}" node -e "
   const fs = require('fs');
   const content = fs.readFileSync(process.env.FIX_REPORT_PATH, 'utf-8');
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/);
   if (match) process.stdout.write(match[1]);
 " 2>/dev/null)
 

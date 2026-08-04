@@ -137,10 +137,16 @@ function searchPhaseInContent(content, escapedPhase, phaseNum) {
     // comparison; unrecognized values are preserved verbatim for forward-compat.
     const modeMatch = section.match(/\*\*Mode(?::\*\*|\*\*:)\s*([^\n]+)/i);
     const mode = modeMatch ? modeMatch[1].trim().toLowerCase() : null;
-    // Extract success criteria as structured array
-    const criteriaMatch = section.match(/\*\*Success Criteria\*\*[^\n]*:\s*\n((?:\s*\d+\.\s*[^\n]+\n?)+)/i);
+    // Extract success criteria as structured array. A criterion may wrap onto extra
+    // indented lines (no `N.` prefix); those continuations must fold INTO their
+    // criterion, not end the run (#2522 — the old `(?:\s*\d+\.\s*[^\n]+)+` broke on a
+    // wrapped line, truncating it and silently dropping every criterion below it).
+    // `\n*` before each numbered line keeps blank-line-separated criteria working.
+    const criteriaMatch = section.match(/\*\*Success Criteria\*\*[^\n]*:\s*\n((?:\n*[ \t]*\d+\.[^\n]*\n?(?:[ \t]+(?!\d+\.)[^\n]*\n?)*)+)/i);
     const success_criteria = criteriaMatch
-        ? criteriaMatch[1].trim().split('\n').map(line => line.replace(/^\s*\d+\.\s*/, '').trim()).filter(Boolean)
+        ? criteriaMatch[1].trim().split(/\n+(?=[ \t]*\d+\.)/)
+            .map(entry => entry.replace(/^\s*\d+\.\s*/, '').replace(/\s*\n\s*/g, ' ').trim())
+            .filter(Boolean)
         : [];
     return {
         found: true,
@@ -658,7 +664,7 @@ function cmdRoadmapAnnotateDependencies(cwd, phaseNum, raw) {
         const planPath = node_path_1.default.join(node_path_1.default.resolve(cwd, phaseInfo.directory), planFile);
         try {
             const content = node_fs_1.default.readFileSync(planPath, 'utf-8');
-            const fm = extractFrontmatter(content);
+            const fm = extractFrontmatter(content, planPath);
             const wave = parseInt(fm.wave, 10) || 1;
             const planId = planFile.replace(/-PLAN\.md$/i, '').replace(/PLAN\.md$/i, '');
             const truths = parseMustHavesBlock(content, 'truths') || [];

@@ -112,18 +112,6 @@ function listPhaseSummaryFiles(phaseDir) {
 function listPhasePlanFiles(phaseDir) {
     return scanPhasePlans(phaseDir)['planFiles'];
 }
-function verificationNextCommand(status, phaseNumber, slashRuntime) {
-    if (status === 'gaps_found') {
-        return `${(0, runtime_slash_cjs_1.formatGsdSlash)('plan-phase', slashRuntime)} ${phaseNumber} --gaps`;
-    }
-    if (status === 'human_needed' || status === 'stale') {
-        return `${(0, runtime_slash_cjs_1.formatGsdSlash)('verify-work', slashRuntime)} ${phaseNumber}`;
-    }
-    if (status === 'missing' || status === 'unknown') {
-        return `${(0, runtime_slash_cjs_1.formatGsdSlash)('execute-phase', slashRuntime)} ${phaseNumber}`;
-    }
-    return '';
-}
 function projectCompletionStatus(implementationComplete, verificationPassed) {
     if (implementationComplete && verificationPassed)
         return 'complete';
@@ -134,8 +122,14 @@ function projectCompletionStatus(implementationComplete, verificationPassed) {
 function buildPhaseCompletionProjection(cwd, phaseNumber, phaseDir, planCount, summaryCount, slashRuntime) {
     const implementationComplete = planCount > 0 && summaryCount >= planCount;
     const phaseFullDir = phaseDir ? node_path_1.default.join(cwd, phaseDir) : '';
+    // #2617: ONE verification-routing seam. init used to re-derive next_command
+    // from the status with its own projector, which had drifted from the router's
+    // table — it appended the phase number and answered `human_needed`; the table
+    // did neither. The router now owns both the content and the runtime
+    // projection, and init passes the phase number it already knows (its phaseDir
+    // is unresolved in some branches, where the router could not derive one).
     const verificationStatus = implementationComplete
-        ? readVerificationStatus(phaseFullDir)
+        ? readVerificationStatus(phaseFullDir, { runtime: slashRuntime, phaseNumber })
         : { status: 'not_required', next_action: '', next_command: '' };
     const projectedVerificationStatus = verificationStatus.status;
     const projectedVerificationAction = verificationStatus.next_action;
@@ -148,7 +142,7 @@ function buildPhaseCompletionProjection(cwd, phaseNumber, phaseDir, planCount, s
         phase_complete: phaseComplete,
         completion_status: projectCompletionStatus(implementationComplete, verificationPassed),
         verification_next_action: projectedVerificationAction,
-        verification_next_command: verificationNextCommand(projectedVerificationStatus, phaseNumber, slashRuntime),
+        verification_next_command: verificationStatus.next_command,
     };
 }
 function getLatestCompletedMilestone(cwd) {
@@ -1854,7 +1848,38 @@ function cmdAgentSkills(cwd, agentType, raw, jsonMode) {
     const projectRoot = (0, project_root_cjs_1.findProjectRoot)(cwd);
     const { config, source, degraded } = loadConfigResolved(projectRoot);
     const diagnostics = { warnings: [] };
-    const block = buildAgentSkillsBlock(config, agentType, projectRoot, diagnostics);
+    let block = buildAgentSkillsBlock(config, agentType, projectRoot, diagnostics);
+    // #2454: Agent prompt fallback for AGENTS-native runtimes where named
+    // subagents are NOT dispatchable (kimi-code, kimi, opencode, kilo, etc.).
+    // On these runtimes, workflows inject ${AGENT_SKILLS_*} into the dispatch
+    // prompt of a built-in subagent (coder/explore/plan). If no
+    // model_profile_overrides or agent_skills config entry exists, the block
+    // is empty — but the agent's prompt CONTENT is installed on disk at the
+    // runtime's agents directory. Read it as a fallback so the persona survives
+    // the dispatch even without explicit config opt-in.
+    //
+    // GATED to non-claude runtimes: Cursor supports named subagent dispatch
+    // and its ${AGENT_SKILLS_*} contract is a skills-injection path, not a
+    // persona fallback. Triggering the fallback for claude would change the
+    // documented "unconfigured → empty block" contract that agent-skills tests
+    // pin.
+    if (!block) {
+        const runtime = (config && config['runtime']) || process.env['GSD_RUNTIME'] || 'claude';
+        if (runtime !== 'claude') {
+            const agentCheck = checkAgentsInstalled(runtime);
+            const agentsDir = agentCheck?.agents_dir;
+            if (typeof agentsDir === 'string' && agentsDir.length > 0) {
+                const agentFile = node_path_1.default.join(agentsDir, `${agentType}.md`);
+                try {
+                    const content = (0, shell_command_projection_cjs_1.platformReadSync)(agentFile);
+                    if (content && content.length > 0) {
+                        block = content;
+                    }
+                }
+                catch { /* agent file not found — fall through to empty block */ }
+            }
+        }
+    }
     // Compute configured + reason for diagnostic output.
     const agentSkillsMap = (config && config['agent_skills'] && typeof config['agent_skills'] === 'object')
         ? config['agent_skills']
@@ -2053,8 +2078,8 @@ function buildSkillManifest(cwd, skillsDir = null) {
         // posix-style for cross-platform stability; flat entries use template
         // literals that always produce '/'; nested entries are joined below
         // with explicit '/' separators rather than path.join).
-        relPath, content) {
-            const frontmatter = extractFrontmatter(content);
+        relPath, content, sourcePath) {
+            const frontmatter = extractFrontmatter(content, sourcePath);
             const dirPart = relPath.replace(/\/SKILL\.md$/, '');
             const stem = dirPart.includes('/') ? dirPart.split('/').pop() : dirPart;
             const name = frontmatter['name'] || stem;
@@ -2095,7 +2120,7 @@ function buildSkillManifest(cwd, skillsDir = null) {
             const skillMdPath = node_path_1.default.join(rootPath, entry.name, 'SKILL.md');
             const content = (0, shell_command_projection_cjs_1.platformReadSync)(skillMdPath);
             if (content !== null) {
-                if (pushSkillEntry(`${entry.name}/SKILL.md`, content))
+                if (pushSkillEntry(`${entry.name}/SKILL.md`, content, skillMdPath))
                     skillCount++;
             }
             // Nested layout: <entry>/skills/<stem>/SKILL.md
@@ -2124,7 +2149,7 @@ function buildSkillManifest(cwd, skillsDir = null) {
                 // Use forward-slash separator explicitly so manifest paths are posix-style
                 // on all platforms, matching the flat-layout behaviour above.
                 const relPath = `${entry.name}/skills/${nested.name}/SKILL.md`;
-                if (pushSkillEntry(relPath, nestedContent))
+                if (pushSkillEntry(relPath, nestedContent, nestedSkillMd))
                     skillCount++;
             }
         }

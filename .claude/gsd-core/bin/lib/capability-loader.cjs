@@ -426,6 +426,8 @@ function loadRegistry(options = {}) {
     // consent the CLI records is the consent the loader checks. The consent store NEVER lives in a repo.
     const gsdHome = options.gsdHome || process.env['GSD_HOME'] || os.homedir();
     const warnings = [];
+    // ADR-2782 D4.3 — non-fatal notices for capabilities that are ACCEPTED (see OverlayMeta).
+    const diagnostics = [];
     const incompatibleGateCapIds = [];
     const blockedGates = [];
     const commandRoots = {};
@@ -719,6 +721,26 @@ function loadRegistry(options = {}) {
                     }
                 }
                 // Accepted.
+                //
+                // ADR-2782 D4.3: an unknown field inside a `reviewer` body is IGNORED WITH A
+                // WARNING rather than failing validation, so a lane built for a newer GSD
+                // degrades to accepted-but-partially-understood instead of being rejected.
+                // That case validates cleanly, so without this call it would surface
+                // nowhere at runtime — the build-time generator only ever sees first-party
+                // in-repo manifests, never an installed third-party overlay. Guarded on
+                // presence so an older built validator without the function still loads,
+                // and wrapped because the never-crash contract (ADR-1244 D2) outranks a
+                // diagnostic: a throwing collector must not cost the user a working lane.
+                if (typeof validator.collectReviewerWarnings === 'function') {
+                    try {
+                        for (const w of validator.collectReviewerWarnings(cap) || []) {
+                            diagnostics.push(`${root.scope}:${id}: ${w}`);
+                        }
+                    }
+                    catch {
+                        // A diagnostic that cannot be produced is not worth failing an install over.
+                    }
+                }
                 overlayCaps.push(cap);
                 acceptedIds.add(id);
                 for (const s of skills)
@@ -752,7 +774,7 @@ function loadRegistry(options = {}) {
             }
         }
     }
-    const meta = { warnings, incompatibleGateCapIds, blockedGates, commandRoots };
+    const meta = { warnings, diagnostics, incompatibleGateCapIds, blockedGates, commandRoots };
     if (overlayCaps.length === 0) {
         // Nothing to compose. Return the frozen registry unchanged when there is
         // also nothing to report (identity-stable); otherwise attach diagnostics.

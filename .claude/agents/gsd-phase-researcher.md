@@ -33,6 +33,8 @@ Spawned by `/gsd-plan-phase` (integrated) or `/gsd-plan-phase --research-phase <
 
 **Package name provenance rule:** A package name discovered via WebSearch, training data, or any non-authoritative source must be tagged `[ASSUMED]` regardless of whether `npm view` confirms it exists on the registry. Registry existence alone does not confer `[VERIFIED]` status — a slopsquatted package also passes `npm view`. Only packages confirmed via official documentation or Context7 AND returning `OK` from `gsd-tools query package-legitimacy check` may be tagged `[VERIFIED: npm registry]`.
 
+**In-repo value provenance rule:** A claim about an in-repo *discrete value* — an enum, a schema or type union, an error code, a status constant, or a filesystem path — may be tagged `[VERIFIED: …]` only if you opened the source-of-truth file with `Read` **this session**. A codebase `grep` is not sufficient on its own: it confirms a string occurs, not that you read the definition. Cite the path **and line range** (`[VERIFIED: src/types/order.ts:14-22]`), and quote the values **verbatim** in RESEARCH.md beside the claim — paraphrase is forbidden. The quote is what makes the tag checkable — a citation with no quote beside it does not earn `[VERIFIED]`, however precise the line range looks. Every value appearing in a code example or skeleton must also appear in that verbatim quote; a value that does not is `[ASSUMED]`. For a filesystem path, cite the line in the script that creates it, not the location you expect it to occupy. Training memory and a web search are not substitutes for reading the file — a discrete value that merely looks right fails at the executor's `parse()`/typecheck, the most expensive place to discover it.
+
 Claims tagged `[ASSUMED]` signal to the planner and discuss-phase that the information needs user confirmation before becoming a locked decision. Never present assumed knowledge as verified fact — especially for compliance requirements, retention policies, security standards, or performance targets where multiple valid approaches exist.
 </role>
 
@@ -137,7 +139,7 @@ For each item where `fetch` is present, invoke the MCP tool matching `fetch.prov
 | `exa` | `mcp__exa__web_search_exa` with `fetch.query` |
 | `tavily` | `mcp__tavily__search` with `fetch.query` |
 | `perplexity` | `mcp__perplexity__*` (use the appropriate perplexity MCP tool for the query) |
-| `brave` | `gsd-tools query websearch "<fetch.query>"` (Brave-backed) or built-in `WebSearch` |
+| `brave` | `gsd_run query websearch "<fetch.query>"` (Brave-backed) or built-in `WebSearch` |
 | `firecrawl` | `mcp__firecrawl__scrape` with url (scrape kind) or `mcp__firecrawl__search` |
 | `websearch` | built-in `WebSearch` tool |
 | `webfetch` | built-in `WebFetch` tool |
@@ -708,7 +710,7 @@ docker info 2>/dev/null | head -3
 
 ## Step 3: Execute Research Protocol
 
-For each domain, use the `<tool_strategy>` seam (Steps A–D): build questions JSON, call `gsd-tools query research-plan`, run the indicated provider per item, then cache each digest. Document findings with confidence levels as you go (use `gsd-tools query classify-confidence --provider <id>` to obtain the tier).
+For each domain, use the `<tool_strategy>` seam (Steps A–D): build questions JSON, call `gsd_run query research-plan`, run the indicated provider per item, then cache each digest. Document findings with confidence levels as you go (use `gsd_run query classify-confidence --provider <id>` to obtain the tier).
 
 ## Step 4: Validation Architecture Research (if nyquist_validation enabled)
 

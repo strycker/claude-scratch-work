@@ -194,9 +194,10 @@ function evaluateUatPassed(phaseFullDir, opts) {
     // ── Process UAT files ──────────────────────────────────────────────────────
     for (const file of uatFileNames) {
         uatFiles.push(file);
+        const uatFilePath = node_path_1.default.join(phaseFullDir, file);
         let raw = '';
         try {
-            raw = node_fs_1.default.readFileSync(node_path_1.default.join(phaseFullDir, file), 'utf-8');
+            raw = node_fs_1.default.readFileSync(uatFilePath, 'utf-8');
         }
         catch {
             blockers.push(`${file}: could not read file`);
@@ -210,7 +211,7 @@ function evaluateUatPassed(phaseFullDir, opts) {
         if (unterminatedFence || unterminatedComment) {
             blockers.push(`${file}: malformed markdown (unterminated fence or comment)`);
         }
-        const fm = extractFrontmatter(raw);
+        const fm = extractFrontmatter(raw, uatFilePath);
         // File-level frontmatter status check
         if (fm['status'] && BLOCKING_UAT_FM_STATUSES.has(fm['status'])) {
             blockers.push(`${file}: frontmatter status=${fm['status']}`);
@@ -240,15 +241,16 @@ function evaluateUatPassed(phaseFullDir, opts) {
     let hasPassingVerification = false;
     for (const file of verFileNames) {
         verificationFiles.push(file);
+        const verificationFilePath = node_path_1.default.join(phaseFullDir, file);
         let raw = '';
         try {
-            raw = node_fs_1.default.readFileSync(node_path_1.default.join(phaseFullDir, file), 'utf-8');
+            raw = node_fs_1.default.readFileSync(verificationFilePath, 'utf-8');
         }
         catch {
             blockers.push(`${file}: could not read verification file`);
             continue;
         }
-        const vfm = extractFrontmatter(raw);
+        const vfm = extractFrontmatter(raw, verificationFilePath);
         const vStatus = vfm['status'];
         if (vStatus && BLOCKING_VERIFICATION_FM_STATUSES.has(vStatus)) {
             blockers.push(`${file}: verification status=${vStatus}`);

@@ -224,7 +224,7 @@ function readStateFile(statePath) {
     catch {
         return null;
     }
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatter(content, statePath);
     const body = content.replace(/^---[\s\S]*?---\s*/, '');
     return { fm, body };
 }

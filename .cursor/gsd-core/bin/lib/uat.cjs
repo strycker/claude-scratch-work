@@ -63,7 +63,8 @@ function cmdAuditUat(cwd, raw) {
         const files = node_fs_1.default.readdirSync(phaseDir);
         // Process UAT files
         for (const file of files.filter(f => f.includes('-UAT') && f.endsWith('.md'))) {
-            const content = node_fs_1.default.readFileSync(node_path_1.default.join(phaseDir, file), 'utf-8');
+            const uatFilePath = node_path_1.default.join(phaseDir, file);
+            const content = node_fs_1.default.readFileSync(uatFilePath, 'utf-8');
             const items = parseUatItems(content);
             if (items.length > 0) {
                 results.push({
@@ -72,17 +73,18 @@ function cmdAuditUat(cwd, raw) {
                     file,
                     file_path: toPosixPath(node_path_1.default.relative(cwd, node_path_1.default.join(phaseDir, file))),
                     type: 'uat',
-                    status: (extractFrontmatter(content).status || 'unknown'),
+                    status: (extractFrontmatter(content, uatFilePath).status || 'unknown'),
                     items,
                 });
             }
         }
         // Process VERIFICATION files
         for (const file of files.filter(f => f.includes('-VERIFICATION') && f.endsWith('.md'))) {
-            const content = node_fs_1.default.readFileSync(node_path_1.default.join(phaseDir, file), 'utf-8');
-            const status = extractFrontmatter(content).status || 'unknown';
+            const verificationFilePath = node_path_1.default.join(phaseDir, file);
+            const content = node_fs_1.default.readFileSync(verificationFilePath, 'utf-8');
+            const status = extractFrontmatter(content, verificationFilePath).status || 'unknown';
             if (status === 'human_needed' || status === 'gaps_found') {
-                const items = parseVerificationItems(content, status);
+                const items = parseVerificationItems(content, status, verificationFilePath);
                 if (items.length > 0) {
                     results.push({
                         phase: phaseNum,
@@ -624,7 +626,7 @@ function rawGapEntryText(entryLines) {
         .trim();
 }
 // ─── parseVerificationItems ───────────────────────────────────────────────────
-function parseVerificationItems(content, status) {
+function parseVerificationItems(content, status, sourcePath) {
     const items = [];
     if (status === 'human_needed') {
         // #2286: the frontmatter's structured `human_verification:` YAML array
@@ -633,7 +635,7 @@ function parseVerificationItems(content, status) {
         // whose frontmatter declares the array doesn't require any particular
         // `## Human Verification` body shape at all. An absent or empty array
         // (length 0) falls back to the body scan unchanged.
-        const frontmatter = extractFrontmatter(content);
+        const frontmatter = extractFrontmatter(content, sourcePath);
         const humanVerification = frontmatter.human_verification;
         if (Array.isArray(humanVerification) && humanVerification.length > 0) {
             humanVerification.forEach((entry, idx) => {

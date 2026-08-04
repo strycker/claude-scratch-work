@@ -63,14 +63,35 @@ const { MODEL_PROFILES } = modelProfilesMod;
 // Unused but imported for structural parity
 void stripShippedMilestones;
 void schema_detect_cjs_1.detectSchemaFiles;
-function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
-    if (!summaryPath) {
-        error('summary-path required');
-    }
+/**
+ * Pure core of `verify-summary` (#2572).
+ *
+ * Same artifact↔git checks the CLI verb has always run, lifted out of the
+ * `output()` wrapper so other verbs can consume the structured
+ * `{ passed, checks, errors }` contract directly instead of shelling out and
+ * re-parsing JSON. `cmdVerifySummary` is now a thin adapter over this.
+ *
+ * Never throws and never writes to stdout: a missing SUMMARY, a non-repo, or an
+ * unresolvable commit all come back as structured `false`/`missing` values.
+ *
+ * Caveat for callers surfacing `commits_exist`: the hash pattern is a loose
+ * `\b[0-9a-f]{7,40}\b`, so any hex-shaped token in the prose counts as a
+ * candidate. That is cheap as an advisory signal and unacceptable as a gate.
+ *
+ * @param checkFileCount How many extracted candidates to probe. Defaults to 2 —
+ *   the value the CLI verb has always used. Pass `Infinity` to probe every
+ *   candidate (see `cmdPhaseComplete`, which reports on all of them).
+ * @param opts.checkCommits When `false`, the `git cat-file` probes are skipped
+ *   entirely and `commits_exist` comes back `false` meaning *not checked*.
+ *   Callers that do not surface `commits_exist` should pass `false` so this
+ *   stays a pure-filesystem check with no subprocess cost.
+ */
+function verifySummaryCore(cwd, summaryPath, checkFileCount, opts) {
     const fullPath = node_path_1.default.join(cwd, summaryPath);
     const checkCount = checkFileCount || 2;
+    const checkCommits = opts?.checkCommits !== false;
     if (!node_fs_1.default.existsSync(fullPath)) {
-        const result = {
+        return {
             passed: false,
             checks: {
                 summary_exists: false,
@@ -80,34 +101,104 @@ function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
             },
             errors: ['SUMMARY.md not found'],
         };
-        output(result, raw, 'failed');
-        return;
     }
     const content = node_fs_1.default.readFileSync(fullPath, 'utf-8');
     const errors = [];
+    const projectRoot = node_path_1.default.resolve(cwd);
+    /**
+     * Is `candidate` plausibly a repo-relative file this check should probe?
+     *
+     * Deliberately narrowing. This is an ADVISORY, so the two error directions are
+     * not symmetric: a false positive tells a user their healthy project is
+     * missing a file that was never claimed, while a false negative just means one
+     * reference goes unprobed. Every rejection below is a noise class confirmed on
+     * #2685; when in doubt, skip rather than warn.
+     */
+    const isProbableProjectFile = (candidate) => {
+        // Only repo-relative paths — a bare filename is too ambiguous to locate.
+        if (!candidate.includes('/'))
+            return false;
+        // URLs, protocol-relative links, and any other scheme.
+        if (candidate.startsWith('http') || candidate.startsWith('//'))
+            return false;
+        if (/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate))
+            return false;
+        // Globs name a set, not a file: `src/**/*.cts` is never "missing".
+        if (/[*?]/.test(candidate))
+            return false;
+        // Bare hostnames (`docs.example.com/guide.html`). A repo-relative path's
+        // first segment is a directory name, which in practice contains a dot only
+        // when it is a dotfile directory (`.github/`, `.changeset/`, `.planning/`)
+        // — i.e. the dot is at index 0. A dot anywhere later marks a hostname.
+        const firstSegment = candidate.split('/')[0] || '';
+        if (firstSegment.indexOf('.') > 0)
+            return false;
+        // Containment guard: a `../`-bearing reference must not turn this advisory
+        // into a filesystem existence probe outside the project.
+        const resolved = node_path_1.default.resolve(projectRoot, candidate);
+        if (resolved !== projectRoot && !resolved.startsWith(projectRoot + node_path_1.default.sep))
+            return false;
+        return true;
+    };
+    // Pattern 2 excludes `[` and `]` from its path class (#2685 Blocker 1). All
+    // three SUMMARY templates prescribe a YAML flow sequence for `key-files`:
+    //
+    //     key-files:
+    //       created: [src/auth/login.ts, src/auth/session.ts]
+    //
+    // and the label matches `(?:Created|Modified|…):` case-insensitively. Without
+    // the bracket exclusion the class captures the literal `[` as part of the
+    // first path, yielding `[src/auth/login.ts` — a candidate that can never exist
+    // on disk. That fired on healthy projects built from GSD's own shipped
+    // template. The exclusion also stops a markdown list in the body from
+    // reintroducing the same artifact.
+    //
+    // Stripping frontmatter first was the other remedy offered on #2685. It is a
+    // verified no-op on top of this exclusion — measured identical extraction
+    // across all three shipped templates — because the exclusion already makes a
+    // flow-sequence line contribute nothing. Consequence worth naming: the
+    // `key-files` block, the most authoritative statement of what a phase created,
+    // is still not read. Recovering it needs a real frontmatter parse, which is
+    // deliberately left as a follow-up rather than smuggled in here.
     const mentionedFiles = new Set();
+    // #2844: Pattern 1 matches any backticked path-like token. A SUMMARY body is
+    // predominantly about what the phase DID, so a backticked path in prose ("Built
+    // `src/kept.ts`", a `- \`src/x.ts\`` list item) is a legitimate claim (#2685
+    // pins this). The false-positive class #2844 fixes is a path mentioned as a
+    // FUTURE/CONDITIONAL deliverable — "next phase will add `shared/types.ts`",
+    // "planned", "would", "to be created" — which is NOT a claim about this phase.
+    // Exclude those lines rather than requiring an explicit claim verb (which would
+    // drop the legitimate "Built …" / list-item forms #2685 protects).
+    const isFutureMention = (line) => /\b(?:will(?:\s+(?:add|create|build|land))?(?:[^.])?|(?:next|later|future)\s+phase|planned?|would\s+(?:be|add|create|build)|to\s+be\s+(?:added|created|built)|eventually|not\s+yet)\b/i.test(line);
     const patterns = [
         /`([^`]+\.[a-zA-Z]+)`/g,
-        /(?:Created|Modified|Added|Updated|Edited):\s*`?([^\s`]+\.[a-zA-Z]+)`?/gi,
+        /(?:Created|Modified|Added|Updated|Edited):\s*`?([^\s`[\]]+\.[a-zA-Z]+)`?/gi,
     ];
     for (const pattern of patterns) {
         let m;
         while ((m = pattern.exec(content)) !== null) {
             const filePath = m[1];
-            if (filePath && !filePath.startsWith('http') && filePath.includes('/')) {
-                mentionedFiles.add(filePath);
-            }
+            if (!filePath || !isProbableProjectFile(filePath))
+                continue;
+            // #2844: skip a backticked path on a future/conditional line — it names a
+            // deliverable this phase did NOT produce, so probing it is a false positive.
+            const lineStart = content.lastIndexOf('\n', m.index) + 1;
+            const lineEnd = content.indexOf('\n', m.index);
+            const line = content.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+            if (isFutureMention(line))
+                continue;
+            mentionedFiles.add(filePath);
         }
     }
     const filesToCheck = Array.from(mentionedFiles).slice(0, checkCount);
     const missing = [];
     for (const file of filesToCheck) {
-        if (!node_fs_1.default.existsSync(node_path_1.default.join(cwd, file))) {
+        if (!node_fs_1.default.existsSync(node_path_1.default.resolve(projectRoot, file))) {
             missing.push(file);
         }
     }
     const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
-    const hashes = content.match(commitHashPattern) || [];
+    const hashes = checkCommits ? content.match(commitHashPattern) || [] : [];
     let commitsExist = false;
     if (hashes.length > 0) {
         for (const hash of hashes.slice(0, 3)) {
@@ -144,8 +235,15 @@ function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
         self_check: selfCheck,
     };
     const passed = missing.length === 0 && selfCheck !== 'failed';
-    const result = { passed, checks, errors };
-    output(result, raw, passed ? 'passed' : 'failed');
+    return { passed, checks, errors };
+}
+/** CLI adapter over verifySummaryCore — arg guard + output shaping only. */
+function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
+    if (!summaryPath) {
+        error('summary-path required');
+    }
+    const result = verifySummaryCore(cwd, summaryPath, checkFileCount);
+    output(result, raw, result.passed ? 'passed' : 'failed');
 }
 /**
  * Issue #429 — negative-grep comment-text echo gate.
@@ -649,13 +747,24 @@ function cmdVerifyPlanStructure(cwd, filePath, raw) {
     if (!filePath) {
         error('file path required');
     }
+    if (filePath.includes('\0')) {
+        error('file path contains null bytes');
+    }
     const fullPath = node_path_1.default.isAbsolute(filePath) ? filePath : node_path_1.default.join(cwd, filePath);
     const content = (0, shell_command_projection_cjs_1.platformReadSync)(fullPath);
     if (!content) {
         output({ error: 'File not found', path: filePath }, raw);
         return;
     }
-    const fm = extractFrontmatter(content);
+    // #2701: fail loud on NUL/binary corruption before structure checks. A
+    // structurally intact-but-NUL-corrupted plan otherwise passes as valid and is
+    // silently skipped by recursive/binary-skipping searchers downstream.
+    const encErr = (0, validate_cjs_2.textEncodingError)(content, filePath);
+    if (encErr) {
+        output({ valid: false, errors: [encErr] }, raw);
+        return;
+    }
+    const fm = extractFrontmatter(content, fullPath);
     const errors = [];
     const warnings = [];
     const required = ['phase', 'plan', 'type', 'wave', 'depends_on', 'files_modified', 'autonomous', 'must_haves'];
@@ -909,7 +1018,7 @@ function collectPromisedFilesAtOrAfterWave(phaseDir, minWave) {
         const planContent = (0, shell_command_projection_cjs_1.platformReadSync)(planFullPath);
         if (!planContent)
             continue;
-        const fm = extractFrontmatter(planContent);
+        const fm = extractFrontmatter(planContent, planFullPath);
         const waveRaw = fm['wave'];
         const wave = typeof waveRaw === 'string' ? parseInt(waveRaw, 10) : (typeof waveRaw === 'number' ? waveRaw : NaN);
         if (isNaN(wave) || wave < minWave)
@@ -944,7 +1053,7 @@ function cmdVerifyKeyLinks(cwd, planFilePath, raw) {
     }
     // Derive the current plan's wave number and phase directory for wave-aware
     // missing-file handling (fix #1202).
-    const currentFm = extractFrontmatter(content);
+    const currentFm = extractFrontmatter(content, fullPath);
     const currentWaveRaw = currentFm['wave'];
     const currentWave = typeof currentWaveRaw === 'string'
         ? parseInt(currentWaveRaw, 10)
@@ -1041,8 +1150,16 @@ function listMilestoneArchiveDirs(planBase) {
             .map((e) => node_path_1.default.join(milestonesDir, e.name))
             .sort((a, b) => node_path_1.default.basename(a).localeCompare(node_path_1.default.basename(b), undefined, { numeric: true }));
     }
-    catch {
-        return [];
+    catch (err) {
+        // #1883: distinguish genuine absence from a permission/I-O failure. ENOENT
+        // (no milestones/ dir yet) keeps the long-standing [] contract that
+        // collectPhaseRoots / forEachArchivedPhaseToken depend on for "no archives";
+        // every other error (EACCES, EIO, …) must propagate — otherwise an unreadable
+        // milestones/ dir is silently reported as "no archives" and active-milestone
+        // resolution / archived-phase filtering misbehaves.
+        if (err.code === 'ENOENT')
+            return [];
+        throw err;
     }
 }
 function forEachArchivedPhaseToken(planBase, onPhase) {
@@ -1215,8 +1332,9 @@ function cmdValidateConsistency(cwd, raw) {
                     }
                 }
                 for (const plan of plans) {
-                    const content = node_fs_1.default.readFileSync(node_path_1.default.join(phasePath, plan), 'utf-8');
-                    const fmData = extractFrontmatter(content);
+                    const planFilePath = node_path_1.default.join(phasePath, plan);
+                    const content = node_fs_1.default.readFileSync(planFilePath, 'utf-8');
+                    const fmData = extractFrontmatter(content, planFilePath);
                     if (!fmData['wave']) {
                         warnings.push(`${phaseLabel}/${plan}: missing 'wave' in frontmatter`);
                     }
@@ -2147,6 +2265,7 @@ module.exports = {
     scanNegativeGrepCommentEcho,
     scanFileWideNegativeGateConflict,
     cmdVerifySummary,
+    verifySummaryCore,
     cmdVerifyPlanStructure,
     cmdVerifyPhaseCompleteness,
     cmdVerifyReferences,
@@ -2158,4 +2277,9 @@ module.exports = {
     cmdValidateAgents,
     cmdVerifySchemaDrift,
     cmdVerifyCodebaseDrift,
+    // Test seam (#1883): listMilestoneArchiveDirs is private and exercised through
+    // the validate command, which runs in a subprocess — an fs monkeypatch in the
+    // test process cannot reach it. Exposed under a leading underscore so the
+    // permission-error path can be unit-tested directly (no chmod 0o000).
+    _listMilestoneArchiveDirs: listMilestoneArchiveDirs,
 };

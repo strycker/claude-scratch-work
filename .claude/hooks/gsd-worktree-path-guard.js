@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.8.0
+// gsd-hook-version: 1.9.1
 // GSD Worktree Path Guard — PreToolUse hook
 // Blocks Edit/Write/MultiEdit tool calls that target absolute paths outside the worktree root.
 //
@@ -37,6 +37,100 @@ function nearestExistingDir(start) {
   return null;
 }
 
+// #2304: Kimi's native hook bus delivers Kimi's tool vocabulary in the payload
+// (Write → WriteFile, Edit/MultiEdit → StrReplaceFile) while the [[hooks]]
+// matcher is registered pre-translated (runtime-hooks-surface.cts
+// buildKimiHooksTomlBlock) — so without normalizing the payload too, the
+// matcher fires but the tool_name check below exits 0 and the guard is dormant
+// on Kimi. The tool_input field names differ as well (kimi-cli
+// src/kimi_cli/tools/file/{write,replace}.py): WriteFile takes `path`/`content`,
+// StrReplaceFile takes `path` + `edit: Edit | list[Edit]` with `old`/`new` —
+// kimi-cli's hooks/events.py forwards tool_input verbatim, so both layers need
+// mapping. Accepts bare and module-qualified ('kimi_cli.tools.file:WriteFile')
+// names; unknown names fall through untouched. Inlined per guard (not
+// hooks/lib/): hook scripts are staged as standalone files, and a sibling
+// require is a staging dependency that can fail silently.
+// A Map, not an object literal: bare bracket lookup resolves prototype keys
+// ('constructor', '__proto__', 'toString') to truthy functions/objects, so the
+// !mapped fall-through never fires for them; Map.get returns undefined (same
+// shape as canonicalizeRuntimeName in src/runtime-name-policy.cts).
+const KIMI_TOOL_NAMES = new Map([['WriteFile', 'Write'], ['StrReplaceFile', 'Edit'], ['ReadFile', 'Read'], ['Shell', 'Bash']]);
+function normalizeKimiPayload(data) {
+  // #2595 (review nit): `JSON.parse('null')` is null, and null/primitive
+  // payloads reached the `data.tool_name` read below and threw — falsifying
+  // this function's own "total over the inputs JSON can express" claim, which
+  // property (e) now tests directly. Harmless in practice (a null payload has
+  // nothing to guard, and the throw landed in the same fail-open catch as the
+  // exit-0 it now takes deliberately) but the claim should be true as stated.
+  if (data === null || typeof data !== 'object') return data;
+  const raw = data.tool_name;
+  if (typeof raw !== 'string') return data;
+  const mapped = KIMI_TOOL_NAMES.get(raw.slice(raw.lastIndexOf(':') + 1));
+  if (!mapped) return data;
+  data.tool_name = mapped;
+  if (data.tool_response === undefined && data.tool_output !== undefined) {
+    data.tool_response = data.tool_output;
+  }
+  const input = data.tool_input;
+  if (input && typeof input === 'object') {
+    // #2547 (review): Kimi's `path` is AUTHORITATIVE — it must win outright,
+    // not merely fill in when `file_path` happens to be absent. kimi-cli's file
+    // tools carry no `file_path` field at all (src/kimi_cli/tools/file/write.py,
+    // replace.py, @ 4a550ef — the SHA #2547 pins), and soul/toolset.py hands the
+    // model's raw json-parsed
+    // arguments to PreToolUse verbatim, doing typed validation only later inside
+    // tool.call() — after the hook has already decided. So a `file_path` in a
+    // Kimi payload is ALWAYS model-supplied, and under the old `=== undefined`
+    // condition it SHADOWED the field kimi-cli actually executes on. A payload
+    // pairing a cross-root `path` with a spurious `file_path: ""` left every
+    // guard reading an empty string and exiting 0, while the identical write
+    // without the extra key blocked — a bypass needing no crash at all. The same
+    // shadowing also preserved a NON-STRING `file_path` (`[]`), which threw
+    // inside gsd-worktree-path-guard's path.isAbsolute() and reached its outer
+    // `catch { process.exit(0) }`: the same crash-to-allow this fix closes
+    // elsewhere, reached through the guard's own read rather than through
+    // normalization. Overwriting can only ever narrow what a guard inspects to
+    // the path that will actually be written, so it cannot under-block.
+    if (typeof input.path === 'string') {
+      input.file_path = input.path;
+    }
+    const edits = Array.isArray(input.edit) ? input.edit
+      : (input.edit && typeof input.edit === 'object') ? [input.edit] : [];
+    if (edits.length) {
+      // #2547: `e?.old`, not `e.old` — `??` guards the value, not the
+      // dereference, so a NULLISH entry (`edit: [null]`) threw a TypeError
+      // here. normalizeKimiPayload runs before any tool dispatch, so that throw
+      // reached each guard's outer `catch { process.exit(0) }` and silently
+      // downgraded a should-BLOCK call into an allow. (A string/number entry
+      // never threw — `('x').old` is a legal read yielding undefined.)
+      //
+      // The String() coercion is guarded for the same reason: `{"toString":
+      // null}` is valid JSON that throws "Cannot convert object to primitive
+      // value", which is the identical crash-to-allow with a different
+      // trigger. Degrading only the non-coercible entry to '' keeps
+      // stringification intact for every value that CAN coerce (numbers,
+      // arrays, plain objects), so nothing downstream — including
+      // gsd-prompt-guard's scan of new_string — loses content it saw before.
+      const editText = (v) => { try { return String(v ?? ''); } catch { return ''; } };
+      // #2595 (review Major 2): reconstruct UNCONDITIONALLY, mirroring the
+      // `path` decision above rather than merely filling in when the field
+      // happens to be absent. kimi-cli's StrReplaceFile schema is `path` +
+      // `edit` only (src/kimi_cli/tools/file/replace.py @ 4a550ef) — it carries
+      // no `old_string`/`new_string` at all, so either field appearing in a
+      // Kimi payload is ALWAYS model-supplied, exactly like `file_path`. Under
+      // the old `=== undefined` condition a model-supplied `new_string: ""`
+      // SHADOWED the reconstruction, leaving gsd-prompt-guard's injection scan
+      // reading '' and exiting at its `if (!content)` before it ever saw the
+      // real `edit[].new` — a one-key bypass of the very scan this fix's
+      // guarded coercion exists to keep fed. A `typeof` test would NOT close
+      // it: a benign non-empty string shadows just as effectively as ''.
+      input.old_string = edits.map((e) => editText(e?.old)).join('\n');
+      input.new_string = edits.map((e) => editText(e?.new)).join('\n');
+    }
+  }
+  return data;
+}
+
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 3000);
 process.stdin.setEncoding('utf8');
@@ -44,7 +138,7 @@ process.stdin.on('data', chunk => input += chunk);
 process.stdin.on('end', () => {
   clearTimeout(stdinTimeout);
   try {
-    const data = JSON.parse(input);
+    const data = normalizeKimiPayload(JSON.parse(input));
     const toolName = data.tool_name;
 
     // Only guard Edit, Write, and MultiEdit tool calls
@@ -72,13 +166,14 @@ process.stdin.on('end', () => {
     }
 
     // #1342: Only enforce inside a GSD-managed isolated executor worktree. Those
-    // are always on a `worktree-agent-*` branch (the positive allow-list enforced
-    // by worktree-branch-check.md, #2924). A manually-created linked worktree (plain
-    // non-GSD work, e.g. Claude Code plan-mode) is on the user's own branch, so the
-    // guard must be a no-op there. Detached HEAD / error → not GSD-managed → no-op.
+    // are always on an `agent-*` or legacy `worktree-agent-*` branch (the positive
+    // allow-list enforced by worktree-branch-check.md, #2924, #1995). A manually-
+    // created linked worktree (plain non-GSD work, e.g. Claude Code plan-mode) is
+    // on the user's own branch, so the guard must be a no-op there. Detached HEAD
+    // / error → not GSD-managed → no-op.
     const branchResult = git(['symbolic-ref', '--short', 'HEAD'], cwd);
     const branch = branchResult.status === 0 && branchResult.stdout ? branchResult.stdout.trim() : '';
-    if (!/^worktree-agent-[A-Za-z0-9._/-]+$/.test(branch)) {
+    if (!/^(worktree-)?agent-[A-Za-z0-9._/-]+$/.test(branch)) {
       process.exit(0); // not a GSD-managed executor worktree — no-op
     }
 
@@ -91,12 +186,37 @@ process.stdin.on('end', () => {
     }
     const wtTopRaw = wtTopResult.stdout.trim();
 
-    const rawFilePath = data.tool_input?.file_path || '';
+    // #2595 (review Major 3): read the field TYPED. `?.file_path || ''` let a
+    // non-string through — `[]` and `{}` are truthy, so they survived the
+    // `!rawFilePath` check and threw inside path.isAbsolute() below, landing in
+    // this script's outer `catch { process.exit(0) }`. That is the same
+    // crash-to-allow #2547 closes elsewhere, reached through the guard's own
+    // read rather than through normalization, and it is NOT closed by making
+    // `path` authoritative: normalization returns early for native Claude Code
+    // payloads (KIMI_TOOL_NAMES has no 'Edit' entry), so `{"tool_name":"Edit",
+    // "tool_input":{"file_path":[]}}` reached it untouched — this guard's
+    // original #260 surface. Same shape as hooks/gsd-windsurf-pre-write.js:75.
+    const rawFilePath = typeof data.tool_input?.file_path === 'string'
+      ? data.tool_input.file_path
+      : '';
     if (!rawFilePath) {
       process.exit(0);
     }
 
-    // Relative paths are always safe — they resolve relative to CWD inside the worktree
+    // Relative paths resolve against the tool's CWD, which is inside the worktree
+    // — so under the runtime this guard was written for they cannot leave it.
+    //
+    // #2595 (review Minor 5) — state the premise rather than leave it implicit,
+    // because THIS PR is what widened the guard's reach to Kimi. "Always safe"
+    // holds only while every runtime reaching here either rejects relative paths
+    // or resolves them against the worktree CWD. Claude Code's Edit/Write require
+    // an absolute file_path, so the original #260 surface satisfies it by
+    // construction. kimi-cli's StrReplaceFile takes `path` with no documented
+    // absoluteness guarantee, and its resolution behaviour is NOT verified here
+    // (no source available to this repo at 4a550ef beyond the schema). If it
+    // resolves relative paths against anything other than the tool CWD, a
+    // `../`-laden path exits 0 at this line and escapes the worktree. Stating a
+    // mechanism and an unverified premise — not asserting a live bypass.
     if (!path.isAbsolute(rawFilePath)) {
       process.exit(0);
     }
@@ -151,6 +271,8 @@ process.stdin.on('end', () => {
             `absolute path is not permitted from an isolated executor worktree. Use a relative path.`,
         };
         process.stdout.write(JSON.stringify(output));
+        // Kimi feeds stderr (not stdout) back to the model on exit 2.
+        process.stderr.write(output.reason);
         process.exit(2);
       }
       // Outside all git repositories — fail open (#1342).
@@ -177,6 +299,8 @@ process.stdin.on('end', () => {
     };
 
     process.stdout.write(JSON.stringify(output));
+    // Kimi feeds stderr (not stdout) back to the model on exit 2.
+    process.stderr.write(output.reason);
     process.exit(2);
   } catch {
     // Silent fail — never block valid tool calls due to hook errors

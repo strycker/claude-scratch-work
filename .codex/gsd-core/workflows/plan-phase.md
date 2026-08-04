@@ -79,9 +79,11 @@ MVP_MODE_CFG=$(gsd_run query config-get workflow.mvp_mode 2>/dev/null || echo "f
 
 When the tdd capability's `workflow.tdd_mode` is active (resolved via the plan:pre render-hooks), the planner agent is instructed to apply `type: tdd` to eligible tasks using heuristics from `references/tdd.md`. The TDD guidance is injected via the tdd capability's contribution hook at §5.6; no inline config-get is needed.
 
-When `CONTEXT_WINDOW >= 500000`, the planner prompt includes the 3 most recent prior phase CONTEXT.md and SUMMARY.md files PLUS any phases explicitly listed in the current phase's `Depends on:` field in ROADMAP.md. Explicit dependencies always load regardless of recency (e.g., Phase 7 declaring `Depends on: Phase 2` always sees Phase 2's context). Bounded recency keeps the planner's context budget focused on recent work.
+When `CONTEXT_WINDOW >= 500000`, the planner prompt includes the 3 most recent prior-phase CONTEXT.md/SUMMARY.md files plus any phases in the current phase's `Depends on:` field (explicit deps load regardless of recency).
 
 Parse JSON for: `researcher_model`, `planner_model`, `checker_model`, `research_enabled`, `plan_checker_enabled`, `nyquist_validation_enabled`, `commit_docs`, `text_mode`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded_phase`, `has_research`, `has_context`, `has_reviews`, `has_plans`, `plan_count`, `phase_status` (#3569), `planning_exists`, `roadmap_exists`, `phase_req_ids`, `response_language`, `granularity`.
+
+**#2517:** omit the `model=` param from an `Agent()` call when its `researcher`/`planner`/`checker`_model is `"inherit"` or empty — passing `model=""` 404s on non-the agent runtimes; omitting inherits the orchestrator model (mirrors execute-phase).
 
 **If `response_language` is set:** All user-facing orchestrator output MUST be in `{response_language}`; technical terms, code, paths, and subagent prompts stay in English. Pass `response_language: {value}` into every spawned subagent prompt.
 
@@ -716,7 +718,6 @@ after `$SPEC_FILE` (Step 7), before the gsd-planner spawn (Step 8).
 disabled or no requirement IDs; §A deterministic edge probe → `$COVERAGE` when `EDGE_ABSENT`; §B
 prohibition recall in the planner). Pass `$COVERAGE` and `$SPECLESS_FALLBACK_DISABLED` into Step 8.
 
-
 ## 8. Spawn gsd-planner Agent
 
 Display banner:
@@ -892,20 +893,17 @@ Agent(
 
 **Skip if `CHUNKED_MODE` is `false`.**
 
-Chunked mode splits the single long-lived planner Agent run into a short outline Agent run followed by
-N short per-plan Agent runs. Each run is bounded to ~3–5 min; each plan is committed individually
-for crash resilience. If any run hangs and the terminal is force-killed, rerunning
-`$gsd-plan-phase {N} --chunked` resumes from the last successfully committed plan.
+Chunked mode splits the single planner run into a short outline run + N short per-plan
+runs (~3–5 min each), committing each plan individually for crash resilience. Rerunning
+`$gsd-plan-phase {N} --chunked` resumes from the last committed plan.
 
-**Intended for new or in-progress chunked runs.** To recover plans already written by a prior
-*non-chunked* run, use step 6's "Add more plans" or proceed directly to `$gsd-execute-phase`
-— don't start a fresh chunked run over existing non-chunked plans.
+For recovering plans from a prior *non-chunked* run, use step 6's "Add more plans" or
+proceed to `$gsd-execute-phase` — don't start a fresh chunked run over them.
 
 ### 8.5.1 Outline Phase (outline-only mode, ~2 min)
 
-**Resume detection:** If `${PHASE_DIR}/${PADDED_PHASE}-PLAN-OUTLINE.md` already exists **and
-is valid** (contains the `## OUTLINE COMPLETE` marker), skip this sub-step — the outline
-already exists from a previous run. Proceed directly to 8.5.2.
+**Resume detection:** If `${PHASE_DIR}/${PADDED_PHASE}-PLAN-OUTLINE.md` exists and contains
+the `## OUTLINE COMPLETE` marker (written by the outline agent — #2762), skip to 8.5.2.
 
 ```bash
 OUTLINE_FILE="${PHASE_DIR}/${PADDED_PHASE}-PLAN-OUTLINE.md"
@@ -933,6 +931,8 @@ Agent(
   The outline must be a markdown table with columns:
   Plan ID | Objective | Wave | Depends On | Requirements
 
+  End the file with a final line `## OUTLINE COMPLETE` — §8.5.1's resume-check greps
+  the file for it, so it MUST be written here, not just returned.
   Return: ## OUTLINE COMPLETE with plan count.",
   subagent_type="gsd-planner",
   model="{planner_model}",
@@ -950,14 +950,14 @@ Handle return:
 
 For each plan entry extracted from `PLAN-OUTLINE.md`:
 
-1. **Resume check:** If `${PHASE_DIR}/{plan_id}-PLAN.md` already exists on disk **and has
-   valid YAML frontmatter** (opening `---` delimiter present), skip this plan (do not
-   overwrite completed work — resume safety).
+1. **Resume check:** Skip if `${PHASE_DIR}/{plan_id}-PLAN.md` exists with valid frontmatter
+   (resume safety) — UNLESS `--reviews` is set, whose purpose is to REPLAN with review
+   feedback (§6), so existing plans are overwritten, not skipped (#2762).
 
    ```bash
    PLAN_FILE="${PHASE_DIR}/${plan_id}-PLAN.md"
-   if [[ -f "$PLAN_FILE" ]] && head -1 "$PLAN_FILE" | grep -q '^---'; then
-     continue  # plan already written, skip
+   if [[ -f "$PLAN_FILE" ]] && head -1 "$PLAN_FILE" | grep -q '^---' && [[ "{{GSD_ARGS}}" != *"--reviews"* ]]; then
+     continue  # resume safety — NOT under --reviews (replan)
    fi
    ```
 
@@ -1291,7 +1291,7 @@ Skipping bounce step.
 **Read pass count:**
 ```bash
 BOUNCE_PASSES=$(gsd_run query config-get workflow.plan_bounce_passes 2>/dev/null || echo "2")
-BOUNCE_SCRIPT=$(gsd_run query config-get workflow.plan_bounce_script 2>/dev/null | jq -r '.' 2>/dev/null || true)
+BOUNCE_SCRIPT=$(gsd_run query config-get workflow.plan_bounce_script --raw 2>/dev/null || true)
 ```
 
 Display banner:
@@ -1399,47 +1399,43 @@ If `TEXT_MODE` is true, present as a plain-text numbered list (options already s
 
 ## 13a. Decision Coverage Gate
 
-After the requirements coverage gate passes, verify that every trackable
-decision captured by discuss-phase in CONTEXT.md `<decisions>` is referenced
-by at least one plan. This is the **translation gate** from issue #2492 —
-its job is to refuse to mark a phase planned when a discuss-phase decision
-silently dropped on the way into the plans.
+Verify every trackable decision in CONTEXT.md `<decisions>` is referenced by at
+least one plan. This **translation gate** (#2492) refuses to mark a phase planned
+when a discuss-phase decision silently dropped.
 
-**Skip if** `workflow.context_coverage_gate` is explicitly set to `false`
-(absent key = enabled). Also skip if no CONTEXT.md exists for this phase
-(nothing to translate) or if its `<decisions>` block is empty.
+**Skip if** `workflow.context_coverage_gate` is `false` (absent = enabled), or
+no CONTEXT.md exists for this phase, or its `<decisions>` block is empty.
 
 ```bash
 GATE_CFG=$(gsd_run query config-get workflow.context_coverage_gate 2>/dev/null || echo "true")
 if [ "$GATE_CFG" != "false" ]; then
-  GATE_RESULT=$(gsd_run query check.decision-coverage-plan "${PHASE_DIR}" "${CONTEXT_PATH}")
-  # BLOCKING: refuse to mark phase planned when a trackable decision is uncovered.
-  # `passed: true` covers both real-pass and skipped cases (gate disabled / no CONTEXT.md /
-  # no trackable decisions). Verify-phase counterpart deliberately omits this exit-1 — that
-  # gate is non-blocking by design (review finding F15).
-  echo "$GATE_RESULT" | jq -e '(.passed // .data.passed) == true' >/dev/null || {
-    echo "$GATE_RESULT" | jq -r '(.message // .data.message // "Decision coverage gate failed.")'
-    exit 1
-  }
+  # #2770: CONTEXT_PATH from step-1 init doesn't survive into this Bash block;
+  # recompute it. Only run when a CONTEXT.md exists (handler fails closed on an
+  # empty arg, so an unguarded empty glob would halt a context-less phase).
+  CONTEXT_PATH=$(ls "${PHASE_DIR}"/*-CONTEXT.md 2>/dev/null | head -1)
+  if [ -n "$CONTEXT_PATH" ]; then
+    GATE_RESULT=$(gsd_run query check.decision-coverage-plan "${PHASE_DIR}" "${CONTEXT_PATH}")
+    # BLOCKING: refuse to mark phase planned when a trackable decision is uncovered.
+    # `passed: true` covers both real-pass and skipped cases (gate disabled / no CONTEXT.md /
+    # no trackable decisions). Verify-phase counterpart deliberately omits this exit-1 — that
+    # gate is non-blocking by design (review finding F15).
+    echo "$GATE_RESULT" | jq -e '(.passed // .data.passed) == true' >/dev/null || {
+      echo "$GATE_RESULT" | jq -r '(.message // .data.message // "Decision coverage gate failed.")'
+      exit 1
+    }
+  fi
 fi
 ```
 
 The handler returns JSON:
 ```json
-{
-  "passed": true,
-  "skipped": false,
-  "total":  2,
-  "covered": 2,
-  "uncovered": [ { "id": "D-01", "text": "...", "category": "..." } ],
-  "message": "..."
-}
+{ "passed": true, "skipped": false, "total": 2, "covered": 2,
+  "uncovered": [{ "id": "D-01", "text": "...", "category": "..." }], "message": "..." }
 ```
 
 **If `passed` is true (or `skipped` is true):** Display
-`✓ Decision coverage: {M}/{N} CONTEXT.md decisions covered by plans` (or
-`(skipped — gate disabled)` / `(skipped — no decisions)`) and proceed to
-step 13b.
+`✓ Decision coverage: {M}/{N} decisions covered` (or `(skipped)`) and proceed
+to step 13b.
 
 **If `passed` is false:** Display the handler's `message` block. It already
 names each uncovered decision (`D-NN | category | text`) and tells the user

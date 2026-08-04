@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gsd-hook-version: 1.8.0
+# gsd-hook-version: 1.9.1
 # gsd-graphify-update.sh — PostToolUse hook (Bash matcher) that auto-rebuilds
 # the project knowledge graph after main HEAD advances on the default branch.
 #
@@ -52,6 +52,15 @@ TOOL_NAME=$(printf '%s\n' "$TOOL_INFO" | sed -n '1p')
 # (#1772). Line 2..EOF preserves embedded newlines; the `case` glob below
 # matches the substring anywhere in the multi-line string.
 COMMAND=$(printf '%s\n' "$TOOL_INFO" | sed -n '2,$p')
+
+# #2304: Kimi CLI registers this hook with matcher 'Shell' and forwards its
+# own tool vocabulary (tool_name 'Shell', possibly module-qualified as
+# kimi_cli.tools.shell:Shell). kimi-cli's Shell.Params names its field
+# `command` (src/kimi_cli/tools/shell/__init__.py), same as Claude's Bash,
+# so only the tool name needs normalization — the shell counterpart of the
+# KIMI_TOOL_NAMES map inlined in the JS guards.
+TOOL_NAME="${TOOL_NAME##*:}"
+if [ "$TOOL_NAME" = "Shell" ]; then TOOL_NAME="Bash"; fi
 
 [ "$TOOL_NAME" = "Bash" ] || exit 0
 
