@@ -63,6 +63,25 @@ class TestSojournLagHeadline:
         assert result["median_lag"] == pytest.approx(1.0)
         assert result["ratio"] == pytest.approx(sojourn_lag_ratio(3.5, 1.0))
 
+    def test_reports_transition_and_resolved_counts(self):
+        # 3 transitions; state 1's probability never crosses 0.7 → 1 unresolved,
+        # so n_transitions=3 but n_resolved=2. Surfaces the headline's sample size.
+        # The two resolved transitions cross one period late (lag 1) so the
+        # pooled median lag is strictly positive (sojourn_lag_ratio rejects 0).
+        full_index = pd.date_range("2000-01-31", periods=15, freq="ME")
+        states = [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 2, 2]
+        full_sample_states = pd.Series(states, index=full_index)
+        col0 = [0.0] * 8 + [0.85] * 7          # state-0 transition @7 crosses @8 (lag 1)
+        col1 = [0.1] * 15                        # state-1 transition @4 NEVER crosses → unresolved
+        col2 = [0.0] * 14 + [0.9]                # state-2 transition @13 crosses @14 (lag 1)
+        fpm = pd.DataFrame({0: col0, 1: col1, 2: col2}, index=full_index)
+
+        result = compute_sojourn_lag_headline(full_sample_states, fpm, act_threshold=0.7)
+
+        assert result["n_transitions"] == 3
+        assert result["n_resolved"] == 2
+        assert result["act_threshold"] == pytest.approx(0.7)
+
 
 class TestDistinctSmoothedFiltered:
     def test_smoothed_and_filtered_are_separate_inputs(self):

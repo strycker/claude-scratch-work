@@ -176,7 +176,23 @@ def compute_sojourn_lag_headline(
 
     ratio = sojourn_lag_ratio(median_sojourn, median_lag)
 
-    return {"median_sojourn": median_sojourn, "median_lag": median_lag, "ratio": ratio}
+    # Sample-size transparency: the ratio is a median over `n_resolved`
+    # transitions (those whose target-state probability ever reached the
+    # threshold) out of `n_transitions` total. A long-history reference yields
+    # few regimes, and the 0.70 action threshold rarely resolves for a calibrated
+    # 5-class model — so a small n_resolved means the headline is indicative, not
+    # robust. Surfaced so the number is never mistaken for a large-sample estimate.
+    n_transitions = sum(len(p) for p in transitions_by_state.values())
+    n_resolved = len(resolved)
+
+    return {
+        "median_sojourn": median_sojourn,
+        "median_lag": median_lag,
+        "ratio": ratio,
+        "n_transitions": n_transitions,
+        "n_resolved": n_resolved,
+        "act_threshold": act_threshold,
+    }
 
 
 if __name__ == "__main__":

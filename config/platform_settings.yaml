@@ -347,6 +347,17 @@ backtest:
                               # they accumulate this much history; earlier windows use the features
                               # that exist then. Also floors the training-row block (=latest active
                               # feature's history). Raise for more training rows / fewer features.
+                              # NOTE: this alone does NOT prevent the L2 degrades that cluster around a
+                              # late feature's activation date — those are driven by a RARE CLASS in the
+                              # truncated block, not by block size (a 240-row block with a 3-example
+                              # regime degrades exactly like a 120-row one). nowcaster_cv_splits below
+                              # gates that properly; this knob just sets the age floor.
+  nowcaster_cv_splits: 5     # calibration-CV folds for the L2 nowcaster. Also the per-class example
+                              # floor: CalibratedClassifierCV raises if any class present in the
+                              # training block has < n_splits rows. driver._cv_safe_active_features
+                              # admits a late feature only once the block it induces clears this bar,
+                              # so activation is as early as SAFE rather than merely as early as old
+                              # enough. Lower it to admit late features sooner (weaker calibration).
   refit_frequency_months: 1  # A2 escape hatch: monthly L1/L2 refit by default; raise this to
                               # reduce wall-clock cost of the ~588-refit walk-forward gauntlet.
   sixty_forty_rebalance: monthly  # 60/40 baseline reconstitution cadence (Claude's discretion,

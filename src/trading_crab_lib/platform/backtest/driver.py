@@ -112,6 +112,62 @@ def _window_active_features(
     return [c for c in cols if int(features[c].notna().sum()) >= min_history]
 
 
+def _cv_safe_active_features(
+    X: pd.DataFrame,
+    y: pd.Series,
+    cols: list[str],
+    *,
+    min_history: int,
+    n_splits: int,
+) -> list[str]:
+    """``_window_active_features`` narrowed until the induced training block can
+    actually support the calibration CV.
+
+    A late feature does not just need ``min_history`` months of its OWN data —
+    admitting it truncates the training block to the rows where every active
+    feature is present (``fit_nowcaster`` drops non-finite rows). That recent-only
+    block is what the fit sees, and ``CalibratedClassifierCV`` raises
+    ``ValueError: Requesting {n}-fold cross-validation but provided less than {n}
+    examples for at least one class`` whenever ANY class present in the block has
+    fewer than ``n_splits`` rows. That is the real trigger for the degrade cluster
+    around a late feature's activation date — and it is independent of block SIZE:
+    a 240-row block with a 3-example regime degrades exactly like a 120-row one.
+    Raising ``min_history`` therefore only smooths it by accident (a later
+    activation tends to have accumulated more of each class), never reliably; a
+    regime that simply did not occur since the feature's start date stays rare no
+    matter how long you wait.
+
+    So admission is gated on the induced block itself: candidates are dropped
+    newest-first (the newest feature is the one truncating the block hardest)
+    until every class present has ``>= n_splits`` examples. A late feature enters
+    as early as it is SAFE to, not merely as early as it is old enough — and the
+    step falls back to the long-history feature set instead of degrading to a
+    held position. No rows are imputed and no class is silently dropped, so the
+    fit stays honest.
+
+    Returns:
+        list[str]: the admissible active columns (possibly empty — the caller's
+        fit then raises and the step degrades, as before).
+    """
+    active = _window_active_features(X, cols, min_history=min_history)
+    while active:
+        block = np.isfinite(X[active].to_numpy(dtype=float)).all(axis=1)
+        counts = y[block].value_counts()
+        # >= 2 classes is a floor for classification at all; the CV needs
+        # n_splits examples of each class that IS present.
+        if len(counts) >= 2 and int(counts.min()) >= n_splits:
+            return active
+        # Drop the newest-starting candidate — it is the one truncating the block.
+        active.remove(max(active, key=lambda c: _first_valid_position(X, c)))
+    return active
+
+
+def _first_valid_position(X: pd.DataFrame, col: str) -> int:
+    """Positional index of ``col``'s first non-NaN row (``len(X)`` if all-NaN)."""
+    first = X[col].first_valid_index()
+    return len(X) if first is None else int(X.index.get_loc(first))
+
+
 def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
     """Refit the L1 jump-model labeler on ``train_features`` ONLY.
 
@@ -178,9 +234,10 @@ def _refit_l2(
     # non-finite-row drop then restricts training to the rectangular block where
     # every active feature is present. Causal — in-window data only (before t).
     min_history = int(cfg.get("backtest", {}).get("feature_min_history", 120))
-    active = _window_active_features(X, list(X.columns), min_history=min_history)
+    n_splits = int(cfg.get("backtest", {}).get("nowcaster_cv_splits", 5))
+    active = _cv_safe_active_features(X, y, list(X.columns), min_history=min_history, n_splits=n_splits)
     X = X[active]
-    model = fit_nowcaster(X, y)
+    model = fit_nowcaster(X, y, n_splits=n_splits)
     proba = model.predict_proba(feature_row[active])
     return pd.Series(proba[0], index=model.classes_)
 
