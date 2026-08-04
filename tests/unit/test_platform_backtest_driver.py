@@ -374,3 +374,77 @@ class TestWindowActiveFeatures:
         # block starts where VIX begins (row 30) → far fewer than the full 180 rows
         assert states.index.min() == df.index[30]
         assert len(states) <= 155
+
+
+class TestCvSafeActiveFeatures:
+    """The L2 degrades that cluster around a late feature's activation date are
+    caused by a RARE CLASS in the block that feature truncates the training set
+    to — CalibratedClassifierCV needs >= n_splits examples of every class present.
+    That is independent of block SIZE, so raising min_history does not reliably
+    fix it; admission must be gated on the induced block itself."""
+
+    def _frame(self, n=240, late_start=200, rare_count=2):
+        """Long feature over all n rows; `late` starting at `late_start`.
+
+        Class 9 is PLENTIFUL in the early rows but appears only `rare_count`
+        times inside the block `late` truncates the training set to — the real
+        shape of the problem (a regime that has barely recurred since the late
+        feature's start date). So the full block is CV-safe while the late block
+        may not be, and dropping `late` is a fix that actually exists.
+        """
+        idx = pd.date_range("1990-01-31", periods=n, freq="ME")
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(
+            {"long": rng.normal(size=n), "late": rng.normal(size=n)}, index=idx
+        )
+        X.iloc[:late_start, X.columns.get_loc("late")] = np.nan
+        # Early rows: 0/1/9 all plentiful. Late block: 0/1 alternating, with only
+        # `rare_count` examples of class 9.
+        early = [(0, 1, 9)[i % 3] for i in range(late_start)]
+        late = [9] * rare_count + [i % 2 for i in range(n - late_start - rare_count)]
+        return X, pd.Series(early + late, index=idx)
+
+    def test_drops_late_feature_when_its_block_starves_a_class(self):
+        X, y = self._frame(rare_count=2)
+        active = driver._cv_safe_active_features(
+            X, y, list(X.columns), min_history=30, n_splits=5
+        )
+        # `late` is old enough (40 obs >= 30) but its block holds only 2 examples
+        # of class 9 (< 5) → dropped; the long-history feature carries the step.
+        assert active == ["long"]
+
+    def test_admits_late_feature_once_its_block_is_cv_safe(self):
+        X, y = self._frame(rare_count=8)
+        active = driver._cv_safe_active_features(
+            X, y, list(X.columns), min_history=30, n_splits=5
+        )
+        # 8 examples of the rare class >= 5 folds → safe, so the late feature is
+        # leveraged rather than needlessly withheld.
+        assert set(active) == {"long", "late"}
+
+    def test_guard_prevents_the_fit_error_it_targets(self):
+        """End-to-end: the unguarded selection raises the exact
+        CalibratedClassifierCV ValueError; the guarded one fits."""
+        from trading_crab_lib.platform.prediction.nowcaster import fit_nowcaster
+
+        X, y = self._frame(rare_count=2)
+        unguarded = driver._window_active_features(X, list(X.columns), min_history=30)
+        assert set(unguarded) == {"long", "late"}
+        with pytest.raises(ValueError, match="less than 5 examples"):
+            fit_nowcaster(X[unguarded], y, n_splits=5)
+
+        guarded = driver._cv_safe_active_features(
+            X, y, list(X.columns), min_history=30, n_splits=5
+        )
+        fit_nowcaster(X[guarded], y, n_splits=5)  # must not raise
+
+    def test_returns_empty_when_no_subset_is_safe(self):
+        # Every class is rare everywhere → nothing clears the bar; the caller's
+        # fit then raises and the step degrades, exactly as before.
+        idx = pd.date_range("1990-01-31", periods=40, freq="ME")
+        X = pd.DataFrame({"a": np.arange(40, dtype=float)}, index=idx)
+        y = pd.Series(range(40), index=idx)  # 40 singleton classes
+        active = driver._cv_safe_active_features(
+            X, y, list(X.columns), min_history=10, n_splits=5
+        )
+        assert active == []
