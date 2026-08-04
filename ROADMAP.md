@@ -342,7 +342,7 @@ freely available. Construct a proxy from FRED components:
 
 ## Phase 4 — Pipeline Monitoring & Notebook Expansion
 
-**Plan document:** `MONITORING_EXPANSION_PLAN.md` (85 work items across 17 phases)
+**Plan document:** `docs/archive/MONITORING_EXPANSION_PLAN.md` (85 work items across 17 phases)
 
 | Phase | Items | Summary |
 |-------|-------|---------|

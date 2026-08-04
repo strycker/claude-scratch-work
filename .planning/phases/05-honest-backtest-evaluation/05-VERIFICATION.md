@@ -7,8 +7,8 @@ behavior_unverified: 0
 overrides_applied: 0
 gaps: []
 deferred:
-  - "Activate the regime layer pre-1990: fred_vix (VIXCLS) starts 1990-01 and L1's any-NaN row-drop collapses pre-1990 training, so the walk-forward holds the naive allocation 1972–~1990 (inflating the 107-month median detection lag). Fix: drop all-NaN-in-window feature columns so the model trains pre-1990 on available features. Non-blocking for the D-01 diagnostic."
-  - "Re-include gold once a free long-history spot source is reachable (macrotrends 403-blocks datacenter/VPN IPs; FRED delisted LBMA gold). Currently excluded via the optional-splice toggle and flagged in the report. Non-blocking for D-01."
+  - "RESOLVED 2026-08-04 — Activate the regime layer pre-1990. Implemented as per-feature min_history (approach ii): backtest.feature_min_history (default 120) admits a late-starting feature once it has that many months in-window, so pre-1990 windows train on the features that exist then instead of collapsing to an any-NaN row-drop. Real-run effect: 512/588 steps predicted (was ~370), terminal log wealth 32.2 -> 111.06, max drawdown -82.5%/215mo -> -66.2%/12mo, no-regime-ablation delta -81.7 -> -2.8. Follow-on: driver._cv_safe_active_features additionally gates admission on the induced training block clearing n_splits examples per class, which is the actual cause of the activation-date degrade cluster (block SIZE is not - a 240-row block with a 3-example regime degrades exactly like a 120-row one)."
+  - "OPEN — Re-include gold once a free long-history spot source is reachable (macrotrends 403-blocks datacenter/VPN IPs; FRED delisted LBMA gold). Currently excluded via the optional-splice toggle and flagged in the report's 'Excluded assets' note. Non-blocking for D-01; carried forward to the next milestone as a data-sourcing item, not a Phase 5 gap."
 human_verification:
   - test: "Run python -m trading_crab_lib.platform.evaluation.report against the real Phase 1 monthly checkpoints with a live FRED_API_KEY and confirm the honest 1972–2020 walk-forward runs end-to-end, stops at the holdout boundary, and reports every required number/artifact."
     expected: "The run completes (588 monthly steps, 1972-01 → 2020-12) and writes the report + equity-curve/KPI/model-metrics parquets; the sojourn/detection-lag ratio is the first metrics section; the four-baseline gauntlet + no-regime-ablation delta + smoothed-vs-filtered gap + KPI table are present; the equity curve ends ≤ 2020-12; the trial registry gains exactly two rows (strategy + ablation); no DSR and no 2021+ read appear."
@@ -68,3 +68,57 @@ price fallback, FRED oil fallback, gold-exclusion toggle, empty-CV-fold guard, n
 scaling + non-finite-row drop) is on PR #112.
 
 **Re-verification:** No — initial verification; human-verified real run.
+
+---
+
+## Phase Closure Record (2026-08-04)
+
+Post-verification work landed on `main` after the 2026-07-27 sign-off. Recorded here so
+the phase closes against what is actually in the tree, not what was verified mid-flight.
+
+### Work completed after verification
+
+| Item | Effect |
+|---|---|
+| **Pre-1990 regime activation** (`backtest.feature_min_history`, approach ii) | Deferred item 1 resolved. 512/588 steps predicted (was ~370) |
+| **CV-safety guard** (`driver._cv_safe_active_features` + `backtest.nowcaster_cv_splits`) | Late features admitted only once the induced training block clears `n_splits` examples per class — the real cause of the activation-date degrade cluster |
+| **Headline sample transparency** (`n_transitions` / `n_resolved` / `act_threshold`) | The sojourn/lag ratio now reports the sample it was computed over, plus a small-sample caveat below 8 resolved transitions |
+| **Data-source resilience** (Stooq fallback, FRED oil fallback, gold-exclusion toggle, empty-CV-fold guard, nowcaster scaling + non-finite-row drop) | Real run reproducible from a fresh clone against degraded free sources |
+
+### Updated real-run numbers (post-activation)
+
+| Metric | At verification | After activation | Note |
+|---|---|---|---|
+| Terminal log wealth (strategy) | 32.18 | **111.06** | |
+| Max drawdown | −82.5% (215mo underwater) | **−66.2% (12mo)** | |
+| No-regime-ablation delta | −81.7 | **−2.83** | still negative — regime layer does not pay rent yet |
+| Median sojourn / lag → ratio | 46.5 / 107.0 → 0.435 | 84.5 / 161.5 → **0.52** | resolves on only ~2 of ~6 transitions |
+| Multiclass Brier | — | **0.20** | |
+| Steps predicted | ~370 / 588 | **512 / 588** | |
+
+### Diagnostic conclusion is unchanged
+
+D-01 still passes on *running and reporting correctly*, and the honest finding still
+stands: **the naive regime layer does not pay rent yet** (ablation 113.89 > strategy
+111.06; ratio 0.52 ≪ the ~5 bar). The activation work narrowed the gap from −81.7 to
+−2.83 without closing it. That remains the standing target for the L4-upgrade milestone,
+exactly as design §14 anticipates.
+
+The detection-lag figure is now understood: it is a **small-sample artifact**, not a
+model defect. Detection requires P(target state) ≥ 0.70; unresolved transitions are
+dropped from the median; and a long-history reference yields ~6 transitions of which ~2
+resolve. The report now surfaces those counts so the number is never mistaken for a
+large-sample estimate.
+
+### Closure checklist
+
+- [x] All 4 success criteria verified (4/4)
+- [x] All 7 plans code-complete with SUMMARY.md
+- [x] Cross-AI review findings F1–F7 incorporated
+- [x] Human-verified real 1972–2020 run (operator, live FRED_API_KEY)
+- [x] Deferred item 1 (pre-1990 activation) — **resolved**
+- [x] Deferred item 2 (gold re-inclusion) — carried to next milestone as a data-sourcing item
+- [x] Full suite green on `main` (**1157 passing**)
+- [x] Holdout discipline intact — no DSR, no 2021+ read
+
+**PHASE 5 CLOSED — 2026-08-04.**

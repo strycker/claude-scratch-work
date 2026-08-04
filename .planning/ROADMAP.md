@@ -24,8 +24,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Honesty Infrastructure** - Physical 2021+ holdout carve, trial registry, walk-forward runner, purged/embargoed CV, and causal-feature gating — installed before any model is tuned (completed 2026-07-22)
 - [x] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe (completed 2026-07-22)
 - [x] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire (completed 2026-07-23)
-- [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27)
-- [ ] **Phase 6: Migration to Public Repo** - Validated skeleton migrated to `strycker/trading-crab`, tests green, docs updated
+- [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
+- [ ] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation
+- [ ] **Phase 7: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
+- [ ] **Phase 8: Invariants & Dimensional Reduction** - Discover named, era-stable conserved quantities as candidate regime features (research track)
 
 ## Phase Details
 
@@ -233,26 +235,105 @@ whether regime timing is actually worth anything.
 
 - [x] 05-07-PLAN.md — Real 1972–2020 run against live checkpoints — blocking human-verify (design §14 Phase 1 exit) (EVAL-01..04)
 
-### Phase 6: Migration to Public Repo
+### Phase 6: Platform Notebook Suite
 
-**Goal**: The validated skeleton lives in `strycker/trading-crab`, the public/PyPI
-two-package repo, ready for continued development outside the heavy-dev workbench.
+**Goal**: Every platform layer (L0–L4) and the Phase 5 evaluation have a notebook that
+shows the data, renders the diagnostics, and ends in an explicit human sign-off cell —
+so the migration can be validated and the regime layer can actually be inspected.
 **Depends on**: Phase 5
+**Requirements**: NB-01
+**Success Criteria** (what must be TRUE):
+
+  1. Six notebooks exist (`P1_data_spine`, `P2_features_taxonomy`, `P3_regime_labeling`,
+     `P4_nowcaster`, `P5_assets_allocation`, `P6_backtest_evaluation`) and each runs
+     top-to-bottom against real checkpoints without error.
+
+  2. Every notebook ends in an explicit human-validation cell stating what the operator
+     must confirm, with the confirmation recorded in the notebook.
+
+  3. All plotting logic lives in `platform/plotting/` library functions called by the
+     notebooks — never defined inline (ADR #11 convention, applied to the platform).
+
+  4. `P3_regime_labeling` shows the 5 regimes against dated economic history (recessions,
+     inflation eras, credit events) so a human can judge whether the labels are real.
+
+  5. `P6_backtest_evaluation` renders the equity curves, baseline gauntlet, ablation
+     delta, calibration, and the sojourn/lag headline with its resolved-transition count.
+**Plans**: TBD
+
+**Why this precedes migration**: the migration's per-step validation gate is "run the
+notebook and verify." The platform currently has **zero** notebooks — all 12 in
+`notebooks/` drive the legacy quarterly pipeline. Without this phase there is nothing to
+validate a migrated step against, and five phases of verified work remain un-inspectable.
+
+### Phase 7: Migration to Public Repo
+
+**Goal**: The validated platform lives in `strycker/trading-crab`, the public/PyPI
+two-package repo, ready for continued development outside the heavy-dev workbench.
+**Depends on**: Phase 6
 **Requirements**: MIG-01
 **Success Criteria** (what must be TRUE):
 
-  1. The two-package layout (`trading-crab` + `trading-crab-lib`) exists in
-     `strycker/trading-crab` with the new L0–L4 modules migrated.
+  1. `platform/` imports nothing from the legacy library — the four coupling seams
+     (CheckpointManager, multpl/macrotrends scraper helpers, email helpers) are vendored
+     and an import-guard test enforces it.
 
-  2. The test suite passes green in the new repo's CI, not just locally.
-  3. README and docs in the new repo describe the regime-conditional platform, not just
-     the legacy quarterly pipeline.
+  2. The two-package layout (`trading-crab` + `trading-crab-lib`) exists in
+     `strycker/trading-crab` with the L0–L4 modules migrated.
+
+  3. The test suite passes green in the new repo's CI, not just locally (≥378 platform
+     tests).
+
+  4. A real 1972–2020 walk-forward in the new repo reproduces the reference numbers in
+     `MIGRATION-PLAN.md` §6.
+
+  5. README and docs in the new repo describe the regime-conditional platform, not the
+     legacy quarterly pipeline.
 **Plans**: TBD
+**Detailed step plan**: `MIGRATION-PLAN.md` (P0–P6)
+
+### Phase 8: Invariants & Dimensional Reduction
+
+**Goal**: Identify a small number of **named, economically interpretable** quantities
+that are stable across market eras ("history rhymes") and carry more regime signal than
+any single asset price — then admit the survivors as features through the existing
+honesty rails.
+**Depends on**: Phase 6 (needs the EDA surface); may run in parallel with Phase 7
+**Requirements**: INV-01
+**Success Criteria** (what must be TRUE):
+
+  1. A candidate set of named ratio/invariant series is constructed (e.g. M2/GDP, total
+     market cap/GDP, credit/GDP, real M2 growth) with each series' economic meaning
+     documented.
+
+  2. Dimensional-reduction techniques (PCA, SVD, sparse PCA, Lasso) are applied **as
+     discovery tools** over the wide feature space, and loading stability is tested
+     across eras (1962–1985 / 1985–2005 / 2005–2020).
+
+  3. Every candidate that is evaluated is logged to the trial registry and assessed
+     walk-forward — no candidate enters on in-sample fit.
+
+  4. Survivors are admitted as **named features**, never as an anonymous principal-
+     component block. Design decision **R4** ("prefer standardized curated features, no
+     PCA in L1") stays intact unless the evidence justifies formally revisiting it — in
+     which case the revision is recorded as a design-doc change, not an implicit drift.
+
+  5. The phase produces understanding as well as accuracy: a written account of which
+     quantities appear conserved and why they plausibly govern regime transitions.
+**Plans**: TBD
+
+**Design tension to resolve deliberately**: `platform_design.md` §11 row R4 rejected PCA
+before clustering because "PCA on mixed-unit features obscures interpretability and the
+semantic skeleton; skeleton constraints need named dimensions." This phase is compatible
+with R4 *as long as* the deliverable is named interpretable series discovered with the
+help of reduction techniques — not anonymous components wired into L1. See
+`.planning/STATUS-REVIEW-2026-08.md` §3.
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+(Phase 8 may run in parallel with Phase 7 once Phase 6 lands.)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -260,5 +341,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Honesty Infrastructure | 5/5 | Complete   | 2026-07-22 |
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
-| 5. Honest Backtest & Evaluation | 7/7 | Complete    | 2026-07-27 |
-| 6. Migration to Public Repo | 0/TBD | Not started | - |
+| 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
+| 6. Platform Notebook Suite | 0/TBD | Not started | - |
+| 7. Migration to Public Repo | 0/TBD | Not started | - |
+| 8. Invariants & Dimensional Reduction | 0/TBD | Not started | - |

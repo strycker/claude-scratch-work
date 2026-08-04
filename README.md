@@ -398,10 +398,10 @@ git submodule update --init --recursive
 |------|----------|
 | `CLAUDE.md` | Code conventions, design rules, ADRs, pitfalls, session instructions for AI |
 | `ROADMAP.md` | Prioritized feature backlog with effort estimates |
-| `STATE.md` | Current implementation status and test coverage |
+| `.planning/STATE.md` | Current implementation status (GSD-managed) |
 | `LESSONS_LEARNED.md` | Pitfalls discovered during development and what we'd do differently |
 | `DISTRIBUTION.md` | How to distribute/deploy: PyPI, Docker, Maven/npm context |
-| `REBUILD-FROM-SCRATCH-GUIDE.md` | Step-by-step guide to rebuilding the project from zero |
+| `docs/archive/REBUILD-FROM-SCRATCH-GUIDE.md` | Step-by-step guide to rebuilding the project from zero |
 
 ---
 
