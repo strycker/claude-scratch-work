@@ -151,6 +151,22 @@ def assemble_backtest_report(
     lines.append(f"- median sojourn (months): {sojourn_lag['median_sojourn']}")
     lines.append(f"- median detection lag (months): {sojourn_lag['median_lag']}")
     lines.append(f"- **ratio: {sojourn_lag['ratio']}**")
+    n_tr = sojourn_lag.get("n_transitions")
+    n_res = sojourn_lag.get("n_resolved")
+    if n_tr is not None and n_res is not None:
+        thr = sojourn_lag.get("act_threshold", 0.70)
+        lines.append(
+            f"- sample: median lag over **{n_res} resolved of {n_tr} transitions** "
+            f"(a transition resolves only when P(target) reaches the {thr:.0%} "
+            "action threshold)."
+        )
+        if n_res < 8:
+            lines.append(
+                "- ⚠ **Small sample:** the ratio is a median over very few resolved "
+                "transitions — treat it as indicative, not a robust go/no-go number. "
+                "The strategy KPIs and the multiclass Brier are the more reliable "
+                "signals at this stage."
+            )
     lines.append("")
 
     # ── 2. Faber comparison (§23.1 standing target, not pass/fail) ──

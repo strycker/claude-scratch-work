@@ -185,6 +185,54 @@ class TestExcludedAssets:
         assert "Excluded assets" not in _assemble()
 
 
+class TestHeadlineSampleTransparency:
+    """The headline surfaces its resolved/total transition counts and warns
+    when the resolved sample is too small to trust as a go/no-go number
+    (the real long-history run resolves only ~2 of ~6 transitions)."""
+
+    def test_reports_resolved_and_total_counts(self):
+        md = report.assemble_backtest_report(
+            sojourn_lag={
+                "median_sojourn": 84.5,
+                "median_lag": 161.5,
+                "ratio": 0.52,
+                "n_transitions": 6,
+                "n_resolved": 2,
+                "act_threshold": 0.70,
+            },
+            strategy_kpis=_strategy_kpis(),
+            ablation_kpis=_ablation_kpis(),
+            baseline_kpis=_baseline_kpis(),
+            gap=0.03,
+        )
+        assert "2 resolved of 6 transitions" in md
+        assert "70%" in md  # action threshold rendered as a percentage
+        assert "Small sample" in md
+
+    def test_no_small_sample_warning_when_ample(self):
+        md = report.assemble_backtest_report(
+            sojourn_lag={
+                "median_sojourn": 18.0,
+                "median_lag": 2.0,
+                "ratio": 9.0,
+                "n_transitions": 20,
+                "n_resolved": 15,
+                "act_threshold": 0.70,
+            },
+            strategy_kpis=_strategy_kpis(),
+            ablation_kpis=_ablation_kpis(),
+            baseline_kpis=_baseline_kpis(),
+            gap=0.03,
+        )
+        assert "15 resolved of 20 transitions" in md
+        assert "Small sample" not in md
+
+    def test_counts_omitted_when_absent(self):
+        # Legacy callers pass a 3-key sojourn_lag (no counts) — the render must
+        # not crash and must not invent a sample line.
+        assert "resolved of" not in _assemble()
+
+
 class TestReferenceLabelColumns:
     """The full-sample smoothed reference must span EVERY decision date (the
     walk-forward now labels pre-1990 under approach ii), so it keeps long-history
