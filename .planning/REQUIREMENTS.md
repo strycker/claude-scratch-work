@@ -56,9 +56,17 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 - [x] **EVAL-03**: Sojourn/detection-lag ratio reported prominently — the go/no-go number for regime timing (design §5.4)
 - [x] **EVAL-04**: Model metrics artifacts (multiclass Brier, calibration bins, confusion tables) persisted per run (salvaged `model_metrics_artifacts.py`; design §8.8)
 
+### Notebooks (NB)
+
+- [ ] **NB-01**: Six platform notebooks (`P1_data_spine`, `P2_features_taxonomy`, `P3_regime_labeling`, `P4_nowcaster`, `P5_assets_allocation`, `P6_backtest_evaluation`) covering L0–L4 + evaluation; each runs top-to-bottom against real checkpoints, ends in an explicit human-validation cell, and calls plotting logic from `platform/plotting/` rather than defining it inline
+
 ### Migration (MIG)
 
-- [ ] **MIG-01**: Validated skeleton code migrated to `strycker/trading-crab` (two-package layout), tests green there, README/docs updated
+- [ ] **MIG-01**: Platform decoupled from the legacy library (4 seams vendored, import-guard test) and migrated to `strycker/trading-crab` (two-package layout), tests green in that repo's CI, real run reproduces the reference numbers, README/docs updated — step plan in `MIGRATION-PLAN.md`
+
+### Invariants (INV)
+
+- [ ] **INV-01**: Named, era-stable invariant candidates (e.g. M2/GDP, market cap/GDP, credit/GDP) constructed and screened using dimensional-reduction techniques as discovery tools; loading stability tested across eras; every candidate logged to the trial registry and assessed walk-forward; survivors admitted as **named** features, never anonymous principal components (preserves design decision R4)
 
 ## v2 Requirements
 
@@ -144,12 +152,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-02 | Phase 5 | Complete |
 | EVAL-03 | Phase 5 | Complete |
 | EVAL-04 | Phase 5 | Complete |
-| MIG-01 | Phase 6 | Pending |
+| NB-01 | Phase 6 | Pending |
+| MIG-01 | Phase 7 | Pending |
+| INV-01 | Phase 8 | Pending |
 
 **Coverage:**
 
-- v1 requirements: 28 total
-- Mapped to phases: 28
+- v1 requirements: 30 total
+- Mapped to phases: 30
 - Unmapped: 0 ✓
 
 ---

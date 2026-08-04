@@ -72,7 +72,7 @@ trading-crab/
 ├── gsd-scratch-work/    ← READ-ONLY submodule (GSD framework version)
 ├── trading-crab-lib/    ← READ-ONLY submodule (trading-crab library repo)
 ├── ROADMAP.md                     ← prioritized feature backlog
-├── STATE.md                       ← current pipeline status and known gaps
+├── .planning/STATE.md             ← current status (GSD-managed; root STATE.md archived)
 ├── .env.example                   ← copy to .env, fill in FRED_API_KEY
 ├── pyproject.toml                 ← pip-installable package (src layout)
 ├── Makefile                       ← common dev shortcuts
@@ -533,7 +533,7 @@ All tuneable parameters are in `config/settings.yaml`. Key sections:
 ## What the Legacy Code Does That Must Be Matched
 
 Cross-reference `legacy/unified_script.py` for ground truth on all algorithms.
-All items are verified as matching in `src/`; see `STATE.md` for known gaps.
+All items are verified as matching in `src/`; see `docs/archive/STATE.md` for the historical legacy-pipeline gap list.
 
 ### Algorithms (all ✓ — fully matched in src/)
 
@@ -600,7 +600,7 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 
 ## Current Status (as of March 2026)
 
-See `STATE.md` for a full breakdown of what runs, what's tested, and what output
+See `docs/archive/STATE.md` (historical) and `.planning/STATE.md` (live) for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
 **Summary:** all 9 pipeline steps run end-to-end on real data. **556 tests collected**
@@ -1207,7 +1207,7 @@ All previously untested modules now have test coverage.
 
 Atomic rename of the Python package directory `src/market_regime/` → `src/trading_crab_lib/`
 plus ~438 import references across 89 files. pip package name: `trading-crab-lib`.
-See `RENAME_PLAN.md` for the full rename strategy. `market_code` (a DataFrame column name)
+See `docs/archive/RENAME_PLAN.md` for the full rename strategy. `market_code` (a DataFrame column name)
 was NOT renamed — it is a data concept, not a package reference.
 
 ### D16. Submodule comparison: main repo is authoritative (2026-03-19)
@@ -1744,7 +1744,7 @@ notebook for exploring cross-asset divergence and momentum features.
 
 ### D39. Phase E — Email plot attachments (2026-03-27)
 
-Completed all 3 items from `MONITORING_EXPANSION_PLAN.md` Phase E:
+Completed all 3 items from `docs/archive/MONITORING_EXPANSION_PLAN.md` Phase E:
 
 - **E.1**: `send_weekly_email()` gains optional `plot_paths: list[Path] | None` kwarg.
   When provided, builds multipart/related HTML email: plain-text alternative + HTML body

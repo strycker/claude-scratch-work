@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 6
-current_phase_name: Migration to Public Repo
-status: executing
-stopped_at: "Completed 05-06-PLAN.md (honest backtest report capstone: assemble_backtest_report + write_backtest_report + run_full_backtest_evaluation + main CLI)"
-last_updated: "2026-07-27T22:08:02.218Z"
-last_activity: 2026-07-27
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
+current_phase_name: Platform Notebook Suite
+status: planning
+stopped_at: "Phase 5 CLOSED 2026-08-04 (verification + deferred items reconciled). Roadmap restructured: Phase 6 = Platform Notebook Suite, Phase 7 = Migration, Phase 8 = Invariants. Ready to plan Phase 6."
+last_updated: "2026-08-04T00:00:00.000Z"
+last_activity: 2026-08-04
+last_activity_desc: Phase 5 closed; docs tidied; MIGRATION-PLAN rewritten for the platform; roadmap extended to 8 phases
 progress:
-  total_phases: 6
+  total_phases: 8
   completed_phases: 5
   total_plans: 28
   completed_plans: 28
-  percent: 83
+  percent: 63
 ---
 
 # Project State
@@ -25,16 +25,31 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 05 — honest-backtest-evaluation
+**Current focus:** Phase 6 — platform notebook suite (pre-planning)
 
 ## Current Position
 
-Phase: 6 — Migration to Public Repo
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-27 — Phase 05 complete, transitioned to Phase 6
+Phase: 6 — Platform Notebook Suite
+Plan: Not started — ready for /gsd-discuss-phase 6
+Status: Ready to plan
+Last activity: 2026-08-04 — Phase 5 closed; docs tidied; MIGRATION-PLAN rewritten
 
-Progress: [█████████░] 93%
+Progress: [██████░░░░] 63% (5 of 8 phases)
+
+### Roadmap restructure (2026-08-04)
+
+Phase 6 was "Migration to Public Repo". It is now split and extended:
+
+| Phase | Was | Now |
+|---|---|---|
+| 6 | Migration to Public Repo | **Platform Notebook Suite** (NB-01) |
+| 7 | — | **Migration to Public Repo** (MIG-01) |
+| 8 | — | **Invariants & Dimensional Reduction** (INV-01) |
+
+Rationale: the migration's per-step validation gate is "run the notebook and verify",
+but the platform has **zero** notebooks — all 12 in `notebooks/` cover the legacy
+quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analysis in
+`.planning/STATUS-REVIEW-2026-08.md`.
 
 ## Performance Metrics
 

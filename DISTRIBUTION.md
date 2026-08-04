@@ -137,7 +137,7 @@ Invoke with a host-side cron job:
 - **Easy secrets**: env vars set in the shell or a `.env` file, never committed
 - **Portable**: run the same image locally, on a VPS, or on a cloud scheduler (AWS ECS, GCP Cloud Run)
 
-See `NEXT_STEPS.md` Phase K (K2, K3) for the implementation backlog.
+See `docs/archive/NEXT_STEPS.md` Phase K (K2, K3) for the implementation backlog.
 
 ---
 

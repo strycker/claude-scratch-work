@@ -29,7 +29,7 @@ def setup() -> None:
     .. note:: Stub — full implementation deferred to Phase E.
     """
     print("tradingcrab-setup: interactive configuration setup")
-    print("(Stub — not yet implemented. See NEXT_STEPS.md Phase E.)")
+    print("(Stub — not yet implemented. See docs/archive/NEXT_STEPS.md Phase E.)")
     print()
     print("For now, manually:")
     print("  1. cp .env.example .env  && edit .env (add FRED_API_KEY)")
@@ -43,4 +43,4 @@ def publish_notebooks() -> None:
     .. note:: Stub — full implementation deferred to Phase F.
     """
     print("tradingcrab-publish: notebook publishing")
-    print("(Stub — not yet implemented. See NEXT_STEPS.md Phase F.)")
+    print("(Stub — not yet implemented. See docs/archive/NEXT_STEPS.md Phase F.)")

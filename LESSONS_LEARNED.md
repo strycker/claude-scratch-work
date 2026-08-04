@@ -2,7 +2,7 @@
 
 A first-person retrospective on pitfalls encountered building this pipeline.
 Intended audience: anyone rebuilding this project or building something similar.
-For the full implementation guide, see `REBUILD-FROM-SCRATCH-GUIDE.md`.
+For the full implementation guide, see `docs/archive/REBUILD-FROM-SCRATCH-GUIDE.md`.
 For formal design decisions, see the ADR section of `CLAUDE.md`.
 
 ---
