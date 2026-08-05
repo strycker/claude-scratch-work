@@ -31,6 +31,7 @@ config/secrets.yaml
 config/email.yaml
 config/email.local.yaml
 config/portfolio.local.yaml
+*pem
 
 # Account holdings — real per-account weights are secrets-adjacent (L4-03,
 # 04-CONTEXT D-01); only the obviously-fake schema doc is tracked.

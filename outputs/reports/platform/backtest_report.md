@@ -7,6 +7,8 @@ This is the go/no-go number: median regime sojourn (how long a regime typically 
 - median sojourn (months): 84.5
 - median detection lag (months): 161.5
 - **ratio: 0.5232198142414861**
+- sample: median lag over **2 resolved of 7 transitions** (a transition resolves only when P(target) reaches the 70% action threshold).
+- ⚠ **Small sample:** the ratio is a median over very few resolved transitions — treat it as indicative, not a robust go/no-go number. The strategy KPIs and the multiclass Brier are the more reliable signals at this stage.
 
 ## Baseline Comparison: Faber 10-Month SMA (§23.1)
 

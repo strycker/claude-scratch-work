@@ -1,26 +1,31 @@
 {
   "name": "monthly_raw",
-  "created": "2026-07-29T15:16:00.145045",
+  "created": "2026-08-05T12:24:12.999625",
   "config_hash": "6c209fad",
-  "rows": 774,
-  "columns": 15,
+  "rows": 775,
+  "columns": 20,
   "col_names": [
-    "wti_fred",
-    "fred_gs10",
-    "fred_aaa",
-    "fred_tb3ms",
     "fred_baa",
-    "fred_t10y2y",
-    "fred_t10y3m",
+    "fred_aaa",
+    "wti_fred",
+    "fred_tb3ms",
+    "fred_gs10",
     "fred_vix",
+    "fred_t10y3m",
+    "fred_t10y2y",
     "sp500",
     "div_yield",
     "cape_shiller",
     "equities_tr",
     "long_duration_tr",
     "oil",
-    "cash"
+    "cash",
+    "fred_unrate",
+    "fred_cpi",
+    "fred_gdp",
+    "fred_payems",
+    "fred_indpro"
   ],
   "index_start": "1962-01-31 00:00:00",
-  "index_end": "2026-06-30 00:00:00"
+  "index_end": "2026-07-31 00:00:00"
 }

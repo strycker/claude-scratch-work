@@ -1,21 +1,26 @@
 {
   "name": "monthly_features",
-  "created": "2026-07-29T15:16:00.154555",
+  "created": "2026-08-05T12:24:13.015628",
   "config_hash": "6c209fad",
-  "rows": 774,
-  "columns": 22,
+  "rows": 775,
+  "columns": 28,
   "col_names": [
-    "wti_fred",
-    "fred_gs10",
-    "fred_aaa",
-    "fred_tb3ms",
     "fred_baa",
-    "fred_t10y2y",
+    "fred_aaa",
+    "wti_fred",
+    "fred_tb3ms",
+    "fred_gs10",
     "fred_t10y3m",
+    "fred_t10y2y",
     "sp500",
     "equities_tr",
     "long_duration_tr",
     "cash",
+    "fred_unrate",
+    "fred_cpi",
+    "fred_gdp",
+    "fred_payems",
+    "fred_indpro",
     "curve_10y3m",
     "curve_10y2y",
     "credit_spread_baa_aaa",
@@ -26,8 +31,9 @@
     "realized_vol_1m",
     "realized_vol_3m",
     "cape_shiller",
-    "div_yield"
+    "div_yield",
+    "real_rate_level"
   ],
   "index_start": "1962-01-31 00:00:00",
-  "index_end": "2026-06-30 00:00:00"
+  "index_end": "2026-07-31 00:00:00"
 }
