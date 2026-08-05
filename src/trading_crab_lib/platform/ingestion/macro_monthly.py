@@ -52,6 +52,7 @@ except ImportError as _err:
     ) from _err
 
 from trading_crab_lib.ingestion import macrotrends, multpl
+from trading_crab_lib.ingestion.browser import fetch_page_html
 from trading_crab_lib.ingestion.http import browser_session, http_get
 
 log = logging.getLogger(__name__)
@@ -235,20 +236,33 @@ def _scrape_macrotrends_html_table_monthly(
     ``pandas.read_html`` fallback parsing, but resamples to ``"ME"`` instead
     of the incumbent's hardcoded quarterly period-end rule. The incumbent
     function itself cannot be reused directly since its resample rule is
-    baked in (D-01: frozen module, no edits)."""
+    baked in (D-01: frozen module, no edits).
+
+    Date-column matching includes "month" alongside "date"/"year" — a
+    2026-08-05 residential diagnostic against the live page found a "Month"
+    date column, which neither of the other two keywords catches, leaving
+    only the ``df.columns[0]`` fallback (a silent trap if the date column is
+    ever not first). Value column is detected FIRST and excluded from the
+    date search: a squashed header like "Gold PricesMonthly Closing Price"
+    contains "month" as a substring of "Monthly", which would otherwise
+    misidentify the value column as the date column."""
     tables = pd.read_html(StringIO(html))
     if not tables:
         raise ValueError(f"No HTML tables found for {column_name}")
 
     df = max(tables, key=len)
 
-    date_col = next(
-        (c for c in df.columns if "date" in str(c).lower() or "year" in str(c).lower()),
-        df.columns[0],
-    )
     value_col = next(
         (c for c in df.columns if "value" in str(c).lower() or "price" in str(c).lower() or "close" in str(c).lower()),
         df.columns[-1],
+    )
+    date_col = next(
+        (
+            c for c in df.columns
+            if c != value_col
+            and ("date" in str(c).lower() or "year" in str(c).lower() or "month" in str(c).lower())
+        ),
+        next((c for c in df.columns if c != value_col), df.columns[0]),
     )
 
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
@@ -292,6 +306,19 @@ def _scrape_macrotrends_monthly(
     than as an HTTP error — the request succeeded, the page just was not the
     data. *session* is threaded in by the caller so one impersonating session
     is reused across every series.
+
+    When the HTTP body carries neither the embedded JSON array nor a
+    parseable table (``macrotrends._html_yields_data`` returns False —
+    imported, not copied, per D-01), falls back to rendering the page in a
+    real browser (``ingestion.browser.fetch_page_html``,
+    ``require_selector=False`` since ``macrotrends.BROWSER_WAIT_SELECTOR`` is
+    an unconfirmed candidate selector). The rendered HTML then goes through
+    the exact same JSON-then-table parse chain as the HTTP body — a rendered
+    page gets no parsing privilege the HTTP path lacks. Whether a real
+    browser gets past this Cloudflare deployment is confirmed (2026-08-05
+    residential diagnostic, HTTP 200 on the real page); whether the
+    end-to-end parse of THIS series produces correct data is NOT — this
+    module's unit tests mock the browser call entirely.
     """
     url = f"{base_url}{path}"
     log.info("Scraping macrotrends (monthly): %s → %s", column_name, url)
@@ -301,10 +328,22 @@ def _scrape_macrotrends_monthly(
     resp = http_get(url, session=session, timeout=30)
     resp.raise_for_status()
 
-    data = macrotrends._extract_json_data(resp.text)
+    html = resp.text
+    if not macrotrends._html_yields_data(html):
+        log.warning(
+            "macrotrends HTTP response for %s carried neither embedded JSON nor a parseable "
+            "table (bot interstitial?) — falling back to a rendered page", column_name,
+        )
+        rendered = fetch_page_html(
+            url, wait_for_selector=macrotrends.BROWSER_WAIT_SELECTOR, require_selector=False
+        )
+        if rendered:
+            html = rendered
+
+    data = macrotrends._extract_json_data(html)
     if data is None or len(data) == 0:
         log.debug("No embedded JSON found — trying pandas.read_html for %s", column_name)
-        return _scrape_macrotrends_html_table_monthly(resp.text, column_name, resample_method)
+        return _scrape_macrotrends_html_table_monthly(html, column_name, resample_method)
 
     sample = data[0]
     date_key = next((k for k in sample if "date" in k.lower()), None)

@@ -48,6 +48,33 @@ SAMPLE_MACROTRENDS_JSON_HTML = (
     + "\n];\n</script></body></html>"
 )
 
+# A "Just a moment..."-style Cloudflare interstitial: no embedded JSON, no
+# <table> — macrotrends._html_yields_data must return False for this.
+SAMPLE_MACROTRENDS_INTERSTITIAL_HTML = """
+<html><body>
+<div class="cf-browser-verification">Just a moment...</div>
+<div id="challenge-running"></div>
+</body></html>
+"""
+
+# Regression fixture for the 2026-08-05 residential diagnostic against the
+# live macrotrends page: value column FIRST with a squashed multi-line
+# header, date column SECOND titled plainly "Month" — exercises the "month"
+# keyword match (and its value/date collision guard) rather than the
+# df.columns[0] fallback silently doing the right thing by accident.
+SAMPLE_MACROTRENDS_MERGED_HEADER_TABLE_HTML = """
+<html><body>
+<table class="table">
+<thead><tr><th>Gold PricesMonthly Closing Price</th><th>Month</th></tr></thead>
+<tbody>
+<tr><td>1,560.00</td><td>2020-01-31</td></tr>
+<tr><td>1,600.00</td><td>2020-02-29</td></tr>
+<tr><td>1,650.00</td><td>2020-03-31</td></tr>
+</tbody>
+</table>
+</body></html>
+"""
+
 
 # ── _fetch_fred_monthly: monthly cadence (~12 rows/year, not quarterly's ~4) ──
 
@@ -195,6 +222,113 @@ def test_scrape_macrotrends_monthly_month_end_indexed(mock_get, mock_sleep):
     )
     assert isinstance(s, pd.Series)
     assert len(s) > 0
+    assert all(idx.is_month_end for idx in s.index)
+
+
+# ── macrotrends monthly scrape — browser fallback ─────────────────────────────
+# playwright IS importable in this environment — every test that can reach
+# _scrape_macrotrends_monthly patches fetch_page_html, or an unpatched
+# fallback would launch a real browser.
+
+
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_page_html")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
+def test_scrape_macrotrends_monthly_json_body_never_calls_fetch_page_html(mock_get, mock_fetch_page_html):
+    from trading_crab_lib.platform.ingestion.macro_monthly import _scrape_macrotrends_monthly
+
+    mock_get.return_value = _FakeResponse(SAMPLE_MACROTRENDS_JSON_HTML)
+
+    s = _scrape_macrotrends_monthly(
+        "https://www.macrotrends.net",
+        "/1333/historical-gold-prices-100-year-chart",
+        "gold_spot",
+        "mean",
+    )
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    mock_fetch_page_html.assert_not_called()
+
+
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_page_html")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
+def test_scrape_macrotrends_monthly_table_body_never_calls_fetch_page_html(mock_get, mock_fetch_page_html):
+    from trading_crab_lib.platform.ingestion.macro_monthly import _scrape_macrotrends_monthly
+
+    mock_get.return_value = _FakeResponse(SAMPLE_MACROTRENDS_MERGED_HEADER_TABLE_HTML)
+
+    s = _scrape_macrotrends_monthly(
+        "https://www.macrotrends.net",
+        "/1333/historical-gold-prices-100-year-chart",
+        "gold_spot",
+        "mean",
+    )
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    mock_fetch_page_html.assert_not_called()
+
+
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_page_html")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
+def test_scrape_macrotrends_monthly_interstitial_falls_back_to_browser_render(mock_get, mock_fetch_page_html):
+    from trading_crab_lib.platform.ingestion.macro_monthly import _scrape_macrotrends_monthly
+
+    mock_get.return_value = _FakeResponse(SAMPLE_MACROTRENDS_INTERSTITIAL_HTML)
+    mock_fetch_page_html.return_value = SAMPLE_MACROTRENDS_JSON_HTML
+
+    s = _scrape_macrotrends_monthly(
+        "https://www.macrotrends.net",
+        "/1333/historical-gold-prices-100-year-chart",
+        "gold_spot",
+        "mean",
+    )
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    mock_fetch_page_html.assert_called_once()
+    call_args, call_kwargs = mock_fetch_page_html.call_args
+    assert call_args[0] == "https://www.macrotrends.net/1333/historical-gold-prices-100-year-chart"
+    assert call_kwargs.get("require_selector") is False
+
+
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_page_html")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
+def test_scrape_macrotrends_monthly_interstitial_and_browser_fallback_none_raises(mock_get, mock_fetch_page_html):
+    from trading_crab_lib.platform.ingestion.macro_monthly import _scrape_macrotrends_monthly
+
+    mock_get.return_value = _FakeResponse(SAMPLE_MACROTRENDS_INTERSTITIAL_HTML)
+    mock_fetch_page_html.return_value = None
+
+    with pytest.raises(ValueError):
+        _scrape_macrotrends_monthly(
+            "https://www.macrotrends.net",
+            "/1333/historical-gold-prices-100-year-chart",
+            "gold_spot",
+            "mean",
+        )
+
+
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_page_html")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
+def test_scrape_macrotrends_monthly_handles_merged_header_and_month_column(mock_get, mock_fetch_page_html):
+    """Regression for the 2026-08-05 live diagnostic, monthly analog: a
+    'Month' date column that is not first, plus a squashed value header.
+    Must not silently return an empty Series."""
+    from trading_crab_lib.platform.ingestion.macro_monthly import _scrape_macrotrends_monthly
+
+    mock_get.return_value = _FakeResponse(SAMPLE_MACROTRENDS_MERGED_HEADER_TABLE_HTML)
+
+    s = _scrape_macrotrends_monthly(
+        "https://www.macrotrends.net",
+        "/1333/historical-gold-prices-100-year-chart",
+        "gold_spot",
+        "mean",
+    )
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    assert not s.isna().all()
     assert all(idx.is_month_end for idx in s.index)
 
 

@@ -16,6 +16,30 @@ detected by TLS fingerprint). Fetches go through the shared
 browser-impersonating client (``trading_crab_lib.ingestion.http``) to defeat
 that check.
 
+Two-step fetch per series: the plain HTTP path above is tried FIRST — it is
+cheap, and becomes correct again the day Cloudflare stops interfering. Only
+when that HTTP body carries neither the embedded JSON array nor a parseable
+HTML table (i.e. it was an interstitial, not the page) does this module fall
+back to rendering the page in a real headless browser
+(``trading_crab_lib.ingestion.browser.fetch_page_html``). Whether a real
+browser gets past THIS PARTICULAR Cloudflare deployment on THIS PARTICULAR
+page is not confirmed by this module's unit tests, which mock the browser
+call entirely — see the ``<human-check>`` in the quick task that added this
+fallback for the only way to answer that.
+
+A residential-connection diagnostic (2026-08-05) confirmed a real headless
+browser DOES reach this page (HTTP 200, real content, no interstitial), and
+also confirmed two things the fallback design must account for: (1) the
+embedded-JSON regex (``_DATA_PATTERN``) does NOT match on the rendered page
+— the series lives inside a Highcharts closure, not a named ``window``
+global — so the rendered HTML is expected to fall through to the
+``pandas.read_html`` table path, not the JSON path; (2) the page's only
+``<table>`` has no distinguishing class (plain ``class="table"``, not
+``historical_data_table`` as an earlier third-party snippet assumed) and its
+header cell text can be a squashed multi-line label — see
+``BROWSER_WAIT_SELECTOR`` and ``_scrape_series_html_table``'s column
+detection below.
+
 Rate-limited to 3 seconds per request (polite scraping).
 
 Usage:
@@ -34,6 +58,7 @@ from typing import Any
 
 import pandas as pd
 
+from trading_crab_lib.ingestion.browser import fetch_page_html
 from trading_crab_lib.ingestion.http import browser_session, http_get
 
 log = logging.getLogger(__name__)
@@ -45,6 +70,17 @@ HEADERS = {
     )
 }
 RATE_LIMIT_SECONDS = 3.0
+
+# Selector passed to the browser fallback with require_selector=False (never
+# as a hard requirement). Updated 2026-08-05 from a residential-connection
+# diagnostic against the live page: a third-party snippet had previously
+# assumed ``table.historical_data_table``, but that class does NOT exist on
+# the rendered page — the actual DOM has a plain, undistinguished
+# ``<table class="table">``. require_selector=False means a miss (e.g. a
+# genuine interstitial, or a macrotrends page type with no table at all)
+# still returns the rendered HTML rather than discarding it, since the data
+# may be reachable some other way even without a matching selector.
+BROWSER_WAIT_SELECTOR = "table"
 
 # Regex to find the embedded data array in the page source.
 # macrotrends stores chart data as:  var defined_data = [{...}, ...];
@@ -82,6 +118,25 @@ def _extract_json_data(html: str) -> list[dict] | None:
         return None
 
 
+def _html_yields_data(html: str) -> bool:
+    """True when *html* carries either the embedded JSON array or a table
+    ``pandas.read_html`` can parse.
+
+    A Cloudflare interstitial carries NEITHER — which is exactly why a
+    browser render is worth its cost as a fallback, and exactly why a
+    response that DOES carry either must never pay that cost. Imported by
+    ``platform/ingestion/macro_monthly.py`` (not copied) so both modules
+    share this single decision.
+    """
+    if _extract_json_data(html):
+        return True
+    try:
+        tables = pd.read_html(StringIO(html))
+    except (ValueError, ImportError):
+        return False
+    return bool(tables)
+
+
 def _scrape_series(
     base_url: str,
     url_path: str,
@@ -105,11 +160,21 @@ def _scrape_series(
     resp = http_get(url, session=session, timeout=30)
     resp.raise_for_status()
 
-    data = _extract_json_data(resp.text)
+    html = resp.text
+    if not _html_yields_data(html):
+        log.warning(
+            "macrotrends HTTP response for %s carried neither embedded JSON nor a parseable "
+            "table (bot interstitial?) — falling back to a rendered page", column_name,
+        )
+        rendered = fetch_page_html(url, wait_for_selector=BROWSER_WAIT_SELECTOR, require_selector=False)
+        if rendered:
+            html = rendered
+
+    data = _extract_json_data(html)
     if data is None or len(data) == 0:
         # Fallback: try pandas.read_html for table-based pages
         log.debug("No embedded JSON found — trying pandas.read_html for %s", column_name)
-        return _scrape_series_html_table(resp.text, column_name, resample_method)
+        return _scrape_series_html_table(html, column_name, resample_method)
 
     # Detect column keys — macrotrends uses varying schemas
     sample = data[0]
@@ -159,7 +224,18 @@ def _scrape_series_html_table(
     column_name: str,
     resample_method: str,
 ) -> pd.Series:
-    """Fallback: parse an HTML table from the page using pandas.read_html."""
+    """Fallback: parse an HTML table from the page using pandas.read_html.
+
+    Column header text is matched by substring, not exact name, because
+    macrotrends header phrasing varies by page (and can be a squashed
+    multi-line label per a 2026-08-05 residential diagnostic, e.g. a value
+    column literally titled "Gold PricesMonthly Closing Price" — still
+    caught by the "price" substring). "month" is matched alongside
+    "date"/"year" because some macrotrends tables title their date column
+    plainly "Month", which neither of those catches — a column that only
+    matches by falling back to ``df.columns[0]`` is a silent trap if the
+    date column is ever NOT first.
+    """
     tables = pd.read_html(StringIO(html))
     if not tables:
         raise ValueError(f"No HTML tables found for {column_name}")
@@ -167,14 +243,23 @@ def _scrape_series_html_table(
     # Use the largest table (most likely the data table)
     df = max(tables, key=len)
 
-    # Find date and value columns
-    date_col = next(
-        (c for c in df.columns if "date" in str(c).lower() or "year" in str(c).lower()),
-        df.columns[0],
-    )
+    # Find value column FIRST, then date column excluding it — a squashed
+    # header like "Gold PricesMonthly Closing Price" contains "month" as a
+    # substring of "Monthly", so if date detection ran first (or considered
+    # this column a candidate) it would misidentify the VALUE column as the
+    # date column. Excluding value_col from the date search resolves that
+    # collision without narrowing either keyword set.
     value_col = next(
         (c for c in df.columns if "value" in str(c).lower() or "price" in str(c).lower() or "close" in str(c).lower()),
         df.columns[-1],
+    )
+    date_col = next(
+        (
+            c for c in df.columns
+            if c != value_col
+            and ("date" in str(c).lower() or "year" in str(c).lower() or "month" in str(c).lower())
+        ),
+        next((c for c in df.columns if c != value_col), df.columns[0]),
     )
 
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
