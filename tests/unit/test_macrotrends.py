@@ -9,6 +9,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
 from trading_crab_lib.ingestion.macrotrends import (
     _extract_json_data,
@@ -40,6 +41,36 @@ SAMPLE_TABLE_HTML = """
 <tr><td>2020-03-31</td><td>1,550.50</td></tr>
 <tr><td>2020-06-30</td><td>1,700.00</td></tr>
 <tr><td>2020-09-30</td><td>1,950.25</td></tr>
+</table>
+</body></html>
+"""
+
+# A "Just a moment..."-style Cloudflare interstitial: no embedded JSON, no
+# <table> — _html_yields_data must return False for this.
+SAMPLE_INTERSTITIAL_HTML = """
+<html><body>
+<div class="cf-browser-verification">Just a moment...</div>
+<div id="challenge-running"></div>
+</body></html>
+"""
+
+# Regression fixture for the 2026-08-05 residential diagnostic against the
+# live macrotrends page: a real headless browser reaches a table with NO
+# distinguishing class (plain class="table", not "historical_data_table"),
+# a date column literally titled "Month" (not "Date"/"Year"), and a value
+# column with a squashed multi-line header ("Gold PricesMonthly Closing
+# Price"). The value column is placed FIRST and the date column SECOND so
+# this fixture actually exercises the "month" keyword match rather than the
+# df.columns[0] fallback silently doing the right thing by accident.
+SAMPLE_MERGED_HEADER_TABLE_HTML = """
+<html><body>
+<table class="table">
+<thead><tr><th>Gold PricesMonthly Closing Price</th><th>Month</th></tr></thead>
+<tbody>
+<tr><td>1,560.00</td><td>2020-01-01</td></tr>
+<tr><td>1,600.00</td><td>2020-02-01</td></tr>
+<tr><td>1,650.00</td><td>2020-03-01</td></tr>
+</tbody>
 </table>
 </body></html>
 """
@@ -158,3 +189,114 @@ def test_fetch_all_handles_failure_gracefully(mock_get, mock_browser_session, mo
 
     assert isinstance(df, pd.DataFrame)
     assert df.empty
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Browser fallback (playwright IS importable in this environment — every
+# test that can reach _scrape_series patches fetch_page_html, or an
+# unpatched fallback would launch a real browser).
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@patch("trading_crab_lib.ingestion.macrotrends.fetch_page_html")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_scrape_series_json_body_never_calls_fetch_page_html(mock_get, mock_fetch_page_html):
+    """HTTP is tried first: a body with embedded JSON must not touch the browser."""
+    mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
+
+    s = _scrape_series("https://www.macrotrends.net", "/test", "gold_spot", "mean")
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    mock_fetch_page_html.assert_not_called()
+
+
+@patch("trading_crab_lib.ingestion.macrotrends.fetch_page_html")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_scrape_series_table_body_never_calls_fetch_page_html(mock_get, mock_fetch_page_html):
+    """HTTP is tried first: a body with a parseable table must not touch the browser."""
+    mock_get.return_value = _FakeResponse(SAMPLE_TABLE_HTML)
+
+    s = _scrape_series("https://www.macrotrends.net", "/test", "gold_spot", "mean")
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    mock_fetch_page_html.assert_not_called()
+
+
+@patch("trading_crab_lib.ingestion.macrotrends.fetch_page_html")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_scrape_series_interstitial_falls_back_to_browser_render(mock_get, mock_fetch_page_html):
+    mock_get.return_value = _FakeResponse(SAMPLE_INTERSTITIAL_HTML)
+    mock_fetch_page_html.return_value = SAMPLE_PAGE_HTML
+
+    s = _scrape_series(
+        "https://www.macrotrends.net",
+        "/1333/historical-gold-prices-100-year-chart",
+        "gold_spot",
+        "mean",
+    )
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    mock_fetch_page_html.assert_called_once()
+    call_args, call_kwargs = mock_fetch_page_html.call_args
+    assert call_args[0] == "https://www.macrotrends.net/1333/historical-gold-prices-100-year-chart"
+    assert call_kwargs.get("require_selector") is False
+
+
+@patch("trading_crab_lib.ingestion.macrotrends.fetch_page_html")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_scrape_series_interstitial_and_browser_fallback_none_raises(mock_get, mock_fetch_page_html):
+    mock_get.return_value = _FakeResponse(SAMPLE_INTERSTITIAL_HTML)
+    mock_fetch_page_html.return_value = None
+
+    with pytest.raises(ValueError):
+        _scrape_series("https://www.macrotrends.net", "/test", "gold_spot", "mean")
+
+
+@patch("trading_crab_lib.ingestion.macrotrends.fetch_page_html")
+@patch("trading_crab_lib.ingestion.macrotrends.time.sleep")
+@patch("trading_crab_lib.ingestion.macrotrends.browser_session")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_fetch_all_degrades_to_empty_df_when_interstitial_and_browser_unavailable(
+    mock_get, mock_browser_session, mock_sleep, mock_fetch_page_html
+):
+    """_scrape_series raising (interstitial + no browser recovery) must
+    degrade fetch_all to an empty DataFrame with a WARNING, not propagate."""
+    mock_get.return_value = _FakeResponse(SAMPLE_INTERSTITIAL_HTML)
+    mock_browser_session.return_value = MagicMock()
+    mock_fetch_page_html.return_value = None
+
+    df = fetch_all({})
+
+    assert isinstance(df, pd.DataFrame)
+    assert df.empty
+
+
+@patch("trading_crab_lib.ingestion.macrotrends.fetch_page_html")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_scrape_series_quarter_end_indexed(mock_get, mock_fetch_page_html):
+    """Frozen-resample regression guard (D-01) — quarterly stays QE."""
+    mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
+
+    s = _scrape_series("https://www.macrotrends.net", "/test", "gold_spot", "mean")
+
+    assert all(idx.is_quarter_end for idx in s.index)
+
+
+@patch("trading_crab_lib.ingestion.macrotrends.fetch_page_html")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_scrape_series_html_table_handles_merged_header_and_month_column(mock_get, mock_fetch_page_html):
+    """Regression for the 2026-08-05 live diagnostic: the real macrotrends
+    table has a 'Month' date column (not 'Date'/'Year', and not first) and a
+    squashed value header ('Gold PricesMonthly Closing Price'). Must not
+    silently return an empty Series."""
+    mock_get.return_value = _FakeResponse(SAMPLE_MERGED_HEADER_TABLE_HTML)
+
+    s = _scrape_series("https://www.macrotrends.net", "/test", "gold_spot", "mean")
+
+    assert isinstance(s, pd.Series)
+    assert len(s) > 0
+    assert not s.isna().all()
+    mock_fetch_page_html.assert_not_called()  # HTTP body already had a parseable table

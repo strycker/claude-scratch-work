@@ -70,11 +70,17 @@ clustering-extras = [
 boosting = [
     "lightgbm>=4.0",
 ]
-# Headless-Chromium Stooq CSV fetcher (ingestion/browser.py). The wheel ships
-# no browser binaries — an operator additionally runs
-# `playwright install chromium` once after installing this extra.
+# Headless-browser rendering for JS-gated sources (ingestion/browser.py).
+# Two engines: Playwright is the primary engine (requires `playwright install
+# chromium` once after installing this extra — the wheel ships no browser
+# binaries); Selenium is a fallback for when Playwright is unavailable or its
+# installed package mismatches the ambient Chromium build — NOT a second
+# attempt at a block Playwright could not pass (see browser.py's docstring).
+# Selenium additionally requires a Chrome/Chromium binary + matching driver
+# on PATH; neither is bundled by this extra.
 browser = [
     "playwright>=1.40",
+    "selenium>=4.15",
 ]
 all = [
     "trading-crab-lib[ingestion,plotting,hmm,clustering-extras,boosting,browser]",
@@ -163,6 +169,7 @@ optional = true
 
 [tool.poetry.group.browser.dependencies]
 playwright = ">=1.40"
+selenium = ">=4.15"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
