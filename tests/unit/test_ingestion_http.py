@@ -190,3 +190,42 @@ def test_http_get_applies_browser_headers_on_plain_requests_fallback(monkeypatch
 
     _url, headers, _timeout = session.calls[0]
     assert headers["User-Agent"] == http.BROWSER_HEADERS["User-Agent"]
+
+
+# ── TC_CA_BUNDLE override (TLS-intercepting networks) ───────────────────────
+
+
+def test_ca_bundle_override_returns_none_when_unset(monkeypatch):
+    monkeypatch.delenv("TC_CA_BUNDLE", raising=False)
+    assert http.ca_bundle_override() is None
+
+
+def test_ca_bundle_override_treats_blank_as_unset(monkeypatch):
+    """An exported-but-empty variable must not be handed to curl_cffi as a
+    CA path — that would break verification rather than fix it."""
+    monkeypatch.setenv("TC_CA_BUNDLE", "   ")
+    assert http.ca_bundle_override() is None
+
+
+def test_browser_session_verifies_against_ca_bundle_when_set(monkeypatch):
+    monkeypatch.setenv("TC_CA_BUNDLE", "/etc/ssl/combined.pem")
+    fake_curl = _FakeCurlModule()
+    monkeypatch.setattr(http, "_curl_requests", fake_curl)
+    monkeypatch.setattr(http, "_CURL_CFFI_AVAILABLE", True)
+
+    http.browser_session()
+
+    assert fake_curl.calls[0]["verify"] == "/etc/ssl/combined.pem"
+
+
+def test_browser_session_explicit_verify_false_is_not_overridden(monkeypatch):
+    """An explicit opt-out stays an opt-out — the bundle upgrades the default,
+    it does not re-enable verification a caller deliberately disabled."""
+    monkeypatch.setenv("TC_CA_BUNDLE", "/etc/ssl/combined.pem")
+    fake_curl = _FakeCurlModule()
+    monkeypatch.setattr(http, "_curl_requests", fake_curl)
+    monkeypatch.setattr(http, "_CURL_CFFI_AVAILABLE", True)
+
+    http.browser_session(verify=False)
+
+    assert fake_curl.calls[0]["verify"] is False

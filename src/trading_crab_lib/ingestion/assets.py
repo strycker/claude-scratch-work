@@ -138,14 +138,26 @@ def _ssl_bypass_curl_session():
     if _URLLIB3_AVAILABLE and urllib3 is not None:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+    # P22 escape hatch: when TC_CA_BUNDLE names a PEM bundle, verify against it
+    # instead of disabling verification. On a TLS-intercepting network that
+    # bundle must carry the intercepting CA as well as the public roots —
+    # scripts/fix_local_ca.sh builds exactly that. Only when it is unset do we
+    # fall back to the historical verify=False behavior.
+    from trading_crab_lib.ingestion.http import ca_bundle_override  # noqa: PLC0415 — avoids an import cycle
+
+    bundle = ca_bundle_override()
+    verify: bool | str = bundle if bundle else False
+    if bundle:
+        log.info("Verifying TLS against operator-supplied CA bundle: %s", bundle)
+
     # Try with browser impersonation first (avoids Yahoo anti-bot 401).
     # Some older curl_cffi builds don't accept impersonate= on Session();
-    # fall back to a plain verify=False session in that case.
+    # fall back to a plain session in that case.
     try:
-        return curl_requests.Session(verify=False, impersonate="chrome")
+        return curl_requests.Session(verify=verify, impersonate="chrome")
     except TypeError:
-        log.debug("curl_cffi Session does not support impersonate= — using plain verify=False")
-        return curl_requests.Session(verify=False)
+        log.debug("curl_cffi Session does not support impersonate= — using plain session")
+        return curl_requests.Session(verify=verify)
 
 
 # ── Phase 1: batch yfinance download ──────────────────────────────────────────
