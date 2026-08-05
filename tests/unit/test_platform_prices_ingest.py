@@ -73,8 +73,9 @@ def test_universe_fetch_tickers_includes_holdings_satellites_watchlist():
 
 
 @patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_tiingo_daily")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
-def test_short_history_ticker_becomes_nan_padded_not_dropped(mock_batch, mock_session):
+def test_short_history_ticker_becomes_nan_padded_not_dropped(mock_batch, mock_tiingo, mock_session):
     cfg = _make_universe_cfg()
 
     full_idx = pd.date_range("2020-01-02", periods=250, freq="B")
@@ -84,6 +85,7 @@ def test_short_history_ticker_becomes_nan_padded_not_dropped(mock_batch, mock_se
         "QQQ": pd.Series(np.arange(300.0, 300.0 + len(full_idx)), index=full_idx, name="QQQ"),
         "IAU": pd.Series(np.arange(30.0, 30.0 + len(short_idx)), index=short_idx, name="IAU"),
     }
+    mock_tiingo.return_value = {}  # chain advances past Tiingo
     mock_session.return_value = MagicMock()
 
     daily, monthly = fetch_universe_prices(cfg)
@@ -101,8 +103,9 @@ def test_short_history_ticker_becomes_nan_padded_not_dropped(mock_batch, mock_se
 
 
 @patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_tiingo_daily")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
-def test_fetch_universe_prices_no_crash_on_short_history(mock_batch, mock_session):
+def test_fetch_universe_prices_no_crash_on_short_history(mock_batch, mock_tiingo, mock_session):
     """Merging variable-length histories never raises."""
     cfg = _make_universe_cfg()
     idx_a = pd.date_range("2020-01-02", periods=100, freq="B")
@@ -112,6 +115,7 @@ def test_fetch_universe_prices_no_crash_on_short_history(mock_batch, mock_sessio
         "QQQ": pd.Series(np.arange(100.0), index=idx_a, name="QQQ"),
         "UEC": pd.Series(np.arange(10.0), index=idx_b, name="UEC"),
     }
+    mock_tiingo.return_value = {}  # chain advances past Tiingo
     mock_session.return_value = MagicMock()
 
     daily, monthly = fetch_universe_prices(cfg)
@@ -121,11 +125,13 @@ def test_fetch_universe_prices_no_crash_on_short_history(mock_batch, mock_sessio
 
 @patch("trading_crab_lib.platform.ingestion.prices_daily._batch_stooq_daily")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_tiingo_daily")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
-def test_fetch_universe_prices_all_fail_returns_empty(mock_batch, mock_session, mock_stooq):
+def test_fetch_universe_prices_all_fail_returns_empty(mock_batch, mock_tiingo, mock_session, mock_stooq):
     cfg = _make_universe_cfg()
     mock_batch.return_value = {}       # yfinance yields nothing
     mock_stooq.return_value = {}       # Stooq fallback also yields nothing
+    mock_tiingo.return_value = {}  # chain advances past Tiingo
     mock_session.return_value = MagicMock()
 
     daily, monthly = fetch_universe_prices(cfg)
@@ -136,10 +142,12 @@ def test_fetch_universe_prices_all_fail_returns_empty(mock_batch, mock_session, 
 
 @patch("trading_crab_lib.platform.ingestion.prices_daily._batch_stooq_daily")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_tiingo_daily")
 @patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
-def test_fetch_universe_prices_falls_back_to_stooq_when_yfinance_empty(mock_batch, mock_session, mock_stooq):
+def test_fetch_universe_prices_falls_back_to_stooq_when_yfinance_empty(mock_batch, mock_tiingo, mock_session, mock_stooq):
     cfg = _make_universe_cfg()
     mock_batch.return_value = {}  # yfinance rate-limited
+    mock_tiingo.return_value = {}  # chain advances past Tiingo
     mock_session.return_value = MagicMock()
     idx = pd.date_range("2020-01-02", periods=5, freq="D")
     mock_stooq.return_value = {"QQQ": pd.Series(range(5), index=idx, name="QQQ", dtype=float)}
@@ -459,3 +467,63 @@ def test_to_monthly_spine_empty_input_returns_empty():
     empty = pd.DataFrame()
     result = to_monthly_spine(empty)
     assert result.empty
+
+
+# ── source chain: Tiingo first, existing sources kept ───────────────────────
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_stooq_daily")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_tiingo_daily")
+def test_tiingo_is_tried_first_and_short_circuits_the_rest(
+    mock_tiingo, mock_yf, mock_session, mock_stooq
+):
+    """When the keyed source succeeds, no unkeyed source is contacted at all."""
+    cfg = _make_universe_cfg()
+    idx = pd.date_range("2020-01-02", periods=5, freq="D")
+    mock_tiingo.return_value = {"QQQ": pd.Series(range(5), index=idx, name="QQQ", dtype=float)}
+
+    daily, _monthly = fetch_universe_prices(cfg)
+
+    assert not daily.empty
+    mock_tiingo.assert_called_once()
+    mock_yf.assert_not_called()
+    mock_stooq.assert_not_called()
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_stooq_daily")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._ssl_bypass_curl_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_yfinance_daily")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._batch_tiingo_daily")
+def test_yfinance_still_reached_when_tiingo_yields_nothing(
+    mock_tiingo, mock_yf, mock_session, mock_stooq
+):
+    """The user's constraint: existing sources are demoted, never removed."""
+    cfg = _make_universe_cfg()
+    mock_tiingo.return_value = {}
+    idx = pd.date_range("2020-01-02", periods=5, freq="D")
+    mock_yf.return_value = {"QQQ": pd.Series(range(5), index=idx, name="QQQ", dtype=float)}
+    mock_session.return_value = MagicMock()
+
+    daily, _monthly = fetch_universe_prices(cfg)
+
+    assert not daily.empty
+    mock_yf.assert_called_once()
+    mock_stooq.assert_not_called()
+
+
+def test_all_four_price_sources_are_still_wired():
+    """Mechanical guard on 'do NOT remove the existing APIs'. A later refactor
+    that drops a source fails here rather than silently narrowing the chain."""
+    import inspect
+
+    from trading_crab_lib.platform.ingestion import prices_daily
+
+    src = inspect.getsource(prices_daily.fetch_universe_prices)
+    for symbol in ("_batch_tiingo_daily", "_batch_yfinance_daily", "_batch_stooq_daily"):
+        assert symbol in src, f"{symbol} is no longer wired into the chain"
+    # The Stooq browser fallback lives inside _batch_stooq_daily.
+    assert "fetch_stooq_csvs" in inspect.getsource(prices_daily._batch_stooq_daily)
+    # Ordering: Tiingo must precede yfinance, which must precede Stooq.
+    assert src.index("_batch_tiingo_daily") < src.index("_batch_yfinance_daily") < src.index("_batch_stooq_daily")
