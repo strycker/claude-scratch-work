@@ -33,17 +33,50 @@ missing.
   `fetch_prices(cfg)` raises `NotImplementedError` immediately. No SDK
   import, no network call, no new dependency.
 
-### Tiingo
+### Tiingo — **LIVE** (implemented 2026-08-05)
 
-- **What it offers:** REST API for end-of-day (plus some intraday) equities,
-  ETFs, mutual funds, forex, and crypto data. Has a free tier for basic EOD
-  access, making it the lowest-friction of the three to eventually pilot.
-- **Integration shape:** Standard REST API with an API key, similar in
-  shape to the existing `fred.py` fetcher pattern (per-series HTTP GET,
-  JSON response).
-- **Stub module:** `src/trading_crab_lib/platform/ingestion/tiingo.py` —
-  `fetch_prices(cfg)` raises `NotImplementedError` immediately. No SDK
-  import, no network call, no new dependency.
+Tiingo is no longer a seam. It is implemented and is the **first source in the
+daily-price fallback chain**:
+
+    Tiingo → yfinance → Stooq (HTTP) → Stooq (headless Chromium)
+
+**Why it was promoted.** Every unauthenticated, bot-gated price source proved
+unreachable from the operator's network: Yahoo Finance is TLS-intercepted and
+answered with a middlebox `429` (a 19-byte `Too Many Requests`, far too small
+to be Yahoo's own throttle page), Stooq serves a JavaScript verification
+challenge to plain HTTP *and* to headless Chromium, and macrotrends sits
+behind Cloudflare. FRED, multpl and ALFRED — keyed or ungated — all worked
+throughout. A keyed REST API is the reliable shape.
+
+**The other three sources were demoted, not removed.** They require no API key,
+they fail fast, and they resume working the moment a network stops interfering
+with them. A unit test asserts all four remain wired and in order.
+
+- **Module:** `src/trading_crab_lib/platform/ingestion/tiingo.py`
+  - `fetch_daily_prices(tickers, start, end, *, api_key=None, cfg=None)` →
+    `dict[ticker, pd.Series]` of daily adjusted closes, tz-naive, unresampled.
+  - `fetch_prices(cfg)` — config-driven wrapper returning a wide DataFrame.
+- **Endpoint:** `GET {base_url}/{ticker}/prices?startDate=&endDate=`
+- **Credential:** `TIINGO_API_KEY` environment variable (or
+  `cfg["tiingo"]["api_key"]`). Sent **only** in an `Authorization: Token`
+  header — never as a URL query parameter, which would leak the key into proxy
+  access logs and exception messages. A central `_redact()` scrubs it from
+  every log record, including ones derived from exception text.
+- **Missing key is not a fault:** logged at INFO, returns empty, builds no
+  session and issues no request, and the chain advances to yfinance.
+- **Price field:** `adjClose` in preference to `close`, matching the
+  `auto_adjust=True` semantics the yfinance path produces. Mixing adjusted and
+  unadjusted prices would silently corrupt returns at every dividend and split.
+- **Free-tier limits are real:** requests are paced between tickers and a `429`
+  is retried with bounded exponential backoff. A non-200/non-429 (e.g. a `401`
+  from a bad key) is not retried and does not burn the budget.
+- **Config:** optional `tiingo:` section in `config/platform_settings.yaml`
+  (`base_url`, `rate_limit_seconds`, `max_retries`), read defensively.
+
+> **Not yet verified against the live API.** The adapter was built and
+> unit-tested without a Tiingo key and without network egress. Its wiring,
+> fallback ordering, credential handling and parsing are covered by mocked
+> tests; that real data returns is unconfirmed until run with a live key.
 
 ### EODHD
 
