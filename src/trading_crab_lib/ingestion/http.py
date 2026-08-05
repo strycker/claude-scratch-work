@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 try:
@@ -69,13 +70,35 @@ _CA_BUNDLE_ENV = "TC_CA_BUNDLE"
 
 
 def ca_bundle_override() -> str | None:
-    """Return the operator-supplied CA bundle path, or None when unset.
+    """Return the operator-supplied CA bundle path, or None when unusable.
 
     Empty/whitespace values are treated as unset so an exported-but-blank
-    variable cannot silently break verification.
+    variable cannot silently break verification. ``~`` is expanded and the
+    path is resolved to an absolute one — a ``.env`` cannot expand ``~`` or
+    ``$HOME`` itself, so a relative leftover would otherwise be handed to the
+    HTTP client as a CA path and fail confusingly far from its cause.
+
+    A path that does not exist is reported at WARNING and treated as unset,
+    rather than being passed through to fail deep inside the TLS stack.
     """
     value = (os.environ.get(_CA_BUNDLE_ENV) or "").strip()
-    return value or None
+    if not value:
+        return None
+
+    resolved = Path(value).expanduser()
+    if not resolved.is_absolute():
+        resolved = (Path.cwd() / resolved).resolve()
+
+    if not resolved.is_file():
+        log.warning(
+            "%s is set to %r but no such file exists (resolved to %s) — ignoring it and "
+            "falling back to the default CA behavior. Run scripts/fix_local_ca.sh and set "
+            "an ABSOLUTE path (a .env file does not expand ~ or $HOME).",
+            _CA_BUNDLE_ENV, value, resolved,
+        )
+        return None
+
+    return str(resolved)
 
 # Transport exception classes call sites should catch. Both curl_cffi's and
 # requests' RequestException subclass OSError, so OSError alone is a safe

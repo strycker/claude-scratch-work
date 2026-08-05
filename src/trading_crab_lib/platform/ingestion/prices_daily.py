@@ -35,6 +35,7 @@ import pandas as pd
 from trading_crab_lib.ingestion.assets import _ssl_bypass_curl_session
 from trading_crab_lib.ingestion.browser import fetch_stooq_csvs, playwright_available
 from trading_crab_lib.ingestion.http import HTTP_ERRORS, browser_session, http_get
+from trading_crab_lib.platform.ingestion.tiingo import fetch_daily_prices
 
 try:
     import yfinance as yf  # type: ignore[import]
@@ -209,6 +210,26 @@ def _batch_yfinance_daily(
     return results
 
 
+# ── Tiingo (keyed, first in the chain) ──────────────────────────────────────
+
+def _batch_tiingo_daily(
+    tickers: list[str], start: str, end: str, cfg: dict[str, Any] | None = None
+) -> dict[str, pd.Series]:
+    """Fetch the universe from Tiingo, degrading to ``{}`` on any failure.
+
+    A thin wrapper giving Tiingo the same patchable shape as
+    :func:`_batch_yfinance_daily` and :func:`_batch_stooq_daily`, and — via the
+    broad catch — guaranteeing that the newest source in the chain can never be
+    the thing that breaks price ingestion. Returns ``{}`` when no API key is
+    configured, which simply advances the chain to yfinance.
+    """
+    try:
+        return fetch_daily_prices(tickers, start, end, cfg=cfg)
+    except Exception as exc:  # noqa: BLE001 — a new source must never break ingestion
+        log.warning("Tiingo daily fetch failed: %s", exc)
+        return {}
+
+
 # ── Stooq daily fallback (no API key; used when yfinance yields nothing) ─────
 
 def _parse_stooq_csv(ticker: str, text: str) -> pd.Series | None:
@@ -378,8 +399,16 @@ def fetch_universe_prices(cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFra
         len(tickers), start, end, ", ".join(tickers),
     )
 
-    session = _ssl_bypass_curl_session()
-    results = _batch_yfinance_daily(tickers, start, end, session=session)
+    # Source order: Tiingo -> yfinance -> Stooq HTTP -> Stooq headless browser.
+    # Tiingo leads because it is the only keyed source here, and keyed APIs are
+    # what still work on networks that block bot-gated ones. The other three are
+    # DEMOTED, never removed: they need no API key, they fail fast, and they
+    # come back into play the moment a network stops interfering with them.
+    results = _batch_tiingo_daily(tickers, start, end, cfg=cfg)
+
+    if not results:
+        session = _ssl_bypass_curl_session()
+        results = _batch_yfinance_daily(tickers, start, end, session=session)
 
     if not results:
         log.warning("yfinance universe fetch returned nothing (rate-limit/block?) — trying Stooq daily fallback ...")
@@ -387,9 +416,10 @@ def fetch_universe_prices(cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFra
 
     if not results:
         log.warning(
-            "All universe price fetches failed (yfinance + Stooq) — degrading to empty/NaN frame. "
-            "Both sources are commonly blocked on datacenter / VPN IPs; retry from a residential "
-            "connection or wait out the yfinance rate-limit."
+            "All universe price fetches failed (Tiingo + yfinance + Stooq) — degrading to empty/NaN "
+            "frame. The unkeyed sources are commonly blocked by bot checks or TLS interception; the "
+            "most reliable remedy is a free Tiingo API key in TIINGO_API_KEY (https://www.tiingo.com). "
+            "Otherwise retry from a different network."
         )
         empty = pd.DataFrame()
         return empty, empty

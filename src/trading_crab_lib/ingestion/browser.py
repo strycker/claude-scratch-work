@@ -76,7 +76,15 @@ _CHROMIUM_PATH_ENV = "TC_CHROMIUM_PATH"
 
 _NAV_TIMEOUT_MS = 30_000
 _REQUEST_TIMEOUT_MS = 30_000
-_DOWNLOAD_TIMEOUT_MS = 30_000
+# Short on purpose. A CSV attachment either starts arriving immediately or is
+# not coming at all, and this timeout is paid PER TICKER — at 30s across a
+# 22-ticker universe a blocked run burned ~11 minutes before giving up.
+_DOWNLOAD_TIMEOUT_MS = 8_000
+
+# Stooq blocks all-or-nothing. If the first few tickers come back as something
+# other than CSV, the rest will too — bail instead of grinding through the
+# whole universe collecting the same challenge page.
+_ABORT_AFTER_CONSECUTIVE_NON_CSV = 3
 
 # Cheap reduction of the automation signature on the navigation path we now
 # depend on. NOTE: these did NOT lift the "Access denied" the request API
@@ -102,11 +110,18 @@ def _fetch_one_via_download(page: Any, url: str) -> str | None:
     raise is EXPECTED and is swallowed deliberately — the download itself is
     the payload. Returns None if no download materialises in time.
     """
-    with page.expect_download(timeout=_DOWNLOAD_TIMEOUT_MS) as download_info:
-        with contextlib.suppress(PlaywrightError):
-            page.goto(url, timeout=_NAV_TIMEOUT_MS)
+    try:
+        with page.expect_download(timeout=_DOWNLOAD_TIMEOUT_MS) as download_info:
+            with contextlib.suppress(PlaywrightError):
+                page.goto(url, timeout=_NAV_TIMEOUT_MS)
+        download = download_info.value
+    except PlaywrightError as exc:
+        # expect_download RAISES when no download arrives. That must return
+        # None so the in-page fetch fallback still gets its turn — letting it
+        # propagate would skip the fallback entirely for this ticker.
+        log.debug("No download event for %s (%s)", url, str(exc)[:80])
+        return None
 
-    download = download_info.value
     path = download.path()
     if path is None:
         return None
@@ -187,6 +202,7 @@ def fetch_stooq_csvs(
                 page.goto(warmup_url, timeout=_NAV_TIMEOUT_MS)
                 page.wait_for_timeout(_CHALLENGE_SETTLE_MS)
 
+                consecutive_non_csv = 0
                 for i, (ticker, url) in enumerate(urls.items()):
                     if i > 0:
                         time.sleep(rate_limit_seconds)
@@ -201,7 +217,22 @@ def fetch_stooq_csvs(
                         results[ticker] = text
                     except Exception as exc:  # noqa: BLE001 — one bad ticker must not abort the batch
                         log.warning("Stooq browser fetch failed for %s: %s", ticker, exc)
-                        continue
+                        text = None
+
+                    # Cheap local look — the authoritative guard stays the single
+                    # shared _parse_stooq_csv in the caller. This only decides
+                    # whether continuing is worth the wall-clock.
+                    if text and text.lstrip().lower().startswith("date,"):
+                        consecutive_non_csv = 0
+                    else:
+                        consecutive_non_csv += 1
+                        if consecutive_non_csv >= _ABORT_AFTER_CONSECUTIVE_NON_CSV:
+                            log.warning(
+                                "Stooq returned non-CSV for %d consecutive tickers — abandoning the "
+                                "browser path rather than working through the remaining %d.",
+                                consecutive_non_csv, len(urls) - i - 1,
+                            )
+                            break
             finally:
                 # Must survive a mid-batch failure — this is the only reason
                 # the try/finally exists; do not collapse it.

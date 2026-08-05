@@ -6,6 +6,7 @@ All network access is mocked — no real HTTP calls are made.
 from __future__ import annotations
 
 import inspect
+import logging
 
 import requests
 
@@ -207,21 +208,46 @@ def test_ca_bundle_override_treats_blank_as_unset(monkeypatch):
     assert http.ca_bundle_override() is None
 
 
-def test_browser_session_verifies_against_ca_bundle_when_set(monkeypatch):
-    monkeypatch.setenv("TC_CA_BUNDLE", "/etc/ssl/combined.pem")
+def test_browser_session_verifies_against_ca_bundle_when_set(monkeypatch, tmp_path):
+    bundle = tmp_path / "combined.pem"
+    bundle.write_text("-----BEGIN CERTIFICATE-----\n")
+    monkeypatch.setenv("TC_CA_BUNDLE", str(bundle))
     fake_curl = _FakeCurlModule()
     monkeypatch.setattr(http, "_curl_requests", fake_curl)
     monkeypatch.setattr(http, "_CURL_CFFI_AVAILABLE", True)
 
     http.browser_session()
 
-    assert fake_curl.calls[0]["verify"] == "/etc/ssl/combined.pem"
+    assert fake_curl.calls[0]["verify"] == str(bundle)
 
 
-def test_browser_session_explicit_verify_false_is_not_overridden(monkeypatch):
+def test_ca_bundle_override_ignores_a_path_that_does_not_exist(monkeypatch, caplog):
+    """The live run set a RELATIVE path (a .env cannot expand ~ or $HOME) and it
+    was handed straight to curl_cffi, failing deep in the TLS stack instead of
+    at its cause."""
+    monkeypatch.setenv("TC_CA_BUNDLE", "/nonexistent/combined.pem")
+    with caplog.at_level(logging.WARNING):
+        assert http.ca_bundle_override() is None
+    assert any("no such file exists" in rec.message for rec in caplog.records)
+
+
+def test_ca_bundle_override_expands_user_home(monkeypatch, tmp_path):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    bundle = fake_home / ".trading-crab-ca.pem"
+    bundle.write_text("-----BEGIN CERTIFICATE-----\n")
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("TC_CA_BUNDLE", "~/.trading-crab-ca.pem")
+
+    assert http.ca_bundle_override() == str(bundle)
+
+
+def test_browser_session_explicit_verify_false_is_not_overridden(monkeypatch, tmp_path):
     """An explicit opt-out stays an opt-out — the bundle upgrades the default,
     it does not re-enable verification a caller deliberately disabled."""
-    monkeypatch.setenv("TC_CA_BUNDLE", "/etc/ssl/combined.pem")
+    bundle = tmp_path / "combined.pem"
+    bundle.write_text("-----BEGIN CERTIFICATE-----\n")
+    monkeypatch.setenv("TC_CA_BUNDLE", str(bundle))
     fake_curl = _FakeCurlModule()
     monkeypatch.setattr(http, "_curl_requests", fake_curl)
     monkeypatch.setattr(http, "_CURL_CFFI_AVAILABLE", True)

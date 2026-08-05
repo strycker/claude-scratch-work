@@ -278,15 +278,26 @@ paid_providers:
   - name:   tiingo
     module: tiingo.py
     note: >
-      REST API, EOD + some intraday, equities/ETFs/mutual funds/forex/crypto,
-      free tier for basic EOD. Stub module raises NotImplementedError; no live
-      integration in v1.
+      LIVE as of 2026-08-05 — no longer a stub. REST API, EOD, free tier for
+      basic EOD. First source in the daily-price fallback chain, ahead of
+      yfinance and both Stooq paths, because it is the only keyed price source
+      and keyed APIs are what survive networks that block bot-gated ones.
+      Requires TIINGO_API_KEY; skipped at INFO when unset.
   - name:   eodhd
     module: eodhd.py
     note: >
       REST API, 60+ exchanges, 150K+ tickers, fundamentals/options/news
       add-ons. Stub module raises NotImplementedError; no live integration
       in v1.
+
+# ── Tiingo (DATA-06) — live daily price adapter, first in the price chain ────
+# Optional section, read defensively via cfg.get("tiingo", {}). The API key is
+# NOT stored here — it comes from the TIINGO_API_KEY environment variable so it
+# never lands in a committed file.
+tiingo:
+  base_url: "https://api.tiingo.com/tiingo/daily"
+  rate_limit_seconds: 1.0   # free tier carries hourly/daily request caps
+  max_retries: 3            # bounded backoff on HTTP 429
 
 # ── Allocation (L4-01) — naive vol-targeted regime-tilt with hysteresis ──────
 # Read defensively via cfg.get("allocation", {}) everywhere; not added to

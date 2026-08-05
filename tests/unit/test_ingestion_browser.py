@@ -339,3 +339,64 @@ def test_fetch_stooq_csvs_omits_executable_path_key_when_env_unset(mock_sync_pw,
 
     _, kwargs = pw_obj.chromium.launch.call_args
     assert "executable_path" not in kwargs
+
+
+# ── regressions from the 2026-08-05 live run ────────────────────────────────
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.time.sleep")
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_download_timeout_still_falls_back_to_in_page_fetch(mock_sync_pw, mock_sleep):
+    """expect_download RAISES on timeout. If that propagates, the in-page fetch
+    fallback is skipped entirely — which is what happened on the live run."""
+    urls = {"SPY": "https://stooq.com/q/d/l/?s=spy.us"}
+    page = _FakePage({}, fetch_behavior={urls["SPY"]: "date,close\nvia-fetch"})
+
+    def _expect_download_timeout(timeout=None):
+        raise browser_mod.PlaywrightError('Timeout 8000ms exceeded while waiting for event "download"')
+
+    page.expect_download = _expect_download_timeout  # type: ignore[method-assign]
+    pw_cm, _pw, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    out = browser_mod.fetch_stooq_csvs(urls)
+
+    assert out == {"SPY": "date,close\nvia-fetch"}
+    assert page.evaluate_urls == [urls["SPY"]]
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.time.sleep")
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_abandons_browser_path_after_consecutive_non_csv(mock_sync_pw, mock_sleep):
+    """Stooq blocks all-or-nothing — do not spend a per-ticker timeout on all
+    22 collecting the same challenge page."""
+    urls = {f"T{i}": f"https://stooq.com/q/d/l/?s=t{i}.us" for i in range(10)}
+    challenge = "<!DOCTYPE html><html><head>challenge"
+    page = _FakePage({u: challenge for u in urls.values()})
+    pw_cm, _pw, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    browser_mod.fetch_stooq_csvs(urls)
+
+    assert page.expect_download_count == browser_mod._ABORT_AFTER_CONSECUTIVE_NON_CSV
+    assert page.expect_download_count < len(urls)
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.time.sleep")
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_valid_csv_resets_the_consecutive_non_csv_counter(mock_sync_pw, mock_sleep):
+    """A single bad ticker in the middle must not abort an otherwise fine run."""
+    urls = {f"T{i}": f"https://stooq.com/q/d/l/?s=t{i}.us" for i in range(6)}
+    behavior = {u: "date,close\nok" for u in urls.values()}
+    behavior[urls["T2"]] = "<!DOCTYPE html>nope"
+    page = _FakePage(behavior)
+    pw_cm, _pw, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    out = browser_mod.fetch_stooq_csvs(urls)
+
+    assert page.expect_download_count == len(urls)
+    assert len(out) == len(urls)
