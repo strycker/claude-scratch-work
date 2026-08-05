@@ -158,6 +158,26 @@ Recent decisions affecting current work:
   impersonation defeats the bot check. Run the `<human-check>` in `260805-570-PLAN.md`
   Task 1 on a residential connection before trusting this source.
 
+- **Macrotrends: headless-browser fallback now wired at both call sites (quick task
+  260805-r7w). A residential-connection diagnostic (2026-08-05) confirmed a real headless
+  browser DOES reach the live macrotrends page (HTTP 200, real rendered content, no
+  interstitial) — the browser-reachability half of this fallback is no longer speculative.
+  BUT the same diagnostic found the embedded-JSON regex (`_DATA_PATTERN`) does NOT match on
+  the rendered page (the series lives inside a Highcharts closure, not a named `window`
+  global), so the rendered HTML falls through to the `pandas.read_html` table path, not the
+  JSON path. The page's only `<table>` has no distinguishing class (`historical_data_table`,
+  assumed from a third-party snippet, does NOT exist — the real class is plain `"table"`), and
+  its header cell text can be a squashed multi-line label (e.g. "Gold PricesMonthly Closing
+  Price"). `BROWSER_WAIT_SELECTOR = "table"` is that unconfirmed candidate selector and is
+  used ONLY with `require_selector=False` for exactly this reason. Column detection in
+  `_scrape_series_html_table` / `_scrape_macrotrends_html_table_monthly` was extended to match
+  a "month"-titled date column (with a value/date collision guard, since a squashed header
+  containing "Monthly" also matches the substring "month"). What this diagnostic does NOT
+  confirm: whether the end-to-end parse of a REAL macrotrends series (not the synthetic test
+  fixtures in this task) produces correct data — that remains untested against the live site
+  from this container (all egress here is proxy-reset). Run the `<human-check>` in
+  `260805-r7w-PLAN.md` Task 3 to confirm the full chain end-to-end.**
+
 - **Stooq: TLS impersonation confirmed insufficient; headless-Chromium fallback now wired,
   also NOT live-verified** (quick task 260805-jt2, superseding the 260805-570 Stooq
   finding). On a residential connection, `impersonate="chrome"` and `impersonate="safari"`
@@ -178,6 +198,7 @@ Recent decisions affecting current work:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260805-570 | fix stooq and macrotrends bot-blocking, ALFRED vintage schema, build guard, yfinance rate-limit | 2026-08-05 | e98f1f0 | [260805-570-fix-stooq-and-macrotrends-bot-blocking-a](./quick/260805-570-fix-stooq-and-macrotrends-bot-blocking-a/) |
+| 260805-r7w | generalize browser.py to fetch_page_html/fetch_urls_as_text, add Selenium as a second engine, route macrotrends through the browser fallback at both call sites | 2026-08-05 | (see directory) | [260805-r7w-generalize-browser-module-and-add-seleni](./quick/260805-r7w-generalize-browser-module-and-add-seleni/) |
 
 ## Deferred Items
 
