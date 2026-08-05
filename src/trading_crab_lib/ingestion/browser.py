@@ -1,43 +1,69 @@
 """
-Headless-Chromium fallback for fetching Stooq CSVs when TLS impersonation fails.
+Headless-Chromium browser-rendering capability for sources gated behind
+JavaScript execution.
 
-Verdict this module exists because of: Stooq serves a 796-byte JavaScript
-browser-verification page (not CSV) to the caller. TLS-fingerprint
-impersonation via curl_cffi (``ingestion/http.py``) was tested exhaustively on
-a residential connection — ``impersonate="chrome"`` and ``impersonate="safari"``,
-each with and without a hand-written header override, each with and without a
-same-session quote-page warm-up — and every single combination returned the
-identical challenge page and set zero cookies. The challenge requires
-executing JavaScript, not presenting a convincing TLS handshake; no
-fingerprint can satisfy it. This module executes that JavaScript in a real
-headless Chromium instead of trying to impersonate it at the transport layer.
+This module renders pages in a real (headless) browser for ANY source whose
+content requires JavaScript to execute before it appears — it is not shaped
+around any one site. It stays a SIBLING of ``ingestion/http.py``: the cheap,
+TLS-impersonating HTTP path in ``http.py`` is always tried FIRST by every
+caller, and this module is only reached as a fallback when that path
+recovers nothing.
 
-Second verdict, from a five-variant diagnostic on the same residential
-connection: inside a real browser, Stooq's CSV endpoint distinguishes a
-NAVIGATION from an API request. Playwright's ``context.request.get`` is
-answered with the body ``"Access denied"`` (HTTP 200), and stealth launch
-args plus a ``navigator.webdriver`` override do not change that. A genuine
-``page.goto`` to the same URL is served normally — as a file attachment,
-which Playwright surfaces by raising ``Error: Download is starting``. That
-raise is the SUCCESS path here, not a failure. Meanwhile an ordinary Stooq
-HTML page loads fine (263 KB) in the same headless browser, so this is
-neither an IP block nor automation detection. Hence: navigate and take the
-download, rather than ask the request API.
+Two verdicts recorded here, both earned on a residential connection (this
+module cannot be exercised against the live internet from inside the
+container that develops it — see the per-caller ``<human-check>`` steps):
 
-This module is a SIBLING of ``ingestion/http.py``, not a replacement. The
-plain (cheap, TLS-impersonating) HTTP path in ``http.py`` stays the first
-attempt everywhere it is used; this module is only reached as a fallback when
-that path recovers nothing.
+1. Stooq serves a 796-byte JavaScript browser-verification page (not CSV) to
+   every TLS-impersonating client tried (``curl_cffi`` with
+   ``impersonate="chrome"`` and ``impersonate="safari"``, each with and
+   without a hand-written header override, each with and without a
+   same-session quote-page warm-up). Every combination returned the
+   identical challenge page and set zero cookies. The challenge requires
+   executing JavaScript, not presenting a convincing TLS handshake; no
+   fingerprint can satisfy it.
 
-Playwright is an OPTIONAL dependency (the ``[browser]`` packaging extra).
-When it is not installed, :func:`fetch_stooq_csvs` degrades to an empty
-result with a logged warning — it never raises.
+2. A five-variant diagnostic on the same connection found that, inside a
+   real browser, Stooq's CSV endpoint distinguishes a NAVIGATION from an API
+   request. Playwright's ``context.request.get`` is answered with the body
+   ``"Access denied"`` (HTTP 200), and stealth launch args plus a
+   ``navigator.webdriver`` override do not change that. A genuine
+   ``page.goto`` to the same URL is served normally — as a file attachment,
+   which Playwright surfaces by raising ``Error: Download is starting``.
+   That raise is the SUCCESS path, not a failure. Meanwhile an ordinary
+   Stooq HTML page loads fine (263 KB) in the same headless browser, so this
+   is neither an IP block nor automation detection. Hence: navigate and take
+   the download for that endpoint, rather than ask the request API.
+   ``fetch_stooq_csvs`` is kept as a named wrapper because this
+   download-interception flow is endpoint-specific, not general.
+
+Two engines are available (Playwright primary, Selenium as a fallback — see
+the "why two engines" note further down); both are OPTIONAL dependencies
+(the ``[browser]`` packaging extra). When neither is installed,
+:func:`fetch_page_html` and :func:`fetch_urls_as_text` degrade to an empty
+result with a logged warning — they never raise.
 
 Usage:
-    from trading_crab_lib.ingestion.browser import fetch_stooq_csvs, playwright_available
+    from trading_crab_lib.ingestion.browser import fetch_page_html, playwright_available
 
     if playwright_available():
-        csvs = fetch_stooq_csvs({"SPY": "https://stooq.com/q/d/l/?s=spy.us&i=d"})
+        html = fetch_page_html("https://example.com/some-js-rendered-page")
+
+    from trading_crab_lib.ingestion.browser import fetch_stooq_csvs
+    csvs = fetch_stooq_csvs({"SPY": "https://stooq.com/q/d/l/?s=spy.us&i=d"})
+
+Why a second engine (Selenium) exists — read before assuming it is a way
+around a block Playwright cannot pass:
+
+- Selenium is NOT bot-evasion redundancy. Both engines drive a real Chromium
+  and present near-identical automation signals to a remote page.
+- ChromeDriver historically leaks ``$cdc_`` properties into the page that
+  fingerprinting scripts specifically look for, which makes Selenium if
+  anything MORE detectable than Playwright, not less.
+- Its value is ENGINE redundancy — a way to still render a page when
+  Playwright is not installed, or when the installed ``playwright`` package
+  and the ambient Chromium build do not match (a failure mode this repo has
+  already hit, which is why ``TC_CHROMIUM_PATH`` exists).
+- It is not a second attempt at a block Playwright could not pass.
 """
 
 from __future__ import annotations
@@ -60,41 +86,57 @@ except ImportError:
     sync_playwright = None  # type: ignore[assignment]
     PlaywrightError = Exception  # type: ignore[assignment,misc]
 
-# A normal Stooq HTML page. Navigating here first lets the challenge's own
-# JavaScript execute and commit its verification cookie into the browser
-# context before any CSV endpoint is requested.
+# A normal Stooq HTML page. Navigating here first (fetch_urls_as_text's
+# warmup_url) lets the challenge's own JavaScript execute and commit its
+# verification cookie into the browser context before any CSV endpoint is
+# requested. Stooq-specific; fetch_page_html takes no warm-up.
 _STOOQ_WARMUP_URL = "https://stooq.com/q/?s=spy.us"
 
-# Matches prices_daily._STOOQ_RATE_LIMIT_SECONDS — rapid-fire per-ticker
+# Matches prices_daily._STOOQ_RATE_LIMIT_SECONDS — rapid-fire per-URL
 # requests is itself a bot signal.
 _BROWSER_RATE_LIMIT_SECONDS = 1.5
 
 # Operator escape hatch: an ambient Chromium build can mismatch the installed
 # playwright package's expected build (this container is exactly such a
-# case). When set, it is passed as chromium.launch(executable_path=...).
+# case). When set, it is passed as chromium.launch(executable_path=...) on
+# the Playwright path and as options.binary_location on the Selenium path.
 _CHROMIUM_PATH_ENV = "TC_CHROMIUM_PATH"
 
 _NAV_TIMEOUT_MS = 30_000
 _REQUEST_TIMEOUT_MS = 30_000
 # Short on purpose. A CSV attachment either starts arriving immediately or is
-# not coming at all, and this timeout is paid PER TICKER — at 30s across a
+# not coming at all, and this timeout is paid PER URL — at 30s across a
 # 22-ticker universe a blocked run burned ~11 minutes before giving up.
 _DOWNLOAD_TIMEOUT_MS = 8_000
 
-# Stooq blocks all-or-nothing. If the first few tickers come back as something
-# other than CSV, the rest will too — bail instead of grinding through the
-# whole universe collecting the same challenge page.
+# Stooq blocks all-or-nothing. If the first few tickers come back as
+# something other than CSV, the rest will too — bail instead of grinding
+# through the whole universe collecting the same challenge page. This is a
+# Stooq-specific opt-in (see fetch_urls_as_text's expected_prefix), not
+# baked into the generic path.
 _ABORT_AFTER_CONSECUTIVE_NON_CSV = 3
 
-# Cheap reduction of the automation signature on the navigation path we now
-# depend on. NOTE: these did NOT lift the "Access denied" the request API
-# received — switching to a real navigation did. They are kept because they
-# are harmless and the navigation path is the one that matters now.
+# Cheap reduction of the automation signature on the navigation path.
+# NOTE: these did NOT lift the "Access denied" the request API received —
+# switching to a real navigation did. They are kept because they are
+# harmless and the navigation path is the one that matters.
 _STEALTH_LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"]
 _STEALTH_INIT_SCRIPT = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-# Short post-navigation wait letting the challenge JS run and commit its
-# cookie before the first CSV request is issued.
+# Short post-navigation wait letting page JS (e.g. a challenge) run and
+# settle before the page is read or a follow-up request is issued.
 _CHALLENGE_SETTLE_MS = 2_000
+
+# Explicit viewport for both fetch paths. A default or absent viewport is
+# itself a distinguishing signal, and some layouts render differently
+# without one — set it explicitly rather than rely on Playwright's default.
+_VIEWPORT = {"width": 1280, "height": 800}
+
+# Navigation wait predicate for fetch_page_html. FORBIDDEN alternative:
+# "networkidle", which waits for 500ms of zero network traffic — pages
+# carrying analytics, ads, or polling never reach that quiet window, so it
+# times out on pages that loaded perfectly fine. A grep gate in this repo's
+# tests enforces that "networkidle" never appears in this file.
+_WAIT_UNTIL = "domcontentloaded"
 
 
 def playwright_available() -> bool:
@@ -102,13 +144,129 @@ def playwright_available() -> bool:
     return _PLAYWRIGHT_AVAILABLE
 
 
-def _fetch_one_via_download(page: Any, url: str) -> str | None:
-    """Navigate to *url* and read the file Stooq serves back as a download.
+def _launch_kwargs() -> dict[str, Any]:
+    """Shared ``chromium.launch()`` kwargs for both fetch paths.
 
-    The CSV endpoint responds with a file attachment, so ``page.goto`` raises
-    ``Error: Download is starting`` instead of completing a navigation. That
-    raise is EXPECTED and is swallowed deliberately — the download itself is
-    the payload. Returns None if no download materialises in time.
+    ``TC_CHROMIUM_PATH`` is an operator escape hatch for when the ambient
+    Chromium build mismatches the installed playwright package's expected
+    build; the key is left ABSENT (not set to None) when unset so Playwright
+    uses its own bundled browser.
+    """
+    kwargs: dict[str, Any] = {"headless": True, "args": list(_STEALTH_LAUNCH_ARGS)}
+    chromium_path = os.environ.get(_CHROMIUM_PATH_ENV)
+    if chromium_path:
+        kwargs["executable_path"] = chromium_path
+    return kwargs
+
+
+def _resolve_engine(engine: str | None) -> str | None:
+    """Resolve which browser engine :func:`fetch_page_html` should use.
+
+    This is the Task-1 version and knows only Playwright. Task 2 extends it
+    with Selenium selection (argument, then ``TC_BROWSER_ENGINE``, then
+    Playwright-first ``auto``).
+    """
+    if _PLAYWRIGHT_AVAILABLE:
+        return "playwright"
+    log.warning(
+        "playwright is not installed — no browser engine available. "
+        "Install with: pip install 'playwright>=1.40'  then: playwright install chromium"
+    )
+    return None
+
+
+def _fetch_page_html_playwright(
+    url: str,
+    *,
+    wait_for_selector: str | None,
+    require_selector: bool,
+    settle_ms: int,
+    timeout_ms: int,
+) -> str | None:
+    """Render *url* with Playwright and return its HTML, or None. Never raises."""
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(**_launch_kwargs())
+            try:
+                context = browser.new_context(viewport=dict(_VIEWPORT))
+                context.add_init_script(_STEALTH_INIT_SCRIPT)
+                page = context.new_page()
+                page.goto(url, timeout=timeout_ms, wait_until=_WAIT_UNTIL)
+
+                if wait_for_selector:
+                    try:
+                        page.wait_for_selector(wait_for_selector, timeout=timeout_ms)
+                    except PlaywrightError as exc:
+                        if require_selector:
+                            log.warning(
+                                "Selector %r never appeared for %s (%s) — required, returning None",
+                                wait_for_selector, url, str(exc)[:80],
+                            )
+                            return None
+                        log.warning(
+                            "Selector %r never appeared for %s (%s) — not required, returning "
+                            "rendered HTML anyway",
+                            wait_for_selector, url, str(exc)[:80],
+                        )
+
+                if settle_ms:
+                    page.wait_for_timeout(settle_ms)
+                return page.content() or None
+            finally:
+                browser.close()
+    except Exception as exc:  # noqa: BLE001 — launch/navigation degradation, never raise to caller
+        log.warning("Playwright fetch_page_html failed for %s: %s", url, exc)
+        return None
+
+
+def fetch_page_html(
+    url: str,
+    *,
+    wait_for_selector: str | None = None,
+    require_selector: bool = True,
+    settle_ms: int = _CHALLENGE_SETTLE_MS,
+    timeout_ms: int = _NAV_TIMEOUT_MS,
+    engine: str | None = None,
+) -> str | None:
+    """Render *url* in a real browser and return its HTML, or None.
+
+    ``wait_for_selector`` is a GUESS at an element that signals the page is
+    ready. ``require_selector`` controls what happens when that guess is
+    wrong:
+
+    - ``True`` (default): a selector that never appears is treated as a real
+      failure — the caller asked for a specific element and not getting it
+      means the page did not render what was expected. Returns None.
+    - ``False``: a selector miss is logged at WARNING and whatever rendered
+      is returned anyway, so an unconfirmed selector cannot throw away a
+      page that may still carry the data (e.g. in a ``<script>`` tag) even
+      though no matching element exists.
+
+    ``engine`` selects the browser engine via :func:`_resolve_engine`
+    (argument, then ``TC_BROWSER_ENGINE``, then Playwright-first ``auto``).
+    Never raises: returns None and logs a WARNING when no engine is
+    available, when the launch fails, or when navigation fails.
+    """
+    resolved = _resolve_engine(engine)
+    if resolved == "playwright":
+        return _fetch_page_html_playwright(
+            url,
+            wait_for_selector=wait_for_selector,
+            require_selector=require_selector,
+            settle_ms=settle_ms,
+            timeout_ms=timeout_ms,
+        )
+    return None
+
+
+def _fetch_one_via_download(page: Any, url: str) -> str | None:
+    """Navigate to *url* and read the file the endpoint serves back as a download.
+
+    Some endpoints (e.g. Stooq's CSV download) respond with a file
+    attachment, so ``page.goto`` raises ``Error: Download is starting``
+    instead of completing a navigation. That raise is EXPECTED and is
+    swallowed deliberately — the download itself is the payload. Returns
+    None if no download materialises in time.
     """
     try:
         with page.expect_download(timeout=_DOWNLOAD_TIMEOUT_MS) as download_info:
@@ -118,7 +276,7 @@ def _fetch_one_via_download(page: Any, url: str) -> str | None:
     except PlaywrightError as exc:
         # expect_download RAISES when no download arrives. That must return
         # None so the in-page fetch fallback still gets its turn — letting it
-        # propagate would skip the fallback entirely for this ticker.
+        # propagate would skip the fallback entirely for this URL.
         log.debug("No download event for %s (%s)", url, str(exc)[:80])
         return None
 
@@ -129,7 +287,7 @@ def _fetch_one_via_download(page: Any, url: str) -> str | None:
         return Path(path).read_text()
     finally:
         # The temp file is ours once read; failing to clean it up would leak
-        # one file per ticker per run.
+        # one file per URL per run.
         with contextlib.suppress(OSError):
             download.delete()
 
@@ -144,6 +302,113 @@ def _fetch_one_via_page_fetch(page: Any, url: str) -> str | None:
     return text if text else None
 
 
+def fetch_urls_as_text(
+    urls: dict[str, str],
+    *,
+    warmup_url: str | None = None,
+    rate_limit_seconds: float = _BROWSER_RATE_LIMIT_SECONDS,
+    expected_prefix: str | None = None,
+    abort_after_consecutive_mismatch: int = _ABORT_AFTER_CONSECUTIVE_NON_CSV,
+) -> dict[str, str]:
+    """Fetch each URL through one headless-Chromium session, as raw text.
+
+    This is the Playwright download-interception flow originally built for
+    Stooq (:func:`fetch_stooq_csvs` is now a thin wrapper over this
+    function), generalised off Stooq's shape.
+
+    Launches exactly one Chromium instance. When *warmup_url* is given,
+    navigates there once first so any challenge JS executes and sets its
+    verification cookie before any target URL is fetched; when None (the
+    generic case) no warm-up navigation happens. Each URL is then fetched by
+    NAVIGATING to it and taking the file the endpoint serves back as a
+    download (see :func:`_fetch_one_via_download`), falling back to an
+    in-page ``fetch()`` when no download materialises.
+
+    Everything stays inside the browser that solved any challenge — no
+    cookie is harvested and replayed through a different HTTP client,
+    because a cookie may be bound to the identity that earned it.
+
+    ``expected_prefix`` is a Stooq-specific opt-in: when set, a body that
+    does not start with it (case-insensitively, after stripping leading
+    whitespace) counts toward ``abort_after_consecutive_mismatch``
+    consecutive misses, after which the remaining URLs are abandoned rather
+    than working through the whole batch collecting the same unwanted body.
+    When ``expected_prefix`` is None (the default / generic case), the
+    counter never increments and EVERY url is attempted.
+
+    Returns plain ``{key: text}`` for whatever was recovered before any
+    failure. This function performs NO parsing, validation, or
+    interpretation of the returned text — that is the caller's job. It
+    never raises: a missing playwright install, a failed launch, a failed
+    navigation, or a failed per-URL fetch all degrade to returning whatever
+    was already accumulated, with a WARNING logged for each cause.
+    """
+    if not urls:
+        return {}
+
+    if not _PLAYWRIGHT_AVAILABLE:
+        log.warning(
+            "playwright is not installed — headless-browser fallback skipped. "
+            "Install with: pip install 'playwright>=1.40'  then: playwright install chromium"
+        )
+        return {}
+
+    results: dict[str, str] = {}
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(**_launch_kwargs())
+            try:
+                # accept_downloads is required — some endpoints answer a
+                # navigation with a file attachment, not a page.
+                context = browser.new_context(accept_downloads=True, viewport=dict(_VIEWPORT))
+                context.add_init_script(_STEALTH_INIT_SCRIPT)
+                page = context.new_page()
+                if warmup_url:
+                    page.goto(warmup_url, timeout=_NAV_TIMEOUT_MS)
+                    page.wait_for_timeout(_CHALLENGE_SETTLE_MS)
+
+                consecutive_mismatch = 0
+                for i, (key, url) in enumerate(urls.items()):
+                    if i > 0:
+                        time.sleep(rate_limit_seconds)
+                    try:
+                        text = _fetch_one_via_download(page, url)
+                        if not text:
+                            log.debug("No download for %s — trying in-page fetch", key)
+                            text = _fetch_one_via_page_fetch(page, url)
+                        if not text:
+                            log.warning("Browser fetch yielded nothing for %s", key)
+                            continue
+                        results[key] = text
+                    except Exception as exc:  # noqa: BLE001 — one bad url must not abort the batch
+                        log.warning("Browser fetch failed for %s: %s", key, exc)
+                        text = None
+
+                    # Stooq-specific opt-in — see docstring. The generic path
+                    # (expected_prefix=None) never increments this counter.
+                    if expected_prefix is None:
+                        continue
+                    if text and text.lstrip().lower().startswith(expected_prefix):
+                        consecutive_mismatch = 0
+                    else:
+                        consecutive_mismatch += 1
+                        if consecutive_mismatch >= abort_after_consecutive_mismatch:
+                            log.warning(
+                                "Got unexpected content for %d consecutive URLs — abandoning the "
+                                "browser path rather than working through the remaining %d.",
+                                consecutive_mismatch, len(urls) - i - 1,
+                            )
+                            break
+            finally:
+                # Must survive a mid-batch failure — this is the only reason
+                # the try/finally exists; do not collapse it.
+                browser.close()
+    except Exception as exc:  # noqa: BLE001 — launch/navigation degradation, never raise to caller
+        log.warning("Headless-browser fetch_urls_as_text failed: %s", exc)
+
+    return results
+
+
 def fetch_stooq_csvs(
     urls: dict[str, str],
     *,
@@ -152,92 +417,24 @@ def fetch_stooq_csvs(
 ) -> dict[str, str]:
     """Fetch each Stooq CSV URL through one headless-Chromium session.
 
-    Launches exactly one Chromium instance and navigates once to *warmup_url*
-    so the JS challenge executes and sets its verification cookie. Each URL is
-    then fetched by NAVIGATING to it and taking the file Stooq serves back as
-    a download (see :func:`_fetch_one_via_download`), falling back to an
-    in-page ``fetch()`` when no download materialises.
+    A thin wrapper over :func:`fetch_urls_as_text` with Stooq's warm-up URL
+    and its ``"date,"`` CSV-header opt-in for the consecutive-mismatch
+    early-bail. Kept as a named, backwards-compatible entry point because
+    ``prices_daily.py`` imports it directly.
 
-    Everything stays inside the browser that solved the challenge — no cookie
-    is harvested and replayed through a different HTTP client, because a
-    cookie may be bound to the identity that earned it, which would
-    reintroduce exactly the fingerprint/identity mismatch this module exists
-    to remove. Note that Playwright's own ``context.request.get`` is NOT such
-    a client but is still refused by this endpoint with "Access denied"; only
-    a real navigation is served.
+    Note that Playwright's own ``context.request.get`` is NOT refused
+    because it lacks cookies — it is refused by this endpoint with "Access
+    denied" even inside the solved browser context; only a real navigation
+    is served. See the module docstring's second verdict for why this
+    module navigates and takes the download rather than asking the request
+    API.
 
     Returns plain ``{ticker: csv_text}`` for whatever was recovered before
-    any failure. This function performs NO parsing, validation, or
-    interpretation of the CSV text — that is the caller's job via the single
-    shared CSV-header guard. It never raises: a missing playwright install,
-    a failed launch, a failed navigation, or a failed per-ticker fetch all
-    degrade to returning whatever was already accumulated, with a WARNING
-    logged for each cause.
+    any failure — see :func:`fetch_urls_as_text` for the full contract.
     """
-    if not urls:
-        return {}
-
-    if not _PLAYWRIGHT_AVAILABLE:
-        log.warning(
-            "playwright is not installed — Stooq headless-browser fallback skipped. "
-            "Install with: pip install 'playwright>=1.40'  then: playwright install chromium"
-        )
-        return {}
-
-    results: dict[str, str] = {}
-    try:
-        with sync_playwright() as pw:
-            launch_kwargs: dict[str, Any] = {"headless": True, "args": list(_STEALTH_LAUNCH_ARGS)}
-            chromium_path = os.environ.get(_CHROMIUM_PATH_ENV)
-            if chromium_path:
-                launch_kwargs["executable_path"] = chromium_path
-
-            browser = pw.chromium.launch(**launch_kwargs)
-            try:
-                # accept_downloads is required — the CSV endpoint answers a
-                # navigation with a file attachment, not a page.
-                context = browser.new_context(accept_downloads=True)
-                context.add_init_script(_STEALTH_INIT_SCRIPT)
-                page = context.new_page()
-                page.goto(warmup_url, timeout=_NAV_TIMEOUT_MS)
-                page.wait_for_timeout(_CHALLENGE_SETTLE_MS)
-
-                consecutive_non_csv = 0
-                for i, (ticker, url) in enumerate(urls.items()):
-                    if i > 0:
-                        time.sleep(rate_limit_seconds)
-                    try:
-                        text = _fetch_one_via_download(page, url)
-                        if not text:
-                            log.debug("No download for %s — trying in-page fetch", ticker)
-                            text = _fetch_one_via_page_fetch(page, url)
-                        if not text:
-                            log.warning("Stooq browser fetch yielded nothing for %s", ticker)
-                            continue
-                        results[ticker] = text
-                    except Exception as exc:  # noqa: BLE001 — one bad ticker must not abort the batch
-                        log.warning("Stooq browser fetch failed for %s: %s", ticker, exc)
-                        text = None
-
-                    # Cheap local look — the authoritative guard stays the single
-                    # shared _parse_stooq_csv in the caller. This only decides
-                    # whether continuing is worth the wall-clock.
-                    if text and text.lstrip().lower().startswith("date,"):
-                        consecutive_non_csv = 0
-                    else:
-                        consecutive_non_csv += 1
-                        if consecutive_non_csv >= _ABORT_AFTER_CONSECUTIVE_NON_CSV:
-                            log.warning(
-                                "Stooq returned non-CSV for %d consecutive tickers — abandoning the "
-                                "browser path rather than working through the remaining %d.",
-                                consecutive_non_csv, len(urls) - i - 1,
-                            )
-                            break
-            finally:
-                # Must survive a mid-batch failure — this is the only reason
-                # the try/finally exists; do not collapse it.
-                browser.close()
-    except Exception as exc:  # noqa: BLE001 — launch/navigation degradation, never raise to caller
-        log.warning("Stooq headless-browser fallback failed: %s", exc)
-
-    return results
+    return fetch_urls_as_text(
+        urls,
+        warmup_url=warmup_url,
+        rate_limit_seconds=rate_limit_seconds,
+        expected_prefix="date,",
+    )

@@ -400,3 +400,184 @@ def test_valid_csv_resets_the_consecutive_non_csv_counter(mock_sync_pw, mock_sle
 
     assert page.expect_download_count == len(urls)
     assert len(out) == len(urls)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Task 1 additions: fetch_page_html + fetch_urls_as_text generalization
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class _FakeHtmlPage:
+    """Fake Playwright Page for the fetch_page_html path.
+
+    Deliberately exposes goto(url, timeout=None, wait_until=None) — a wider
+    signature than _FakePage, because fetch_page_html's navigation (unlike
+    fetch_urls_as_text's) is allowed to pass wait_until.
+    """
+
+    def __init__(self, content_text: str = "<html>ok</html>", selector_raises: bool = False) -> None:
+        self._content_text = content_text
+        self._selector_raises = selector_raises
+        self.goto_calls: list[tuple[str, float | None, str | None]] = []
+        self.wait_for_selector_calls: list[tuple[str, float | None]] = []
+        self.wait_for_timeout_calls: list[float] = []
+
+    def goto(self, url: str, timeout: float | None = None, wait_until: str | None = None) -> None:
+        self.goto_calls.append((url, timeout, wait_until))
+
+    def wait_for_selector(self, selector: str, timeout: float | None = None) -> None:
+        self.wait_for_selector_calls.append((selector, timeout))
+        if self._selector_raises:
+            raise browser_mod.PlaywrightError("Timeout waiting for selector")
+
+    def wait_for_timeout(self, ms: float) -> None:
+        self.wait_for_timeout_calls.append(ms)
+
+    def content(self) -> str:
+        return self._content_text
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_page_html_returns_content_and_closes_browser(mock_sync_pw):
+    page = _FakeHtmlPage(content_text="<html>hello</html>")
+    pw_cm, pw_obj, browser_obj, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    html = browser_mod.fetch_page_html("https://example.com")
+
+    assert html == "<html>hello</html>"
+    pw_obj.chromium.launch.assert_called_once()
+    browser_obj.close.assert_called_once()
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_page_html_calls_wait_for_selector_before_content(mock_sync_pw):
+    page = _FakeHtmlPage(content_text="<html>table here</html>")
+    pw_cm, _pw, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    html = browser_mod.fetch_page_html("https://example.com", wait_for_selector="table.x")
+
+    assert html == "<html>table here</html>"
+    assert page.wait_for_selector_calls == [("table.x", browser_mod._NAV_TIMEOUT_MS)]
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_page_html_required_selector_missing_returns_none(mock_sync_pw, caplog):
+    page = _FakeHtmlPage(content_text="<html>partial</html>", selector_raises=True)
+    pw_cm, _pw, browser_obj, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    with caplog.at_level(logging.WARNING):
+        html = browser_mod.fetch_page_html("https://example.com", wait_for_selector="table.x")
+
+    assert html is None
+    browser_obj.close.assert_called_once()
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_page_html_optional_selector_missing_returns_html_anyway(mock_sync_pw, caplog):
+    page = _FakeHtmlPage(content_text="<html>partial but usable</html>", selector_raises=True)
+    pw_cm, _pw, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    with caplog.at_level(logging.WARNING):
+        html = browser_mod.fetch_page_html(
+            "https://example.com", wait_for_selector="table.x", require_selector=False
+        )
+
+    assert html == "<html>partial but usable</html>"
+    assert any("never appeared" in rec.message for rec in caplog.records)
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", False)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_page_html_no_engine_available_returns_none(mock_sync_pw, caplog):
+    with caplog.at_level(logging.WARNING):
+        html = browser_mod.fetch_page_html("https://example.com")
+
+    assert html is None
+    mock_sync_pw.assert_not_called()
+    assert any("pip install" in rec.message for rec in caplog.records)
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_page_html_launch_failure_returns_none(mock_sync_pw, caplog):
+    pw_cm = MagicMock()
+    pw_obj = MagicMock()
+    pw_cm.__enter__.return_value = pw_obj
+    pw_cm.__exit__.return_value = False
+    pw_obj.chromium.launch.side_effect = RuntimeError("boom")
+    mock_sync_pw.return_value = pw_cm
+
+    with caplog.at_level(logging.WARNING):
+        html = browser_mod.fetch_page_html("https://example.com")
+
+    assert html is None
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_page_html_sets_explicit_viewport(mock_sync_pw):
+    page = _FakeHtmlPage()
+    pw_cm, _pw, browser_obj, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    browser_mod.fetch_page_html("https://example.com")
+
+    _, kwargs = browser_obj.new_context.call_args
+    assert kwargs.get("viewport") == {"width": 1280, "height": 800}
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.time.sleep")
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_urls_as_text_sets_explicit_viewport(mock_sync_pw, mock_sleep):
+    urls = {"K": "https://example.com/k"}
+    page = _FakePage({urls["K"]: "some text"})
+    pw_cm, _pw, browser_obj, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    browser_mod.fetch_urls_as_text(urls)
+
+    _, kwargs = browser_obj.new_context.call_args
+    assert kwargs.get("viewport") == {"width": 1280, "height": 800}
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.time.sleep")
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_urls_as_text_generic_path_attempts_every_url_without_early_bail(mock_sync_pw, mock_sleep):
+    """Contrast with test_abandons_browser_path_after_consecutive_non_csv,
+    which proves the Stooq wrapper opts IN to the early-bail via
+    expected_prefix. The generic path (no expected_prefix) must not."""
+    urls = {f"K{i}": f"https://example.com/{i}" for i in range(10)}
+    unrecognised = "<!DOCTYPE html><html><head>not what we expect"
+    page = _FakePage({u: unrecognised for u in urls.values()})
+    pw_cm, _pw, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    out = browser_mod.fetch_urls_as_text(urls)
+
+    assert page.expect_download_count == len(urls)
+    assert len(out) == len(urls)
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.time.sleep")
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_fetch_urls_as_text_skips_warmup_navigation_when_warmup_url_none(mock_sync_pw, mock_sleep):
+    urls = {"K": "https://example.com/k"}
+    page = _FakePage({urls["K"]: "some text"})
+    pw_cm, _pw, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    browser_mod.fetch_urls_as_text(urls, warmup_url=None)
+
+    # Only the per-url navigation, no separate warm-up goto.
+    assert page.goto_urls == [urls["K"]]
