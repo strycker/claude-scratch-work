@@ -10,6 +10,12 @@ rather than serving it via a separate API endpoint.  This module extracts
 that JSON blob using a regex, parses it into a DataFrame, and resamples to
 quarterly frequency.
 
+macrotrends.net fronts its pages with a Cloudflare bot check (a "Just a
+moment..." interstitial returned as HTTP 403 to plain ``requests`` clients,
+detected by TLS fingerprint). Fetches go through the shared
+browser-impersonating client (``trading_crab_lib.ingestion.http``) to defeat
+that check.
+
 Rate-limited to 3 seconds per request (polite scraping).
 
 Usage:
@@ -28,13 +34,7 @@ from typing import Any
 
 import pandas as pd
 
-try:
-    import requests
-except ImportError as _err:
-    raise ImportError(
-        "requests is required for macrotrends.net scraping. "
-        "Install with: pip install 'trading-crab-lib[ingestion]'"
-    ) from _err
+from trading_crab_lib.ingestion.http import browser_session, http_get
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ def _scrape_series(
     url_path: str,
     column_name: str,
     resample_method: str,
+    session: Any = None,
 ) -> pd.Series:
     """
     Scrape a single macrotrends series and return quarterly data.
@@ -97,7 +98,7 @@ def _scrape_series(
     url = f"{base_url}{url_path}"
     log.info("Scraping macrotrends: %s → %s", column_name, url)
 
-    resp = requests.get(url, headers=HEADERS, timeout=30)
+    resp = http_get(url, session=session, headers=HEADERS, timeout=30)
     resp.raise_for_status()
 
     data = _extract_json_data(resp.text)
@@ -219,10 +220,11 @@ def fetch_all(cfg: dict[str, Any]) -> pd.DataFrame:
         series_defs = DEFAULT_SERIES
 
     frames: list[pd.Series] = []
+    session = browser_session()
 
     for column_name, url_path, resample_method in series_defs:
         try:
-            s = _scrape_series(base_url, url_path, column_name, resample_method)
+            s = _scrape_series(base_url, url_path, column_name, resample_method, session=session)
             if not s.empty:
                 frames.append(s)
                 log.info(

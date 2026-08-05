@@ -6,7 +6,7 @@ All network access is mocked — no real HTTP calls are made.
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
@@ -72,7 +72,7 @@ def test_extract_json_data_returns_none_for_no_data():
 
 # ── _scrape_series tests ─────────────────────────────────────────────────────
 
-@patch("trading_crab_lib.ingestion.macrotrends.requests.get")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
 def test_scrape_series_from_json_embed(mock_get):
     mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
 
@@ -85,7 +85,7 @@ def test_scrape_series_from_json_embed(mock_get):
     assert hasattr(s.index, "freqstr") or len(s) <= 6
 
 
-@patch("trading_crab_lib.ingestion.macrotrends.requests.get")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
 def test_scrape_series_html_table_fallback(mock_get):
     """When no embedded JSON, falls back to pandas.read_html."""
     mock_get.return_value = _FakeResponse(SAMPLE_TABLE_HTML)
@@ -96,12 +96,25 @@ def test_scrape_series_html_table_fallback(mock_get):
     assert len(s) > 0
 
 
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_scrape_series_uses_impersonating_client(mock_get):
+    mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
+
+    _scrape_series("https://www.macrotrends.net", "/1333/historical-gold-prices-100-year-chart", "gold_spot", "mean")
+
+    mock_get.assert_called_once()
+    called_url = mock_get.call_args.args[0] if mock_get.call_args.args else mock_get.call_args.kwargs.get("url")
+    assert called_url == "https://www.macrotrends.net/1333/historical-gold-prices-100-year-chart"
+
+
 # ── fetch_all tests ──────────────────────────────────────────────────────────
 
 @patch("trading_crab_lib.ingestion.macrotrends.time.sleep")
-@patch("trading_crab_lib.ingestion.macrotrends.requests.get")
-def test_fetch_all_default_series(mock_get, mock_sleep):
+@patch("trading_crab_lib.ingestion.macrotrends.browser_session")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_fetch_all_default_series(mock_get, mock_browser_session, mock_sleep):
     mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
+    mock_browser_session.return_value = MagicMock()
 
     cfg = {}  # uses DEFAULT_SERIES
     df = fetch_all(cfg)
@@ -113,9 +126,11 @@ def test_fetch_all_default_series(mock_get, mock_sleep):
 
 
 @patch("trading_crab_lib.ingestion.macrotrends.time.sleep")
-@patch("trading_crab_lib.ingestion.macrotrends.requests.get")
-def test_fetch_all_custom_config(mock_get, mock_sleep):
+@patch("trading_crab_lib.ingestion.macrotrends.browser_session")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_fetch_all_custom_config(mock_get, mock_browser_session, mock_sleep):
     mock_get.return_value = _FakeResponse(SAMPLE_PAGE_HTML)
+    mock_browser_session.return_value = MagicMock()
 
     cfg = {
         "macrotrends": {
@@ -132,9 +147,11 @@ def test_fetch_all_custom_config(mock_get, mock_sleep):
 
 
 @patch("trading_crab_lib.ingestion.macrotrends.time.sleep")
-@patch("trading_crab_lib.ingestion.macrotrends.requests.get")
-def test_fetch_all_handles_failure_gracefully(mock_get, mock_sleep):
+@patch("trading_crab_lib.ingestion.macrotrends.browser_session")
+@patch("trading_crab_lib.ingestion.macrotrends.http_get")
+def test_fetch_all_handles_failure_gracefully(mock_get, mock_browser_session, mock_sleep):
     mock_get.side_effect = Exception("Network error")
+    mock_browser_session.return_value = MagicMock()
 
     cfg = {}
     df = fetch_all(cfg)

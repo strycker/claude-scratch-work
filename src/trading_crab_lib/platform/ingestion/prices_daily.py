@@ -25,12 +25,14 @@ Usage:
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date
 from typing import Any
 
 import pandas as pd
 
 from trading_crab_lib.ingestion.assets import _ssl_bypass_curl_session
+from trading_crab_lib.ingestion.http import HTTP_ERRORS, browser_session, http_get
 
 try:
     import yfinance as yf  # type: ignore[import]
@@ -40,6 +42,9 @@ except ImportError:
     _YFINANCE_AVAILABLE = False
 
 log = logging.getLogger(__name__)
+
+# 22 rapid-fire per-ticker requests is itself a bot signal — pace Stooq fetches.
+_STOOQ_RATE_LIMIT_SECONDS = 1.5
 
 
 # ── universe ticker set ─────────────────────────────────────────────────────
@@ -147,16 +152,17 @@ def _batch_stooq_daily(
     returns a dict of ticker -> daily Close Series (successfully fetched only).
     No API key required.
 
-    Stooq serves a JavaScript anti-bot *challenge page* (not CSV) to some
-    datacenter / VPN IPs. A real CSV response begins with the ``Date,`` header;
-    anything else (an HTML challenge, an empty body, an error) is detected and
-    skipped rather than parsed as data — so this degrades cleanly to ``{}``
-    when Stooq is unreachable or challenges the caller.
+    Stooq serves a JavaScript anti-bot *challenge page* (not CSV) to plain
+    ``requests`` clients, detected by TLS fingerprint. Fetches go through the
+    shared browser-impersonating client (``ingestion.http``) to defeat that
+    check. A real CSV response begins with the ``Date,`` header; anything
+    else (an HTML challenge, an empty body, an error) is detected and skipped
+    rather than parsed as data — so this degrades cleanly to ``{}`` when
+    Stooq is unreachable or challenges the caller.
     """
-    try:
-        import requests  # noqa: PLC0415 — optional-at-call-time network dep
-    except ImportError:
-        log.warning("requests is not installed — Stooq daily fallback skipped.")
+    session = browser_session()
+    if session is None:
+        log.warning("No HTTP client available — Stooq daily fallback skipped.")
         return {}
 
     d1 = pd.Timestamp(start).strftime("%Y%m%d")
@@ -165,13 +171,16 @@ def _batch_stooq_daily(
 
     log.info("Stooq daily fallback: fetching %d tickers ...", len(tickers))
     results: dict[str, pd.Series] = {}
-    for ticker in tickers:
+    for i, ticker in enumerate(tickers):
+        if i > 0:
+            time.sleep(_STOOQ_RATE_LIMIT_SECONDS)
+
         sym = f"{ticker.lower().replace('.', '-')}.us"
         url = f"https://stooq.com/q/d/l/?s={sym}&i=d&d1={d1}&d2={d2}"
         try:
-            resp = requests.get(url, headers=headers, timeout=30)
+            resp = http_get(url, session=session, headers=headers, timeout=30)
             text = resp.text
-        except requests.RequestException as exc:  # noqa: BLE001 — network degradation
+        except HTTP_ERRORS as exc:  # noqa: BLE001 — network degradation
             log.warning("Stooq fetch failed for %s: %s", ticker, exc)
             continue
 
