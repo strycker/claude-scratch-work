@@ -32,7 +32,8 @@ avoided drawdowns — never fooled by its own backtest.
 Phase: 6 — Platform Notebook Suite
 Plan: Discussion complete — `06-CONTEXT.md` written. Ready for `/gsd-plan-phase 6`
 Status: Ready to plan
-Last activity: 2026-08-04 — Phase 6 context gathered; governing docs amended
+Last activity: 2026-08-05 — Completed quick task 260805-570: fixed Stooq/macrotrends
+bot-blocking, ALFRED vintage schema (had never worked), build guard, yfinance rate-limit
 
 ### Phase 6 discussion outcome (2026-08-04)
 
@@ -149,6 +150,19 @@ Recent decisions affecting current work:
   (Phase 1 human-verification item).~~ **RESOLVED 2026-07-23** — `FRED_API_KEY` is present
   in the environment (32-char key) and functionally verified against the live FRED API
   (authenticated GDP series fetch succeeded). No longer a blocker; do not re-flag.
+
+- **Stooq and macrotrends fixes are wiring-verified, NOT live-verified** (quick task
+  260805-570). Both now fetch through a browser-impersonating client, but the container's
+  agent proxy MITM-terminates TLS and resets curl_cffi's impersonated ClientHello, so
+  neither could be confirmed against the live sites. Unit tests prove the client is used;
+  they do NOT prove impersonation defeats the bot checks. Run the `<human-check>` in
+  `260805-570-PLAN.md` Task 1 on a residential connection before trusting either source.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260805-570 | fix stooq and macrotrends bot-blocking, ALFRED vintage schema, build guard, yfinance rate-limit | 2026-08-05 | e98f1f0 | [260805-570-fix-stooq-and-macrotrends-bot-blocking-a](./quick/260805-570-fix-stooq-and-macrotrends-bot-blocking-a/) |
 
 ## Deferred Items
 
