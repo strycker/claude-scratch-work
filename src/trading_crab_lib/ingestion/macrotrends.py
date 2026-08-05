@@ -98,7 +98,11 @@ def _scrape_series(
     url = f"{base_url}{url_path}"
     log.info("Scraping macrotrends: %s → %s", column_name, url)
 
-    resp = http_get(url, session=session, headers=HEADERS, timeout=30)
+    # No headers= here on purpose: HEADERS carries a hardcoded Chrome/120 UA
+    # that would override the impersonating client's own matched header set and
+    # reintroduce a UA/TLS-fingerprint mismatch. http_get applies browser
+    # headers itself on the plain-requests fallback path.
+    resp = http_get(url, session=session, timeout=30)
     resp.raise_for_status()
 
     data = _extract_json_data(resp.text)

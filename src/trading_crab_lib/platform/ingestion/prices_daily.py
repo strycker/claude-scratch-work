@@ -233,7 +233,6 @@ def _batch_stooq_daily(
 
     d1 = pd.Timestamp(start).strftime("%Y%m%d")
     d2 = pd.Timestamp(end).strftime("%Y%m%d")
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; trading-crab/1.0)"}
 
     log.info("Stooq daily fallback: fetching %d tickers ...", len(tickers))
     results: dict[str, pd.Series] = {}
@@ -244,7 +243,10 @@ def _batch_stooq_daily(
         sym = f"{ticker.lower().replace('.', '-')}.us"
         url = f"https://stooq.com/q/d/l/?s={sym}&i=d&d1={d1}&d2={d2}"
         try:
-            resp = http_get(url, session=session, headers=headers, timeout=30)
+            # No headers= on purpose — a self-identifying "trading-crab/1.0" UA
+            # used to override the impersonating client's Chrome header set,
+            # advertising the scraper to the very bot check we are evading.
+            resp = http_get(url, session=session, timeout=30)
             text = resp.text
         except HTTP_ERRORS as exc:  # noqa: BLE001 — network degradation
             log.warning("Stooq fetch failed for %s: %s", ticker, exc)

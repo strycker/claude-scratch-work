@@ -182,7 +182,7 @@ def test_scrape_multpl_monthly_no_datasets():
 
 
 @patch("trading_crab_lib.platform.ingestion.macro_monthly.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.macro_monthly.requests.get")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
 def test_scrape_macrotrends_monthly_month_end_indexed(mock_get, mock_sleep):
     from trading_crab_lib.platform.ingestion.macro_monthly import _scrape_macrotrends_monthly
 
@@ -199,8 +199,9 @@ def test_scrape_macrotrends_monthly_month_end_indexed(mock_get, mock_sleep):
 
 
 @patch("trading_crab_lib.platform.ingestion.macro_monthly.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.macro_monthly.requests.get")
-def test_fetch_macrotrends_monthly_all_handles_series_failure(mock_get, mock_sleep):
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.browser_session")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
+def test_fetch_macrotrends_monthly_all_handles_series_failure(mock_get, mock_session, mock_sleep):
     from trading_crab_lib.platform.ingestion.macro_monthly import _fetch_macrotrends_monthly_all
 
     mock_get.side_effect = OSError("Connection refused")
@@ -220,27 +221,27 @@ def test_fetch_macrotrends_monthly_all_handles_series_failure(mock_get, mock_sle
 
 
 @patch("trading_crab_lib.platform.ingestion.macro_monthly.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.macro_monthly.requests.get")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.browser_session")
+@patch("trading_crab_lib.platform.ingestion.macro_monthly.http_get")
+@patch("trading_crab_lib.ingestion.multpl.requests.get")
 @patch("trading_crab_lib.platform.ingestion.macro_monthly.Fred")
-def test_fetch_macro_monthly_null_tolerant_partial_success(mock_fred_cls, mock_get, mock_sleep):
+def test_fetch_macro_monthly_null_tolerant_partial_success(
+    mock_fred_cls, mock_multpl_get, mock_http_get, mock_session, mock_sleep
+):
     from trading_crab_lib.platform.ingestion.macro_monthly import fetch_macro_monthly
 
     mock_fred = MagicMock()
     mock_fred.get_series.return_value = _make_daily_fred_series(years=2)
     mock_fred_cls.return_value = mock_fred
 
-    # multpl and macrotrends both call `requests.get` through the SAME
-    # singleton `requests` module (multpl.py's `import requests` and this
-    # module's `import requests` bind the identical object) — one patch
-    # covers both call sites; discriminate by URL to fail multpl only,
-    # exercising partial-source-failure tolerance (a failed source is
-    # simply absent from the merged frame, never an error).
-    def _get_side_effect(url, **kwargs):
-        if "macrotrends" in url:
-            return _FakeResponse(SAMPLE_MACROTRENDS_JSON_HTML)
-        raise OSError("multpl unreachable")
-
-    mock_get.side_effect = _get_side_effect
+    # multpl and macrotrends no longer share a transport: macrotrends fetches
+    # through the browser-impersonating client (its Cloudflare bot check
+    # rejects a plain-requests TLS fingerprint), while multpl still uses
+    # requests. So they are patched separately now — macrotrends succeeds and
+    # multpl fails outright, exercising partial-source-failure tolerance
+    # (a failed source is simply absent from the merged frame, never an error).
+    mock_http_get.return_value = _FakeResponse(SAMPLE_MACROTRENDS_JSON_HTML)
+    mock_multpl_get.side_effect = OSError("multpl unreachable")
 
     cfg = {
         "fred_monthly": {

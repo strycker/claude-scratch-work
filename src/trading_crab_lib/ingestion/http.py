@@ -72,6 +72,27 @@ def impersonation_available() -> bool:
     return _CURL_CFFI_AVAILABLE
 
 
+def is_impersonating_session(session: Any) -> bool:
+    """Return True when *session* is a curl_cffi session presenting a browser
+    TLS fingerprint.
+
+    Used to decide whether :data:`BROWSER_HEADERS` should be applied. It must
+    NOT be applied to an impersonating session: curl_cffi already supplies a
+    complete, internally-consistent browser header set (correct ``sec-ch-ua``
+    and ``sec-fetch-*`` client hints, header ordering, and a User-Agent that
+    matches the TLS fingerprint it presents). Overriding that with a
+    hand-written subset yields a request whose fingerprint and User-Agent
+    disagree and which is missing client hints every real browser sends —
+    itself a strong bot signal, and worse than sending nothing.
+
+    Identity is checked against the curl_cffi Session class rather than
+    duck-typed, so a plain ``requests.Session`` can never be mistaken for one.
+    """
+    if not _CURL_CFFI_AVAILABLE or _curl_requests is None:
+        return False
+    return isinstance(session, _curl_requests.Session)
+
+
 def browser_session(*, impersonate: str = DEFAULT_IMPERSONATE, verify: bool = True) -> Any | None:
     """Construct a browser-impersonating HTTP session.
 
@@ -122,6 +143,13 @@ def http_get(
     Reuses *session* when supplied (preferred — avoids re-negotiating TLS per
     request); otherwise builds a one-shot session via :func:`browser_session`.
     Raises OSError if no HTTP client is available at all.
+
+    :data:`BROWSER_HEADERS` is applied ONLY on the plain-``requests`` fallback
+    path, where there is no impersonation for it to contradict. On the
+    curl_cffi path only caller-supplied *headers* are passed through, and the
+    kwarg is omitted entirely when the caller supplied none — see
+    :func:`is_impersonating_session` for why clobbering curl_cffi's own header
+    set defeats the impersonation it was chosen for.
     """
     own_session = session
     if own_session is None:
@@ -131,6 +159,13 @@ def http_get(
             "No HTTP client available (neither curl_cffi nor requests is importable) — "
             "cannot issue request to " + url
         )
+
+    if is_impersonating_session(own_session):
+        # Let curl_cffi's matched browser header set stand. Passing headers=None
+        # would still override it in some versions, so omit the kwarg outright.
+        if headers:
+            return own_session.get(url, headers=dict(headers), timeout=timeout)
+        return own_session.get(url, timeout=timeout)
 
     merged_headers = dict(BROWSER_HEADERS)
     if headers:
