@@ -238,8 +238,10 @@ whether regime timing is actually worth anything.
 ### Phase 6: Platform Notebook Suite
 
 **Goal**: Every platform layer (L0–L4) and the Phase 5 evaluation have a notebook that
-shows the data, renders the diagnostics, and ends in an explicit human sign-off cell —
-so the migration can be validated and the regime layer can actually be inspected.
+shows the data and renders the diagnostics — a **periodic verification-and-validation
+surface** (are the regimes still well-defined? is the data still behaving as historic?),
+plus **one cold-start selection gate at P3** where a human signs off on the regime
+labeling before it is trusted for live use.
 **Depends on**: Phase 5
 **Requirements**: NB-01
 **Success Criteria** (what must be TRUE):
@@ -248,8 +250,13 @@ so the migration can be validated and the regime layer can actually be inspected
      `P4_nowcaster`, `P5_assets_allocation`, `P6_backtest_evaluation`) and each runs
      top-to-bottom against real checkpoints without error.
 
-  2. Every notebook ends in an explicit human-validation cell stating what the operator
-     must confirm, with the confirmation recorded in the notebook.
+  2. `P3_regime_labeling` ends in a cold-start sign-off cell where the operator records
+     date, verdict, and reasoning for the regime labeling. The other five notebooks are
+     periodic check surfaces — they state what to look for, but carry no per-run gate.
+
+  2b. Notebooks read the full data span (including post-2020) via the explicit
+     `get_holdout_checkpoint_manager()` opt-in, so drift in the live era is visible;
+     model-fitting paths remain fenced at 2020-12 via the default dev manager.
 
   3. All plotting logic lives in `platform/plotting/` library functions called by the
      notebooks — never defined inline (ADR #11 convention, applied to the platform).

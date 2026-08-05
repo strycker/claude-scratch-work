@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Platform Notebook Suite
 status: planning
-stopped_at: "Phase 5 CLOSED 2026-08-04 (verification + deferred items reconciled). Roadmap restructured: Phase 6 = Platform Notebook Suite, Phase 7 = Migration, Phase 8 = Invariants. Ready to plan Phase 6."
+stopped_at: "Phase 6 discussion COMPLETE 2026-08-04 — 06-CONTEXT.md written (21 decisions). Honesty framing amended across PROJECT.md/ROADMAP.md/REQUIREMENTS.md: the fence is on fitting, not looking. Ready for /gsd-plan-phase 6."
 last_updated: "2026-08-04T00:00:00.000Z"
 last_activity: 2026-08-04
-last_activity_desc: Phase 5 closed; docs tidied; MIGRATION-PLAN rewritten for the platform; roadmap extended to 8 phases
+last_activity_desc: Phase 6 context gathered; notebooks reframed as periodic V&V surface with one cold-start gate at P3
 progress:
   total_phases: 8
   completed_phases: 5
@@ -30,9 +30,41 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 6 — Platform Notebook Suite
-Plan: Not started — ready for /gsd-discuss-phase 6
+Plan: Discussion complete — `06-CONTEXT.md` written. Ready for `/gsd-plan-phase 6`
 Status: Ready to plan
-Last activity: 2026-08-04 — Phase 5 closed; docs tidied; MIGRATION-PLAN rewritten
+Last activity: 2026-08-04 — Phase 6 context gathered; governing docs amended
+
+### Phase 6 discussion outcome (2026-08-04)
+
+The notebooks were reframed during discussion, and the reframe reached up into the
+project constraints:
+
+- **Purpose:** periodic verification & validation (are the regimes still well-defined?
+  is the data still behaving as historic?), **not** a per-run human gate. One cold-start
+  selection gate at `P3_regime_labeling`; the other five carry no gate.
+- **Honesty framing amended** in `PROJECT.md`: the fence is on *fitting*, not *looking*.
+  Notebooks read the full span (incl. post-2020) via the explicit
+  `get_holdout_checkpoint_manager()` opt-in — which `holdout.py` already documented as
+  the live-scoring path. Fitting stays fenced at 2020-12. Post-2020 observations that
+  change a decision are recorded with their date. The prior "firewalled from all
+  selection decisions" wording was unworkable: catching feature decay *is* a selection
+  decision informed by recent data.
+- **`ROADMAP.md` criterion 2 rewritten** (+ new 2b on the holdout opt-in) and **NB-01
+  reworded** in `REQUIREMENTS.md` to match.
+- **Scope held:** no tuning ((K,λ) sweeps stay deferred to v2 per Phase 3 D-02), no
+  report wiring, no package restructuring (Phase 7), no holdout-carve repair (separate).
+
+### ⚠ Adjacent finding — fitting is currently unfenced
+
+Verified during discussion: `data/holdout/` does not exist, the dev-tree
+`monthly_features` carries **66 post-cutoff rows** running to 2026-06, and nothing
+outside `tests/unit/test_platform_holdout.py` calls `write_monthly_features_split()` or
+`assert_dev_checkpoint_within_boundary()`. The carve is a tested mechanism that was
+never applied to built data — so `assert_dev_checkpoint_within_boundary("monthly_features")`
+would raise today, and any fit between now and the fix can train on 2021+ data.
+
+**Fix (separate, pre-Phase-6):** call the split in `scripts/build_platform_data.py` and
+assert at fitting entry points. Small, and urgent independent of Phase 6.
 
 Progress: [██████░░░░] 63% (5 of 8 phases)
 
