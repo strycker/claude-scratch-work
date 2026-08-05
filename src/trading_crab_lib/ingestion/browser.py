@@ -275,7 +275,13 @@ def _fetch_page_html_playwright(
 
                 if wait_for_selector:
                     try:
-                        page.wait_for_selector(wait_for_selector, timeout=timeout_ms)
+                        # state="attached", NOT Playwright's default "visible".
+                        # We want the element in the DOM so the HTML we return
+                        # carries it — not on screen. macrotrends' data table is
+                        # present but hidden behind a chart/table toggle, so a
+                        # visibility wait times out (30s per series) on a page
+                        # whose table was there the whole time.
+                        page.wait_for_selector(wait_for_selector, timeout=timeout_ms, state="attached")
                     except PlaywrightError as exc:
                         if require_selector:
                             log.warning(
