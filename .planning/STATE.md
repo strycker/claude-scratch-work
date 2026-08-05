@@ -151,12 +151,27 @@ Recent decisions affecting current work:
   in the environment (32-char key) and functionally verified against the live FRED API
   (authenticated GDP series fetch succeeded). No longer a blocker; do not re-flag.
 
-- **Stooq and macrotrends fixes are wiring-verified, NOT live-verified** (quick task
-  260805-570). Both now fetch through a browser-impersonating client, but the container's
-  agent proxy MITM-terminates TLS and resets curl_cffi's impersonated ClientHello, so
-  neither could be confirmed against the live sites. Unit tests prove the client is used;
-  they do NOT prove impersonation defeats the bot checks. Run the `<human-check>` in
-  `260805-570-PLAN.md` Task 1 on a residential connection before trusting either source.
+- **Macrotrends fix is wiring-verified, NOT live-verified** (quick task 260805-570). It
+  fetches through a browser-impersonating client, but the container's agent proxy
+  MITM-terminates TLS and resets curl_cffi's impersonated ClientHello, so it could not be
+  confirmed against the live site. Unit tests prove the client is used; they do NOT prove
+  impersonation defeats the bot check. Run the `<human-check>` in `260805-570-PLAN.md`
+  Task 1 on a residential connection before trusting this source.
+
+- **Stooq: TLS impersonation confirmed insufficient; headless-Chromium fallback now wired,
+  also NOT live-verified** (quick task 260805-jt2, superseding the 260805-570 Stooq
+  finding). On a residential connection, `impersonate="chrome"` and `impersonate="safari"`
+  — each with and without a hand-written header override, each with and without a
+  same-session quote-page warm-up — ALL returned the identical 796-byte JavaScript
+  browser-verification challenge page and set zero cookies. The challenge requires
+  executing JavaScript; no TLS fingerprint can satisfy it. A headless-Chromium challenge
+  solver (`ingestion/browser.py`) is now wired as the Stooq fallback behind the optional
+  `[browser]` packaging extra, tried only when the plain HTTP path recovers zero tickers.
+  This browser path is wiring-verified by mocked unit tests ONLY — it has NOT been
+  confirmed against the live site, because all container egress is reset by the agent
+  proxy (Chromium launches here, but even `https://example.com` returns
+  `net::ERR_CONNECTION_RESET`). Run the `<human-check>` in `260805-jt2-PLAN.md` Task 3 on
+  a residential machine to find out whether it defeats the challenge.
 
 ### Quick Tasks Completed
 

@@ -37,6 +37,34 @@ class _RecordingSession:
         return "response"
 
 
+_NOT_PASSED = object()
+
+
+class _RecordingCurlSession:
+    """Stands in for a real curl_cffi Session.
+
+    Records whether ``headers`` was passed at all — distinguishing "omitted"
+    from "passed as None" matters, because only omitting it leaves curl_cffi's
+    own impersonated header set untouched.
+    """
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.calls: list[tuple] = []
+
+    def get(self, url, headers=_NOT_PASSED, timeout=None):
+        self.calls.append((url, headers, timeout))
+        return "response"
+
+
+class _ClassBasedCurlModule:
+    """curl_cffi stand-in whose ``Session`` is a real class, so
+    ``isinstance(session, module.Session)`` works as it does for the genuine
+    module."""
+
+    Session = _RecordingCurlSession
+
+
 # ── browser_session ─────────────────────────────────────────────────────────
 
 
@@ -105,3 +133,60 @@ def test_module_does_not_import_the_ssl_bypass_factory():
     assert "from trading_crab_lib.ingestion.assets" not in src
     assert "from trading_crab_lib.ingestion import assets" not in src
     assert "_ssl_bypass_curl_session" not in src
+
+
+# ── header handling: impersonating path vs plain-requests fallback ──────────
+
+
+def _impersonating(monkeypatch):
+    """Point http at the class-based curl_cffi stand-in and return a session."""
+    monkeypatch.setattr(http, "_curl_requests", _ClassBasedCurlModule())
+    monkeypatch.setattr(http, "_CURL_CFFI_AVAILABLE", True)
+    return _RecordingCurlSession()
+
+
+def test_is_impersonating_session_true_for_curl_session(monkeypatch):
+    session = _impersonating(monkeypatch)
+    assert http.is_impersonating_session(session) is True
+
+
+def test_is_impersonating_session_false_for_plain_requests_session(monkeypatch):
+    _impersonating(monkeypatch)
+    assert http.is_impersonating_session(requests.Session()) is False
+
+
+def test_http_get_does_not_clobber_impersonated_headers(monkeypatch):
+    """BROWSER_HEADERS must NOT be applied to a curl_cffi session — doing so
+    replaces its matched Chrome header set with a hand-written subset, leaving
+    the User-Agent disagreeing with the TLS fingerprint."""
+    session = _impersonating(monkeypatch)
+
+    http.http_get("https://stooq.com/q/d/l/?s=spy.us&i=d", session=session)
+
+    assert len(session.calls) == 1
+    _url, headers, _timeout = session.calls[0]
+    # headers was omitted entirely, not passed as None or as BROWSER_HEADERS.
+    assert headers is _NOT_PASSED
+
+
+def test_http_get_passes_only_caller_headers_on_impersonating_path(monkeypatch):
+    session = _impersonating(monkeypatch)
+
+    http.http_get("https://example.com/x", session=session, headers={"X-Test": "1"})
+
+    _url, headers, _timeout = session.calls[0]
+    assert headers == {"X-Test": "1"}
+    # No BROWSER_HEADERS keys leaked in alongside the caller's.
+    assert "User-Agent" not in headers
+
+
+def test_http_get_applies_browser_headers_on_plain_requests_fallback(monkeypatch):
+    """Regression guard (passes before and after): the fallback path has no
+    impersonation to contradict, so it still needs browser-like headers."""
+    _impersonating(monkeypatch)
+    session = _RecordingSession()
+
+    http.http_get("https://example.com/x", session=session)
+
+    _url, headers, _timeout = session.calls[0]
+    assert headers["User-Agent"] == http.BROWSER_HEADERS["User-Agent"]

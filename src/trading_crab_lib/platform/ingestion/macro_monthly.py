@@ -51,15 +51,8 @@ except ImportError as _err:
         "Install with: pip install 'trading-crab-lib[ingestion]'"
     ) from _err
 
-try:
-    import requests
-except ImportError as _err:
-    raise ImportError(
-        "requests is required for multpl.com/macrotrends.net scraping. "
-        "Install with: pip install 'trading-crab-lib[ingestion]'"
-    ) from _err
-
 from trading_crab_lib.ingestion import macrotrends, multpl
+from trading_crab_lib.ingestion.http import browser_session, http_get
 
 log = logging.getLogger(__name__)
 
@@ -279,6 +272,7 @@ def _scrape_macrotrends_monthly(
     path: str,
     column_name: str,
     resample_method: str,
+    session: Any = None,
 ) -> pd.Series:
     """
     Scrape a single macrotrends series at monthly cadence.
@@ -289,11 +283,22 @@ def _scrape_macrotrends_monthly(
     incumbent's ``_scrape_series``/``_scrape_series_html_table`` bake in a
     hardcoded quarterly resample that must stay frozen (D-01) — this analog
     resamples to ``"ME"`` instead.
+
+    Fetches through ``ingestion/http.py``'s browser-impersonating client, not
+    plain ``requests``: macrotrends fronts its pages with a Cloudflare bot
+    check that answers a plain-``requests`` TLS fingerprint with an
+    interstitial. That interstitial carries no ``<table>`` and no embedded
+    JSON, so it surfaces here as a "No tables found" parse failure rather
+    than as an HTTP error — the request succeeded, the page just was not the
+    data. *session* is threaded in by the caller so one impersonating session
+    is reused across every series.
     """
     url = f"{base_url}{path}"
     log.info("Scraping macrotrends (monthly): %s → %s", column_name, url)
 
-    resp = requests.get(url, headers=macrotrends.HEADERS, timeout=30)
+    # No headers= — macrotrends.HEADERS carries a hardcoded Chrome/120 UA that
+    # would override the impersonating client's own matched header set.
+    resp = http_get(url, session=session, timeout=30)
     resp.raise_for_status()
 
     data = macrotrends._extract_json_data(resp.text)
@@ -354,13 +359,17 @@ def _fetch_macrotrends_monthly_all(cfg: dict[str, Any]) -> dict[str, pd.Series]:
     base_url = mt_cfg.get("base_url", "https://www.macrotrends.net")
     series_list_cfg = mt_cfg.get("series", [])
 
+    # One impersonating session reused across every series (see
+    # _scrape_macrotrends_monthly for why plain requests is bot-blocked here).
+    session = browser_session()
+
     results: dict[str, pd.Series] = {}
     for entry in series_list_cfg:
         name = entry["name"]
         path = entry["path"]
         resample_method = entry.get("resample", "mean")
         try:
-            s = _scrape_macrotrends_monthly(base_url, path, name, resample_method)
+            s = _scrape_macrotrends_monthly(base_url, path, name, resample_method, session=session)
             if not s.empty:
                 results[name] = s
         except Exception as exc:  # noqa: BLE001 — network libraries raise various types

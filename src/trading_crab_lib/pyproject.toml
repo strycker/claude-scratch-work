@@ -70,8 +70,14 @@ clustering-extras = [
 boosting = [
     "lightgbm>=4.0",
 ]
+# Headless-Chromium Stooq CSV fetcher (ingestion/browser.py). The wheel ships
+# no browser binaries — an operator additionally runs
+# `playwright install chromium` once after installing this extra.
+browser = [
+    "playwright>=1.40",
+]
 all = [
-    "trading-crab-lib[ingestion,plotting,hmm,clustering-extras,boosting]",
+    "trading-crab-lib[ingestion,plotting,hmm,clustering-extras,boosting,browser]",
 ]
 dev = [
     "pytest>=8.0",
@@ -151,6 +157,12 @@ optional = true
 
 [tool.poetry.group.boosting.dependencies]
 lightgbm = ">=4.0"
+
+[tool.poetry.group.browser]
+optional = true
+
+[tool.poetry.group.browser.dependencies]
+playwright = ">=1.40"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
