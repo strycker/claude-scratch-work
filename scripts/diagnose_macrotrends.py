@@ -43,10 +43,17 @@ def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch(**launch)
         try:
-            context = browser.new_context()
+            # A real viewport — headless defaults to something small, and an odd
+            # viewport is itself a cheap bot signal.
+            context = browser.new_context(viewport={"width": 1280, "height": 800})
             context.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
             page = context.new_page()
-            resp = page.goto(URL, wait_until="networkidle", timeout=60000)
+            # NOT networkidle: it waits for 500ms of zero network traffic, which a
+            # page with analytics/ads/polling never reaches — it times out even
+            # when the page loaded perfectly. domcontentloaded is the reliable
+            # signal; give the chart JS a moment afterwards to populate.
+            resp = page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(4000)
             html = page.content()
 
             print("=" * 62)
@@ -109,7 +116,8 @@ def main() -> int:
             hits: list[str] = []
             page.on("response", lambda r: hits.append(f"{r.status} {r.url}")
                     if any(s in r.url for s in (".php", ".json", ".csv", "/api/", "assets")) else None)
-            page.goto(URL, wait_until="networkidle", timeout=60000)
+            page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(4000)
             for h in hits[:25]:
                 print(f"    {h}")
 
