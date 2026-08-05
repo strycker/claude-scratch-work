@@ -12,6 +12,18 @@ executing JavaScript, not presenting a convincing TLS handshake; no
 fingerprint can satisfy it. This module executes that JavaScript in a real
 headless Chromium instead of trying to impersonate it at the transport layer.
 
+Second verdict, from a five-variant diagnostic on the same residential
+connection: inside a real browser, Stooq's CSV endpoint distinguishes a
+NAVIGATION from an API request. Playwright's ``context.request.get`` is
+answered with the body ``"Access denied"`` (HTTP 200), and stealth launch
+args plus a ``navigator.webdriver`` override do not change that. A genuine
+``page.goto`` to the same URL is served normally — as a file attachment,
+which Playwright surfaces by raising ``Error: Download is starting``. That
+raise is the SUCCESS path here, not a failure. Meanwhile an ordinary Stooq
+HTML page loads fine (263 KB) in the same headless browser, so this is
+neither an IP block nor automation detection. Hence: navigate and take the
+download, rather than ask the request API.
+
 This module is a SIBLING of ``ingestion/http.py``, not a replacement. The
 plain (cheap, TLS-impersonating) HTTP path in ``http.py`` stays the first
 attempt everywhere it is used; this module is only reached as a fallback when
@@ -30,19 +42,23 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
 _PLAYWRIGHT_AVAILABLE = False
 try:
+    from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import sync_playwright
     _PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     sync_playwright = None  # type: ignore[assignment]
+    PlaywrightError = Exception  # type: ignore[assignment,misc]
 
 # A normal Stooq HTML page. Navigating here first lets the challenge's own
 # JavaScript execute and commit its verification cookie into the browser
@@ -60,6 +76,14 @@ _CHROMIUM_PATH_ENV = "TC_CHROMIUM_PATH"
 
 _NAV_TIMEOUT_MS = 30_000
 _REQUEST_TIMEOUT_MS = 30_000
+_DOWNLOAD_TIMEOUT_MS = 30_000
+
+# Cheap reduction of the automation signature on the navigation path we now
+# depend on. NOTE: these did NOT lift the "Access denied" the request API
+# received — switching to a real navigation did. They are kept because they
+# are harmless and the navigation path is the one that matters now.
+_STEALTH_LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"]
+_STEALTH_INIT_SCRIPT = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
 # Short post-navigation wait letting the challenge JS run and commit its
 # cookie before the first CSV request is issued.
 _CHALLENGE_SETTLE_MS = 2_000
@@ -70,6 +94,41 @@ def playwright_available() -> bool:
     return _PLAYWRIGHT_AVAILABLE
 
 
+def _fetch_one_via_download(page: Any, url: str) -> str | None:
+    """Navigate to *url* and read the file Stooq serves back as a download.
+
+    The CSV endpoint responds with a file attachment, so ``page.goto`` raises
+    ``Error: Download is starting`` instead of completing a navigation. That
+    raise is EXPECTED and is swallowed deliberately — the download itself is
+    the payload. Returns None if no download materialises in time.
+    """
+    with page.expect_download(timeout=_DOWNLOAD_TIMEOUT_MS) as download_info:
+        with contextlib.suppress(PlaywrightError):
+            page.goto(url, timeout=_NAV_TIMEOUT_MS)
+
+    download = download_info.value
+    path = download.path()
+    if path is None:
+        return None
+    try:
+        return Path(path).read_text()
+    finally:
+        # The temp file is ours once read; failing to clean it up would leak
+        # one file per ticker per run.
+        with contextlib.suppress(OSError):
+            download.delete()
+
+
+def _fetch_one_via_page_fetch(page: Any, url: str) -> str | None:
+    """Fallback: same-origin ``fetch()`` executed inside the page.
+
+    Carries the page's cookies, origin and referer, which a detached request
+    client does not. Only tried when the download path yields nothing.
+    """
+    text = page.evaluate("async (u) => (await fetch(u)).text()", url)
+    return text if text else None
+
+
 def fetch_stooq_csvs(
     urls: dict[str, str],
     *,
@@ -78,14 +137,19 @@ def fetch_stooq_csvs(
 ) -> dict[str, str]:
     """Fetch each Stooq CSV URL through one headless-Chromium session.
 
-    Launches exactly one Chromium instance, navigates once to *warmup_url*
-    so the JS challenge executes and sets its verification cookie, then
-    issues one ``context.request.get`` per URL in *urls* — the browser
-    CONTEXT's own request API, never a harvested-cookie replay through a
-    different HTTP client. A cookie replayed outside the browser that
-    produced it may be bound to that browser's TLS fingerprint and identity,
-    which would reintroduce exactly the fingerprint/identity mismatch this
-    module exists to remove.
+    Launches exactly one Chromium instance and navigates once to *warmup_url*
+    so the JS challenge executes and sets its verification cookie. Each URL is
+    then fetched by NAVIGATING to it and taking the file Stooq serves back as
+    a download (see :func:`_fetch_one_via_download`), falling back to an
+    in-page ``fetch()`` when no download materialises.
+
+    Everything stays inside the browser that solved the challenge — no cookie
+    is harvested and replayed through a different HTTP client, because a
+    cookie may be bound to the identity that earned it, which would
+    reintroduce exactly the fingerprint/identity mismatch this module exists
+    to remove. Note that Playwright's own ``context.request.get`` is NOT such
+    a client but is still refused by this endpoint with "Access denied"; only
+    a real navigation is served.
 
     Returns plain ``{ticker: csv_text}`` for whatever was recovered before
     any failure. This function performs NO parsing, validation, or
@@ -108,14 +172,17 @@ def fetch_stooq_csvs(
     results: dict[str, str] = {}
     try:
         with sync_playwright() as pw:
-            launch_kwargs: dict[str, Any] = {"headless": True}
+            launch_kwargs: dict[str, Any] = {"headless": True, "args": list(_STEALTH_LAUNCH_ARGS)}
             chromium_path = os.environ.get(_CHROMIUM_PATH_ENV)
             if chromium_path:
                 launch_kwargs["executable_path"] = chromium_path
 
             browser = pw.chromium.launch(**launch_kwargs)
             try:
-                context = browser.new_context()
+                # accept_downloads is required — the CSV endpoint answers a
+                # navigation with a file attachment, not a page.
+                context = browser.new_context(accept_downloads=True)
+                context.add_init_script(_STEALTH_INIT_SCRIPT)
                 page = context.new_page()
                 page.goto(warmup_url, timeout=_NAV_TIMEOUT_MS)
                 page.wait_for_timeout(_CHALLENGE_SETTLE_MS)
@@ -124,11 +191,14 @@ def fetch_stooq_csvs(
                     if i > 0:
                         time.sleep(rate_limit_seconds)
                     try:
-                        resp = context.request.get(url, timeout=_REQUEST_TIMEOUT_MS)
-                        if not resp.ok:
-                            log.warning("Stooq browser fetch non-OK response for %s", ticker)
+                        text = _fetch_one_via_download(page, url)
+                        if not text:
+                            log.debug("No download for %s — trying in-page fetch", ticker)
+                            text = _fetch_one_via_page_fetch(page, url)
+                        if not text:
+                            log.warning("Stooq browser fetch yielded nothing for %s", ticker)
                             continue
-                        results[ticker] = resp.text()
+                        results[ticker] = text
                     except Exception as exc:  # noqa: BLE001 — one bad ticker must not abort the batch
                         log.warning("Stooq browser fetch failed for %s: %s", ticker, exc)
                         continue
