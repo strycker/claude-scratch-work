@@ -10,12 +10,23 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 
+from trading_crab_lib.platform.ingestion import prices_daily
 from trading_crab_lib.platform.ingestion.prices_daily import (
     _batch_stooq_daily,
+    _batch_yfinance_daily,
     fetch_universe_prices,
     to_monthly_spine,
     universe_fetch_tickers,
 )
+
+
+def _make_yf_frame(tickers: list[str]) -> pd.DataFrame:
+    """A minimal yf.download()-shaped MultiIndex frame (level-0=metric,
+    level-1=ticker) with non-NaN Close values for the given tickers."""
+    idx = pd.date_range("2020-01-02", periods=3, freq="B")
+    columns = pd.MultiIndex.from_product([["Close"], tickers])
+    data = np.tile(np.arange(100.0, 103.0), (len(tickers), 1)).T
+    return pd.DataFrame(data, index=idx, columns=columns)
 
 
 def _make_universe_cfg():
@@ -211,6 +222,72 @@ def test_fetch_universe_prices_no_tickers_returns_empty():
     daily, monthly = fetch_universe_prices(cfg)
     assert daily.empty
     assert monthly.empty
+
+
+# ── _batch_yfinance_daily: chunking + retry/backoff ─────────────────────────
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._YFINANCE_AVAILABLE", True)
+@patch("trading_crab_lib.platform.ingestion.prices_daily.yf")
+def test_yfinance_daily_fetches_in_small_chunks(mock_yf, mock_sleep):
+    tickers = [f"T{i}" for i in range(12)]
+
+    def _download(**kwargs):
+        chunk = kwargs["tickers"]
+        assert len(chunk) <= prices_daily._YF_CHUNK_SIZE
+        return _make_yf_frame(chunk)
+
+    mock_yf.download.side_effect = _download
+
+    out = _batch_yfinance_daily(tickers, "2020-01-01", "2020-02-01")
+
+    assert mock_yf.download.call_count > 1
+    assert len(out) == 12
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._YFINANCE_AVAILABLE", True)
+@patch("trading_crab_lib.platform.ingestion.prices_daily.yf")
+def test_yfinance_daily_keeps_partial_results_when_a_chunk_exhausts_retries(mock_yf, mock_sleep):
+    tickers = [f"T{i}" for i in range(6)]  # chunk 1: T0-T4 (5 tickers), chunk 2: T5
+
+    def _download(**kwargs):
+        chunk = kwargs["tickers"]
+        if chunk == tickers[:5]:
+            return _make_yf_frame(chunk)
+        raise RuntimeError("429 Too Many Requests")
+
+    mock_yf.download.side_effect = _download
+
+    out = _batch_yfinance_daily(tickers, "2020-01-01", "2020-02-01")
+
+    assert out != {}
+    assert set(out.keys()) == set(tickers[:5])
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._YFINANCE_AVAILABLE", True)
+@patch("trading_crab_lib.platform.ingestion.prices_daily.yf")
+def test_yfinance_daily_retries_rate_limited_chunk_with_growing_backoff(mock_yf, mock_sleep):
+    tickers = ["T0", "T1", "T2"]  # single chunk (<= _YF_CHUNK_SIZE)
+    call_count = {"n": 0}
+
+    def _download(**kwargs):
+        call_count["n"] += 1
+        if call_count["n"] < 3:
+            raise RuntimeError("Rate limit exceeded (429)")
+        return _make_yf_frame(kwargs["tickers"])
+
+    mock_yf.download.side_effect = _download
+
+    out = _batch_yfinance_daily(tickers, "2020-01-01", "2020-02-01")
+
+    assert mock_yf.download.call_count == 3
+    assert len(out) == 3
+    sleep_intervals = [c.args[0] for c in mock_sleep.call_args_list]
+    assert len(sleep_intervals) >= 2
+    assert sleep_intervals[0] < sleep_intervals[1]
 
 
 # ── to_monthly_spine (D-05: daily -> monthly, daily preserved) ─────────────

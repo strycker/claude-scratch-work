@@ -31,6 +31,26 @@ import logging
 import os
 import sys
 
+import pandas as pd
+
+
+def check_price_coverage(daily_raw: pd.DataFrame | None) -> str | None:
+    """Return None when *daily_raw* has both rows and columns, else a
+    specific failure message naming what was wrong.
+
+    Pure — no I/O. This is the assertion the build script uses to decide
+    whether a price universe actually came through, replacing a substring
+    heuristic that matched almost any column name and let the build print
+    "BUILD OK" over a 0x0 frame.
+    """
+    if daily_raw is None:
+        return "daily_raw checkpoint is absent (never written — the fetch never ran or failed before saving)"
+    if len(daily_raw) == 0:
+        return "daily_raw has zero rows — the price fetch returned nothing"
+    if len(daily_raw.columns) == 0:
+        return "daily_raw has zero columns — the price fetch returned nothing"
+    return None
+
 
 def main() -> int:
     logging.basicConfig(
@@ -70,7 +90,8 @@ def main() -> int:
     monthly_features = build_monthly_spine(cfg)
 
     cm = get_platform_checkpoint_manager()
-    log.info("Wrote platform checkpoints to: %s", cm.checkpoint_dir if hasattr(cm, "checkpoint_dir") else "data/checkpoints/platform/")
+    checkpoint_dir = cm.checkpoint_dir if hasattr(cm, "checkpoint_dir") else "data/checkpoints/platform/"
+    log.info("Wrote platform checkpoints to: %s", checkpoint_dir)
     log.info(
         "monthly_features: %d months, %d columns, %s → %s",
         len(monthly_features),
@@ -79,13 +100,24 @@ def main() -> int:
         monthly_features.index.max().date() if len(monthly_features) else "n/a",
     )
 
-    # Sanity: the report needs price/return coverage; warn loudly if the price
-    # fetch degraded to empty (the usual failure mode behind a blocked network).
-    price_like = [c for c in monthly_features.columns if any(t in c.lower() for t in ("spy", "equit", "price", "return", "tr"))]
-    if len(monthly_features) == 0 or not price_like:
-        log.warning(
-            "monthly_features looks sparse (no price/return-like columns). This usually means a data "
-            "source was unreachable (Yahoo/macrotrends). Re-run from a machine with normal internet."
+    # Sanity: the report needs actual price coverage. A substring heuristic used to
+    # scan column names for price-like tokens, but "tr" matches almost any column
+    # name and "equit" matches the multpl-derived equities_tr column (not produced
+    # by price ingestion at all) — that let the build print BUILD OK over a 0x0
+    # daily_raw. Load the real daily_raw checkpoint and assert it has rows+columns.
+    try:
+        daily_raw = cm.load("daily_raw")
+    except FileNotFoundError:
+        daily_raw = None
+
+    daily_raw_failure = check_price_coverage(daily_raw)
+    monthly_features_failure = check_price_coverage(monthly_features)
+    if daily_raw_failure is not None or monthly_features_failure is not None:
+        for msg in (daily_raw_failure, monthly_features_failure):
+            if msg is not None:
+                log.error(msg)
+        log.error(
+            "a data source was unreachable — re-run from a machine with normal internet."
         )
         return 1
 

@@ -46,6 +46,20 @@ log = logging.getLogger(__name__)
 # 22 rapid-fire per-ticker requests is itself a bot signal — pace Stooq fetches.
 _STOOQ_RATE_LIMIT_SECONDS = 1.5
 
+# yfinance chunking + backoff. Defined locally (not imported from ingestion/assets.py's
+# private constant) — a single oversized yf.download() call for the whole universe is
+# what triggers Yahoo's rate limit and discards everything on failure.
+_YF_CHUNK_SIZE = 5
+_YF_MAX_RETRIES = 3
+_YF_BACKOFF_BASE_SECONDS = 2.0
+_YF_CHUNK_SLEEP_SECONDS = 1.0
+_RATE_LIMIT_SIGNATURES = (
+    "Too Many Requests",
+    "Rate limit",
+    "rate limited",
+    "429",
+)
+
 
 # ── universe ticker set ─────────────────────────────────────────────────────
 
@@ -68,47 +82,15 @@ def universe_fetch_tickers(cfg: dict[str, Any]) -> list[str]:
 
 # ── daily batch fetch (no internal resample — daily preserved) ─────────────
 
-def _batch_yfinance_daily(
-    tickers: list[str], start: str, end: str, session: Any = None
-) -> dict[str, pd.Series]:
-    """Fetch all tickers in ONE yf.download() call at daily interval.
+def _extract_close_series(raw: pd.DataFrame, tickers: list[str]) -> dict[str, pd.Series]:
+    """Extract per-ticker Close Series from one yf.download() result frame.
 
-    Mirrors ``assets._batch_yfinance`` but requests interval="1d" and performs
-    NO internal resample — daily data is preserved for D-05 persistence.
-    Returns a dict of ticker -> daily Close Series (only successfully fetched
-    tickers).
+    Handles both column shapes yfinance returns: a MultiIndex (level-0=metric,
+    level-1=ticker) for a multi-ticker download, or flat columns for a
+    single-ticker download. No resample — daily data is preserved for D-05
+    persistence. Returns a dict of ticker -> daily Close Series (only
+    successfully fetched, non-all-NaN tickers).
     """
-    if not _YFINANCE_AVAILABLE:
-        log.warning(
-            "yfinance is not installed — daily batch download skipped. "
-            "Run: pip install yfinance"
-        )
-        return {}
-
-    log.info("Batch-fetching %d tickers (daily) from yfinance ...", len(tickers))
-
-    kwargs: dict[str, Any] = {
-        "tickers": tickers,
-        "start": start,
-        "end": end,
-        "interval": "1d",
-        "auto_adjust": True,
-        "progress": False,
-    }
-    if session is not None:
-        kwargs["session"] = session
-
-    try:
-        raw = yf.download(**kwargs)
-    except (OSError, RuntimeError, ValueError, TypeError) as exc:
-        log.warning("Batch yfinance daily download failed: %s", exc)
-        return {}
-
-    if raw is None or raw.empty:
-        return {}
-
-    # Multiple tickers -> MultiIndex columns (level-0=metric, level-1=ticker).
-    # Single ticker -> flat columns.
     if isinstance(raw.columns, pd.MultiIndex):
         levels = raw.columns.get_level_values(0)
         if "Close" not in levels:
@@ -138,6 +120,90 @@ def _batch_yfinance_daily(
             s.index = s.index.tz_localize(None)
         results[ticker] = s  # no resample — daily preserved
 
+    return results
+
+
+def _download_yfinance_chunk(
+    chunk: list[str], start: str, end: str, session: Any = None
+) -> dict[str, pd.Series]:
+    """Download one chunk of tickers, retrying on rate-limit/transport errors
+    or an empty result with exponential backoff.
+
+    Treats both a raised transport/rate-limit error and an empty/None result
+    as retryable. Returns {} only after exhausting ``_YF_MAX_RETRIES``
+    attempts — the caller is responsible for keeping any results already
+    accumulated from other chunks (partial results are never discarded).
+    """
+    kwargs: dict[str, Any] = {
+        "tickers": chunk,
+        "start": start,
+        "end": end,
+        "interval": "1d",
+        "auto_adjust": True,
+        "progress": False,
+    }
+    if session is not None:
+        kwargs["session"] = session
+
+    for attempt in range(_YF_MAX_RETRIES):
+        raw = None
+        try:
+            raw = yf.download(**kwargs)
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:  # noqa: BLE001 — network degradation
+            is_rate_limited = any(sig in str(exc) for sig in _RATE_LIMIT_SIGNATURES)
+            log.warning(
+                "yfinance chunk download failed for %s (attempt %d/%d)%s: %s",
+                chunk, attempt + 1, _YF_MAX_RETRIES,
+                " [rate-limited]" if is_rate_limited else "", exc,
+            )
+
+        if raw is not None and not raw.empty:
+            return _extract_close_series(raw, chunk)
+
+        if attempt < _YF_MAX_RETRIES - 1:
+            sleep_seconds = _YF_BACKOFF_BASE_SECONDS * (2 ** attempt)
+            time.sleep(sleep_seconds)
+
+    log.warning("Exhausted %d retries for yfinance chunk %s — skipping, keeping other chunks' results", _YF_MAX_RETRIES, chunk)
+    return {}
+
+
+def _batch_yfinance_daily(
+    tickers: list[str], start: str, end: str, session: Any = None
+) -> dict[str, pd.Series]:
+    """Fetch all tickers at daily interval, chunked with retry + backoff.
+
+    Mirrors ``assets._batch_yfinance`` but requests interval="1d" and performs
+    NO internal resample — daily data is preserved for D-05 persistence.
+
+    Splits the ticker universe into chunks of ``_YF_CHUNK_SIZE`` (a single
+    oversized ``yf.download()`` call for the whole universe is a common
+    trigger for Yahoo's rate limit). Each chunk is retried up to
+    ``_YF_MAX_RETRIES`` times with exponential backoff; a chunk that
+    exhausts its retries is skipped rather than discarding results already
+    recovered from other chunks. Returns a dict of ticker -> daily Close
+    Series (only successfully fetched tickers).
+    """
+    if not _YFINANCE_AVAILABLE:
+        log.warning(
+            "yfinance is not installed — daily batch download skipped. "
+            "Run: pip install yfinance"
+        )
+        return {}
+
+    log.info(
+        "Batch-fetching %d tickers (daily) from yfinance in chunks of %d ...",
+        len(tickers), _YF_CHUNK_SIZE,
+    )
+
+    results: dict[str, pd.Series] = {}
+    chunks = [tickers[i:i + _YF_CHUNK_SIZE] for i in range(0, len(tickers), _YF_CHUNK_SIZE)]
+    for i, chunk in enumerate(chunks):
+        if i > 0:
+            time.sleep(_YF_CHUNK_SLEEP_SECONDS)
+        results.update(_download_yfinance_chunk(chunk, start, end, session=session))
+
+    log.info("yfinance daily batch recovered %d/%d tickers", len(results), len(tickers))
     return results
 
 
