@@ -27,11 +27,13 @@ from __future__ import annotations
 import logging
 import time
 from datetime import date
+from io import StringIO
 from typing import Any
 
 import pandas as pd
 
 from trading_crab_lib.ingestion.assets import _ssl_bypass_curl_session
+from trading_crab_lib.ingestion.browser import fetch_stooq_csvs, playwright_available
 from trading_crab_lib.ingestion.http import HTTP_ERRORS, browser_session, http_get
 
 try:
@@ -209,6 +211,40 @@ def _batch_yfinance_daily(
 
 # ── Stooq daily fallback (no API key; used when yfinance yields nothing) ─────
 
+def _parse_stooq_csv(ticker: str, text: str) -> pd.Series | None:
+    """Parse one Stooq CSV response body into a named daily Close Series.
+
+    The single guard standing between a challenge page and it being parsed
+    as price data: a genuine CSV starts with the ``date,`` header. Anything
+    else (an HTML challenge, an empty body, "No data") is rejected here and
+    ONLY here — both the plain-HTTP path and the headless-browser fallback
+    route their response text through this one function, so the guard can
+    never drift out of sync between the two paths.
+
+    Returns None (never an empty Series) on any rejection, so callers have
+    exactly one falsy check. Every rejection path logs a WARNING.
+    """
+    if not text.lstrip().lower().startswith("date,"):
+        log.warning("Stooq returned non-CSV for %s (anti-bot challenge or no data) — skipping", ticker)
+        return None
+
+    try:
+        df = pd.read_csv(StringIO(text))
+    except (ValueError, pd.errors.ParserError) as exc:
+        log.warning("Stooq CSV parse failed for %s: %s", ticker, exc)
+        return None
+
+    if df.empty or "Close" not in df.columns or "Date" not in df.columns:
+        return None
+
+    s = pd.Series(
+        df["Close"].to_numpy(),
+        index=pd.to_datetime(df["Date"]),
+        name=ticker,
+    ).dropna()
+    return s if not s.empty else None
+
+
 def _batch_stooq_daily(
     tickers: list[str], start: str, end: str
 ) -> dict[str, pd.Series]:
@@ -218,65 +254,81 @@ def _batch_stooq_daily(
     returns a dict of ticker -> daily Close Series (successfully fetched only).
     No API key required.
 
-    Stooq serves a JavaScript anti-bot *challenge page* (not CSV) to plain
-    ``requests`` clients, detected by TLS fingerprint. Fetches go through the
-    shared browser-impersonating client (``ingestion.http``) to defeat that
-    check. A real CSV response begins with the ``Date,`` header; anything
-    else (an HTML challenge, an empty body, an error) is detected and skipped
-    rather than parsed as data — so this degrades cleanly to ``{}`` when
-    Stooq is unreachable or challenges the caller.
-    """
-    session = browser_session()
-    if session is None:
-        log.warning("No HTTP client available — Stooq daily fallback skipped.")
-        return {}
+    Two paths, in order:
 
+    1. Plain HTTP through the shared browser-impersonating client
+       (``ingestion.http``) — cheap, correct in spirit, and the one that
+       stops being needed the day Stooq drops its challenge. Tried first,
+       always.
+    2. Headless-Chromium fallback (``ingestion.browser``), gated on the HTTP
+       path recovering ZERO tickers AND playwright being installed. Stooq
+       serves a JavaScript browser-verification *challenge page* (not CSV)
+       to plain ``requests``/curl_cffi clients — the challenge must be
+       EXECUTED, and only a real browser can do that. This path costs a
+       browser launch per run, so it is a fallback, not the default.
+
+    Both paths route their response text through the single
+    :func:`_parse_stooq_csv` guard — a challenge page cannot become price
+    data via either path. This function never raises; total failure
+    degrades to ``{}``.
+    """
+    urls: dict[str, str] = {}
     d1 = pd.Timestamp(start).strftime("%Y%m%d")
     d2 = pd.Timestamp(end).strftime("%Y%m%d")
-
-    log.info("Stooq daily fallback: fetching %d tickers ...", len(tickers))
-    results: dict[str, pd.Series] = {}
-    for i, ticker in enumerate(tickers):
-        if i > 0:
-            time.sleep(_STOOQ_RATE_LIMIT_SECONDS)
-
+    for ticker in tickers:
         sym = f"{ticker.lower().replace('.', '-')}.us"
-        url = f"https://stooq.com/q/d/l/?s={sym}&i=d&d1={d1}&d2={d2}"
+        urls[ticker] = f"https://stooq.com/q/d/l/?s={sym}&i=d&d1={d1}&d2={d2}"
+
+    results: dict[str, pd.Series] = {}
+    recovered_via = "HTTP"
+
+    session = browser_session()
+    if session is None:
+        log.warning("No HTTP client available — Stooq HTTP path skipped.")
+    else:
+        log.info("Stooq daily fallback: fetching %d tickers via HTTP ...", len(tickers))
+        for i, ticker in enumerate(tickers):
+            if i > 0:
+                time.sleep(_STOOQ_RATE_LIMIT_SECONDS)
+            url = urls[ticker]
+            try:
+                # No headers= on purpose — a self-identifying "trading-crab/1.0" UA
+                # used to override the impersonating client's Chrome header set,
+                # advertising the scraper to the very bot check we are evading.
+                resp = http_get(url, session=session, timeout=30)
+                text = resp.text
+            except HTTP_ERRORS as exc:  # noqa: BLE001 — network degradation
+                log.warning("Stooq fetch failed for %s: %s", ticker, exc)
+                continue
+
+            s = _parse_stooq_csv(ticker, text)
+            if s is not None:
+                results[ticker] = s
+
+    # Fallback, gated on BOTH conditions: the HTTP path recovered nothing AND
+    # the headless-browser challenge solver is actually available. The browser
+    # is never launched while the cheap HTTP path still works.
+    if not results and playwright_available():
+        recovered_via = "headless-browser fallback"
+        log.warning(
+            "Stooq HTTP path recovered 0/%d tickers — trying headless-browser challenge solver ...",
+            len(tickers),
+        )
         try:
-            # No headers= on purpose — a self-identifying "trading-crab/1.0" UA
-            # used to override the impersonating client's Chrome header set,
-            # advertising the scraper to the very bot check we are evading.
-            resp = http_get(url, session=session, timeout=30)
-            text = resp.text
-        except HTTP_ERRORS as exc:  # noqa: BLE001 — network degradation
-            log.warning("Stooq fetch failed for %s: %s", ticker, exc)
-            continue
+            csvs = fetch_stooq_csvs(urls)
+        except Exception as exc:  # noqa: BLE001 — never propagate a browser-path failure
+            log.warning("Stooq headless-browser fallback raised: %s", exc)
+            csvs = {}
+        for ticker, text in csvs.items():
+            s = _parse_stooq_csv(ticker, text)
+            if s is not None:
+                results[ticker] = s
 
-        # A genuine CSV starts with the 'Date,' header. Anything else is Stooq's
-        # JS challenge page, an empty body, or 'No data' — skip, don't parse.
-        if not text.lstrip().lower().startswith("date,"):
-            log.warning("Stooq returned non-CSV for %s (anti-bot challenge or no data) — skipping", ticker)
-            continue
-
-        try:
-            from io import StringIO
-
-            df = pd.read_csv(StringIO(text))
-        except (ValueError, pd.errors.ParserError) as exc:
-            log.warning("Stooq CSV parse failed for %s: %s", ticker, exc)
-            continue
-
-        if df.empty or "Close" not in df.columns or "Date" not in df.columns:
-            continue
-        s = pd.Series(
-            df["Close"].to_numpy(),
-            index=pd.to_datetime(df["Date"]),
-            name=ticker,
-        ).dropna()
-        if not s.empty:
-            results[ticker] = s
-
-    log.info("Stooq daily fallback: recovered %d/%d tickers", len(results), len(tickers))
+    log.info(
+        "Stooq daily fallback (%s): recovered %d/%d tickers",
+        recovered_via if results else "no path succeeded",
+        len(results), len(tickers),
+    )
     return results
 
 

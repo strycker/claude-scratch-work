@@ -165,13 +165,17 @@ def test_batch_stooq_daily_parses_csv_close(mock_http_get, mock_browser_session,
 
 
 @patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.playwright_available")
 @patch("trading_crab_lib.platform.ingestion.prices_daily.browser_session")
 @patch("trading_crab_lib.platform.ingestion.prices_daily.http_get")
-def test_batch_stooq_daily_skips_js_challenge_page(mock_http_get, mock_browser_session, mock_sleep):
+def test_batch_stooq_daily_skips_js_challenge_page(mock_http_get, mock_browser_session, mock_playwright_available, mock_sleep):
     # Stooq's anti-bot page (served to some datacenter/VPN IPs) — must NOT be parsed as data.
+    # playwright_available patched False: this test is specifically about the HTTP-path guard,
+    # not the browser fallback (that is covered separately below) — no real browser launch here.
     challenge = "<!DOCTYPE html><html><head></head><body><noscript>This site requires JavaScript</noscript></body></html>"
     mock_http_get.return_value = MagicMock(text=challenge)
     mock_browser_session.return_value = MagicMock()
+    mock_playwright_available.return_value = False
 
     out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
     assert out == {}
@@ -207,6 +211,150 @@ def test_batch_stooq_daily_rate_limits_between_tickers(mock_http_get, mock_brows
 
     assert len(out) == 3
     assert mock_sleep.call_count >= 2
+
+
+# ── _parse_stooq_csv: single shared CSV-header guard ────────────────────────
+
+
+def test_parse_stooq_csv_returns_series_for_valid_csv():
+    csv = "Date,Open,High,Low,Close,Volume\n2020-01-02,100,101,99,100.5,1000\n2020-01-03,100.5,102,100,101.2,1200\n"
+    s = prices_daily._parse_stooq_csv("SPY", csv)
+    assert s is not None
+    assert list(s.values) == [100.5, 101.2]
+    assert s.name == "SPY"
+
+
+def test_parse_stooq_csv_returns_none_for_challenge_page():
+    challenge = "<!DOCTYPE html><html><head></head><body><noscript>This site requires JavaScript</noscript></body></html>"
+    assert prices_daily._parse_stooq_csv("SPY", challenge) is None
+
+
+# ── _batch_stooq_daily: headless-browser fallback wiring ───────────────────
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_stooq_csvs")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.browser_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.http_get")
+def test_batch_stooq_daily_never_calls_browser_fallback_when_http_recovers_a_ticker(
+    mock_http_get, mock_browser_session, mock_fetch_browser, mock_sleep
+):
+    csv = "Date,Open,High,Low,Close,Volume\n2020-01-02,100,101,99,100.5,1000\n"
+    mock_http_get.return_value = MagicMock(text=csv)
+    mock_browser_session.return_value = MagicMock()
+
+    out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+
+    assert "SPY" in out
+    mock_fetch_browser.assert_not_called()
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.playwright_available")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_stooq_csvs")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.browser_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.http_get")
+def test_batch_stooq_daily_falls_back_to_browser_when_http_recovers_nothing(
+    mock_http_get, mock_browser_session, mock_fetch_browser, mock_playwright_available, mock_sleep
+):
+    challenge = "<!DOCTYPE html><html><body>JS challenge</body></html>"
+    mock_http_get.return_value = MagicMock(text=challenge)
+    mock_browser_session.return_value = MagicMock()
+    mock_playwright_available.return_value = True
+
+    browser_csv = "Date,Open,High,Low,Close,Volume\n2020-01-02,100,101,99,100.5,1000\n"
+    mock_fetch_browser.return_value = {"SPY": browser_csv}
+
+    out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+
+    assert "SPY" in out
+    mock_fetch_browser.assert_called_once()
+    called_urls = mock_fetch_browser.call_args.args[0]
+    assert "SPY" in called_urls
+    assert called_urls["SPY"].startswith("https://stooq.com/q/d/l/?s=spy.us")
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.playwright_available")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_stooq_csvs")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.browser_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.http_get")
+def test_batch_stooq_daily_skips_browser_fallback_when_playwright_unavailable(
+    mock_http_get, mock_browser_session, mock_fetch_browser, mock_playwright_available, mock_sleep
+):
+    challenge = "<!DOCTYPE html><html><body>JS challenge</body></html>"
+    mock_http_get.return_value = MagicMock(text=challenge)
+    mock_browser_session.return_value = MagicMock()
+    mock_playwright_available.return_value = False
+
+    out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+
+    assert out == {}
+    mock_fetch_browser.assert_not_called()
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.playwright_available")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_stooq_csvs")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.browser_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.http_get")
+def test_batch_stooq_daily_browser_challenge_page_rejected_by_shared_guard(
+    mock_http_get, mock_browser_session, mock_fetch_browser, mock_playwright_available, mock_sleep
+):
+    challenge = "<!DOCTYPE html><html><body>JS challenge</body></html>"
+    mock_http_get.return_value = MagicMock(text=challenge)
+    mock_browser_session.return_value = MagicMock()
+    mock_playwright_available.return_value = True
+    mock_fetch_browser.return_value = {"SPY": challenge}  # browser ALSO got a challenge page
+
+    out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+
+    assert out == {}
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.playwright_available")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_stooq_csvs")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.browser_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.http_get")
+def test_batch_stooq_daily_browser_fallback_raising_does_not_propagate(
+    mock_http_get, mock_browser_session, mock_fetch_browser, mock_playwright_available, mock_sleep
+):
+    challenge = "<!DOCTYPE html><html><body>JS challenge</body></html>"
+    mock_http_get.return_value = MagicMock(text=challenge)
+    mock_browser_session.return_value = MagicMock()
+    mock_playwright_available.return_value = True
+    mock_fetch_browser.side_effect = RuntimeError("browser launch failed")
+
+    out = _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+
+    assert out == {}
+
+
+@patch("trading_crab_lib.platform.ingestion.prices_daily.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.playwright_available")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_stooq_csvs")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.browser_session")
+@patch("trading_crab_lib.platform.ingestion.prices_daily.http_get")
+@patch("trading_crab_lib.platform.ingestion.prices_daily._parse_stooq_csv")
+def test_batch_stooq_daily_both_paths_route_through_shared_parse_helper(
+    mock_parse, mock_http_get, mock_browser_session, mock_fetch_browser, mock_playwright_available, mock_sleep
+):
+    # Force the HTTP path's parse to reject, so the browser fallback fires too —
+    # patching this ONE helper changes the outcome of BOTH paths, proving the
+    # guard was factored out rather than duplicated.
+    mock_parse.return_value = None
+    mock_http_get.return_value = MagicMock(text="http-response-text")
+    mock_browser_session.return_value = MagicMock()
+    mock_playwright_available.return_value = True
+    mock_fetch_browser.return_value = {"SPY": "browser-response-text"}
+
+    _batch_stooq_daily(["SPY"], "2020-01-01", "2020-01-10")
+
+    assert mock_parse.call_count == 2
+    texts_seen = [c.args[1] for c in mock_parse.call_args_list]
+    assert "http-response-text" in texts_seen
+    assert "browser-response-text" in texts_seen
 
 
 def test_fetch_universe_prices_no_tickers_returns_empty():
