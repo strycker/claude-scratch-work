@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 try:
@@ -55,6 +56,26 @@ BROWSER_HEADERS: dict[str, str] = {
 
 DEFAULT_IMPERSONATE = "chrome"
 DEFAULT_TIMEOUT = 30.0
+
+# Operator escape hatch for TLS-intercepting networks. curl_cffi uses its own
+# bundled CA store and ignores the macOS Keychain, the system trust store, and
+# the SSL_CERT_FILE / REQUESTS_CA_BUNDLE environment variables — so on a
+# network that re-signs TLS (corporate proxy, filtering appliance, some VPNs)
+# verification fails with "self signed certificate in certificate chain" even
+# though browsers are fine. Point this at a PEM bundle containing both the
+# public roots and the intercepting CA (``scripts/fix_local_ca.sh`` builds one)
+# to keep verification ON rather than disabling it.
+_CA_BUNDLE_ENV = "TC_CA_BUNDLE"
+
+
+def ca_bundle_override() -> str | None:
+    """Return the operator-supplied CA bundle path, or None when unset.
+
+    Empty/whitespace values are treated as unset so an exported-but-blank
+    variable cannot silently break verification.
+    """
+    value = (os.environ.get(_CA_BUNDLE_ENV) or "").strip()
+    return value or None
 
 # Transport exception classes call sites should catch. Both curl_cffi's and
 # requests' RequestException subclass OSError, so OSError alone is a safe
@@ -108,21 +129,31 @@ def browser_session(*, impersonate: str = DEFAULT_IMPERSONATE, verify: bool = Tr
     its own initiative. This is intentionally NOT the SSL-bypass factory in
     the assets ingestion module.
     """
+    # A caller that explicitly asked for verify=False keeps that; otherwise an
+    # operator-supplied bundle replaces the boolean, so verification stays ON
+    # even on a TLS-intercepting network.
+    effective_verify: bool | str = verify
+    if verify:
+        bundle = ca_bundle_override()
+        if bundle:
+            effective_verify = bundle
+            log.debug("Using CA bundle from %s: %s", _CA_BUNDLE_ENV, bundle)
+
     if _CURL_CFFI_AVAILABLE and _curl_requests is not None:
         try:
-            return _curl_requests.Session(impersonate=impersonate, verify=verify)
+            return _curl_requests.Session(impersonate=impersonate, verify=effective_verify)
         except TypeError:
             log.debug(
                 "curl_cffi Session does not support impersonate= in this version — "
                 "falling back to a session without impersonation"
             )
-            return _curl_requests.Session(verify=verify)
+            return _curl_requests.Session(verify=effective_verify)
 
     if _REQUESTS_AVAILABLE and _requests is not None:
         log.debug("curl_cffi not importable — falling back to plain requests.Session (no TLS impersonation)")
         session = _requests.Session()
         session.headers.update(BROWSER_HEADERS)
-        session.verify = verify
+        session.verify = effective_verify
         return session
 
     log.warning("Neither curl_cffi nor requests is importable — cannot construct an HTTP session.")
