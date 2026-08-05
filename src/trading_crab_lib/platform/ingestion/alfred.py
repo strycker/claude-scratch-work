@@ -14,7 +14,9 @@ Bulk fetch, never per-date loop:
   observation in a single request. Looping the single-date vintage lookup
   endpoint per historical month would be O(months) API calls (~750/series
   for 1962+ monthly) and is an explicit anti-pattern (RESEARCH Pattern 2 /
-  Anti-Pattern).
+  Anti-Pattern). The real response has three columns — realtime_start,
+  date, value — not four: realtime_end is commented out in fredapi's own
+  source and is never read by any code in this module.
 
 Pre-vintage-era fallback (D-06):
   ALFRED archives mostly begin decades after 1962. For dates earlier than a
@@ -46,15 +48,26 @@ log = logging.getLogger(__name__)
 # the incumbent's 8 so we don't stall the pool on oversized responses.
 _MAX_WORKERS = 3
 
-_REQUIRED_VINTAGE_ROLES = ("realtime_start", "realtime_end", "date", "value")
+_REQUIRED_VINTAGE_ROLES = ("realtime_start", "date", "value")
+_OPTIONAL_VINTAGE_ROLES = ("realtime_end",)
 
 
 def _detect_vintage_columns(df: pd.DataFrame) -> dict[str, str]:
-    """Locate realtime_start/realtime_end/date/value columns case-insensitively.
+    """Locate realtime_start/date/value columns case-insensitively; map
+    realtime_end too when present.
 
-    Guards the [ASSUMED] all-releases column schema (RESEARCH A1) without a
-    live call: returns a mapping from canonical role name to the actual
-    column name found in *df*.
+    fredapi's ``get_series_all_releases()`` returns exactly three columns —
+    realtime_start, date, value — because realtime_end is commented out in
+    fredapi's own source (verified against the installed fredapi package).
+    Requiring realtime_end made every ALFRED fetch fail 0/5 on every machine
+    and every network since this module shipped. realtime_end is read by no
+    downstream code in this module, so it is mapped opportunistically when a
+    caller's frame does carry it (e.g. a hand-built frame in a test), but is
+    never required.
+
+    Returns a mapping from canonical role name to the actual column name
+    found in *df*. Only required roles are guaranteed present in the
+    returned mapping.
 
     Raises:
         ValueError: naming every required role that could not be located.
@@ -72,6 +85,9 @@ def _detect_vintage_columns(df: pd.DataFrame) -> dict[str, str]:
             "get_series_all_releases() response is missing required column(s): "
             f"{', '.join(missing)}. Found columns: {list(df.columns)}"
         )
+    for role in _OPTIONAL_VINTAGE_ROLES:
+        if role in lower_to_actual:
+            mapping[role] = lower_to_actual[role]
     return mapping
 
 
