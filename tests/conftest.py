@@ -258,3 +258,38 @@ def asset_prices(quarterly_index):
         },
         index=quarterly_index,
     )
+
+
+# ── no test may launch a real browser ───────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _forbid_real_browser_launch(monkeypatch, request):
+    """Fail loudly if any test actually starts a browser.
+
+    Unit tests mock both engines, but a test that patches only ONE engine's
+    availability flag silently falls through to the other and launches a real
+    Chrome — slow, network-dependent, and green for the wrong reason. That
+    happened once: an engine-unavailable test patched only the Playwright flag
+    and passed solely because selenium was uninstalled at the time; installing
+    selenium turned it into a live browser launch.
+
+    Tests that genuinely need a real browser can opt out with
+    @pytest.mark.real_browser.
+    """
+    if request.node.get_closest_marker("real_browser"):
+        return
+
+    def _blocked(*_args, **_kwargs):
+        raise AssertionError(
+            "A test tried to launch a REAL browser. Mock the engine, or patch BOTH "
+            "_PLAYWRIGHT_AVAILABLE and _SELENIUM_AVAILABLE when asserting no engine is available. "
+            "Opt out deliberately with @pytest.mark.real_browser."
+        )
+
+    try:
+        from selenium import webdriver
+
+        monkeypatch.setattr(webdriver, "Chrome", _blocked, raising=False)
+    except ImportError:
+        pass

@@ -421,14 +421,14 @@ class _FakeHtmlPage:
         self._content_text = content_text
         self._selector_raises = selector_raises
         self.goto_calls: list[tuple[str, float | None, str | None]] = []
-        self.wait_for_selector_calls: list[tuple[str, float | None]] = []
+        self.wait_for_selector_calls: list[tuple[str, float | None, str | None]] = []
         self.wait_for_timeout_calls: list[float] = []
 
     def goto(self, url: str, timeout: float | None = None, wait_until: str | None = None) -> None:
         self.goto_calls.append((url, timeout, wait_until))
 
-    def wait_for_selector(self, selector: str, timeout: float | None = None) -> None:
-        self.wait_for_selector_calls.append((selector, timeout))
+    def wait_for_selector(self, selector: str, timeout: float | None = None, state: str | None = None) -> None:
+        self.wait_for_selector_calls.append((selector, timeout, state))
         if self._selector_raises:
             raise browser_mod.PlaywrightError("Timeout waiting for selector")
 
@@ -463,7 +463,11 @@ def test_fetch_page_html_calls_wait_for_selector_before_content(mock_sync_pw):
     html = browser_mod.fetch_page_html("https://example.com", wait_for_selector="table.x")
 
     assert html == "<html>table here</html>"
-    assert page.wait_for_selector_calls == [("table.x", browser_mod._NAV_TIMEOUT_MS)]
+    # state="attached", not Playwright's default "visible": we need the element
+    # in the DOM so the returned HTML carries it, not rendered on screen. A
+    # visibility wait times out on an element hidden behind a UI toggle even
+    # though it was in the DOM the whole time.
+    assert page.wait_for_selector_calls == [("table.x", browser_mod._NAV_TIMEOUT_MS, "attached")]
 
 
 @patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
@@ -496,9 +500,13 @@ def test_fetch_page_html_optional_selector_missing_returns_html_anyway(mock_sync
     assert any("never appeared" in rec.message for rec in caplog.records)
 
 
+@patch("trading_crab_lib.ingestion.browser._SELENIUM_AVAILABLE", False)
 @patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", False)
 @patch("trading_crab_lib.ingestion.browser.sync_playwright")
 def test_fetch_page_html_no_engine_available_returns_none(mock_sync_pw, caplog):
+    """NO engine available means BOTH flags off. Patching only the Playwright
+    flag let this fall through to Selenium and launch a real Chrome — it passed
+    only because selenium happened to be uninstalled when it was written."""
     with caplog.at_level(logging.WARNING):
         html = browser_mod.fetch_page_html("https://example.com")
 

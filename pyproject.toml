@@ -49,6 +49,9 @@ where   = ["src"]
 include = ["trading_crab"]
 
 [tool.pytest.ini_options]
+markers = [
+    "real_browser: test deliberately launches a real browser (exempt from the conftest launch guard)",
+]
 testpaths  = ["tests"]
 pythonpath = ["src", "scripts"]
 filterwarnings = [
