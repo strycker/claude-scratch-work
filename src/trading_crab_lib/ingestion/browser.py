@@ -86,6 +86,25 @@ except ImportError:
     sync_playwright = None  # type: ignore[assignment]
     PlaywrightError = Exception  # type: ignore[assignment,misc]
 
+_SELENIUM_AVAILABLE = False
+try:
+    from selenium import webdriver
+    from selenium.common.exceptions import TimeoutException as SeleniumTimeout
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+    _SELENIUM_AVAILABLE = True
+except ImportError:
+    # Every name bound here so tests can patch them even when selenium is not
+    # installed (it is not, in this repo's dev/CI containers).
+    webdriver = None  # type: ignore[assignment]
+    SeleniumTimeout = Exception  # type: ignore[assignment,misc]
+    ChromeOptions = None  # type: ignore[assignment,misc]
+    By = None  # type: ignore[assignment,misc]
+    EC = None  # type: ignore[assignment,misc]
+    WebDriverWait = None  # type: ignore[assignment,misc]
+
 # A normal Stooq HTML page. Navigating here first (fetch_urls_as_text's
 # warmup_url) lets the challenge's own JavaScript execute and commit its
 # verification cookie into the browser context before any CSV endpoint is
@@ -138,10 +157,37 @@ _VIEWPORT = {"width": 1280, "height": 800}
 # tests enforces that "networkidle" never appears in this file.
 _WAIT_UNTIL = "domcontentloaded"
 
+# Engine selection env var, checked by _resolve_engine when the caller does
+# not pass an explicit engine= argument. Accepted values: "playwright",
+# "selenium", "auto" (default).
+_BROWSER_ENGINE_ENV = "TC_BROWSER_ENGINE"
+
+# Pinned in code (not read from the ambient browser) so the value is visible
+# and stable across whatever Chrome build happens to be installed. This is
+# hygiene — a UA string any real Chrome install would also send — not an
+# evasion technique.
+_SELENIUM_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+# Window size mirrors _VIEWPORT so both engines render at the same size.
+_SELENIUM_ARGS = [
+    "--headless=new",
+    "--disable-blink-features=AutomationControlled",
+    "--window-size=1280,800",
+    f"--user-agent={_SELENIUM_USER_AGENT}",
+]
+
 
 def playwright_available() -> bool:
     """Return True when the ``playwright`` package is importable."""
     return _PLAYWRIGHT_AVAILABLE
+
+
+def selenium_available() -> bool:
+    """Return True when the ``selenium`` package is importable."""
+    return _SELENIUM_AVAILABLE
 
 
 def _launch_kwargs() -> dict[str, Any]:
@@ -162,15 +208,49 @@ def _launch_kwargs() -> dict[str, Any]:
 def _resolve_engine(engine: str | None) -> str | None:
     """Resolve which browser engine :func:`fetch_page_html` should use.
 
-    This is the Task-1 version and knows only Playwright. Task 2 extends it
-    with Selenium selection (argument, then ``TC_BROWSER_ENGINE``, then
-    Playwright-first ``auto``).
+    Precedence: explicit *engine* argument, then ``TC_BROWSER_ENGINE``, then
+    ``"auto"`` (Playwright preferred, Selenium as fallback). An explicit
+    request for an engine that is not available is honored as a failure —
+    it does NOT silently fall through to the other engine, because the
+    operator asked for something specific and not getting it is exactly what
+    they need to see.
     """
+    requested = (engine or os.environ.get(_BROWSER_ENGINE_ENV) or "auto").strip().lower()
+
+    if requested == "playwright":
+        if _PLAYWRIGHT_AVAILABLE:
+            return "playwright"
+        log.warning(
+            "TC_BROWSER_ENGINE/engine explicitly requested 'playwright' but it is not "
+            "installed. Install with: pip install 'playwright>=1.40'  then: playwright "
+            "install chromium"
+        )
+        return None
+
+    if requested == "selenium":
+        if _SELENIUM_AVAILABLE:
+            return "selenium"
+        log.warning(
+            "TC_BROWSER_ENGINE/engine explicitly requested 'selenium' but it is not "
+            "installed. Install with: pip install 'selenium>=4.15'  plus a Chrome/Chromium "
+            "binary."
+        )
+        return None
+
+    if requested != "auto":
+        log.warning(
+            "Unrecognised browser engine %r (accepted: 'playwright', 'selenium', 'auto') — "
+            "treating as 'auto'.", requested,
+        )
+
     if _PLAYWRIGHT_AVAILABLE:
         return "playwright"
+    if _SELENIUM_AVAILABLE:
+        return "selenium"
     log.warning(
-        "playwright is not installed — no browser engine available. "
-        "Install with: pip install 'playwright>=1.40'  then: playwright install chromium"
+        "No browser engine available. Install one of: "
+        "pip install 'playwright>=1.40'  then: playwright install chromium   —or—   "
+        "pip install 'selenium>=4.15'  plus a Chrome/Chromium binary"
     )
     return None
 
@@ -219,6 +299,64 @@ def _fetch_page_html_playwright(
         return None
 
 
+def _fetch_page_html_selenium(
+    url: str,
+    *,
+    wait_for_selector: str | None,
+    require_selector: bool,
+    settle_ms: int,
+    timeout_ms: int,
+) -> str | None:
+    """Render *url* with Selenium and return its HTML, or None. Never raises.
+
+    Selenium implements fetch_page_html ONLY — it has no download-
+    interception equivalent, so fetch_urls_as_text stays Playwright-only.
+    """
+    driver = None
+    try:
+        options = ChromeOptions()
+        for arg in _SELENIUM_ARGS:
+            options.add_argument(arg)
+        chromium_path = os.environ.get(_CHROMIUM_PATH_ENV)
+        if chromium_path:
+            options.binary_location = chromium_path
+
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(timeout_ms / 1000.0)
+        driver.get(url)
+
+        if wait_for_selector:
+            try:
+                WebDriverWait(driver, timeout_ms / 1000.0).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, wait_for_selector))
+                )
+            except SeleniumTimeout as exc:
+                if require_selector:
+                    log.warning(
+                        "Selector %r never appeared for %s (%s) — required, returning None",
+                        wait_for_selector, url, str(exc)[:80],
+                    )
+                    return None
+                log.warning(
+                    "Selector %r never appeared for %s (%s) — not required, returning "
+                    "rendered HTML anyway",
+                    wait_for_selector, url, str(exc)[:80],
+                )
+
+        if settle_ms:
+            time.sleep(settle_ms / 1000.0)
+        return driver.page_source or None
+    except Exception as exc:  # noqa: BLE001 — launch/navigation degradation, never raise to caller
+        log.warning("Selenium fetch_page_html failed for %s: %s", url, exc)
+        return None
+    finally:
+        if driver is not None:
+            # An orphaned chromedriver process per failed run is worse than a
+            # swallowed teardown error.
+            with contextlib.suppress(Exception):
+                driver.quit()
+
+
 def fetch_page_html(
     url: str,
     *,
@@ -250,6 +388,14 @@ def fetch_page_html(
     resolved = _resolve_engine(engine)
     if resolved == "playwright":
         return _fetch_page_html_playwright(
+            url,
+            wait_for_selector=wait_for_selector,
+            require_selector=require_selector,
+            settle_ms=settle_ms,
+            timeout_ms=timeout_ms,
+        )
+    if resolved == "selenium":
+        return _fetch_page_html_selenium(
             url,
             wait_for_selector=wait_for_selector,
             require_selector=require_selector,
@@ -314,7 +460,11 @@ def fetch_urls_as_text(
 
     This is the Playwright download-interception flow originally built for
     Stooq (:func:`fetch_stooq_csvs` is now a thin wrapper over this
-    function), generalised off Stooq's shape.
+    function), generalised off Stooq's shape. PLAYWRIGHT-ONLY: there is no
+    Selenium equivalent of Playwright's download interception
+    (``page.expect_download``), so this function does not accept an
+    ``engine`` argument and never falls back to Selenium even when Selenium
+    is the only engine installed — no faked Selenium download path exists.
 
     Launches exactly one Chromium instance. When *warmup_url* is given,
     navigates there once first so any challenge JS executes and sets its
@@ -348,8 +498,10 @@ def fetch_urls_as_text(
 
     if not _PLAYWRIGHT_AVAILABLE:
         log.warning(
-            "playwright is not installed — headless-browser fallback skipped. "
-            "Install with: pip install 'playwright>=1.40'  then: playwright install chromium"
+            "playwright is not installed — headless-browser fallback skipped. This download-"
+            "interception flow is Playwright-specific, so Selenium cannot serve this call even "
+            "when it is installed. Install with: pip install 'playwright>=1.40'  then: "
+            "playwright install chromium"
         )
         return {}
 
