@@ -230,8 +230,8 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     monthly_raw.index.name = "date"
 
     cm = get_platform_checkpoint_manager()
-    cm.save(daily, "daily_raw")
-    cm.save(monthly_raw, "monthly_raw")
+    cm.save(daily, "daily_raw", source="prices_daily.fetch_universe_prices (universe price chain)")
+    cm.save(monthly_raw, "monthly_raw", source="build_monthly_spine (combined monthly ingest: macro+prices+research+agency)")
 
     lean = compute_lean_features(monthly_raw, cfg)
     tag_feature_columns(lean, cfg)  # WARNING-only defensive taxonomy-coverage check
