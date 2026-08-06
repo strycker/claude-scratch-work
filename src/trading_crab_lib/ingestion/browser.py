@@ -210,6 +210,28 @@ def selenium_available() -> bool:
     return _SELENIUM_AVAILABLE
 
 
+def _launch_hint(exc: BaseException) -> str:
+    """Append an actionable remedy to browser-launch failures we recognise.
+
+    A missing shared library buries the only useful line ("error while loading
+    shared libraries: libnspr4.so") inside hundreds of lines of Chromium
+    command-line flags. The browser downloaded fine; the HOST lacks Chromium's
+    system dependencies — a distinct failure from "playwright not installed",
+    and it needs a distinct fix.
+    """
+    text = str(exc)
+    if "error while loading shared libraries" in text or "cannot open shared object file" in text:
+        return (
+            f"{text}\n"
+            "  >> Chromium is installed but the HOST is missing its system libraries. Fix with:\n"
+            "       sudo $(which playwright) install-deps chromium\n"
+            "     or on Debian/Ubuntu install libnspr4, libnss3, libasound2t64, libatk1.0-0, "
+            "libatk-bridge2.0-0, libcups2, libdrm2, libxkbcommon0, libxcomposite1, libxdamage1, "
+            "libxfixes3, libxrandr2, libgbm1, libpango-1.0-0, libcairo2."
+        )
+    return text
+
+
 def headless_mode() -> bool:
     """Return False only when TC_BROWSER_HEADLESS is explicitly falsy.
 
@@ -332,7 +354,7 @@ def _fetch_page_html_playwright(
             finally:
                 browser.close()
     except Exception as exc:  # noqa: BLE001 — launch/navigation degradation, never raise to caller
-        log.warning("Playwright fetch_page_html failed for %s: %s", url, exc)
+        log.warning("Playwright fetch_page_html failed for %s: %s", url, _launch_hint(exc))
         return None
 
 
