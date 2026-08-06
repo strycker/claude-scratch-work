@@ -6,6 +6,9 @@ test convention (tests/unit/test_transforms.py).
 
 from __future__ import annotations
 
+import json
+import logging
+
 import pandas as pd
 import pytest
 
@@ -16,6 +19,10 @@ from trading_crab_lib.platform.splice import (
     build_treasury_tr_synthetic,
     monthly_total_return,
     ratio_splice,
+    resolve_class_sources,
+    resolve_source_column,
+    source_candidates,
+    write_splice_provenance,
 )
 
 
@@ -341,3 +348,263 @@ class TestBuildCoreResearchSeries:
 
         assert "gold" in result.columns
         assert list(result["gold"].dropna().values) == [1800.0 + i for i in range(6)]
+
+
+class TestSourceChains:
+    """source_candidates / resolve_source_column / resolve_class_sources —
+    the config-driven multi-source fallback-chain generalization."""
+
+    # ── source_candidates() ─────────────────────────────────────────────
+
+    def test_scalar_value_becomes_one_element_list(self):
+        assert source_candidates({"source_col": "gold_spot"}, "source_col") == ["gold_spot"]
+
+    def test_list_value_taken_as_is(self):
+        params = {"source_col": ["gold_spot", "IAU"]}
+        assert source_candidates(params, "source_col") == ["gold_spot", "IAU"]
+
+    def test_missing_key_is_empty_list(self):
+        assert source_candidates({}, "source_col") == []
+
+    def test_legacy_fallback_col_appended_for_source_col_key(self):
+        params = {"source_col": "wti_crude", "fallback_col": "wti_fred"}
+        assert source_candidates(params, "source_col") == ["wti_crude", "wti_fred"]
+
+    def test_fallback_col_not_duplicated_if_already_listed(self):
+        params = {"source_col": ["wti_crude", "wti_fred"], "fallback_col": "wti_fred"}
+        assert source_candidates(params, "source_col") == ["wti_crude", "wti_fred"]
+
+    def test_fallback_col_ignored_for_non_source_col_keys(self):
+        params = {"yield_col": "a", "fallback_col": "b"}
+        assert source_candidates(params, "yield_col") == ["a"]
+
+    def test_deduplicates_preserving_order(self):
+        assert source_candidates({"source_col": ["a", "b", "a"]}, "source_col") == ["a", "b"]
+
+    # ── resolve_source_column() ─────────────────────────────────────────
+
+    def test_resolves_first_candidate_when_present(self):
+        params = {"source_col": ["gold_spot", "IAU"]}
+        assert resolve_source_column(params, "source_col", {"gold_spot", "IAU"}) == "gold_spot"
+
+    def test_resolves_second_candidate_when_first_absent(self):
+        params = {"source_col": ["gold_spot", "IAU"]}
+        assert resolve_source_column(params, "source_col", {"IAU"}) == "IAU"
+
+    def test_none_when_no_candidate_present(self):
+        params = {"source_col": ["gold_spot", "IAU"]}
+        assert resolve_source_column(params, "source_col", {"SPY"}) is None
+
+    # ── resolve_class_sources() ─────────────────────────────────────────
+
+    def test_resolves_all_required_keys(self):
+        params = {"method": "single_source", "source_col": "gold_spot"}
+        assert resolve_class_sources(params, {"gold_spot"}) == {"source_col": "gold_spot"}
+
+    def test_none_when_any_required_key_unresolvable(self):
+        params = {"method": "single_source", "source_col": "gold_spot"}
+        assert resolve_class_sources(params, {"SPY"}) is None
+
+    def test_multi_key_method_resolves_both_keys(self):
+        params = {
+            "method": "total_return_from_price_div",
+            "price_col": "sp500",
+            "div_yield_col": "div_yield",
+        }
+        resolved = resolve_class_sources(params, {"sp500", "div_yield"})
+        assert resolved == {"price_col": "sp500", "div_yield_col": "div_yield"}
+
+    # ── chain resolution through build_core_research_series() ──────────
+
+    def test_first_candidate_resolves_with_info_log_position_1_of_n(self, caplog):
+        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
+        raw = pd.DataFrame({"gold_spot": [1000.0 + i for i in range(6)]}, index=idx)
+        cfg = {
+            "splice": {
+                "gold": {
+                    "research_name": "gold",
+                    "method": "single_source",
+                    "source_col": ["gold_spot", "IAU"],
+                },
+            }
+        }
+
+        with caplog.at_level(logging.INFO):
+            result = build_core_research_series(raw, cfg)
+
+        assert list(result["gold"].dropna().values) == [1000.0 + i for i in range(6)]
+        info_logs = [r.message for r in caplog.records if r.levelno == logging.INFO]
+        assert any("gold_spot" in m and "1 of 2" in m for m in info_logs)
+        prov = result.attrs["splice_provenance"]["gold"]
+        assert prov["status"] == "primary"
+        assert prov["sources"]["source_col"] == {
+            "candidates": ["gold_spot", "IAU"], "resolved": "gold_spot", "position": 1,
+        }
+
+    def test_second_candidate_resolves_with_info_log_position_2_of_n(self, caplog):
+        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
+        raw = pd.DataFrame({"IAU": [30.0 + i for i in range(6)]}, index=idx)  # gold_spot absent
+        cfg = {
+            "splice": {
+                "gold": {
+                    "research_name": "gold",
+                    "method": "single_source",
+                    "source_col": ["gold_spot", "IAU"],
+                },
+            }
+        }
+
+        with caplog.at_level(logging.INFO):
+            result = build_core_research_series(raw, cfg)
+
+        assert "gold" in result.columns
+        assert list(result["gold"].dropna().values) == [30.0 + i for i in range(6)]
+        info_logs = [r.message for r in caplog.records if r.levelno == logging.INFO]
+        assert any("IAU" in m and "2 of 2" in m for m in info_logs)
+        prov = result.attrs["splice_provenance"]["gold"]
+        assert prov["status"] == "fallback"
+        assert prov["sources"]["source_col"]["resolved"] == "IAU"
+        assert prov["sources"]["source_col"]["position"] == 2
+
+    def test_optional_class_all_candidates_absent_skipped_with_warning_listing_all(self, caplog):
+        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
+        raw = pd.DataFrame({"fred_tb3ms": [0.02] * 6}, index=idx)
+        cfg = {
+            "splice": {
+                "gold": {
+                    "research_name": "gold",
+                    "method": "single_source",
+                    "source_col": ["gold_spot", "IAU"],
+                    "optional": True,
+                },
+                "cash": {"research_name": "cash", "method": "yield_as_return", "yield_col": "fred_tb3ms"},
+            }
+        }
+
+        with caplog.at_level(logging.WARNING):
+            result = build_core_research_series(raw, cfg)
+
+        assert "gold" not in result.columns  # skipped, not errored
+        assert "cash" in result.columns
+        warnings = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("gold_spot" in m and "IAU" in m for m in warnings)
+        prov = result.attrs["splice_provenance"]["gold"]
+        assert prov["status"] == "skipped"
+        assert prov["sources"]["source_col"]["candidates"] == ["gold_spot", "IAU"]
+        assert prov["sources"]["source_col"]["resolved"] is None
+
+    def test_required_class_all_candidates_absent_raises_naming_every_candidate(self):
+        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
+        raw = pd.DataFrame({"unrelated": [1.0] * 6}, index=idx)
+        cfg = {
+            "splice": {
+                "gold": {
+                    "research_name": "gold",
+                    "method": "single_source",
+                    "source_col": ["gold_spot", "IAU"],
+                },
+                "oil": {
+                    "research_name": "oil",
+                    "method": "single_source",
+                    "source_col": ["wti_crude", "wti_fred"],
+                },
+            }
+        }
+
+        with pytest.raises(ValueError, match="required source columns are missing") as exc:
+            build_core_research_series(raw, cfg)
+
+        message = str(exc.value)
+        assert "gold_spot" in message and "IAU" in message
+        assert "wti_crude" in message and "wti_fred" in message
+
+    def test_chain_works_on_non_single_source_key(self):
+        idx = pd.date_range("1962-01-31", periods=12, freq="ME")
+        raw = pd.DataFrame({"b": [0.02] * 12}, index=idx)  # "a" absent, "b" present
+        cfg = {
+            "splice": {
+                "cash": {
+                    "research_name": "cash",
+                    "method": "yield_as_return",
+                    "yield_col": ["a", "b"],
+                },
+            }
+        }
+
+        result = build_core_research_series(raw, cfg)
+
+        assert list(result["cash"].dropna().values) == [0.02] * 12
+        prov = result.attrs["splice_provenance"]["cash"]
+        assert prov["sources"]["yield_col"]["resolved"] == "b"
+        assert prov["sources"]["yield_col"]["position"] == 2
+        assert prov["status"] == "fallback"
+
+    # ── gold -> IAU wiring specifically ─────────────────────────────────
+
+    def test_gold_resolves_to_iau_when_gold_spot_absent_no_gold_specific_python_branch(self):
+        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
+        raw = pd.DataFrame({"IAU": [30.0 + i for i in range(6)]}, index=idx)
+        cfg = {
+            "splice": {
+                "gold": {
+                    "research_name": "gold",
+                    "method": "single_source",
+                    "source_col": ["gold_spot", "IAU"],
+                    "optional": True,
+                },
+            }
+        }
+
+        result = build_core_research_series(raw, cfg)
+
+        assert "gold" in result.columns
+        assert list(result["gold"].dropna().values) == [30.0 + i for i in range(6)]
+        assert result.attrs["splice_provenance"]["gold"]["status"] == "fallback"
+
+    def test_gold_prefers_gold_spot_over_iau_when_both_present(self):
+        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
+        raw = pd.DataFrame(
+            {"gold_spot": [1000.0 + i for i in range(6)], "IAU": [30.0 + i for i in range(6)]},
+            index=idx,
+        )
+        cfg = {
+            "splice": {
+                "gold": {
+                    "research_name": "gold",
+                    "method": "single_source",
+                    "source_col": ["gold_spot", "IAU"],
+                    "optional": True,
+                },
+            }
+        }
+
+        result = build_core_research_series(raw, cfg)
+
+        assert list(result["gold"].dropna().values) == [1000.0 + i for i in range(6)]
+        prov = result.attrs["splice_provenance"]["gold"]
+        assert prov["status"] == "primary"
+        assert prov["sources"]["source_col"]["resolved"] == "gold_spot"
+
+    # ── write_splice_provenance() ───────────────────────────────────────
+
+    def test_write_splice_provenance_round_trips_to_json(self, tmp_path):
+        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
+        raw = pd.DataFrame({"gold_spot": [1000.0 + i for i in range(6)]}, index=idx)
+        cfg = {
+            "splice": {
+                "gold": {
+                    "research_name": "gold",
+                    "method": "single_source",
+                    "source_col": ["gold_spot", "IAU"],
+                },
+            }
+        }
+        result = build_core_research_series(raw, cfg)
+        provenance = result.attrs["splice_provenance"]
+
+        path = write_splice_provenance(provenance, tmp_path / "splice_provenance.json")
+        loaded = json.loads(path.read_text())
+
+        assert "captured_at" in loaded
+        assert loaded["provenance"]["gold"]["status"] == "primary"
+        assert loaded["provenance"]["gold"]["sources"]["source_col"]["resolved"] == "gold_spot"

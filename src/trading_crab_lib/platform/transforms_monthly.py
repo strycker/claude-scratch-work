@@ -221,7 +221,22 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
 
     macro = macro_monthly.fetch_macro_monthly(cfg)
     daily, monthly_prices = prices_daily.fetch_universe_prices(cfg)
-    research = splice.build_core_research_series(macro, cfg) if not macro.empty else pd.DataFrame()
+
+    # The splice input MUST include the monthly ticker columns (e.g. IAU), not
+    # just macro-only columns — otherwise a fallback chain naming a tradable
+    # ETF (gold: [gold_spot, IAU]) could never resolve, even though the ETF
+    # data is right there in monthly_prices. Guarded only for the both-empty
+    # case: if either macro or monthly_prices has data, splice still runs on
+    # whatever is available (a class missing its required macro columns then
+    # raises its own actionable preflight error, rather than silently
+    # skipping the whole splice step).
+    splice_input_frames = [f for f in (macro, monthly_prices) if not f.empty]
+    if splice_input_frames:
+        splice_input = pd.concat(splice_input_frames, axis=1)
+        research = splice.build_core_research_series(splice_input, cfg)
+    else:
+        research = pd.DataFrame()
+
     agency = align_agency_monthly(monthly_index, cfg)
 
     frames = [f for f in (macro, monthly_prices, research, agency) if not f.empty]
@@ -232,6 +247,10 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     cm = get_platform_checkpoint_manager()
     cm.save(daily, "daily_raw", source="prices_daily.fetch_universe_prices (universe price chain)")
     cm.save(monthly_raw, "monthly_raw", source="build_monthly_spine (combined monthly ingest: macro+prices+research+agency)")
+
+    splice_provenance = research.attrs.get("splice_provenance") if not research.empty else None
+    if splice_provenance:
+        splice.write_splice_provenance(splice_provenance, cm.dir / "splice_provenance.json")
 
     lean = compute_lean_features(monthly_raw, cfg)
     tag_feature_columns(lean, cfg)  # WARNING-only defensive taxonomy-coverage check

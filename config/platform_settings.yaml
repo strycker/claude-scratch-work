@@ -112,6 +112,14 @@ macrotrends_monthly:
 # One spliced research series per asset CLASS, used by all models. The weekly
 # report maps each class to Glenn's tradable ticker. Every rule below is a
 # DATA-02 deliverable — source, method, and tradable proxy per class.
+#
+# Any source-column key (source_col, yield_col, price_col, div_yield_col,
+# old_col, new_col) accepts EITHER a scalar OR an ordered list of candidate
+# columns tried in order, first available wins — trading_crab_lib.platform.
+# splice.resolve_class_sources() is the single place that decides which
+# column a class actually uses. The resolved choice (and its position in the
+# chain) is logged at INFO on every run and persisted to a provenance JSON —
+# never a silent, undocumented fallback.
 splice:
   equities:
     research_name: equities_tr
@@ -129,20 +137,31 @@ splice:
   gold:
     research_name: gold
     method:        single_source
-    source_col:    gold_spot
-    # gold_spot has no reliable free source right now (macrotrends 403-blocks
-    # datacenter/VPN IPs; FRED delisted its LBMA gold series). optional:true lets
-    # the build SKIP gold (with a WARNING) instead of crashing when the source is
-    # unavailable — the backtest then runs on the other core assets. Set to false
-    # (or delete) to make gold required again once a source is reachable.
+    # Chain: gold_spot (macrotrends, 1915+) tried first; falls back to IAU
+    # (the tradable ETF's own daily price, from prices_daily.fetch_universe_prices)
+    # when gold_spot is unavailable — macrotrends 403-blocks datacenter/VPN IPs
+    # and FRED delisted its LBMA gold series. optional:true additionally lets
+    # the build SKIP gold entirely (with a WARNING) if NEITHER candidate
+    # resolves, instead of crashing.
+    #
+    # CAVEAT — IAU is NOT spot gold: it is a total-return ETF carrying an
+    # expense ratio and tracking drift, and its price history starts ~2005
+    # versus gold_spot's 1915+. Falling back to it changes what the regime
+    # labeler sees and truncates the gold research series by roughly nine
+    # decades. This is an explicitly chosen compromise, accepted so the
+    # platform keeps SOME gold series while gold_spot has no reachable free
+    # source — it is not a claim that IAU equals spot gold.
+    source_col:    [gold_spot, IAU]
     optional:      true
     tradable:      IAU
   oil:
     research_name:  oil
     method:         single_source
-    source_col:     wti_crude
+    # Chain: wti_crude (macrotrends, 1946+) tried first; falls back to
+    # wti_fred (FRED WTISPLC, 1946+) when macrotrends is blocked (403 on
+    # datacenter/VPN IPs).
+    source_col:     [wti_crude, wti_fred]
     cross_check_col: wti_fred
-    fallback_col:   wti_fred    # use FRED WTI (1946+) when macrotrends is blocked (403 on datacenter/VPN IPs)
     tradable:       USO
   cash:
     research_name: cash

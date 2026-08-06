@@ -20,6 +20,26 @@ block of ``config/platform_settings.yaml``:
 in ``cfg['splice']`` and returns the 5 ``research_name`` columns documented
 in ``docs/splicing_rules.md`` (equities_tr, long_duration_tr, gold, oil, cash).
 
+Source-column chains: ANY source-column key on ANY class (``source_col``,
+``yield_col``, ``price_col``, ``div_yield_col``, ``old_col``, ``new_col``) may
+be declared in config as a scalar or as an ordered list of candidate columns
+— ``source_candidates()`` normalizes both spellings, and
+``resolve_class_sources()`` is the single place that decides which column a
+class actually uses (first candidate present in the raw frame wins). Every
+resolution is logged at INFO on every run, and the full resolved-vs-tried
+picture is recorded in the returned frame's ``.attrs["splice_provenance"]``
+(persist it to JSON with ``write_splice_provenance()``).
+
+IAU-is-not-spot-gold caveat: the ``gold`` class's chain falls back to the
+``IAU`` ETF column when ``gold_spot`` (macrotrends) is unavailable. IAU is a
+total-return gold ETF carrying an expense ratio and tracking drift — it is
+**not** spot gold, and its price history begins around 2005 versus
+``gold_spot``'s 1915+. Falling back to it changes what downstream models see
+and truncates the gold research series by roughly nine decades. This is an
+explicitly chosen compromise (see ``config/platform_settings.yaml``'s
+``splice.gold`` comment and ``docs/splicing_rules.md`` §3), not an
+equivalence claim.
+
 Usage:
     from trading_crab_lib.platform.splice import build_core_research_series
     research = build_core_research_series(raw, cfg)
@@ -29,7 +49,10 @@ Does not import or modify any incumbent transform module (D-01).
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -157,57 +180,118 @@ _SPLICE_SOURCE_COL_KEYS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _class_sources_available(params: dict[str, Any], available: set[str]) -> bool:
-    """True if every source column a splice class needs is present in *available*.
+def source_candidates(params: dict[str, Any], key: str) -> list[str]:
+    """Normalize `params[key]` into an ordered list of candidate column names.
 
-    A ``single_source`` class is satisfied by its primary ``source_col`` OR its
-    optional ``fallback_col``.
+    A list value is taken as-is; a scalar becomes a one-element list; a
+    missing/None value becomes an empty list. When `key` is `"source_col"`,
+    the legacy `fallback_col` value (if present and not already listed) is
+    appended — the entire back-compat surface for the old one-off
+    `single_source` fallback spelling, so a config still written the legacy
+    way (`source_col: x` + `fallback_col: y`) keeps working unedited.
+    De-duplicates while preserving order.
+    """
+    raw_value = params.get(key)
+    if raw_value is None:
+        candidates: list[Any] = []
+    elif isinstance(raw_value, list):
+        candidates = list(raw_value)
+    else:
+        candidates = [raw_value]
+
+    if key == "source_col":
+        fallback = params.get("fallback_col")
+        if fallback is not None and fallback not in candidates:
+            candidates.append(fallback)
+
+    seen: set[Any] = set()
+    deduped: list[str] = []
+    for candidate in candidates:
+        if candidate not in seen:
+            seen.add(candidate)
+            deduped.append(candidate)
+    return deduped
+
+
+def resolve_source_column(params: dict[str, Any], key: str, available: set[str]) -> str | None:
+    """Return the first candidate for `key` that is present in `available`, else None."""
+    for candidate in source_candidates(params, key):
+        if candidate in available:
+            return candidate
+    return None
+
+
+def resolve_class_sources(params: dict[str, Any], available: set[str]) -> dict[str, str] | None:
+    """Resolve every source-column key a splice class's `method` needs.
+
+    Returns a `key -> resolved column` mapping, or None if ANY required key
+    has no resolvable candidate in `available`. This is the single place that
+    decides which column a class uses — both the preflight validation and
+    the assembly step below call it, so they can never disagree.
     """
     method = params.get("method", "")
+    resolved: dict[str, str] = {}
     for key in _SPLICE_SOURCE_COL_KEYS.get(method, ()):
-        col = params.get(key)
-        if col is None or col in available:
-            continue
-        if method == "single_source" and params.get("fallback_col") in available:
-            continue
-        return False
-    return True
+        col = resolve_source_column(params, key, available)
+        if col is None:
+            return None
+        resolved[key] = col
+    return resolved
+
+
+def write_splice_provenance(provenance: dict[str, Any], path: Path) -> Path:
+    """Write splice `provenance` (as produced on `build_core_research_series()`'s
+    return value `.attrs["splice_provenance"]`) to `path` as indented JSON,
+    stamped with a `captured_at` UTC ISO timestamp. Pure I/O helper — the
+    rest of this module stays free of file I/O.
+    """
+    payload = {
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "provenance": provenance,
+    }
+    path.write_text(json.dumps(payload, indent=2))
+    return path
 
 
 def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
     """Dispatch on each core class's `method` and assemble the 5
     `research_name` columns from `cfg['splice']` (D-03/D-04).
 
-    Preflight-validates that every required source column is present before
-    assembling, so a failed upstream fetch (e.g. macrotrends returning no
-    gold_spot/wti_crude, or a yfinance rate-limit) yields one clear, actionable
-    error naming every missing column instead of a bare ``KeyError`` deep in
-    the loop.
+    Preflight-validates that every required class's source columns are
+    resolvable before assembling, so a failed upstream fetch (e.g.
+    macrotrends returning no gold_spot/wti_crude, or a yfinance rate-limit)
+    yields one clear, actionable error naming every candidate tried instead
+    of a bare ``KeyError`` deep in the loop.
+
+    Every class's resolution is logged at INFO on every run (which column,
+    and its 1-based position in its candidate chain) and recorded in the
+    returned frame's ``.attrs["splice_provenance"]`` — a per-class dict with
+    `class_name`, `method`, `status` (`primary`/`fallback`/`skipped`), and a
+    `sources` map of each source-column key's candidate list, resolved
+    column, and position.
     """
     splice_cfg = cfg["splice"]
-
-    # ── Preflight: report all missing source columns at once ──
-    # A single_source class whose primary source_col is absent is still
-    # satisfiable if its optional ``fallback_col`` (e.g. a FRED cross-check
-    # series) IS present — so it is only flagged missing when both are absent.
     available = set(raw.columns)
+
+    # ── Preflight: report every missing source column for required classes,
+    # in one error, before assembling anything. Optional classes (e.g. gold
+    # when its only free source is IP-blocked) never block the build — they
+    # are skipped at assembly time with a WARNING instead.
     missing: list[str] = []
     for class_name, params in splice_cfg.items():
-        # Optional classes (e.g. gold when its only free source, macrotrends, is
-        # IP-blocked) never block the build — they are skipped at assembly time
-        # if their data is absent (with a WARNING), not raised here.
         if params.get("optional", False):
             continue
         method = params.get("method", "")
+        if resolve_class_sources(params, available) is not None:
+            continue
+        research_name = params.get("research_name", class_name)
         for key in _SPLICE_SOURCE_COL_KEYS.get(method, ()):
-            col = params.get(key)
-            if col is None or col in available:
+            if resolve_source_column(params, key, available) is not None:
                 continue
-            if method == "single_source" and params.get("fallback_col") in available:
-                continue
+            candidates = source_candidates(params, key)
             missing.append(
-                f"  - {params.get('research_name', class_name)} "
-                f"({method}): missing column '{col}'"
+                f"  - {research_name} ({method}): missing column for '{key}' "
+                f"(tried: {candidates})"
             )
     if missing:
         raise ValueError(
@@ -220,44 +304,77 @@ def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.Dat
         )
 
     columns: dict[str, pd.Series] = {}
+    provenance: dict[str, Any] = {}
 
     for class_name, params in splice_cfg.items():
         method = params["method"]
         research_name = params["research_name"]
+        keys = _SPLICE_SOURCE_COL_KEYS.get(method, ())
+        resolved_map = resolve_class_sources(params, available)
 
-        # Optional class whose source data never arrived → skip it entirely.
-        if params.get("optional", False) and not _class_sources_available(params, available):
+        if resolved_map is None:
+            # Optional class whose source data never arrived → skip entirely.
+            tried = {key: source_candidates(params, key) for key in keys}
             log.warning(
-                "splice '%s': OPTIONAL class skipped — source data unavailable "
-                "(e.g. macrotrends blocked). The backtest will run without this asset.",
-                research_name,
+                "splice '%s': OPTIONAL class skipped — no candidate resolvable (tried %s). "
+                "The backtest will run without this asset.",
+                research_name, tried,
             )
+            provenance[research_name] = {
+                "class_name": class_name,
+                "method": method,
+                "status": "skipped",
+                "sources": {
+                    key: {"candidates": tried[key], "resolved": None, "position": None}
+                    for key in keys
+                },
+            }
             continue
 
+        source_detail: dict[str, dict[str, Any]] = {}
+        any_fallback = False
+        for key in keys:
+            candidates = source_candidates(params, key)
+            resolved_col = resolved_map[key]
+            position = candidates.index(resolved_col) + 1
+            source_detail[key] = {
+                "candidates": candidates,
+                "resolved": resolved_col,
+                "position": position,
+            }
+            any_fallback = any_fallback or position != 1
+            log.info(
+                "splice '%s': resolved %s -> '%s' (candidate %d of %d)",
+                research_name, key, resolved_col, position, len(candidates),
+            )
+        status = "fallback" if any_fallback else "primary"
+
         if method == "total_return_from_price_div":
-            series = build_equity_total_return(raw[params["price_col"]], raw[params["div_yield_col"]], cfg)
+            series = build_equity_total_return(
+                raw[resolved_map["price_col"]], raw[resolved_map["div_yield_col"]], cfg
+            )
         elif method == "cmt_par_bond_repricing":
-            series = build_treasury_tr_synthetic(raw[params["yield_col"]], cfg)
+            series = build_treasury_tr_synthetic(raw[resolved_map["yield_col"]], cfg)
         elif method == "single_source":
-            col = params["source_col"]
-            fallback = params.get("fallback_col")
-            if col not in raw.columns and fallback in raw.columns:
-                log.warning(
-                    "splice '%s': primary source '%s' missing — falling back to '%s'",
-                    research_name, col, fallback,
-                )
-                col = fallback
-            series = raw[col].dropna().rename(research_name)
+            series = raw[resolved_map["source_col"]].dropna().rename(research_name)
         elif method == "yield_as_return":
-            series = raw[params["yield_col"]].dropna().rename(research_name)
+            series = raw[resolved_map["yield_col"]].dropna().rename(research_name)
         elif method == "ratio_splice":
             series = ratio_splice(
-                raw[params["old_col"]], raw[params["new_col"]], pd.Timestamp(params["join_date"])
+                raw[resolved_map["old_col"]], raw[resolved_map["new_col"]], pd.Timestamp(params["join_date"])
             ).rename(research_name)
         else:
             raise ValueError(f"Unknown splice method '{method}' for class '{class_name}'")
 
         columns[research_name] = series
+        provenance[research_name] = {
+            "class_name": class_name,
+            "method": method,
+            "status": status,
+            "sources": source_detail,
+        }
 
     log.info("Built %d core research series: %s", len(columns), sorted(columns))
-    return pd.concat(columns, axis=1)
+    result = pd.concat(columns, axis=1)
+    result.attrs["splice_provenance"] = provenance
+    return result

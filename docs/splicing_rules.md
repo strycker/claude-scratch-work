@@ -128,29 +128,55 @@ closer duration match, if a future phase needs tighter tracking.
 research series, tracked against **IAU** (2005+; Glenn holds IAU, not GLD —
 D-03, D-10).
 
-**Decision.** Single-source passthrough of the incumbent's already-scraped
-macrotrends monthly gold spot series (`gold_spot`) — no splice needed.
+**Decision (updated — Task 2, 260806-u89).** Config-driven fallback chain:
+`source_col: [gold_spot, IAU]`. `gold_spot` (macrotrends) is tried first; if
+it is unavailable, the class falls back to `IAU`'s own daily price (merged
+into the splice input from `monthly_prices`, see
+`transforms_monthly.build_monthly_spine`) rather than being skipped entirely.
+`optional: true` still lets the build skip `gold` (with a WARNING) if NEITHER
+candidate resolves.
 
-- **Source:** `macrotrends.net` (already scraped by
+- **Primary source:** `macrotrends.net` (already scraped by
   `ingestion/macrotrends.py`, D-01 — reused as-is, zero new ingestion code).
+- **Fallback source:** `IAU` daily close, from
+  `platform/ingestion/prices_daily.py::fetch_universe_prices()`.
 - **Date range:** macrotrends gold spot covers 1915+, comfortably spanning
-  the 1962 target.
-- **Join date:** none — single continuous source, no `ratio_splice` needed.
-- **Method:** `single_source` — `raw[source_col].dropna()`, renamed to the
-  `research_name`.
+  the 1962 target. **IAU only covers ~2005+.**
+- **Join date:** none — this is a candidate-chain fallback (first available
+  column wins), not a `ratio_splice` — the two segments are never stitched
+  together into one continuous series.
+- **Method:** `single_source` with a chain — `resolve_class_sources()`
+  picks the first candidate present, then `raw[resolved_col].dropna()`,
+  renamed to the `research_name`.
+
+**CAVEAT — IAU is NOT spot gold.** IAU is a total-return gold ETF carrying an
+expense ratio and tracking drift; it is not the LBMA/spot gold price
+`gold_spot` represents, and its history begins around 2005 versus
+`gold_spot`'s 1915+. Falling back to IAU therefore (a) changes what the
+regime labeler and every downstream model see for the `gold` research
+series, and (b) truncates the effective gold history by roughly nine decades
+whenever the fallback fires. This is an explicitly chosen compromise —
+accepted so the platform retains SOME gold series when `gold_spot` has no
+reachable free source — not a claim that the two are equivalent. Every run
+logs, at INFO, which of the two candidates actually resolved and its
+position in the chain (`splice.build_core_research_series`'s per-class
+provenance), so a silent switch from `gold_spot` to `IAU` is never invisible.
 
 **Rationale.** RESEARCH identified macrotrends gold as already-scraped and
 verified in `ingestion/macrotrends.py`'s `DEFAULT_SERIES` — using it directly
 is a "zero new ingestion code" win (D-01: `platform/` imports but never
 modifies incumbent fetchers) with no accuracy tradeoff, since it is the
-primary free source with the longest history for this asset class.
+primary free source with the longest history for this asset class. The IAU
+fallback exists purely as a never-lose-the-asset-class safety net for when
+macrotrends is blocked (403 on datacenter/VPN IPs) or otherwise unreachable.
 
-**Tradeoff.** None identified — macrotrends already exceeds the 1962 target
-span with a single continuous series (RESEARCH's Open Question 3 on
+**Tradeoff.** The IAU caveat above. Otherwise unchanged from the original
+decision: macrotrends already exceeds the 1962 target span with a single
+continuous series when it IS reachable (RESEARCH's Open Question 3 on
 multi-segment splices for gold — e.g. macrotrends → LBMA → IAU-implied spot
 as three segments — was explicitly deferred: default to the simplest source
 that meets the target span, only add a segment if a coverage gap is found;
-none was found for gold).
+none was found for gold's primary source).
 
 ---
 
@@ -228,7 +254,7 @@ instrument, not a simplification.
 |---|---|---|---|---|---|---|
 | Equities | `equities_tr` | multpl.com (price + div yield) | ~1871 | none (single source) | `total_return_from_price_div` | SPY |
 | Long duration | `long_duration_tr` | FRED `GS10` | 1953 | none (single source) | `cmt_par_bond_repricing` (par-bond repricing, semiannual) | TLT |
-| Gold | `gold` | macrotrends | 1915 | none (single source) | `single_source` | IAU |
+| Gold | `gold` | macrotrends `gold_spot` (primary), IAU daily close (fallback — **not spot gold**, ~2005+) | 1915 (macrotrends) / ~2005 (IAU fallback) | none (candidate chain, not a splice) | `single_source` (chain: `[gold_spot, IAU]`) | IAU |
 | Oil | `oil` | macrotrends (primary), FRED `WTISPLC` (cross-check) | 1946 | none (single source) | `single_source` | USO / class-level |
 | Cash | `cash` | FRED `TB3MS` | 1934 | none (single source) | `yield_as_return` | FZFXX / SPAXX |
 
