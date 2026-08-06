@@ -219,6 +219,70 @@ def _scrape_series(
     return s.resample("QE").mean()
 
 
+# Characters stripped before numeric conversion. macrotrends renders prices as
+# "$4,245.30" — the comma alone was handled, the currency symbol was not, so
+# to_numeric produced NaN for every row even when the right column was picked.
+_NUMERIC_STRIP = re.compile(r"[^0-9eE.+-]")
+
+
+def _clean_numeric(col: pd.Series) -> pd.Series:
+    """Strip currency symbols, thousands separators and stray text."""
+    return col.astype(str).str.replace(_NUMERIC_STRIP, "", regex=True)
+
+
+def _detect_date_and_value_columns(df: pd.DataFrame, column_name: str) -> tuple[Any, Any]:
+    """Identify the date and value columns by CONTENT, not by header text.
+
+    Header matching cannot work on the real macrotrends table: pandas reads
+    BOTH columns as the same squashed label and merely de-duplicates the
+    second, e.g.::
+
+        ['Gold PricesMonthly Closing Price', 'Gold PricesMonthly Closing Price.1']
+
+    Every column therefore contains "price" AND "month", so a keyword search
+    matches the wrong one whichever order it runs in — the observed failure was
+    the DATE column being taken as the value column and vice versa, which
+    parsed prices as dates, produced all-NaT, and emptied the series.
+
+    So: try to parse each column as dates and as numbers, and let the data
+    decide. The date column is the one that parses cleanly as dates; the value
+    column is the one that parses cleanly as numbers once currency symbols are
+    stripped. Falls back to positional (first, last) only when the content is
+    ambiguous.
+    """
+    date_scores: dict[Any, float] = {}
+    value_scores: dict[Any, float] = {}
+    for col in df.columns:
+        raw = df[col]
+        # An ALREADY-NUMERIC column is never the date column. pandas.read_html
+        # types a clean price column as float64, and pd.to_datetime happily
+        # reads floats as nanosecond epochs — so it would score a perfect 1.0
+        # as a date candidate and win the tie against the real date column.
+        if pd.api.types.is_numeric_dtype(raw):
+            date_scores[col] = 0.0
+        else:
+            date_scores[col] = float(pd.to_datetime(raw, errors="coerce").notna().mean())
+        value_scores[col] = float(pd.to_numeric(_clean_numeric(raw), errors="coerce").notna().mean())
+
+    date_col = max(date_scores, key=lambda c: date_scores[c])
+    # The value column must not be the date column; among the rest, take the
+    # most numeric. A date string like "2026-08-01" also strips to digits, so
+    # date_col is excluded FIRST rather than compared on numeric score.
+    remaining = [c for c in df.columns if c != date_col]
+    value_col = max(remaining, key=lambda c: value_scores[c]) if remaining else date_col
+
+    if date_scores[date_col] < 0.5 or value_scores[value_col] < 0.5:
+        log.warning(
+            "macrotrends %s: ambiguous columns (date %.0f%% parseable, value %.0f%% parseable) — "
+            "falling back to positional first/last",
+            column_name, 100 * date_scores[date_col], 100 * value_scores[value_col],
+        )
+        return df.columns[0], df.columns[-1]
+
+    log.debug("macrotrends %s: date_col=%r value_col=%r", column_name, date_col, value_col)
+    return date_col, value_col
+
+
 def _scrape_series_html_table(
     html: str,
     column_name: str,
@@ -243,30 +307,10 @@ def _scrape_series_html_table(
     # Use the largest table (most likely the data table)
     df = max(tables, key=len)
 
-    # Find value column FIRST, then date column excluding it — a squashed
-    # header like "Gold PricesMonthly Closing Price" contains "month" as a
-    # substring of "Monthly", so if date detection ran first (or considered
-    # this column a candidate) it would misidentify the VALUE column as the
-    # date column. Excluding value_col from the date search resolves that
-    # collision without narrowing either keyword set.
-    value_col = next(
-        (c for c in df.columns if "value" in str(c).lower() or "price" in str(c).lower() or "close" in str(c).lower()),
-        df.columns[-1],
-    )
-    date_col = next(
-        (
-            c for c in df.columns
-            if c != value_col
-            and ("date" in str(c).lower() or "year" in str(c).lower() or "month" in str(c).lower())
-        ),
-        next((c for c in df.columns if c != value_col), df.columns[0]),
-    )
+    date_col, value_col = _detect_date_and_value_columns(df, column_name)
 
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    df[value_col] = pd.to_numeric(
-        df[value_col].astype(str).str.replace(",", "", regex=False),
-        errors="coerce",
-    )
+    df[value_col] = pd.to_numeric(_clean_numeric(df[value_col]), errors="coerce")
     df = df.dropna(subset=[date_col, value_col])
 
     s = df.set_index(date_col)[value_col].sort_index()
