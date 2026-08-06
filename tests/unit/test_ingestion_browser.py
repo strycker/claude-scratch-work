@@ -906,3 +906,71 @@ def test_fetch_urls_as_text_selenium_only_returns_empty_and_warns(monkeypatch, c
     assert out == {}
     fake_webdriver.Chrome.assert_not_called()
     assert any("pip install" in rec.message for rec in caplog.records)
+
+
+# ── headless signal hygiene (2026-08-05 escalation) ─────────────────────────
+
+
+def test_headless_mode_defaults_true(monkeypatch):
+    monkeypatch.delenv("TC_BROWSER_HEADLESS", raising=False)
+    assert browser_mod.headless_mode() is True
+
+
+@pytest.mark.parametrize("value", ["false", "False", "0", "no", "off", " FALSE "])
+def test_headless_mode_false_only_when_explicitly_disabled(monkeypatch, value):
+    monkeypatch.setenv("TC_BROWSER_HEADLESS", value)
+    assert browser_mod.headless_mode() is False
+
+
+@pytest.mark.parametrize("value", ["true", "1", "", "yes", "anything-else"])
+def test_headless_mode_stays_true_for_anything_else(monkeypatch, value):
+    monkeypatch.setenv("TC_BROWSER_HEADLESS", value)
+    assert browser_mod.headless_mode() is True
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_playwright_context_overrides_the_headless_user_agent(mock_sync_pw):
+    """Headless Chromium announces itself as "HeadlessChrome" in its UA and
+    client hints — observed leaking to third parties as
+    m_ch_ua=..."HeadlessChrome"|v="151". The context must override it."""
+    page = _FakePage({})
+    pw_cm, _pw, browser_obj, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    browser_mod.fetch_page_html("https://example.com")
+
+    _, kwargs = browser_obj.new_context.call_args
+    ua = kwargs.get("user_agent")
+    assert ua, "no user_agent set on the Playwright context"
+    assert "Headless" not in ua
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.time.sleep")
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_download_path_context_also_overrides_the_user_agent(mock_sync_pw, mock_sleep):
+    """Both context construction sites, not just the HTML one."""
+    urls = {"SPY": "https://stooq.com/q/d/l/?s=spy.us"}
+    page = _FakePage({urls["SPY"]: "date,close\nspy-data"})
+    pw_cm, _pw, browser_obj, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    browser_mod.fetch_stooq_csvs(urls)
+
+    _, kwargs = browser_obj.new_context.call_args
+    assert "Headless" not in (kwargs.get("user_agent") or "")
+
+
+@patch("trading_crab_lib.ingestion.browser._PLAYWRIGHT_AVAILABLE", True)
+@patch("trading_crab_lib.ingestion.browser.sync_playwright")
+def test_headless_env_toggle_reaches_chromium_launch(mock_sync_pw, monkeypatch):
+    monkeypatch.setenv("TC_BROWSER_HEADLESS", "false")
+    page = _FakePage({})
+    pw_cm, pw_obj, _browser, _context = _build_fake_playwright(page)
+    mock_sync_pw.return_value = pw_cm
+
+    browser_mod.fetch_page_html("https://example.com")
+
+    _, kwargs = pw_obj.chromium.launch.call_args
+    assert kwargs.get("headless") is False

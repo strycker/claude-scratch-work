@@ -171,6 +171,26 @@ _SELENIUM_USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+# Applied to the PLAYWRIGHT context, which otherwise inherits Chromium's own
+# headless User-Agent. Observed on 2026-08-05: third-party requests from a page
+# we loaded carried `m_ch_ua=..."HeadlessChrome"|v="151"` — the browser was
+# announcing itself as headless in client-hint headers.
+#
+# NOTE this is the OPPOSITE call to the one made for the curl_cffi client in
+# ingestion/http.py, and deliberately so. There, curl_cffi supplies a complete
+# header set matched to the TLS fingerprint it presents, so overriding the UA
+# CREATES an inconsistency. Here, headless Chromium's own default is ALREADY
+# inconsistent with what a real Chrome sends, so overriding it removes one.
+# The rule in both cases is the same: make the UA agree with everything else
+# the client presents.
+_PLAYWRIGHT_USER_AGENT = _SELENIUM_USER_AGENT
+
+# Operator toggle: set TC_BROWSER_HEADLESS=false to drive a VISIBLE browser.
+# Headless leaves signals no flag fully suppresses; a real windowed session
+# does not. Only usable on a machine with a display, which is why headless
+# stays the default.
+_HEADLESS_ENV = "TC_BROWSER_HEADLESS"
+
 # Window size mirrors _VIEWPORT so both engines render at the same size.
 _SELENIUM_ARGS = [
     "--headless=new",
@@ -190,6 +210,17 @@ def selenium_available() -> bool:
     return _SELENIUM_AVAILABLE
 
 
+def headless_mode() -> bool:
+    """Return False only when TC_BROWSER_HEADLESS is explicitly falsy.
+
+    Defaults to headless because a visible window needs a display, which CI
+    and most servers lack. Set TC_BROWSER_HEADLESS=false on a desktop to drive
+    a real windowed browser, which emits none of the headless-specific signals.
+    """
+    raw = (os.environ.get(_HEADLESS_ENV) or "").strip().lower()
+    return raw not in {"false", "0", "no", "off"}
+
+
 def _launch_kwargs() -> dict[str, Any]:
     """Shared ``chromium.launch()`` kwargs for both fetch paths.
 
@@ -198,7 +229,7 @@ def _launch_kwargs() -> dict[str, Any]:
     build; the key is left ABSENT (not set to None) when unset so Playwright
     uses its own bundled browser.
     """
-    kwargs: dict[str, Any] = {"headless": True, "args": list(_STEALTH_LAUNCH_ARGS)}
+    kwargs: dict[str, Any] = {"headless": headless_mode(), "args": list(_STEALTH_LAUNCH_ARGS)}
     chromium_path = os.environ.get(_CHROMIUM_PATH_ENV)
     if chromium_path:
         kwargs["executable_path"] = chromium_path
@@ -268,7 +299,7 @@ def _fetch_page_html_playwright(
         with sync_playwright() as pw:
             browser = pw.chromium.launch(**_launch_kwargs())
             try:
-                context = browser.new_context(viewport=dict(_VIEWPORT))
+                context = browser.new_context(viewport=dict(_VIEWPORT), user_agent=_PLAYWRIGHT_USER_AGENT)
                 context.add_init_script(_STEALTH_INIT_SCRIPT)
                 page = context.new_page()
                 page.goto(url, timeout=timeout_ms, wait_until=_WAIT_UNTIL)
@@ -518,7 +549,9 @@ def fetch_urls_as_text(
             try:
                 # accept_downloads is required — some endpoints answer a
                 # navigation with a file attachment, not a page.
-                context = browser.new_context(accept_downloads=True, viewport=dict(_VIEWPORT))
+                context = browser.new_context(
+                    accept_downloads=True, viewport=dict(_VIEWPORT), user_agent=_PLAYWRIGHT_USER_AGENT
+                )
                 context.add_init_script(_STEALTH_INIT_SCRIPT)
                 page = context.new_page()
                 if warmup_url:
