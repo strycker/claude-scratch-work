@@ -25,6 +25,11 @@ data/raw/
 # outputs/plots/
 # outputs/reports/
 
+# Offline dev snapshots — deliberately committed (docs/offline_snapshots.md).
+# Narrowest possible exception: only this subtree, nothing else under data/.
+!data/snapshots/
+!data/snapshots/**
+
 # Secrets / API keys (always use .env instead)
 *.key
 config/secrets.yaml
