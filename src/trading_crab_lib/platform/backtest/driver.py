@@ -58,6 +58,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import numpy as np
@@ -79,6 +80,10 @@ from trading_crab_lib.platform.prediction.nowcaster import build_nowcaster_train
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
+
+# Report progress this often. 12 = once per simulated year, which keeps a
+# multi-hundred-step run visibly alive without flooding the log.
+_PROGRESS_EVERY_STEPS = 12
 
 # The only exception CalibratedClassifierCV/LogisticRegression raise for a
 # degenerate (too-few-samples-per-class) fold — see RESEARCH.md Pitfall 2.
@@ -345,7 +350,30 @@ def run_backtest(
     prev_active_regime: int | None = None
     prev_cash: float = 1.0
 
-    for t, train_index, test_index in expanding_steps(dev_features.index, min_train=min_train):
+    # Materialize the step list so progress can be reported as N/total. Every
+    # step refits L1+L2 on an expanding window, so a full run is minutes of
+    # silent sklearn work — without this the process looks hung, especially
+    # after the early degraded-refit warnings stop and output goes quiet.
+    steps = list(expanding_steps(dev_features.index, min_train=min_train))
+    total_steps = len(steps)
+    started = time.monotonic()
+    log.info(
+        "Backtest: %d monthly steps from %s to %s (each step refits L1+L2 on an expanding window)",
+        total_steps,
+        steps[0][0].date() if steps else "n/a",
+        steps[-1][0].date() if steps else "n/a",
+    )
+
+    for step_no, (t, train_index, test_index) in enumerate(steps, start=1):
+        if step_no % _PROGRESS_EVERY_STEPS == 0 or step_no == total_steps:
+            elapsed = time.monotonic() - started
+            rate = step_no / elapsed if elapsed > 0 else 0.0
+            remaining = (total_steps - step_no) / rate if rate > 0 else 0.0
+            log.info(
+                "Backtest progress: %d/%d steps (%.0f%%) — %s — %.1fs elapsed, ~%.0fs remaining",
+                step_no, total_steps, 100.0 * step_no / total_steps,
+                t.date(), elapsed, remaining,
+            )
         train_features = dev_features.loc[train_index]
         degraded = False
 

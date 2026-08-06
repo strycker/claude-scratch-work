@@ -300,3 +300,68 @@ def test_scrape_series_html_table_handles_merged_header_and_month_column(mock_ge
     assert len(s) > 0
     assert not s.isna().all()
     mock_fetch_page_html.assert_not_called()  # HTTP body already had a parseable table
+
+
+# ── column detection on the REAL live table shape (2026-08-06) ──────────────
+
+
+# What pandas.read_html actually produces for the live macrotrends page: BOTH
+# columns carry the SAME squashed header (pandas only de-duplicates the second
+# with ".1"), dates are strings, and values are $-prefixed with separators.
+SAMPLE_LIVE_IDENTICAL_HEADERS_HTML = """
+<html><body>
+<table class="table">
+<thead><tr><th>Gold PricesMonthly Closing Price</th><th>Gold PricesMonthly Closing Price</th></tr></thead>
+<tbody>
+<tr><td>2026-08-01</td><td>$4,245.30</td></tr>
+<tr><td>2026-07-01</td><td>$4,041.70</td></tr>
+<tr><td>2026-06-01</td><td>$4,006.70</td></tr>
+</tbody>
+</table>
+</body></html>
+"""
+
+
+def test_detect_columns_when_both_headers_are_identical():
+    """No header keyword can separate these — both contain 'price' AND 'month'.
+    Detection must go by content."""
+    from io import StringIO
+
+    import pandas as pd
+
+    from trading_crab_lib.ingestion.macrotrends import _detect_date_and_value_columns
+
+    df = pd.read_html(StringIO(SAMPLE_LIVE_IDENTICAL_HEADERS_HTML))[0]
+    date_col, value_col = _detect_date_and_value_columns(df, "gold_spot")
+
+    assert date_col == df.columns[0]
+    assert value_col == df.columns[1]
+    assert date_col != value_col
+
+
+def test_numeric_column_is_never_chosen_as_the_date_column():
+    """read_html types a clean price column as float64, and pd.to_datetime
+    reads floats as nanosecond epochs — scoring a perfect 1.0 as a date
+    candidate and winning the tie against the real date column."""
+    import pandas as pd
+
+    from trading_crab_lib.ingestion.macrotrends import _detect_date_and_value_columns
+
+    df = pd.DataFrame({"Gold PricesMonthly Closing Price": [1560.0, 1600.0], "Month": ["2020-01-01", "2020-02-01"]})
+    date_col, value_col = _detect_date_and_value_columns(df, "gold_spot")
+
+    assert date_col == "Month"
+    assert value_col == "Gold PricesMonthly Closing Price"
+
+
+def test_currency_symbols_are_stripped_before_numeric_conversion():
+    """'$4,245.30' — the comma was handled, the dollar sign was not, so every
+    row became NaN even once the right column was picked."""
+    from trading_crab_lib.ingestion.macrotrends import _scrape_series_html_table
+
+    s = _scrape_series_html_table(SAMPLE_LIVE_IDENTICAL_HEADERS_HTML, "gold_spot", "mean")
+
+    assert not s.empty
+    assert s.loc["2026-06-30"] == pytest.approx(4006.70)
+    # Q3 averages July and August under the "mean" resample.
+    assert s.loc["2026-09-30"] == pytest.approx((4041.70 + 4245.30) / 2)

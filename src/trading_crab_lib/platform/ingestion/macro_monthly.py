@@ -252,24 +252,14 @@ def _scrape_macrotrends_html_table_monthly(
 
     df = max(tables, key=len)
 
-    value_col = next(
-        (c for c in df.columns if "value" in str(c).lower() or "price" in str(c).lower() or "close" in str(c).lower()),
-        df.columns[-1],
-    )
-    date_col = next(
-        (
-            c for c in df.columns
-            if c != value_col
-            and ("date" in str(c).lower() or "year" in str(c).lower() or "month" in str(c).lower())
-        ),
-        next((c for c in df.columns if c != value_col), df.columns[0]),
-    )
+    # Content-based detection, imported (not copied) from macrotrends.py — the
+    # live table reads as TWO IDENTICALLY-NAMED columns, so no header keyword
+    # can distinguish them. See that helper for the full explanation.
+    date_col, value_col = macrotrends._detect_date_and_value_columns(df, column_name)
 
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    df[value_col] = pd.to_numeric(
-        df[value_col].astype(str).str.replace(",", "", regex=False),
-        errors="coerce",
-    )
+    df[value_col] = pd.to_numeric(macrotrends._clean_numeric(df[value_col]), errors="coerce")
+
     df = df.dropna(subset=[date_col, value_col])
 
     s = df.set_index(date_col)[value_col].sort_index()
