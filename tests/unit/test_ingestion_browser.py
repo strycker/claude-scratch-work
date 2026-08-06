@@ -974,3 +974,24 @@ def test_headless_env_toggle_reaches_chromium_launch(mock_sync_pw, monkeypatch):
 
     _, kwargs = pw_obj.chromium.launch.call_args
     assert kwargs.get("headless") is False
+
+
+# ── launch-failure diagnostics ──────────────────────────────────────────────
+
+
+def test_launch_hint_explains_a_missing_system_library():
+    """The one useful line is buried under hundreds of Chromium flags, and the
+    fix (install HOST libs) differs from 'playwright not installed'."""
+    exc = RuntimeError(
+        "BrowserType.launch: Target page, context or browser has been closed\n"
+        "[pid=1][err] chrome-headless-shell: error while loading shared libraries: "
+        "libnspr4.so: cannot open shared object file: No such file or directory"
+    )
+    hint = browser_mod._launch_hint(exc)
+    assert "install-deps chromium" in hint
+    assert "libnspr4" in hint
+
+
+def test_launch_hint_leaves_unrelated_errors_untouched():
+    exc = RuntimeError("net::ERR_CONNECTION_RESET")
+    assert browser_mod._launch_hint(exc) == "net::ERR_CONNECTION_RESET"
