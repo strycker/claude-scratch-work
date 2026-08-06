@@ -37,7 +37,7 @@ from urllib.parse import urlencode
 
 import pandas as pd
 
-from trading_crab_lib.ingestion.http import HTTP_ERRORS, browser_session, http_get
+from trading_crab_lib.ingestion.http import HTTP_ERRORS, http_get, plain_session
 
 log = logging.getLogger(__name__)
 
@@ -235,7 +235,12 @@ def fetch_daily_prices(
     rate_limit_seconds = tiingo_cfg.get("rate_limit_seconds", _RATE_LIMIT_SECONDS)
     max_retries = tiingo_cfg.get("max_retries", _MAX_RETRIES)
 
-    session = browser_session()
+    # Plain requests, NOT the impersonating client. Tiingo is a keyed REST API
+    # with no bot check, so impersonation defeats nothing and only adds
+    # failure modes: curl_cffi carries its own CA store and its own transport,
+    # and has been observed failing where plain requests succeeded (a proxy
+    # reset it outright against this very endpoint while requests got HTTP 200).
+    session = plain_session()
     if session is None:
         log.warning("No HTTP client available — Tiingo fetch skipped.")
         return {}

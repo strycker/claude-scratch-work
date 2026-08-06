@@ -183,6 +183,34 @@ def browser_session(*, impersonate: str = DEFAULT_IMPERSONATE, verify: bool = Tr
     return None
 
 
+def plain_session() -> Any | None:
+    """A plain ``requests`` session — no TLS impersonation.
+
+    For endpoints with NO bot check: keyed REST APIs (Tiingo), and anything
+    else that simply answers a well-formed request. Impersonation exists to
+    defeat fingerprint-based blocking; where there is nothing to defeat it is
+    pure added risk, because curl_cffi ships its OWN CA store and its own
+    transport. Both have failed in practice where plain ``requests`` worked:
+    curl_cffi could not verify Yahoo's chain against either its bundled store
+    or certifi on an operator machine, and is reset outright by some
+    intercepting proxies.
+
+    Honors TC_CA_BUNDLE like :func:`browser_session`. Returns None when
+    ``requests`` is somehow unavailable.
+    """
+    if not (_REQUESTS_AVAILABLE and _requests is not None):
+        log.warning("requests is not importable — cannot build a plain HTTP session.")
+        return None
+
+    session = _requests.Session()
+    session.headers.update(BROWSER_HEADERS)
+    bundle = ca_bundle_override()
+    if bundle:
+        session.verify = bundle
+        log.debug("Plain session verifying against %s: %s", _CA_BUNDLE_ENV, bundle)
+    return session
+
+
 def http_get(
     url: str,
     *,

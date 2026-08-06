@@ -39,7 +39,7 @@ def _response(payload: object, status: int = 200) -> MagicMock:
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_prefers_adjclose_over_close(mock_get, mock_session, mock_sleep):
     """Mixing adjusted and unadjusted prices would silently corrupt returns at
@@ -52,7 +52,7 @@ def test_prefers_adjclose_over_close(mock_get, mock_session, mock_sleep):
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_falls_back_to_close_when_adjclose_absent(mock_get, mock_session, mock_sleep):
     mock_get.return_value = _response(_rows(adj=False))
@@ -63,7 +63,7 @@ def test_falls_back_to_close_when_adjclose_absent(mock_get, mock_session, mock_s
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_series_is_daily_and_tz_naive(mock_get, mock_session, mock_sleep):
     mock_get.return_value = _response(_rows())
@@ -81,7 +81,7 @@ def test_series_is_daily_and_tz_naive(mock_get, mock_session, mock_sleep):
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_api_key_travels_in_header_never_in_url(mock_get, mock_session, mock_sleep):
     mock_get.return_value = _response(_rows())
@@ -96,7 +96,7 @@ def test_api_key_travels_in_header_never_in_url(mock_get, mock_session, mock_sle
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_api_key_never_reaches_the_logs_via_an_exception(mock_get, mock_session, mock_sleep, caplog):
     """The realistic leak path: the transport echoes request detail — including
@@ -118,7 +118,7 @@ def test_missing_api_key_returns_empty_without_raising_or_requesting(monkeypatch
     monkeypatch.delenv("TIINGO_API_KEY", raising=False)
 
     with patch("trading_crab_lib.platform.ingestion.tiingo.http_get") as mock_get, \
-         patch("trading_crab_lib.platform.ingestion.tiingo.browser_session") as mock_session, \
+         patch("trading_crab_lib.platform.ingestion.tiingo.plain_session") as mock_session, \
          caplog.at_level(logging.INFO):
         out = tiingo.fetch_daily_prices(["SPY"], "2024-01-01", "2024-01-05")
 
@@ -145,7 +145,7 @@ def test_resolve_api_key_precedence_and_blank_handling(monkeypatch):
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_one_failing_ticker_does_not_abort_the_batch(mock_get, mock_session, mock_sleep):
     def _side_effect(url, **_kwargs):
@@ -161,7 +161,7 @@ def test_one_failing_ticker_does_not_abort_the_batch(mock_get, mock_session, moc
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_429_is_retried_with_bounded_backoff_then_succeeds(mock_get, mock_session, mock_sleep):
     mock_get.side_effect = [
@@ -180,7 +180,7 @@ def test_429_is_retried_with_bounded_backoff_then_succeeds(mock_get, mock_sessio
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_429_retry_budget_is_bounded(mock_get, mock_session, mock_sleep):
     mock_get.return_value = _response(None, status=429)
@@ -192,7 +192,7 @@ def test_429_retry_budget_is_bounded(mock_get, mock_session, mock_sleep):
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 @pytest.mark.parametrize("status", [401, 403, 404, 500])
 def test_non_200_non_429_is_not_retried(mock_get, mock_session, mock_sleep, status):
@@ -205,7 +205,7 @@ def test_non_200_non_429_is_not_retried(mock_get, mock_session, mock_sleep, stat
 
 
 @patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
-@patch("trading_crab_lib.platform.ingestion.tiingo.browser_session")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
 @patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
 def test_unparseable_payload_degrades_to_skip(mock_get, mock_session, mock_sleep):
     mock_get.return_value = _response({"detail": "not a list"})
@@ -213,3 +213,22 @@ def test_unparseable_payload_degrades_to_skip(mock_get, mock_session, mock_sleep
     out = tiingo.fetch_daily_prices(["SPY"], "2024-01-01", "2024-01-05", api_key=_KEY)
 
     assert out == {}
+
+
+# ── transport choice ────────────────────────────────────────────────────────
+
+
+@patch("trading_crab_lib.platform.ingestion.tiingo.time.sleep")
+@patch("trading_crab_lib.platform.ingestion.tiingo.http_get")
+@patch("trading_crab_lib.platform.ingestion.tiingo.plain_session")
+def test_uses_plain_session_not_the_impersonating_client(mock_plain, mock_get, mock_sleep):
+    """Tiingo is a keyed REST API with no bot check, so impersonation defeats
+    nothing and only adds failure modes — curl_cffi ships its own CA store and
+    its own transport, and was observed being reset against this very endpoint
+    while plain requests got HTTP 200."""
+    mock_get.return_value = _response(_rows())
+
+    tiingo.fetch_daily_prices(["SPY"], "2024-01-01", "2024-01-05", api_key=_KEY)
+
+    mock_plain.assert_called_once()
+    assert not hasattr(tiingo, "browser_session"), "the impersonating client must not be imported here"
