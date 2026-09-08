@@ -41,6 +41,7 @@ import pandas as pd
 
 from trading_crab_lib.platform import splice, taxonomy
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+from trading_crab_lib.platform.honesty.holdout import write_monthly_features_split
 from trading_crab_lib.platform.ingestion import alfred, macro_monthly, prices_daily
 
 log = logging.getLogger(__name__)
@@ -261,7 +262,13 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     monthly_features = monthly_features.loc[:, ~monthly_features.columns.duplicated(keep="last")]
     monthly_features.index.name = "date"
 
-    cm.save(monthly_features, "monthly_features")
+    # HON-01: carve at the holdout boundary rather than writing one unfenced
+    # checkpoint. Dev rows (<= 2020-12) land in the default platform namespace;
+    # post-cutoff rows go to data/holdout/, which the default manager cannot
+    # read. Anything that legitimately needs the full span — live weekly
+    # scoring, the verification notebooks — opts in by name via
+    # honesty.holdout.load_full_span(). The fence is on fitting, not looking.
+    write_monthly_features_split(monthly_features, "monthly_features")
 
     log.info(
         "build_monthly_spine: assembled %d months, %d columns (monthly_features, %d lean)",

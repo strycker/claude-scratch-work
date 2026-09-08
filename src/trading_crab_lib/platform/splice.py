@@ -95,6 +95,85 @@ def ratio_splice(old: pd.Series, new: pd.Series, join_date: pd.Timestamp) -> pd.
     return spliced
 
 
+# ── Yield units ──────────────────────────────────────────────────────────────
+#
+# Raw columns keep whatever units their SOURCE publishes — ingestion does not
+# rescale, and neither should it. That means `monthly_raw` legitimately mixes
+# conventions: FRED's CMT and T-bill series are annualized PERCENT
+# (`fred_gs10` = 4.68) while multpl's `div_yield` is already a DECIMAL fraction
+# (0.011). `bond_price()` / `monthly_total_return()` are decimal-domain
+# functions, so percent series MUST be converted here, at the splice boundary,
+# and nowhere else.
+#
+# Getting this wrong is silent and catastrophic rather than loud: feeding 4.68
+# to `monthly_total_return` accrues a 39%-per-month coupon and compounds
+# `long_duration_tr` to ~1e128, which then propagates into every KPI without
+# raising anything. Hence `assert_yield_units_plausible()` below.
+
+_YIELD_UNIT_SCALES = {"percent": 0.01, "decimal": 1.0}
+DEFAULT_YIELD_UNITS = "percent"
+
+# A US Treasury yield has never exceeded 100% annualized. Anything above that
+# after conversion is a units error, not a market.
+_IMPLAUSIBLE_DECIMAL_YIELD = 1.0
+# Below this the series is *suspicious* (a whole history median under 10bp),
+# but ZIRP-era slices can legitimately sit here — warn, never fail.
+_SUSPICIOUSLY_LOW_MEDIAN_YIELD = 0.001
+
+
+def assert_yield_units_plausible(yields_decimal: pd.Series, *, source: str) -> None:
+    """Fail loudly on an unambiguous yield-units error; warn on a suspicious one.
+
+    Deliberately asymmetric, because the two directions are not equally
+    knowable. A converted yield above 100% annualized cannot be a rate under
+    any market conditions, so that is an error. A very low median can mean
+    either double-converted units or a genuine ZIRP window, so that is only a
+    warning — a hard failure there would reject real 2009-2021 T-bill data.
+
+    Raises:
+        ValueError: if any converted yield exceeds 100% annualized.
+    """
+    clean = yields_decimal.dropna()
+    if clean.empty:
+        return
+    worst = float(clean.abs().max())
+    if worst > _IMPLAUSIBLE_DECIMAL_YIELD:
+        raise ValueError(
+            f"{source}: yield of {worst:.4g} ({worst:.1%} annualized) after unit conversion is "
+            f"not a plausible rate. The series is almost certainly in PERCENT while configured "
+            f"as decimal — set `yield_units: percent` for this splice class. Left uncaught this "
+            f"compounds into a nonsense total-return index rather than failing."
+        )
+    median = float(clean.median())
+    if median < _SUSPICIOUSLY_LOW_MEDIAN_YIELD:
+        log.warning(
+            "%s: median yield after conversion is %.6g (%.4f%% annualized), which is very low. "
+            "If this series is already a decimal fraction, it is being converted twice — check "
+            "`yield_units` for this splice class.",
+            source, median, median * 100,
+        )
+
+
+def yield_to_decimal(yields: pd.Series, *, units: str = DEFAULT_YIELD_UNITS, source: str = "yield") -> pd.Series:
+    """Normalize an annualized yield series to a decimal fraction.
+
+    ``units`` comes from the splice class's ``yield_units`` config key and
+    defaults to ``percent`` — the convention of every yield column the
+    platform currently ingests (all FRED).
+
+    Raises:
+        ValueError: on an unknown ``units`` value, or via
+            ``assert_yield_units_plausible`` on an impossible converted rate.
+    """
+    if units not in _YIELD_UNIT_SCALES:
+        raise ValueError(
+            f"{source}: unknown yield_units {units!r}; expected one of {sorted(_YIELD_UNIT_SCALES)}"
+        )
+    converted = yields * _YIELD_UNIT_SCALES[units]
+    assert_yield_units_plausible(converted, source=source)
+    return converted
+
+
 # ── Treasury total-return synthetic (par-bond repricing) ────────────────────
 
 def bond_price(yield_annual: float, coupon_annual: float, years_to_maturity: float, freq: int = 2) -> float:
@@ -102,6 +181,11 @@ def bond_price(yield_annual: float, coupon_annual: float, years_to_maturity: flo
 
     A par bond priced at its own coupon yield (`yield_annual == coupon_annual`)
     returns ~1.0 by construction.
+
+    Units: `yield_annual` and `coupon_annual` are DECIMAL fractions (0.0468),
+    never percent (4.68) — `pv_face = 1 / (1 + r)**n` only prices to par in the
+    decimal domain. Callers reading raw FRED columns must run them through
+    `yield_to_decimal()` first.
     """
     periods = int(round(years_to_maturity * freq))
     coupon = coupon_annual / freq
@@ -131,18 +215,62 @@ def build_treasury_tr_synthetic(gs10_yield_series: pd.Series, cfg: dict[str, Any
     """Chain `monthly_total_return()` across a monthly CMT yield series into a
     cumulative total-return index (base = 1.0 at the first observation).
 
-    Reads `maturity_years`/`coupon_freq` from `cfg['splice']['long_duration']`.
+    Reads `maturity_years`/`coupon_freq`/`yield_units` from
+    `cfg['splice']['long_duration']`. The incoming series is in its source's
+    native units (FRED CMT is PERCENT) and is converted to decimal here —
+    `monthly_total_return()` is decimal-domain.
     """
     params = cfg["splice"]["long_duration"]
     maturity_years = params["maturity_years"]
     freq = params["coupon_freq"]
 
-    yields = gs10_yield_series.dropna()
+    yields = yield_to_decimal(
+        gs10_yield_series.dropna(),
+        units=params.get("yield_units", DEFAULT_YIELD_UNITS),
+        source="splice.long_duration",
+    )
     monthly_returns = [
         monthly_total_return(y0, y1, maturity_years, freq=freq) for y0, y1 in zip(yields.iloc[:-1], yields.iloc[1:])
     ]
     returns = pd.Series(monthly_returns, index=yields.index[1:])
     index_level = pd.concat([pd.Series([1.0], index=[yields.index[0]]), (1 + returns).cumprod()])
+    index_level.name = params["research_name"]
+    return index_level
+
+
+# ── Cash (T-bill) total return ───────────────────────────────────────────────
+
+def build_cash_index(tbill_yield_series: pd.Series, cfg: dict[str, Any]) -> pd.Series:
+    """Chain a short-rate yield series into a cumulative total-return index
+    (base = 1.0 at the first observation), like every other research class.
+
+    Two things this must get right, both of which were previously wrong:
+
+    * **Units.** The yield arrives in its source's native units (FRED TB3MS is
+      PERCENT) and is converted to decimal here.
+    * **Level, not rate.** Every consumer runs research series through
+      ``compute_monthly_returns()``, i.e. ``pct_change()``. Returning the yield
+      series itself therefore made "cash return" the month-over-month CHANGE IN
+      THE YIELD — a T-bill going 0.5% -> 3.0% booked a +500% month. Cash must be
+      an index level so that ``pct_change()`` recovers the accrual.
+
+    Accrual convention matches ``monthly_total_return()``: the month ending at
+    ``t`` earns the yield observed at ``t-1``, which is the rate actually known
+    when that month began. Using the yield at ``t`` would be look-ahead.
+    """
+    params = cfg["splice"]["cash"]
+    yields = yield_to_decimal(
+        tbill_yield_series.dropna(),
+        units=params.get("yield_units", DEFAULT_YIELD_UNITS),
+        source="splice.cash",
+    )
+    if yields.empty:
+        return pd.Series(dtype=float, name=params["research_name"])
+
+    monthly_accrual = (yields.shift(1) / 12).dropna()
+    index_level = pd.concat(
+        [pd.Series([1.0], index=[yields.index[0]]), (1 + monthly_accrual).cumprod()]
+    )
     index_level.name = params["research_name"]
     return index_level
 
@@ -156,6 +284,11 @@ def build_equity_total_return(price: pd.Series, div_yield: pd.Series, cfg: dict[
     Source: already-scraped multpl price + dividend yield, not a new Shiller
     fetcher (Claude's-Discretion choice — see docs/splicing_rules.md for the
     Shiller cross-check option).
+
+    Units: multpl's ``div_yield`` is already a DECIMAL fraction (0.011), unlike
+    the FRED yield columns — hence no ``yield_to_decimal()`` call here. That
+    asymmetry is exactly why the conversion is per-class config, not a blanket
+    rule.
     """
     params = cfg["splice"]["equities"]
     price = price.dropna()
@@ -358,7 +491,7 @@ def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.Dat
         elif method == "single_source":
             series = raw[resolved_map["source_col"]].dropna().rename(research_name)
         elif method == "yield_as_return":
-            series = raw[resolved_map["yield_col"]].dropna().rename(research_name)
+            series = build_cash_index(raw[resolved_map["yield_col"]], cfg)
         elif method == "ratio_splice":
             series = ratio_splice(
                 raw[resolved_map["old_col"]], raw[resolved_map["new_col"]], pd.Timestamp(params["join_date"])

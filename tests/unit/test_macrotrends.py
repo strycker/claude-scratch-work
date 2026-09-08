@@ -365,3 +365,28 @@ def test_currency_symbols_are_stripped_before_numeric_conversion():
     assert s.loc["2026-06-30"] == pytest.approx(4006.70)
     # Q3 averages July and August under the "mean" resample.
     assert s.loc["2026-09-30"] == pytest.approx((4041.70 + 4245.30) / 2)
+
+
+def test_column_detection_emits_no_pandas_format_warning():
+    """The detection heuristic scores arbitrary scraped strings for date-ness,
+    so pandas cannot infer one format and used to emit a "Could not infer
+    format" UserWarning on every scraped column. Saying format="mixed"
+    expresses the per-element intent instead of leaving warning noise that
+    trains readers to ignore warnings."""
+    import warnings
+
+    from trading_crab_lib.ingestion.macrotrends import _detect_date_and_value_columns
+
+    df = pd.DataFrame(
+        {
+            "Gold PricesMonthly Closing Price": ["2026-08-01", "Jul 1, 2026", "not a date"],
+            "Gold PricesMonthly Closing Price.1": ["4,450.00", "$4,041.70", "3,900"],
+        }
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        date_col, value_col = _detect_date_and_value_columns(df, "gold_spot")
+
+    assert date_col == "Gold PricesMonthly Closing Price"
+    assert value_col == "Gold PricesMonthly Closing Price.1"

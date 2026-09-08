@@ -36,7 +36,7 @@ from sklearn.preprocessing import StandardScaler
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_crab_lib.clustering import reduce_pca, evaluate_kmeans
+from trading_crab_lib.clustering import evaluate_kmeans, reduce_pca
 from trading_crab_lib.config import load
 from trading_crab_lib.transforms import engineer_all
 
@@ -235,7 +235,7 @@ def main():
 
     # ── 1. Clustering quality ─────────────────────────────────────────────
     print("\n" + "─" * 72)
-    print("1. CLUSTERING QUALITY COMPARISON (k={}, PCA={})".format(k, n_pca))
+    print(f"1. CLUSTERING QUALITY COMPARISON (k={k}, PCA={n_pca})")
     print("─" * 72)
 
     print("\nBuilding features WITHOUT momentum...")
@@ -335,7 +335,7 @@ def main():
         ]]
 
         if key_cols:
-            print(f"\n  Mean |momentum value| by quarter offset from transition:")
+            print("\n  Mean |momentum value| by quarter offset from transition:")
             print(f"  {'Offset':>8s}", end="")
             for c in key_cols:
                 short = c.replace("_mom_", "M").replace("10yr_ustreas", "10y")
@@ -352,7 +352,7 @@ def main():
                 print()
 
         # Compare magnitude at transition vs baseline
-        print(f"\n  Transition vs baseline magnitude comparison:")
+        print("\n  Transition vs baseline magnitude comparison:")
         for c in key_cols:
             t0 = trans_df[trans_df["offset_q"] == 0]
             t_2 = trans_df[trans_df["offset_q"] == -2]

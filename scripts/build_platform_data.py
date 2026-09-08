@@ -83,6 +83,10 @@ def main() -> int:
 
     from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
     from trading_crab_lib.platform.config import load_platform_config
+    from trading_crab_lib.platform.honesty.holdout import (
+        DEFAULT_HOLDOUT_CUTOFF,
+        assert_dev_checkpoint_within_boundary,
+    )
     from trading_crab_lib.platform.transforms_monthly import build_monthly_spine
 
     cfg = load_platform_config()
@@ -125,6 +129,21 @@ def main() -> int:
         daily_raw = cm.load("daily_raw")
     except FileNotFoundError:
         daily_raw = None
+
+    # HON-01 fence, verified rather than assumed. build_monthly_spine carves
+    # monthly_features at the 2020-12 boundary; this proves the dev-namespace
+    # checkpoint on disk actually honours it. A build that silently leaves
+    # post-cutoff rows where fitting code reads them is a failed build — every
+    # fit after it would train on holdout data.
+    try:
+        assert_dev_checkpoint_within_boundary("monthly_features")
+        log.info("Holdout fence OK: dev monthly_features ends on or before %s", DEFAULT_HOLDOUT_CUTOFF)
+    except RuntimeError as exc:
+        log.error("HOLDOUT FENCE VIOLATED: %s", exc)
+        return 1
+    except FileNotFoundError:
+        log.error("HOLDOUT FENCE UNVERIFIABLE: dev monthly_features checkpoint is missing")
+        return 1
 
     daily_raw_failure = check_price_coverage(daily_raw)
     monthly_features_failure = check_price_coverage(monthly_features)

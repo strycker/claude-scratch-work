@@ -36,7 +36,7 @@ from sklearn.preprocessing import StandardScaler
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_crab_lib.clustering import reduce_pca, evaluate_kmeans, fit_clusters
+from trading_crab_lib.clustering import evaluate_kmeans, reduce_pca
 from trading_crab_lib.config import load
 from trading_crab_lib.transforms import engineer_all
 
@@ -209,7 +209,7 @@ def main():
 
     # ── 1. Clustering quality ─────────────────────────────────────────────
     print("\n" + "─" * 72)
-    print("1. CLUSTERING QUALITY COMPARISON (k={}, PCA={})".format(k, n_pca))
+    print(f"1. CLUSTERING QUALITY COMPARISON (k={k}, PCA={n_pca})")
     print("─" * 72)
 
     print("\nBuilding features WITHOUT divergence...")
@@ -304,7 +304,7 @@ def main():
         print(f"  Divergence columns analyzed: {len(div_cols)}")
 
         # Summary statistics: mean absolute divergence at each offset
-        print(f"\n  Mean |divergence z-score| by quarter offset from transition:")
+        print("\n  Mean |divergence z-score| by quarter offset from transition:")
         print(f"  {'Offset':>8s}", end="")
         z_cols = [c for c in div_cols if "z_4q" in c]
         for c in z_cols:
@@ -323,7 +323,7 @@ def main():
         # Trigger rate at each offset
         trig_cols = [c for c in div_cols if "trigger" in c]
         if trig_cols:
-            print(f"\n  Trigger fire rate by quarter offset:")
+            print("\n  Trigger fire rate by quarter offset:")
             print(f"  {'Offset':>8s}", end="")
             for c in trig_cols:
                 short = c.replace("div_", "").replace("_trigger", "")

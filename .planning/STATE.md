@@ -55,17 +55,24 @@ project constraints:
 - **Scope held:** no tuning ((K,λ) sweeps stay deferred to v2 per Phase 3 D-02), no
   report wiring, no package restructuring (Phase 7), no holdout-carve repair (separate).
 
-### ⚠ Adjacent finding — fitting is currently unfenced
+### ✅ RESOLVED (2026-09-08) — fitting is now fenced at rest
 
-Verified during discussion: `data/holdout/` does not exist, the dev-tree
-`monthly_features` carries **66 post-cutoff rows** running to 2026-06, and nothing
-outside `tests/unit/test_platform_holdout.py` calls `write_monthly_features_split()` or
-`assert_dev_checkpoint_within_boundary()`. The carve is a tested mechanism that was
-never applied to built data — so `assert_dev_checkpoint_within_boundary("monthly_features")`
-would raise today, and any fit between now and the fix can train on 2021+ data.
+*Was:* `data/holdout/` did not exist, the dev-tree `monthly_features` carried
+post-cutoff rows to 2026-08, and nothing outside `tests/unit/test_platform_holdout.py`
+called `write_monthly_features_split()` or `assert_dev_checkpoint_within_boundary()`.
+A tested mechanism that no production path invokes is not a fence.
 
-**Fix (separate, pre-Phase-6):** call the split in `scripts/build_platform_data.py` and
-assert at fitting entry points. Small, and urgent independent of Phase 6.
+*Now:* `build_monthly_spine()` writes through the split, and
+`scripts/build_platform_data.py` calls `assert_dev_checkpoint_within_boundary()`
+and **fails the build** on violation. Applied to the checkpoint on disk: dev
+1962-01 → **2020-12** (708 rows), holdout holds the 68 post-cutoff rows.
+
+New `honesty.holdout.load_full_span()` is the explicit *looking* opt-in (dev +
+holdout concatenated), matching the amended framing. `report/weekly.py` live
+scoring now uses it — **required, not cosmetic**: it scores
+`monthly_features.iloc[[-1]]`, so carving without it would have scored December
+2020 as "today" every week. Three tests pin the wiring specifically and fail
+against the unwired code.
 
 Progress: [██████░░░░] 63% (5 of 8 phases)
 
@@ -199,7 +206,9 @@ Recent decisions affecting current work:
 |---|-------------|------|--------|-----------|
 | 260805-570 | fix stooq and macrotrends bot-blocking, ALFRED vintage schema, build guard, yfinance rate-limit | 2026-08-05 | e98f1f0 | [260805-570-fix-stooq-and-macrotrends-bot-blocking-a](./quick/260805-570-fix-stooq-and-macrotrends-bot-blocking-a/) |
 | 260805-r7w | generalize browser.py to fetch_page_html/fetch_urls_as_text, add Selenium as a second engine, route macrotrends through the browser fallback at both call sites | 2026-08-05 | (see directory) | [260805-r7w-generalize-browser-module-and-add-seleni](./quick/260805-r7w-generalize-browser-module-and-add-seleni/) |
-| 260908-qwe | fix hindsight-oracle IndexError: restrict the smoothed oracle's per-step universe to assets that have started (phantom IAU/USO weight in 1974), guard portfolio_vol's per-asset EWMA fallback conservatively | 2026-09-08 | (see directory) | [260908-qwe-fix-hindsight-oracle-indexerror-phantom-](./quick/260908-qwe-fix-hindsight-oracle-indexerror-phantom-/) |
+| 260908-qwe | fix hindsight-oracle IndexError: restrict the smoothed oracle's per-step universe to assets that have started (phantom IAU/USO weight in 1974), guard portfolio_vol's per-asset EWMA fallback conservatively | 2026-09-08 | 18f68af | [260908-qwe-fix-hindsight-oracle-indexerror-phantom-](./quick/260908-qwe-fix-hindsight-oracle-indexerror-phantom-/) |
+| 260908-rh4 | fix percent-vs-decimal yield units at the splice boundary (long_duration_tr compounded to 2.3e128; cash booked yield CHANGES as returns), add an asymmetric units guard, correct three test defects incl. an integration test whose 24/24 steps all degraded | 2026-09-08 | 75dedc7 | [260908-rh4-fix-percent-vs-decimal-yield-units-at-th](./quick/260908-rh4-fix-percent-vs-decimal-yield-units-at-th/) |
+| 260908-fnc | close the holdout fence at rest: carve at build, assert at build, add load_full_span() looking opt-in, repoint live weekly scoring | 2026-09-08 | 7f99548 | (in this STATE entry) |
 
 ## Deferred Items
 

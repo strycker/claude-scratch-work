@@ -131,6 +131,11 @@ splice:
     research_name:  long_duration_tr
     method:         cmt_par_bond_repricing
     yield_col:      fred_gs10
+    # FRED publishes CMT yields in PERCENT (4.68), while multpl's div_yield is
+    # already decimal (0.011) — ingestion preserves each source's own units, so
+    # the conversion is declared per class here and applied at the splice
+    # boundary. bond_price()/monthly_total_return() are decimal-domain.
+    yield_units:    percent
     maturity_years: 10
     coupon_freq:    2
     tradable:       TLT
@@ -167,6 +172,7 @@ splice:
     research_name: cash
     method:        yield_as_return
     yield_col:     fred_tb3ms
+    yield_units:   percent   # FRED TB3MS is percent (3.72), not decimal
     tradable:      FZFXX
 
 # ── Universe (tickers) ─────────────────────────────────────────────────────────
