@@ -74,6 +74,37 @@ def write_monthly_features_split(
     )
 
 
+def load_full_span(name: str, cutoff: str = DEFAULT_HOLDOUT_CUTOFF) -> pd.DataFrame:
+    """Dev rows + holdout rows for *name*, concatenated in index order.
+
+    **The explicit "looking" opt-in.** The fence is on *fitting*, not looking
+    (PROJECT.md, amended during the Phase 6 discussion): live weekly scoring and
+    the verification notebooks legitimately need post-cutoff observations, and
+    they say so by calling this instead of the default manager.
+
+    Nothing here weakens the fence. The default manager still cannot reach the
+    holdout tree — this function opens BOTH managers by name, in the caller's
+    own code, where it is visible in review. Never call it from a fitting,
+    tuning, or model-selection path.
+
+    A missing holdout checkpoint is normal (every row predates the cutoff) and
+    returns the dev side alone.
+    """
+    dev_df = get_platform_checkpoint_manager().load(name)
+    try:
+        holdout_df = get_holdout_checkpoint_manager().load(name)
+    except FileNotFoundError:
+        log.debug("load_full_span: no holdout checkpoint for '%s'; returning dev rows only", name)
+        return dev_df
+
+    combined = pd.concat([dev_df, holdout_df]).sort_index()
+    log.info(
+        "load_full_span: %s -> %d dev rows (<=%s) + %d holdout rows (>%s) = %d",
+        name, len(dev_df), cutoff, len(holdout_df), cutoff, len(combined),
+    )
+    return combined
+
+
 def assert_dev_checkpoint_within_boundary(
     name: str,
     cutoff: str = DEFAULT_HOLDOUT_CUTOFF,

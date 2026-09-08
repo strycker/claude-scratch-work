@@ -8,6 +8,9 @@ default dev path CANNOT return post-2020 rows.
 
 from __future__ import annotations
 
+import inspect
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -16,6 +19,7 @@ from trading_crab_lib.platform.honesty.holdout import (
     DEFAULT_HOLDOUT_CUTOFF,
     assert_dev_checkpoint_within_boundary,
     get_holdout_checkpoint_manager,
+    load_full_span,
     split_by_holdout_boundary,
     write_monthly_features_split,
 )
@@ -157,3 +161,82 @@ class TestHoldoutBoundary:
 
         with pytest.raises(FileNotFoundError):
             dev_manager.load("holdout_only_checkpoint")
+
+
+# ── load_full_span: the explicit "looking" opt-in ────────────────────────────
+
+
+class TestLoadFullSpan:
+    """The fence is on fitting, not looking. Live weekly scoring and the
+    verification notebooks legitimately need post-cutoff observations, and they
+    say so by calling this rather than the default manager. Without it, carving
+    the checkpoint silently makes live scoring evaluate December 2020 as
+    "today" — every week, forever.
+    """
+
+    def test_returns_both_sides_of_the_boundary_in_index_order(self, dev_manager, holdout_manager):
+        df = _synthetic_monthly_df(start="2019-01-31", end="2022-12-31")
+        write_monthly_features_split(df, name="monthly_features", cutoff=DEFAULT_HOLDOUT_CUTOFF)
+
+        full = load_full_span("monthly_features")
+
+        assert len(full) == len(df)
+        assert full.index.max() == df.index.max()
+        assert full.index.is_monotonic_increasing
+        # check_freq=False: date_range stamps freq=MonthEnd on the in-memory
+        # frame and the parquet round-trip drops it. That metadata is not the
+        # behavior under test.
+        pd.testing.assert_frame_equal(full, df, check_freq=False)
+
+    def test_reaches_past_the_cutoff_where_the_default_manager_cannot(
+        self, dev_manager, holdout_manager
+    ):
+        df = _synthetic_monthly_df(start="2019-01-31", end="2022-12-31")
+        write_monthly_features_split(df, name="monthly_features", cutoff=DEFAULT_HOLDOUT_CUTOFF)
+
+        assert dev_manager.load("monthly_features").index.max() == pd.Timestamp("2020-12-31")
+        assert load_full_span("monthly_features").index.max() == pd.Timestamp("2022-12-31")
+
+    def test_missing_holdout_side_returns_dev_rows_not_an_error(self, dev_manager, holdout_manager):
+        """Normal when every row predates the cutoff — not a failure."""
+        df = _synthetic_monthly_df(start="2019-01-31", end="2020-12-31")
+        dev_manager.save(df, "monthly_features")
+
+        full = load_full_span("monthly_features")
+
+        pd.testing.assert_frame_equal(full, df, check_freq=False)
+
+
+# ── Build wiring: the carve is applied, not merely available ─────────────────
+
+
+class TestBuildAppliesTheCarve:
+    """The mechanism was fully implemented and unit-tested for months while
+    nothing called it: data/holdout/ did not exist and the dev checkpoint ran
+    to 2026-08. A tested mechanism that no production path invokes is not a
+    fence. These tests pin the wiring itself.
+    """
+
+    def test_build_monthly_spine_writes_through_the_split(self):
+        import trading_crab_lib.platform.transforms_monthly as tm
+
+        source = inspect.getsource(tm.build_monthly_spine)
+        assert "write_monthly_features_split" in source
+        assert 'cm.save(monthly_features, "monthly_features")' not in source, (
+            "build_monthly_spine must not write an unfenced monthly_features checkpoint"
+        )
+
+    def test_build_script_asserts_the_boundary_and_fails_the_build(self):
+        source = Path("scripts/build_platform_data.py").read_text()
+        assert "assert_dev_checkpoint_within_boundary" in source, (
+            "the build must verify the fence on disk, not assume it"
+        )
+
+    def test_live_weekly_scoring_uses_the_full_span_opt_in(self):
+        import trading_crab_lib.platform.report.weekly as weekly
+
+        source = inspect.getsource(weekly)
+        assert "load_full_span(\"monthly_features\")" in source, (
+            "live scoring must opt into the full span, or it scores the cutoff "
+            "month as 'today' forever"
+        )

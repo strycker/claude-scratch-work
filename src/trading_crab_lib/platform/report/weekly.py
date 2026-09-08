@@ -46,6 +46,7 @@ from trading_crab_lib.platform.allocation.hysteresis import (
 from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.honesty.holdout import load_full_span
 from trading_crab_lib.platform.prediction.transition_matrix import empirical_transition_matrix
 from trading_crab_lib.platform.report.holdings import load_account_weights
 
@@ -221,7 +222,11 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     cm = cm or get_platform_checkpoint_manager()
 
     nowcaster = cm.load_model("nowcaster")
-    monthly_features = cm.load("monthly_features")
+    # Live scoring is "looking", not "fitting", so it takes the explicit
+    # full-span opt-in. The dev checkpoint stops at the 2020-12 holdout
+    # boundary; loading it here would silently score December 2020 as "today",
+    # every week, forever.
+    monthly_features = load_full_span("monthly_features")
     regime_labels = cm.load("regime_labels")["state"]
     returns_by_regime = cm.load("returns_by_regime")
     asset_returns = cm.load("asset_returns")
