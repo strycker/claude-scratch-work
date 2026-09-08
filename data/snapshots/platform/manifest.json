@@ -1,0 +1,77 @@
+{
+  "captured_at": "2026-09-08T18:20:00.796892+00:00",
+  "git_commit": "31c3f200f013ef672afd71470943d9fb2a6a0392",
+  "names": {
+    "daily_raw": {
+      "rows": 0,
+      "columns": 0,
+      "col_names": [],
+      "index_start": null,
+      "index_end": null
+    },
+    "monthly_raw": {
+      "rows": 775,
+      "columns": 20,
+      "col_names": [
+        "fred_tb3ms",
+        "fred_baa",
+        "fred_gs10",
+        "fred_aaa",
+        "wti_fred",
+        "fred_vix",
+        "fred_t10y3m",
+        "fred_t10y2y",
+        "sp500",
+        "div_yield",
+        "cape_shiller",
+        "equities_tr",
+        "long_duration_tr",
+        "oil",
+        "cash",
+        "fred_unrate",
+        "fred_cpi",
+        "fred_gdp",
+        "fred_payems",
+        "fred_indpro"
+      ],
+      "index_start": "1962-01-31 00:00:00",
+      "index_end": "2026-07-31 00:00:00"
+    },
+    "monthly_features": {
+      "rows": 775,
+      "columns": 28,
+      "col_names": [
+        "fred_tb3ms",
+        "fred_baa",
+        "fred_gs10",
+        "fred_aaa",
+        "wti_fred",
+        "fred_t10y3m",
+        "fred_t10y2y",
+        "sp500",
+        "equities_tr",
+        "long_duration_tr",
+        "cash",
+        "fred_unrate",
+        "fred_cpi",
+        "fred_gdp",
+        "fred_payems",
+        "fred_indpro",
+        "curve_10y3m",
+        "curve_10y2y",
+        "credit_spread_baa_aaa",
+        "fred_vix",
+        "oil",
+        "trailing_return_1m",
+        "trailing_return_3m",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "cape_shiller",
+        "div_yield",
+        "real_rate_level"
+      ],
+      "index_start": "1962-01-31 00:00:00",
+      "index_end": "2026-07-31 00:00:00"
+    }
+  }
+}

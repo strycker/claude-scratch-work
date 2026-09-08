@@ -1,0 +1,84 @@
+{
+  "captured_at": "2026-09-08T18:30:40.202226+00:00",
+  "provenance": {
+    "equities_tr": {
+      "class_name": "equities",
+      "method": "total_return_from_price_div",
+      "status": "primary",
+      "sources": {
+        "price_col": {
+          "candidates": [
+            "sp500"
+          ],
+          "resolved": "sp500",
+          "position": 1
+        },
+        "div_yield_col": {
+          "candidates": [
+            "div_yield"
+          ],
+          "resolved": "div_yield",
+          "position": 1
+        }
+      }
+    },
+    "long_duration_tr": {
+      "class_name": "long_duration",
+      "method": "cmt_par_bond_repricing",
+      "status": "primary",
+      "sources": {
+        "yield_col": {
+          "candidates": [
+            "fred_gs10"
+          ],
+          "resolved": "fred_gs10",
+          "position": 1
+        }
+      }
+    },
+    "gold": {
+      "class_name": "gold",
+      "method": "single_source",
+      "status": "primary",
+      "sources": {
+        "source_col": {
+          "candidates": [
+            "gold_spot",
+            "IAU"
+          ],
+          "resolved": "gold_spot",
+          "position": 1
+        }
+      }
+    },
+    "oil": {
+      "class_name": "oil",
+      "method": "single_source",
+      "status": "primary",
+      "sources": {
+        "source_col": {
+          "candidates": [
+            "wti_crude",
+            "wti_fred"
+          ],
+          "resolved": "wti_crude",
+          "position": 1
+        }
+      }
+    },
+    "cash": {
+      "class_name": "cash",
+      "method": "yield_as_return",
+      "status": "primary",
+      "sources": {
+        "yield_col": {
+          "candidates": [
+            "fred_tb3ms"
+          ],
+          "resolved": "fred_tb3ms",
+          "position": 1
+        }
+      }
+    }
+  }
+}

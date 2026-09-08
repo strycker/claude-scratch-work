@@ -1,18 +1,20 @@
 {
   "name": "monthly_features",
-  "created": "2026-08-05T14:12:39.072002",
+  "created": "2026-09-08T13:30:40.262650",
   "config_hash": "6c209fad",
-  "rows": 775,
-  "columns": 50,
+  "rows": 776,
+  "columns": 53,
   "col_names": [
-    "fred_aaa",
-    "fred_baa",
-    "wti_fred",
     "fred_gs10",
+    "fred_baa",
     "fred_tb3ms",
+    "fred_aaa",
+    "wti_fred",
     "fred_t10y3m",
     "fred_t10y2y",
     "sp500",
+    "gold_spot",
+    "wti_crude",
     "AGG",
     "COST",
     "DBA",
@@ -47,6 +49,7 @@
     "curve_10y2y",
     "credit_spread_baa_aaa",
     "fred_vix",
+    "gold",
     "oil",
     "trailing_return_1m",
     "trailing_return_3m",
@@ -57,5 +60,5 @@
     "real_rate_level"
   ],
   "index_start": "1962-01-31 00:00:00",
-  "index_end": "2026-07-31 00:00:00"
+  "index_end": "2026-08-31 00:00:00"
 }
