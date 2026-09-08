@@ -275,6 +275,17 @@ def asset_prices(quarterly_index):
     )
 
 
+
+class _GuardTripped(BaseException):
+    """Raised when a test trips the browser or network guard.
+
+    Deliberately inherits BaseException, NOT Exception. Ingestion and browser
+    code wrap their calls in broad `except Exception` handlers so a real
+    outage degrades gracefully — and those handlers would swallow the guard,
+    turning a violation into a silently-logged warning. BaseException passes
+    straight through them to fail the test.
+    """
+
 # ── no test may launch a real browser ───────────────────────────────────────
 
 
@@ -296,7 +307,7 @@ def _forbid_real_browser_launch(monkeypatch, request):
         return
 
     def _blocked(*_args, **_kwargs):
-        raise AssertionError(
+        raise _GuardTripped(
             "A test tried to launch a REAL browser. Mock the engine, or patch BOTH "
             "_PLAYWRIGHT_AVAILABLE and _SELENIUM_AVAILABLE when asserting no engine is available. "
             "Opt out deliberately with @pytest.mark.real_browser."
@@ -306,5 +317,65 @@ def _forbid_real_browser_launch(monkeypatch, request):
         from selenium import webdriver
 
         monkeypatch.setattr(webdriver, "Chrome", _blocked, raising=False)
+    except ImportError:
+        pass
+
+
+# ── no test may make a real network call ────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _forbid_real_network(monkeypatch, request):
+    """Fail loudly if any test actually reaches the internet.
+
+    Unit tests mock their fetchers, but a test that patches only SOME of the
+    fetchers a pipeline step calls will silently make live requests for the
+    rest. That happened: test_step01_ingest_writes_macro_raw_without_network
+    patched fred and multpl but not macrotrends, and 01_ingest calls
+    macrotrends inside a try/except — so the call was made, failed, and was
+    swallowed. It only surfaced once macrotrends started WORKING and its 167
+    rows of real history contaminated a 4-row synthetic frame.
+
+    Blocking at the transport layer catches every client this repo uses,
+    including ones reached through a lazy import that a module-attribute patch
+    would miss.
+
+    Tests that genuinely need the network can opt out with
+    @pytest.mark.network.
+    """
+    if request.node.get_closest_marker("network"):
+        return
+
+    def _blocked(*args: object, **kwargs: object) -> None:
+        target = ""
+        for candidate in list(args) + list(kwargs.values()):
+            if isinstance(candidate, str) and "://" in candidate:
+                target = f" to {candidate}"
+                break
+        raise _GuardTripped(
+            f"A test tried to make a REAL network request{target}. Patch the specific fetcher "
+            "it calls — note that a lazily-imported module must be patched at its source "
+            "(e.g. 'trading_crab_lib.ingestion.macrotrends.fetch_all'), not as an attribute of "
+            "the module that imports it. Opt out deliberately with @pytest.mark.network."
+        )
+
+    try:
+        import requests
+
+        monkeypatch.setattr(requests.Session, "request", _blocked, raising=False)
+    except ImportError:
+        pass
+
+    try:
+        from curl_cffi import requests as curl_requests
+
+        monkeypatch.setattr(curl_requests.Session, "request", _blocked, raising=False)
+    except ImportError:
+        pass
+
+    try:
+        import urllib.request
+
+        monkeypatch.setattr(urllib.request, "urlopen", _blocked, raising=False)
     except ImportError:
         pass

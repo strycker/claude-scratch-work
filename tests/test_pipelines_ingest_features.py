@@ -73,12 +73,19 @@ def test_step01_ingest_writes_macro_raw_without_network(monkeypatch, tmp_path, c
     All I/O is redirected to tmp_path so no production checkpoints are touched.
     """
     from trading_crab_lib.ingestion import fred as fred_module
+    from trading_crab_lib.ingestion import macrotrends as mt_module
     from trading_crab_lib.ingestion import multpl as multpl_module
 
     synthetic = _make_synthetic_macro()
 
     monkeypatch.setattr(fred_module, "fetch_all", lambda _cfg: synthetic)
     monkeypatch.setattr(multpl_module, "fetch_all", lambda _cfg: pd.DataFrame(index=synthetic.index))
+    # 01_ingest imports macrotrends LAZILY inside its function body, so this must
+    # be patched at the source module — patching an attribute on step01 would not
+    # intercept it. Without this the test made a real request to macrotrends.net,
+    # swallowed by 01_ingest's non-fatal try/except, and only surfaced once
+    # macrotrends started working and its real history contaminated the frame.
+    monkeypatch.setattr(mt_module, "fetch_all", lambda _cfg: pd.DataFrame(index=synthetic.index))
     monkeypatch.setattr(step01, "DATA_DIR", tmp_path)
 
     step01.main([])

@@ -78,6 +78,54 @@ class TestPortfolioVol:
         expected = 0.6 * spy_vol + 0.4 * tlt_vol
         assert result == pytest.approx(expected)
 
+    def _with_unstarted_asset(self) -> pd.DataFrame:
+        """SPY/TLT with full history plus IAU, which has not been issued yet —
+        every IAU observation is NaN. Mirrors the real 1974 decision date where
+        the traced universe was {IAU: 0, SPY: 153, TLT: 153, USO: 0} obs."""
+        asset_returns = self._asset_returns(24)
+        asset_returns["IAU"] = np.nan
+        return asset_returns
+
+    def test_all_nan_asset_does_not_raise(self):
+        """An asset with ZERO observations made ewma_vol return an empty
+        series, and .iloc[-1] on that raised IndexError — crashing the whole
+        evaluation run rather than degrading."""
+        weights = pd.Series({"SPY": 0.5, "TLT": 0.3, "IAU": 0.2})
+
+        result = portfolio_vol(weights, self._with_unstarted_asset(), halflife=6, min_obs=12)
+
+        assert np.isfinite(result)
+
+    def test_unestimable_asset_imputed_conservatively_never_as_zero(self):
+        """scale = min(1, target / sigma), so UNDER-estimating sigma OVER-levers.
+        Summing with pandas' skipna would treat the unestimable asset's weight as
+        risk-free and do exactly that. The imputed vol must instead push the
+        estimate strictly UP versus the estimable assets alone."""
+        asset_returns = self._with_unstarted_asset()
+        weights = pd.Series({"SPY": 0.5, "TLT": 0.3, "IAU": 0.2})
+
+        result = portfolio_vol(weights, asset_returns, halflife=6, min_obs=12)
+
+        spy_vol = float(ewma_vol(asset_returns["SPY"], halflife=6, annualization_factor=12).iloc[-1])
+        tlt_vol = float(ewma_vol(asset_returns["TLT"], halflife=6, annualization_factor=12).iloc[-1])
+        estimable_only = 0.5 * spy_vol + 0.3 * tlt_vol
+        assert result > estimable_only
+        # Specifically: imputed with the MAX estimable vol, the conservative choice.
+        assert result == pytest.approx(estimable_only + 0.2 * max(spy_vol, tlt_vol))
+
+    def test_no_estimable_asset_degrades_to_all_cash_not_nan(self):
+        """NaN would be the dangerous answer: min(1.0, target/nan) is 1.0 in
+        Python — a full position on zero information. 0.0 routes through
+        vol_target_scale's documented all-cash degradation instead."""
+        idx = pd.date_range("2015-01-31", periods=24, freq="ME")
+        asset_returns = pd.DataFrame({"SPY": np.nan, "TLT": np.nan}, index=idx)
+        weights = pd.Series({"SPY": 0.6, "TLT": 0.4})
+
+        result = portfolio_vol(weights, asset_returns, halflife=6, min_obs=12)
+
+        assert result == 0.0
+        assert vol_target_scale(0.10, result) == 0.0  # all-cash, not full position
+
 
 # ── regime_tilt_weights: clipped, normalized, deterministic ─────────────────
 
