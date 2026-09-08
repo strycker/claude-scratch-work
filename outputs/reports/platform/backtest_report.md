@@ -14,43 +14,43 @@ This is the go/no-go number: median regime sojourn (how long a regime typically 
 
 The Faber 10-month SMA is design §23.1's STANDING TARGET for the regime strategy to beat on both log wealth AND max drawdown — this is recorded, not a pass/fail gate (D-01a).
 
-- strategy: terminal log wealth=108.5906, max drawdown=-67.16%
-- faber_sma: terminal log wealth=1.1391, max drawdown=-99.69%
+- strategy: terminal log wealth=3.7468, max drawdown=-21.90%
+- faber_sma: terminal log wealth=6.3726, max drawdown=-18.94%
 
 ## No-Regime-Ablation Delta (Does the Regime Layer Pay Rent?)
 
 The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regime tilt disabled (backtest/baselines.py::no_regime_ablation) — never a hand-rolled parallel implementation (D-02).
 
-- terminal log wealth delta (strategy - ablation): -5.7312 (strategy=108.5906, ablation=114.3218)
-- max drawdown delta (strategy - ablation): +0.65% (strategy=-67.16%, ablation=-67.81%)
+- terminal log wealth delta (strategy - ablation): +0.0996 (strategy=3.7468, ablation=3.6472)
+- max drawdown delta (strategy - ablation): -2.09% (strategy=-21.90%, ablation=-19.81%)
 
 ## Smoothed-vs-Filtered Gap
 
-- gap (smoothed hindsight performance - real-time filtered performance): -18.0722 — the measured hindsight content of the strategy (§5.4). The smoothed reference is ONE full-sample labeler fit; the filtered series is the walk-forward driver's actual per-step decisions — genuinely distinct series (Pitfall 1), never the same object reused.
+- gap (smoothed hindsight performance - real-time filtered performance): -0.4061 — the measured hindsight content of the strategy (§5.4). The smoothed reference is ONE full-sample labeler fit; the filtered series is the walk-forward driver's actual per-step decisions — genuinely distinct series (Pitfall 1), never the same object reused.
 
 ## Baseline Gauntlet
 
 | Leg | Terminal Log Wealth | Max Drawdown |
 |-----|---------------------|--------------|
 | SPY Buy & Hold | 5.6805 | -48.95% |
-| 60/40 | 131.0293 | -2.27% |
-| Faber 10-Month SMA | 1.1391 | -99.69% |
-| Strategy (regime tilt) | 108.5906 | -67.16% |
-| No-Regime Ablation | 114.3218 | -67.81% |
+| 60/40 | 5.0471 | -26.96% |
+| Faber 10-Month SMA | 6.3726 | -18.94% |
+| Strategy (regime tilt) | 3.7468 | -21.90% |
+| No-Regime Ablation | 3.6472 | -19.81% |
 
-- no-regime-ablation delta vs. strategy: -5.7312 terminal log wealth (+0.65% max drawdown) — does the regime layer pay rent?
+- no-regime-ablation delta vs. strategy: +0.0996 terminal log wealth (-2.09% max drawdown) — does the regime layer pay rent?
 
 ## Strategy KPIs
 
-- terminal log wealth: 108.5906
-- max drawdown: -67.16% (11 months underwater)
-- CVaR(5%): -0.1872
-- turnover (mean monthly): 0.0260
+- terminal log wealth: 3.7468
+- max drawdown: -21.90% (62 months underwater)
+- CVaR(5%): -0.0463
+- turnover (mean monthly): 0.0821
 - in-sample crisis capture ratios (down-capture, A6):
-  - 1973-74_oil_shock: -120.68
-  - 1980-82_volcker_recession: 2199.11
-  - 2000-02_dotcom_bust: -1353.09
-  - 2008-09_gfc: -17.86
+  - 1973-74_oil_shock: 0.17
+  - 1980-82_volcker_recession: 0.87
+  - 2000-02_dotcom_bust: 0.09
+  - 2008-09_gfc: 0.10
 
 ### Conventions
 
