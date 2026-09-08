@@ -1,8 +1,8 @@
 {
   "name": "daily_raw",
-  "created": "2026-09-08T13:30:40.094281",
+  "created": "2026-09-08T16:49:13.466325",
   "config_hash": "6c209fad",
-  "rows": 14289,
+  "rows": 14290,
   "columns": 22,
   "col_names": [
     "AGG",
@@ -29,10 +29,11 @@
     "VYM"
   ],
   "index_start": "1970-01-02 00:00:00",
-  "index_end": "2026-09-04 00:00:00",
+  "index_end": "2026-09-08 00:00:00",
   "merge": {
     "cols_kept_from_disk": [],
-    "cols_added": [
+    "cols_added": [],
+    "cols_updated": [
       "AGG",
       "COST",
       "DBA",
@@ -56,13 +57,12 @@
       "VNQ",
       "VYM"
     ],
-    "cols_updated": [],
     "rows_kept_from_disk": 0,
-    "rows_added": 14289,
+    "rows_added": 1,
     "cells_filled_from_disk": 0,
     "pre_merge_shape": {
-      "rows": 0,
-      "columns": 0
+      "rows": 14289,
+      "columns": 22
     }
   }
 }

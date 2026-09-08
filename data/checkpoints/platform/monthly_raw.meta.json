@@ -1,15 +1,15 @@
 {
   "name": "monthly_raw",
-  "created": "2026-09-08T13:30:40.200554",
+  "created": "2026-09-08T16:49:13.548942",
   "config_hash": "6c209fad",
   "rows": 776,
   "columns": 45,
   "col_names": [
     "fred_gs10",
-    "fred_baa",
-    "fred_tb3ms",
-    "fred_aaa",
     "wti_fred",
+    "fred_aaa",
+    "fred_tb3ms",
+    "fred_baa",
     "fred_vix",
     "fred_t10y3m",
     "fred_t10y2y",
@@ -55,7 +55,19 @@
   "index_end": "2026-08-31 00:00:00",
   "merge": {
     "cols_kept_from_disk": [],
-    "cols_added": [
+    "cols_added": [],
+    "cols_updated": [
+      "fred_gs10",
+      "wti_fred",
+      "fred_aaa",
+      "fred_tb3ms",
+      "fred_baa",
+      "fred_vix",
+      "fred_t10y3m",
+      "fred_t10y2y",
+      "sp500",
+      "div_yield",
+      "cape_shiller",
       "gold_spot",
       "wti_crude",
       "AGG",
@@ -80,22 +92,9 @@
       "UNG",
       "VNQ",
       "VYM",
-      "gold"
-    ],
-    "cols_updated": [
-      "fred_gs10",
-      "fred_baa",
-      "fred_tb3ms",
-      "fred_aaa",
-      "wti_fred",
-      "fred_vix",
-      "fred_t10y3m",
-      "fred_t10y2y",
-      "sp500",
-      "div_yield",
-      "cape_shiller",
       "equities_tr",
       "long_duration_tr",
+      "gold",
       "oil",
       "cash",
       "fred_unrate",
@@ -105,11 +104,11 @@
       "fred_indpro"
     ],
     "rows_kept_from_disk": 0,
-    "rows_added": 1,
+    "rows_added": 0,
     "cells_filled_from_disk": 277,
     "pre_merge_shape": {
-      "rows": 775,
-      "columns": 20
+      "rows": 776,
+      "columns": 45
     }
   }
 }
