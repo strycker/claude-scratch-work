@@ -18,10 +18,13 @@ Three behaviors under test (Task 1, RED):
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.evaluation import report
 
 
@@ -266,6 +269,99 @@ class TestReferenceLabelColumns:
         covered = df[ref].dropna().index
         assert covered.max() == idx.max()
         assert (pd.DatetimeIndex(idx[120:]).isin(covered)).all()
+
+
+
+# ── _smoothed_hindsight_perf: hindsight in the LABELS only, not the universe ─
+
+
+class TestSmoothedHindsightUniverse:
+    """The smoothed oracle is deliberately non-causal about regime LABELS.
+    It must not also be non-causal about which assets EXIST: tilting into a
+    ticker that had not been issued yet is a second, undocumented leak, and
+    it crashed the run outright (IAU/USO had 0 observations at the traced
+    1974-10-31 decision date, so the per-asset EWMA fallback indexed an empty
+    series).
+    """
+
+    N_MONTHS = 40
+    LATE_START = 30  # 'LATE' has no observations before this position
+
+    def _frame(self, *, include_late: bool) -> pd.DataFrame:
+        """Deliberately deterministic, not seeded RNG.
+
+        Both assets must have a strictly POSITIVE full-sample Sharpe. A random
+        draw can easily hand SPY a negative one, and ``_per_regime_tilt`` clips
+        negative Sharpes to zero — which would zero out BOTH legs and let the
+        comparison below pass vacuously, for a reason unrelated to the universe
+        restriction under test.
+        """
+        idx = pd.date_range("2000-01-31", periods=self.N_MONTHS, freq="ME")
+        # mean 0.01, non-zero std => Sharpe comfortably positive.
+        data = {"SPY": np.tile([0.02, 0.0], self.N_MONTHS // 2)}
+        if include_late:
+            late = np.full(self.N_MONTHS, np.nan)
+            # Near-riskless and far higher mean => dominant full-sample Sharpe,
+            # so the oracle WILL tilt into it if the universe is not restricted.
+            n_late = self.N_MONTHS - self.LATE_START
+            late[self.LATE_START:] = np.tile([0.08, 0.079], n_late // 2)
+            data["LATE"] = late
+        return pd.DataFrame(data, index=idx)
+
+    def test_fixture_gives_both_assets_positive_sharpe(self):
+        """Guards the fixture itself: if SPY's Sharpe were <= 0 it would be
+        clipped to zero weight and the comparison test would pass for the
+        wrong reason."""
+        frame = self._frame(include_late=True)
+        stats = returns_by_regime_stats(frame, pd.Series(0, index=frame.index))
+        sharpes = stats.set_index("asset")["sharpe_annualized"]
+        assert sharpes["SPY"] > 0
+        assert sharpes["LATE"] > sharpes["SPY"]
+
+    def _args(self, frame: pd.DataFrame) -> tuple:
+        states = pd.Series(0, index=frame.index)
+        cash_ret = pd.Series(0.0, index=frame.index)
+        # Every decision date precedes LATE's inception.
+        decision_dates = list(frame.index[12:25])
+        return states, cash_ret, decision_dates, {"portfolio_vol_min_obs": 12, "ewma_halflife_months": 6}
+
+    def test_no_weight_given_to_an_asset_that_has_not_started(self):
+        frame = self._frame(include_late=True)
+        states, cash_ret, decision_dates, alloc_cfg = self._args(frame)
+
+        seen_weights: list[pd.Series] = []
+        real_tilt = report.vol_targeted_tilt
+
+        def capturing_tilt(*args, **kwargs):
+            result = real_tilt(*args, **kwargs)
+            seen_weights.append(result["weights"])
+            return result
+
+        with patch.object(report, "vol_targeted_tilt", capturing_tilt):
+            report._smoothed_hindsight_perf(states, frame, cash_ret, decision_dates, alloc_cfg)
+
+        assert seen_weights, "the oracle never called the allocator"
+        for weights in seen_weights:
+            assert float(weights.get("LATE", 0.0)) == 0.0
+
+    def test_result_unchanged_by_the_presence_of_a_not_yet_started_column(self):
+        """Merely guarding the empty-series crash is not enough: with only that
+        guard, LATE still draws full-sample stats, wins the Sharpe ranking, and
+        takes weight that then earns nothing (its return is NaN) — so the two
+        results diverge. They may only agree if the universe itself is
+        restricted to assets that have started by the decision date."""
+        with_late = self._frame(include_late=True)
+        without_late = self._frame(include_late=False)
+        states, cash_ret, decision_dates, alloc_cfg = self._args(with_late)
+
+        perf_with = report._smoothed_hindsight_perf(
+            states, with_late, cash_ret, decision_dates, alloc_cfg
+        )
+        perf_without = report._smoothed_hindsight_perf(
+            states, without_late, cash_ret, decision_dates, alloc_cfg
+        )
+
+        assert perf_with == pytest.approx(perf_without)
 
 
 if __name__ == "__main__":

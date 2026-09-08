@@ -40,6 +40,20 @@ def vol_target_scale(target_vol_annual: float, portfolio_vol_annual: float) -> f
     return min(1.0, target_vol_annual / portfolio_vol_annual)
 
 
+def _latest_asset_vol(series: pd.Series, *, halflife: float) -> float:
+    """Latest annualized EWMA vol of one asset, or NaN when unestimable.
+
+    ``ewma_vol`` uses min_periods=2, so a 1-observation series already yields
+    NaN — but a 0-observation series yields an EMPTY series, and .iloc[-1] on
+    that raises IndexError. Both cases mean "no estimate"; return NaN for both
+    and let the caller decide how to degrade.
+    """
+    clean = series.dropna()
+    if len(clean) < 2:
+        return float("nan")
+    return float(ewma_vol(clean, halflife=halflife, annualization_factor=12).iloc[-1])
+
+
 # ponytail: linear-sum-of-vols fallback deliberately ignores diversification —
 # it can only make the tilt MORE conservative than the true portfolio vol, never
 # less. Upgrade path: regime-conditional Ledoit-Wolf covariance (L3-V2-01, v2).
@@ -58,15 +72,35 @@ def portfolio_vol(
     sum sum(w_i * sigma_hat_i), which over-estimates true portfolio vol
     (ignores diversification) and so under-levers rather than over-levers —
     safe-by-construction given D-03's defensive framing.
+
+    An asset with fewer than two non-NaN observations has no estimable vol.
+    It is imputed with the MAX of the estimable vols, never dropped and never
+    treated as zero: scale = min(1, target / sigma), so under-estimating sigma
+    OVER-levers, and pandas' skipna would silently do exactly that. If no
+    asset is estimable at all, returns 0.0 — which vol_target_scale maps to
+    all-cash. Returning NaN here would be actively unsafe: min(1.0, x/nan)
+    evaluates to 1.0 in Python, i.e. a full position on zero information.
     """
     common_assets = weights.index.intersection(asset_returns.columns)
+    # NOTE: dropna() is row-wise, so a SINGLE all-NaN column collapses `aligned`
+    # to zero rows and kills this branch for every caller that passes a ragged
+    # universe (e.g. an ETF that starts in 2005 alongside series back to 1950),
+    # no matter how much joint history the other assets share. Callers should
+    # restrict the universe to assets that have actually started by the decision
+    # date; the fallback below is correct but far more conservative.
     aligned = asset_returns[common_assets].dropna()
     if len(aligned) >= min_obs:
         port_returns = (aligned * weights[common_assets]).sum(axis=1)
         return float(ewma_vol(port_returns, halflife=halflife, annualization_factor=12).iloc[-1])
-    per_asset_vol = asset_returns[common_assets].apply(
-        lambda s: ewma_vol(s.dropna(), halflife=halflife, annualization_factor=12).iloc[-1]
+
+    per_asset_vol = pd.Series(
+        {asset: _latest_asset_vol(asset_returns[asset], halflife=halflife) for asset in common_assets},
+        dtype=float,
     )
+    estimable = per_asset_vol.dropna()
+    if estimable.empty:
+        return 0.0
+    per_asset_vol = per_asset_vol.fillna(estimable.max())
     return float((weights[common_assets].abs() * per_asset_vol).sum())
 
 

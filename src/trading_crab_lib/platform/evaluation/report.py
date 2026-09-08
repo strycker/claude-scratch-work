@@ -402,15 +402,31 @@ def _smoothed_hindsight_perf(
     computed over the ENTIRE smoothed labeling (non-causal by construction,
     exactly the "labeler is intentionally non-causal at the batch level"
     behavior the labeler's own docstring documents).
+
+    Exactly ONE kind of hindsight is intended here — the regime LABELS (and
+    the regime-conditional stats derived from them). Asset EXISTENCE is not:
+    the oracle must not tilt into a ticker that had not been issued yet at
+    the decision date. Without the per-step universe restriction below, IAU
+    (inception 2005) and USO (2006) draw full-sample Sharpe entries and pick
+    up real weight in 1974 — a second, undocumented leak that also makes the
+    phantom sleeve mechanically earn 0 (its return is NaN and ``.sum()``
+    skips NaN), silently distorting the very gap this function measures. The
+    walk-forward driver has no such problem because it derives its stats from
+    the train window only (``driver.py``: ``dev_asset_returns.loc[train_index]``).
     """
     smoothed_stats = returns_by_regime_stats(asset_returns, full_sample_states)
+    # Inception date per asset, computed once — an asset is tradable at t only
+    # once it has at least one observation on or before t.
+    inception = {col: asset_returns[col].first_valid_index() for col in asset_returns.columns}
     step_returns: list[float] = []
     for t in decision_dates:
         state = int(full_sample_states.loc[t])
+        available = [col for col, start in inception.items() if start is not None and start <= t]
+        step_stats = smoothed_stats[smoothed_stats["asset"].isin(available)]
         tilt = vol_targeted_tilt(
             {state: 1.0},
-            smoothed_stats,
-            asset_returns.loc[:t],
+            step_stats,
+            asset_returns.loc[:t, available],
             target_vol_annual=allocation_cfg.get("target_vol_annual", 0.10),
             halflife=allocation_cfg.get("ewma_halflife_months", 6),
             min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
