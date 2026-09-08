@@ -75,6 +75,14 @@ def _cfg() -> dict:
         "backtest": {
             "cost_bps": 10,
             "min_train_months": MIN_TRAIN,
+            # MUST be <= min_train_months. Omitting it takes the driver's
+            # production default of 120 months, which no feature can ever reach
+            # inside a 48-month synthetic window — so _window_active_features
+            # returned nothing, L1 got a zero-column frame, and all 24 steps
+            # degraded to "hold previous weights". The end-to-end test then
+            # verified plumbing and artifact shapes while exercising none of the
+            # labeling, prediction, or allocation logic it exists to cover.
+            "feature_min_history": 12,
             "skip_l1l2_for_ablation": True,
             "sixty_forty_rebalance": "monthly",
             "apply_cost_to_baselines": True,
@@ -104,9 +112,12 @@ def _make_synthetic_frames(
     ``monthly_features`` mirrors the driver/baselines tests' lean-column
     synthetic frame. ``monthly_raw`` supplies the raw columns
     ``splice.build_core_research_series`` needs for all 5 core classes
-    (sp500/div_yield/fred_gs10/gold_spot/wti_crude/fred_tb3ms), all positive
-    and in the units ``test_platform_splice.py`` uses (decimal fraction
-    yields, not percent).
+    (sp500/div_yield/gold_spot/wti_crude/fred_gs10/fred_tb3ms), all positive
+    and in PRODUCTION units: FRED yields in percent (``fred_gs10`` ~ 4.0), and
+    multpl's ``div_yield`` as a decimal fraction (~0.02). Those really do
+    differ by source, and this fixture previously used decimal for both — so
+    the end-to-end test exercised a units regime that no real run ever sees,
+    and stayed green while production compounded ``long_duration_tr`` to 1e128.
     """
     rng = np.random.default_rng(seed)
     idx = pd.date_range(start, periods=n_months, freq="ME")
@@ -119,10 +130,10 @@ def _make_synthetic_frames(
         {
             "sp500": sp500,
             "div_yield": rng.uniform(0.015, 0.03, n_months),
-            "fred_gs10": 0.04 + 0.001 * np.sin(np.arange(n_months) / 5) + rng.normal(0, 0.0005, n_months),
+            "fred_gs10": 4.0 + 0.1 * np.sin(np.arange(n_months) / 5) + rng.normal(0, 0.05, n_months),
             "gold_spot": 1000 + np.cumsum(rng.normal(0, 5, n_months)),
             "wti_crude": 50 + np.cumsum(rng.normal(0, 1, n_months)),
-            "fred_tb3ms": 0.01 + 0.001 * np.arange(n_months) / n_months + rng.normal(0, 0.0002, n_months),
+            "fred_tb3ms": 1.0 + 0.1 * np.arange(n_months) / n_months + rng.normal(0, 0.02, n_months),
         },
         index=idx,
     )
@@ -202,6 +213,49 @@ class TestRunFullBacktestEvaluationEndToEnd:
         # per_step_metrics only visits post-min_train decision dates — the
         # two are not the same length, proving they were built independently.
         assert len(full_sample_states) > len(per_step_metrics["dates"])
+
+
+class TestKpisAreOnAPlausibleScale:
+    """The end-to-end gap this suite had: every artifact was produced, every
+    shape was right, every trial was registered — and the numbers inside were
+    physically impossible. A units defect compounded ``long_duration_tr`` to
+    1e128 and gave the strategy a mean monthly return of +21.9%, and nothing in
+    the suite noticed, because nothing asserted on magnitude.
+    """
+
+    def test_strategy_monthly_returns_are_a_plausible_magnitude(self, tmp_path):
+        monthly_features, monthly_raw = _make_synthetic_frames()
+
+        result = report.run_full_backtest_evaluation(
+            monthly_features, monthly_raw, _cfg(),
+            registry_path=tmp_path / "trials.jsonl", output_dir=tmp_path,
+        )
+
+        returns = result["equity_curve"]["return"]
+        # A long-only book of equities/duration/gold/oil/cash. Even allowing
+        # generous slack, a mean monthly return above 5% is not a strategy, it
+        # is an arithmetic error.
+        assert abs(returns.mean()) < 0.05, f"mean monthly return {returns.mean():.2%} is not plausible"
+        assert returns.max() < 1.0, f"max monthly return {returns.max():.2%} is not plausible"
+
+    def test_terminal_log_wealth_is_finite_and_bounded(self, tmp_path):
+        monthly_features, monthly_raw = _make_synthetic_frames()
+
+        result = report.run_full_backtest_evaluation(
+            monthly_features, monthly_raw, _cfg(),
+            registry_path=tmp_path / "trials.jsonl", output_dir=tmp_path,
+        )
+
+        for leg, kpis in (
+            ("strategy", result["strategy_kpis"]),
+            ("ablation", result["ablation_kpis"]),
+            *result["baseline_kpis"].items(),
+        ):
+            wealth = kpis["terminal_log_wealth"]
+            assert np.isfinite(wealth), f"{leg}: terminal log wealth is not finite"
+            # exp(10) ~ 22000x over the test window — far beyond any real result,
+            # but loose enough not to be a tuning knob.
+            assert abs(wealth) < 10.0, f"{leg}: terminal log wealth {wealth:.2f} is not plausible"
 
 
 class TestYTrueDateAlignment:

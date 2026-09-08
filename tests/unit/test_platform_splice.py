@@ -13,7 +13,9 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.platform.splice import (
+    assert_yield_units_plausible,
     bond_price,
+    build_cash_index,
     build_core_research_series,
     build_equity_total_return,
     build_treasury_tr_synthetic,
@@ -23,6 +25,7 @@ from trading_crab_lib.platform.splice import (
     resolve_source_column,
     source_candidates,
     write_splice_provenance,
+    yield_to_decimal,
 )
 
 
@@ -162,7 +165,7 @@ class TestMonthlyTotalReturn:
 class TestBuildTreasuryTrSynthetic:
     def test_builds_cumulative_index_from_yield_series(self):
         idx = _monthly_index("1962-01-31", 24)
-        yields = pd.Series([0.04 + 0.0005 * i for i in range(24)], index=idx)
+        yields = pd.Series([4.0 + 0.05 * i for i in range(24)], index=idx)  # PERCENT, as FRED publishes
 
         result = build_treasury_tr_synthetic(yields, SPLICE_CFG)
 
@@ -173,11 +176,113 @@ class TestBuildTreasuryTrSynthetic:
 
     def test_falling_yields_produce_rising_index(self):
         idx = _monthly_index("1962-01-31", 12)
-        yields = pd.Series([0.06 - 0.002 * i for i in range(12)], index=idx)
+        yields = pd.Series([6.0 - 0.2 * i for i in range(12)], index=idx)  # PERCENT, as FRED publishes
 
         result = build_treasury_tr_synthetic(yields, SPLICE_CFG)
 
         assert result.iloc[-1] > result.iloc[0]
+
+
+class TestYieldUnits:
+    """FRED publishes yields in PERCENT (fred_gs10 = 4.68); multpl's div_yield
+    is already DECIMAL (0.011). Ingestion preserves each source's units, so the
+    splice boundary is the single place the conversion happens. Getting it wrong
+    is silent: feeding 4.68 to a decimal-domain bond model accrues a 39%/month
+    coupon and compounds long_duration_tr to ~1e128 without raising anything.
+    """
+
+    def test_percent_yields_produce_a_plausible_treasury_index(self):
+        """The regression that matters. Real FRED-scale input (4-8%) must give a
+        10y Treasury a mid-single-digit annualized return, not a number with 128
+        digits in it."""
+        idx = _monthly_index("1962-01-31", 12 * 30)
+        # A realistic band, oscillating so neither pure duration gains nor pure
+        # losses dominate the result.
+        yields = pd.Series(
+            [6.0 + 2.0 * ((i % 24) / 24 - 0.5) for i in range(12 * 30)], index=idx
+        )
+
+        result = build_treasury_tr_synthetic(yields, SPLICE_CFG)
+
+        annualized = (result.iloc[-1] / result.iloc[0]) ** (12 / len(result)) - 1
+        assert 0.0 < annualized < 0.20, f"implausible annualized return {annualized:.2%}"
+
+    def test_unconverted_percent_yield_is_rejected_not_compounded(self):
+        """A yield above 100% annualized cannot be a rate under any market
+        conditions, so it is an error rather than a warning."""
+        yields = pd.Series([4.68, 4.70, 4.75])
+
+        with pytest.raises(ValueError, match="not a plausible rate"):
+            assert_yield_units_plausible(yields, source="splice.long_duration")
+
+    def test_plausible_decimal_yield_passes(self):
+        assert_yield_units_plausible(pd.Series([0.0468, 0.047, 0.0475]), source="test") is None
+
+    def test_suspiciously_low_median_warns_but_does_not_raise(self, caplog):
+        """Double-converted units and a genuine ZIRP window look alike, so this
+        direction can only warn — failing here would reject real 2009-2021
+        T-bill data."""
+        with caplog.at_level(logging.WARNING):
+            assert_yield_units_plausible(pd.Series([0.0004, 0.0004, 0.0005]), source="splice.cash")
+
+        assert any("yield_units" in rec.getMessage() for rec in caplog.records)
+
+    def test_yield_to_decimal_scales_percent_and_passes_decimal_through(self):
+        percent = pd.Series([4.68, 3.72])
+        pd.testing.assert_series_equal(
+            yield_to_decimal(percent, units="percent"), percent * 0.01
+        )
+        decimal = pd.Series([0.0468, 0.0372])
+        pd.testing.assert_series_equal(yield_to_decimal(decimal, units="decimal"), decimal)
+
+    def test_unknown_units_rejected(self):
+        with pytest.raises(ValueError, match="unknown yield_units"):
+            yield_to_decimal(pd.Series([4.0]), units="basis_points")
+
+
+class TestBuildCashIndex:
+    """Cash must be an index LEVEL, because every consumer runs research series
+    through compute_monthly_returns() == pct_change(). Returning the yield
+    itself made "cash return" the month-over-month change in the yield — a
+    T-bill going 0.5% -> 3.0% booked a +500% month."""
+
+    def test_is_an_index_level_whose_pct_change_recovers_the_accrual(self):
+        idx = _monthly_index("1962-01-31", 24)
+        yields = pd.Series([3.6] * 24, index=idx)  # 3.6% annual == 0.3%/month
+
+        result = build_cash_index(yields, SPLICE_CFG)
+
+        assert result.iloc[0] == pytest.approx(1.0)
+        monthly = result.pct_change().dropna()
+        assert monthly.min() == pytest.approx(0.003)
+        assert monthly.max() == pytest.approx(0.003)
+
+    def test_a_yield_jump_is_not_booked_as_a_return(self):
+        """The specific old failure: pct_change of the raw yield turned a
+        0.5% -> 3.0% T-bill move into +500%."""
+        idx = _monthly_index("1962-01-31", 4)
+        yields = pd.Series([0.5, 0.5, 3.0, 3.0], index=idx)
+
+        monthly = build_cash_index(yields, SPLICE_CFG).pct_change().dropna()
+
+        assert monthly.max() < 0.01  # a few bp of accrual, nowhere near +500%
+
+    def test_accrual_uses_the_previously_observed_yield_not_the_current_one(self):
+        """Earning month t's rate over month t would be look-ahead: that rate is
+        only observable at the END of the month."""
+        idx = _monthly_index("1962-01-31", 3)
+        yields = pd.Series([12.0, 0.0, 0.0], index=idx)  # 12% then zero
+
+        monthly = build_cash_index(yields, SPLICE_CFG).pct_change().dropna()
+
+        # The first accrual reflects the 12% observed at t0, not the 0% at t1.
+        assert monthly.iloc[0] == pytest.approx(0.01)
+        assert monthly.iloc[1] == pytest.approx(0.0)
+
+    def test_empty_input_returns_empty_named_series(self):
+        result = build_cash_index(pd.Series(dtype=float), SPLICE_CFG)
+        assert result.empty
+        assert result.name == "cash"
 
 
 class TestBuildEquityTotalReturn:
@@ -520,7 +625,7 @@ class TestSourceChains:
 
     def test_chain_works_on_non_single_source_key(self):
         idx = pd.date_range("1962-01-31", periods=12, freq="ME")
-        raw = pd.DataFrame({"b": [0.02] * 12}, index=idx)  # "a" absent, "b" present
+        raw = pd.DataFrame({"b": [2.0] * 12}, index=idx)  # "a" absent, "b" present
         cfg = {
             "splice": {
                 "cash": {
@@ -533,7 +638,10 @@ class TestSourceChains:
 
         result = build_core_research_series(raw, cfg)
 
-        assert list(result["cash"].dropna().values) == [0.02] * 12
+        # An INDEX LEVEL compounding a 2%-annual accrual, not the yield itself.
+        cash = result["cash"].dropna()
+        assert cash.iloc[0] == pytest.approx(1.0)
+        assert cash.iloc[-1] == pytest.approx((1 + 0.02 / 12) ** 11)
         prov = result.attrs["splice_provenance"]["cash"]
         assert prov["sources"]["yield_col"]["resolved"] == "b"
         assert prov["sources"]["yield_col"]["position"] == 2
