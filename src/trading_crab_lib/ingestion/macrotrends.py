@@ -261,7 +261,14 @@ def _detect_date_and_value_columns(df: pd.DataFrame, column_name: str) -> tuple[
         if pd.api.types.is_numeric_dtype(raw):
             date_scores[col] = 0.0
         else:
-            date_scores[col] = float(pd.to_datetime(raw, errors="coerce").notna().mean())
+            # format="mixed" parses each element on its own. That is precisely
+            # what this heuristic wants — it is scoring arbitrary scraped
+            # strings, so there IS no single format to infer — and saying so
+            # explicitly silences pandas' "Could not infer format" UserWarning
+            # instead of leaving it to fire on every scrape.
+            date_scores[col] = float(
+                pd.to_datetime(raw, errors="coerce", format="mixed").notna().mean()
+            )
         value_scores[col] = float(pd.to_numeric(_clean_numeric(raw), errors="coerce").notna().mean())
 
     date_col = max(date_scores, key=lambda c: date_scores[c])

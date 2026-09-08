@@ -70,16 +70,19 @@ class TestEngineerAllIntegration:
     """engineer_all() produces well-formed output on synthetic data."""
 
     @pytest.fixture(scope="class")
-    def cfg(self):
+    @classmethod
+    def cfg(cls):
         from trading_crab_lib.config import load
         return load()
 
     @pytest.fixture(scope="class")
-    def raw_df(self):
+    @classmethod
+    def raw_df(cls):
         return _make_synthetic_macro(n_quarters=80)
 
     @pytest.fixture(scope="class")
-    def features_df(self, raw_df, cfg):
+    @classmethod
+    def features_df(cls, raw_df, cfg):
         from trading_crab_lib.transforms import engineer_all
         return engineer_all(raw_df, cfg, causal=False)
 
@@ -174,7 +177,8 @@ class TestClusteringIntegration:
     """reduce_pca() → fit_clusters() chain works on synthetic feature data."""
 
     @pytest.fixture(scope="class")
-    def pca_df(self):
+    @classmethod
+    def pca_df(cls):
         from trading_crab_lib.clustering import reduce_pca
         from trading_crab_lib.config import load
         from trading_crab_lib.transforms import engineer_all

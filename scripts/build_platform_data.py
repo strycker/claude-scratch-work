@@ -82,11 +82,11 @@ def main() -> int:
         return 2
 
     from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+    from trading_crab_lib.platform.config import load_platform_config
     from trading_crab_lib.platform.honesty.holdout import (
         DEFAULT_HOLDOUT_CUTOFF,
         assert_dev_checkpoint_within_boundary,
     )
-    from trading_crab_lib.platform.config import load_platform_config
     from trading_crab_lib.platform.transforms_monthly import build_monthly_spine
 
     cfg = load_platform_config()
