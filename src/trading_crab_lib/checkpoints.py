@@ -74,6 +74,98 @@ PRESERVATION_CHECKPOINT_NAMES: frozenset[str] = frozenset({
 })
 
 
+# ── Merge-on-save checkpoints ────────────────────────────────────────────────
+# A degraded or empty upstream fetch must never be physically able to shrink a
+# checkpoint's stored coverage. Raw ingest frames are MERGE-ELIGIBLE by
+# default: their columns are OBSERVATIONS of the outside world, so a column
+# missing from a fresh fetch means a source failed today, never that the
+# column ceased to exist. `save()` therefore combines a fresh write with
+# whatever is already on disk (`merge_preserving()`) instead of replacing it,
+# and refuses outright to overwrite a non-empty checkpoint with an empty
+# frame.
+#
+# Derived frames are deliberately EXCLUDED and stay replace-only: their
+# columns are FUNCTIONS OF CONFIG, so a column absent after a feature-list
+# edit means the user removed it on purpose, and merging would silently keep
+# the stale column and defeat the edit. This applies to `monthly_features`,
+# `features`, `features_supervised`, `features_causal`, `features_noncausal`,
+# and every `*_secondary` preservation name (those already have their own
+# write-once rule via `preservation_checkpoint_should_write`).
+#
+# Two escape hatches restore plain replace semantics for a merge-eligible
+# name: pass `force_replace=True`, or set the environment variable
+# `TC_CHECKPOINT_FORCE_REPLACE` to a truthy value ("1"/"true"/"yes").  Both
+# are logged at INFO so a silently-set env var still leaves a trace in the
+# run log.
+MERGE_ON_SAVE_CHECKPOINT_NAMES: frozenset[str] = frozenset({
+    "daily_raw",
+    "monthly_raw",
+    "macro_raw",
+    "asset_prices",
+})
+
+_ENV_TRUTHY = {"1", "true", "yes"}
+
+
+def merge_preserving(
+    existing: pd.DataFrame, new: pd.DataFrame
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Combine *new* over *existing*, never losing coverage *existing* has.
+
+    Semantics:
+      - union of columns and of index; index sorted ascending.
+      - an overlapping cell takes *new*'s value where it is non-NaN, else
+        keeps *existing*'s value.
+      - a column present only in *existing* is kept intact.
+      - a column present only in *new* is added.
+      - column order is deterministic: *new*'s columns (in *new*'s order)
+        first, then existing-only columns.
+
+    Duplicate column labels in either frame make combine-first semantics
+    undefined, so that case is refused rather than guessed at: *new* is
+    returned unchanged with a `"degraded"` key in the stats dict naming the
+    repeated labels.
+
+    Returns:
+        (merged, stats) — stats reports cols_kept_from_disk, cols_added,
+        cols_updated (all lists of column names), and rows_kept_from_disk,
+        rows_added, cells_filled_from_disk (all counts).
+    """
+    existing_dupes = existing.columns[existing.columns.duplicated()].tolist()
+    new_dupes = new.columns[new.columns.duplicated()].tolist()
+    if existing_dupes or new_dupes:
+        dupes = sorted(set(existing_dupes) | set(new_dupes))
+        log.warning(
+            "merge_preserving: duplicate column label(s) %s — combine semantics "
+            "are undefined under duplicate labels, returning `new` unchanged.",
+            dupes,
+        )
+        return new, {"degraded": "duplicate column labels", "duplicate_columns": dupes}
+
+    cols_kept_from_disk = [c for c in existing.columns if c not in new.columns]
+    cols_added = [c for c in new.columns if c not in existing.columns]
+    cols_updated = [c for c in new.columns if c in existing.columns]
+    rows_kept_from_disk = int((~existing.index.isin(new.index)).sum())
+    rows_added = int((~new.index.isin(existing.index)).sum())
+
+    merged = new.combine_first(existing)
+    ordered_cols = list(new.columns) + cols_kept_from_disk
+    merged = merged[ordered_cols].sort_index()
+
+    new_reindexed = new.reindex(index=merged.index, columns=merged.columns)
+    cells_filled_from_disk = int((new_reindexed.isna() & merged.notna()).to_numpy().sum())
+
+    stats = {
+        "cols_kept_from_disk": cols_kept_from_disk,
+        "cols_added": cols_added,
+        "cols_updated": cols_updated,
+        "rows_kept_from_disk": rows_kept_from_disk,
+        "rows_added": rows_added,
+        "cells_filled_from_disk": cells_filled_from_disk,
+    }
+    return merged, stats
+
+
 def preservation_checkpoint_should_write(
     name: str,
     cm: CheckpointManager,
@@ -121,14 +213,88 @@ class CheckpointManager:
 
     # ── DataFrame checkpoints ─────────────────────────────────────────────
 
-    def save(self, df: pd.DataFrame, name: str) -> Path:
-        """Persist a DataFrame to {name}.parquet and write metadata."""
+    def save(
+        self,
+        df: pd.DataFrame,
+        name: str,
+        *,
+        merge: bool | None = None,
+        force_replace: bool = False,
+        source: str | None = None,
+    ) -> Path:
+        """Persist a DataFrame to {name}.parquet and write metadata.
+
+        By default, checkpoints in `MERGE_ON_SAVE_CHECKPOINT_NAMES` are
+        merged with whatever is already on disk (`merge_preserving()`)
+        instead of being replaced, and an empty *df* is refused outright
+        when a non-empty checkpoint already exists — see the module-level
+        "Merge-on-save checkpoints" comment for the full rationale.
+
+        Args:
+            df: the DataFrame to persist.
+            name: checkpoint name (no extension).
+            merge: force merge-on-save on (True) or off (False) regardless
+                of `name`'s membership in `MERGE_ON_SAVE_CHECKPOINT_NAMES`.
+                `None` (default) defers to that set.
+            force_replace: bypass merge-on-save entirely and write a plain
+                replace, even for a merge-eligible name. Same effect as
+                setting `TC_CHECKPOINT_FORCE_REPLACE` truthy.
+            source: human-readable label for the producing chain/step, used
+                only in the WARNING logged when an empty write is refused.
+        """
+        parquet_path = self.dir / f"{name}.parquet"
+
+        env_force = os.environ.get("TC_CHECKPOINT_FORCE_REPLACE", "").strip().lower() in _ENV_TRUTHY
+        if force_replace or env_force:
+            mechanism = "force_replace=True" if force_replace else "TC_CHECKPOINT_FORCE_REPLACE env var"
+            log.info("Checkpoint %s: protective merge bypassed via %s.", name, mechanism)
+            return self._write_checkpoint(df, name)
+
+        do_merge = merge if merge is not None else (name in MERGE_ON_SAVE_CHECKPOINT_NAMES)
+
+        if not do_merge or not parquet_path.exists():
+            return self._write_checkpoint(df, name)
+
+        try:
+            existing = pd.read_parquet(parquet_path)
+        except (OSError, ValueError, pd.errors.ParserError) as exc:
+            log.warning(
+                "Checkpoint %s: existing parquet unreadable (%s) — falling back to plain replace.",
+                name, exc,
+            )
+            return self._write_checkpoint(df, name)
+
+        if not existing.empty and df.empty:
+            log.warning(
+                "Checkpoint %s: refusing to overwrite non-empty checkpoint (%d rows x %d cols "
+                "on disk) with an empty frame. Producing source: %s. Override with "
+                "force_replace=True or TC_CHECKPOINT_FORCE_REPLACE=1 if this is intentional.",
+                name, len(existing), len(existing.columns), source or "unnamed source",
+            )
+            return parquet_path
+
+        merged, stats = merge_preserving(existing, df)
+        stats = dict(stats)
+        stats["pre_merge_shape"] = {"rows": len(existing), "columns": len(existing.columns)}
+        log.info(
+            "Checkpoint %s merged: %d cols kept from disk, %d cols added, %d cols updated, "
+            "%d rows kept from disk, %d rows added, %d cells filled from disk.",
+            name,
+            len(stats["cols_kept_from_disk"]), len(stats["cols_added"]), len(stats["cols_updated"]),
+            stats["rows_kept_from_disk"], stats["rows_added"], stats["cells_filled_from_disk"],
+        )
+        return self._write_checkpoint(merged, name, merge_stats=stats)
+
+    def _write_checkpoint(
+        self, df: pd.DataFrame, name: str, *, merge_stats: dict[str, Any] | None = None
+    ) -> Path:
+        """Write *df* to {name}.parquet and write its metadata sidecar."""
         parquet_path = self.dir / f"{name}.parquet"
         meta_path = self.dir / f"{name}.meta.json"
 
         df.to_parquet(parquet_path)
 
-        meta = {
+        meta: dict[str, Any] = {
             "name": name,
             "created": datetime.now().isoformat(),
             "config_hash": _config_hash(),
@@ -138,6 +304,8 @@ class CheckpointManager:
             "index_start": str(df.index[0]) if len(df) else None,
             "index_end": str(df.index[-1]) if len(df) else None,
         }
+        if merge_stats is not None:
+            meta["merge"] = merge_stats
         meta_path.write_text(json.dumps(meta, indent=2))
 
         log.info(

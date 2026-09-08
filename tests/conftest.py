@@ -187,6 +187,20 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     ckpt_mod.CHECKPOINT_DIR = session_dir
     os.environ["TC_CHECKPOINT_DIR"] = str(session_dir)
 
+    # PLATFORM_CHECKPOINT_DIR is a separate module-level constant
+    # (trading_crab_lib.platform.checkpoints) that bypasses TC_CHECKPOINT_DIR
+    # entirely — get_platform_checkpoint_manager() always passes an explicit
+    # checkpoint_dir, so the env-var override above never reaches it. Without
+    # this second redirect, platform tests write to the real
+    # data/checkpoints/platform/ directory. The real platform/ subdir was
+    # already copytree'd into session_dir above (see the src.is_dir() branch),
+    # so session_dir/platform still serves as the read-fallback for platform
+    # checkpoints too.
+    import trading_crab_lib.platform.checkpoints as platform_ckpt_mod
+
+    original_platform_checkpoint_dir = platform_ckpt_mod.PLATFORM_CHECKPOINT_DIR
+    platform_ckpt_mod.PLATFORM_CHECKPOINT_DIR = session_dir / "platform"
+
     # Ensure all checkpoint-dependent constraint tests run rather than skip.
     # When data/raw/ and data/checkpoints/ are cleared, synthesise minimal
     # stand-ins with the correct structure.  Real production data always wins —
@@ -204,6 +218,7 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     # Restore — production directory is never touched
     ckpt_mod.CHECKPOINT_DIR = original_checkpoint_dir
     os.environ.pop("TC_CHECKPOINT_DIR", None)
+    platform_ckpt_mod.PLATFORM_CHECKPOINT_DIR = original_platform_checkpoint_dir
 
 
 @pytest.fixture

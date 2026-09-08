@@ -322,6 +322,43 @@ class TestBuildMonthlySpineLeanFeatures:
         assert list(result.columns).count("fred_vix") == 1
 
 
+# ── build_monthly_spine — gold source chain resolves via monthly_prices (Task 2) ──
+
+
+class TestBuildMonthlySpineGoldFallbackToIAU:
+    @patch("trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages")
+    @patch("trading_crab_lib.platform.ingestion.prices_daily.fetch_universe_prices")
+    @patch("trading_crab_lib.platform.ingestion.macro_monthly.fetch_macro_monthly")
+    def test_gold_resolves_to_iau_via_monthly_prices(self, mock_macro, mock_prices, mock_vintages):
+        """gold_spot absent from macro (simulated macrotrends failure); IAU
+        present in the daily-derived monthly_prices frame. build_monthly_spine
+        must feed splice a frame that includes monthly_prices — otherwise the
+        gold->IAU chain can never resolve (Task 2 key_link)."""
+        idx = _make_monthly_index(start="2015-01-31", periods=24)
+        macro = _make_synthetic_macro(idx)
+        del macro["gold_spot"]
+        mock_macro.return_value = macro
+
+        monthly_prices = pd.DataFrame({"IAU": 30.0 + np.arange(len(idx), dtype=float)}, index=idx)
+        mock_prices.return_value = (pd.DataFrame(), monthly_prices)
+        mock_vintages.return_value = {}
+
+        cfg = _make_cfg(start="2015-01-01", end="2016-12-31")
+        cfg["splice"] = dict(SPLICE_CFG)
+        cfg["splice"]["gold"] = {
+            "research_name": "gold",
+            "method": "single_source",
+            "source_col": ["gold_spot", "IAU"],
+            "optional": True,
+        }
+
+        result = build_monthly_spine(cfg)
+
+        assert "gold" in result.columns
+        assert not result["gold"].dropna().empty
+        assert list(result["gold"].dropna().values) == list(monthly_prices["IAU"].values)
+
+
 # ── build_monthly_spine — end-to-end cadence, alignment, coverage, NULL-tolerance ──
 
 

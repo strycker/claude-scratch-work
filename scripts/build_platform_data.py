@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 """build_platform_data.py — Build the Phase 1 monthly data checkpoints.
 
-The platform backtest/report machinery (Phase 5) reads two checkpoints that the
-Phase 1 data layer produces but that are NOT committed to git (``data/`` is
-gitignored). On a fresh clone they are absent, so
-``python -m trading_crab_lib.platform.evaluation.report`` fails with:
+The platform backtest/report machinery (Phase 5) reads checkpoints the
+Phase 1 data layer produces. Only ``data/raw/`` is gitignored — the platform
+checkpoints under ``data/checkpoints/platform/`` ARE tracked in git — but a
+fresh clone's tracked copy can still be stale or empty (e.g. a degraded
+source wrote a 0-row frame before Task 1's never-lose-coverage protection
+existed). Re-running this script refreshes them, so
+``python -m trading_crab_lib.platform.evaluation.report`` can run end-to-end.
 
     FileNotFoundError: .../data/checkpoints/platform/monthly_features.parquet
 
@@ -90,6 +93,19 @@ def main() -> int:
     monthly_features = build_monthly_spine(cfg)
 
     cm = get_platform_checkpoint_manager()
+
+    from trading_crab_lib.platform.snapshots import DEFAULT_SNAPSHOT_NAMES, is_snapshot_backed
+
+    for snapshot_name in DEFAULT_SNAPSHOT_NAMES:
+        if is_snapshot_backed(cm, snapshot_name):
+            log.warning(
+                "build_platform_data: checkpoint '%s' is STILL SNAPSHOT-BACKED (offline dev data, "
+                "not live) after this build — either its live source never wrote fresh data, or "
+                "merge-on-save (Task 1) refused an empty fetch and preserved the snapshot "
+                "untouched. Run `python scripts/platform_snapshot.py list` for the capture date.",
+                snapshot_name,
+            )
+
     checkpoint_dir = cm.checkpoint_dir if hasattr(cm, "checkpoint_dir") else "data/checkpoints/platform/"
     log.info("Wrote platform checkpoints to: %s", checkpoint_dir)
     log.info(
