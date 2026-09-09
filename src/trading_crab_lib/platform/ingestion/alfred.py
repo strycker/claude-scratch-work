@@ -134,27 +134,96 @@ def align_with_fallback(
     For each date in *as_of_dates*: if it precedes the series' earliest
     recorded vintage, returns the corresponding value from the publication-
     lag-shifted *shift_series* (D-06's documented accepted compromise — never
-    NaN, never a raised error). Otherwise the value is the latest reference
-    period known by that as-of date (per :func:`value_as_of`) — the most
-    recently *published* observation, correctly vintage-corrected — mirroring
-    what a `shift()`-aligned series does for un-vintaged series (Pitfall 4:
-    vintage-correction subsumes the shift once vintages exist), falling back
-    to *shift_series* only if no reference period is known at all yet.
+    NaN, never a raised error). Otherwise the value is derived from the latest
+    reference period known by that as-of date (per :func:`value_as_of`) — the
+    most recently *published* observation, correctly vintage-corrected —
+    mirroring what a `shift()`-aligned series does for un-vintaged series
+    (Pitfall 4: vintage-correction subsumes the shift once vintages exist),
+    falling back to *shift_series* only if no reference period is known at all
+    yet.
+
+    **Chained on within-vintage growth, not raw published levels.** Consecutive
+    output values come from consecutive *vintages*, and the level of an index
+    series is base-dependent: BLS rebased CPI from 1967=100 to 1982-84=100 in
+    January 1988, so the value published in Jan 1988 (345.9) and the one
+    published in Feb 1988 (115.9) describe the same price level on different
+    bases. Splicing published levels directly produced a ~2.99x cliff at every
+    such boundary — one where this function hands off from *shift_series* to
+    vintages, and one at each rebasing. In `fred_cpi` that put two artificial
+    jumps into the series and drove `real_rate_level` to a range of
+    -209 .. +74.
+
+    Each step therefore applies the growth measured **within the current
+    vintage** — where the base cancels — to the previous output value. This is
+    still strictly point-in-time: only rows already filtered to
+    ``realtime_start <= as_of`` are read, and a revision to an earlier
+    reference period is correctly seen as growth inside the newer vintage.
+
+    Two joins, handled separately:
+
+    * **Within the vintage era**, each step applies the growth measured inside
+      the current vintage, so a rebasing cancels. When no rebasing occurs the
+      ratios telescope and the chained result is **exactly** the raw published
+      level — this is a no-op for well-behaved series (rates like
+      ``fred_unrate``, headcounts like ``fred_payems``).
+    * **At the handoff from shift_series**, the whole vintage segment is
+      ratio-spliced onto shift_series' base at a same-date join, the idiom
+      ``splice.ratio_splice`` already uses. Continuity at the join is by
+      construction, so the two series agree at that one date and diverge
+      afterwards along the vintage growth path. Anchoring on the previous
+      *output* instead would let a stale fallback value distort every later
+      value, and would break the telescoping property above.
+
+    The output therefore stays on shift_series' (modern) base throughout, which
+    keeps the level interpretable — ``fred_cpi`` reads ~30 in 1962 and ~258 in
+    2020, as CPIAUCSL should.
     """
     cols = _detect_vintage_columns(all_releases)
     rs_col = cols["realtime_start"]
     earliest_vintage = pd.to_datetime(all_releases[rs_col]).min()
 
     values: dict[pd.Timestamp, float] = {}
+    prev_ref: pd.Timestamp | None = None
+    prev_raw: float | None = None
+    base_scale = 1.0  # set once, at the shift_series -> vintage join
+
     for as_of in pd.DatetimeIndex(as_of_dates):
-        if as_of < earliest_vintage:
-            values[as_of] = shift_series.get(as_of, float("nan"))
-            continue
-        known = value_as_of(all_releases, as_of)
+        known = (
+            pd.Series(dtype=float)
+            if as_of < earliest_vintage
+            else value_as_of(all_releases, as_of)
+        )
         if known.empty:
             values[as_of] = shift_series.get(as_of, float("nan"))
+            prev_ref, prev_raw = None, None
+            continue
+
+        latest_ref = known.index.max()
+
+        if prev_raw is None:
+            # First vintage-era step: anchor the chain on the published level,
+            # then ratio-splice the whole vintage segment onto shift_series'
+            # base (`splice.ratio_splice`'s idiom, at a same-date join). This is
+            # what removes the fallback->vintage cliff without letting a stale
+            # fallback value distort the chain.
+            raw = known.loc[latest_ref]
+            join_value = shift_series.get(as_of, float("nan"))
+            if pd.notna(join_value) and pd.notna(raw) and raw != 0:
+                base_scale = join_value / raw
         else:
-            values[as_of] = known.loc[known.index.max()]
+            # Growth measured WITHIN the current vintage, where the base cancels.
+            anchor_ref = prev_ref if prev_ref in known.index else None
+            if anchor_ref is None:
+                earlier = known.index[known.index < latest_ref]
+                anchor_ref = earlier.max() if len(earlier) else None
+            anchor_value = known.get(anchor_ref) if anchor_ref is not None else None
+            if anchor_value is not None and pd.notna(anchor_value) and anchor_value != 0:
+                raw = prev_raw * (known.loc[latest_ref] / anchor_value)
+            else:
+                raw = known.loc[latest_ref]
+
+        values[as_of] = raw * base_scale
+        prev_ref, prev_raw = latest_ref, raw
 
     result = pd.Series(values)
     result.index.name = "date"

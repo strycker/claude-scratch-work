@@ -153,7 +153,7 @@ def test_pre_vintage_fallback():
     # 2020-06-20.
     as_of_dates = pd.DatetimeIndex(["2019-01-01", "2020-06-20"])
     shift_series = pd.Series(
-        {pd.Timestamp("2019-01-01"): 42.0, pd.Timestamp("2020-06-20"): 999.0}
+        {pd.Timestamp("2019-01-01"): 42.0, pd.Timestamp("2020-06-20"): 60.0}
     )
 
     result = align_with_fallback(all_releases, as_of_dates, shift_series)
@@ -161,9 +161,12 @@ def test_pre_vintage_fallback():
     # Before the earliest recorded vintage: falls back to the shift value —
     # never NaN, never a raised error (D-06).
     assert result.loc[pd.Timestamp("2019-01-01")] == pytest.approx(42.0)
-    # At/after the vintage era: uses the reconstructed point-in-time value
-    # for the matching reference period, not the fallback.
-    assert result.loc[pd.Timestamp("2020-06-20")] == pytest.approx(200.0)
+    # At the vintage-era join the series is ratio-spliced onto shift_series'
+    # base, so the two agree AT the join by construction and diverge after it
+    # along the vintage growth path. (Previously this returned the raw
+    # published level, 200.0, which splices two different index bases together
+    # — see test_vintage_rebasing_does_not_create_a_level_discontinuity.)
+    assert result.loc[pd.Timestamp("2020-06-20")] == pytest.approx(60.0)
 
 
 # ── fetch_vintage_series ──────────────────────────────────────────────────────
@@ -250,3 +253,123 @@ def test_fetch_all_vintages_missing_api_key_raises():
     cfg = {"fred_vintage": {"api_key": None, "series": {}}}
     with pytest.raises(OSError, match="FRED_API_KEY"):
         fetch_all_vintages(cfg)
+
+
+# ── Index-base discontinuities across vintages ──────────────────────────────
+
+
+def _rebasing_releases() -> pd.DataFrame:
+    """The real CPIAUCSL situation, in miniature.
+
+    BLS rebased CPI from 1967=100 to 1982-84=100 in January 1988. Vintages
+    published before the rebasing carry the old base; vintages published after
+    carry the new one, ~2.99x smaller. Both describe the same price level.
+
+    Four reference periods, each published a month later. The vintage released
+    on 1988-02-15 restates the whole history on the new base.
+    """
+    old_base = {"1987-10-01": 340.2, "1987-11-01": 344.5, "1987-12-01": 345.5}
+    new_base_factor = 1 / 2.9845
+
+    rows = []
+    # Pre-rebasing vintages: each release adds one period, on the OLD base.
+    for i, (ref, val) in enumerate(old_base.items()):
+        rows.append(
+            {
+                "realtime_start": pd.Timestamp(ref) + pd.DateOffset(months=1, days=14),
+                "date": pd.Timestamp(ref),
+                "value": val,
+            }
+        )
+        _ = i
+    # The 1988-02-15 vintage: adds 1988-01 AND restates every earlier period on
+    # the NEW base.
+    restated = {**old_base, "1988-01-01": 345.9}
+    for ref, val in restated.items():
+        rows.append(
+            {
+                "realtime_start": pd.Timestamp("1988-02-15"),
+                "date": pd.Timestamp(ref),
+                "value": val * new_base_factor,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def test_vintage_rebasing_does_not_create_a_level_discontinuity():
+    """The A4 regression. Splicing published LEVELS across a rebasing put a
+    ~2.99x cliff into fred_cpi (1988-01: 345.9 -> 1988-02: 115.9), which drove
+    real_rate_level to a range of -209..+74 — in a feature that defines 64% of
+    labeler occupancy. Growth measured inside a vintage is base-invariant."""
+    from trading_crab_lib.platform.ingestion.alfred import align_with_fallback
+
+    releases = _rebasing_releases()
+    as_of_dates = pd.DatetimeIndex(
+        ["1987-11-30", "1987-12-31", "1988-01-31", "1988-02-29"]
+    )
+    shift_series = pd.Series(340.0, index=as_of_dates)
+
+    result = align_with_fallback(releases, as_of_dates, shift_series)
+
+    step_ratios = (result / result.shift(1)).dropna()
+    assert step_ratios.max() < 1.10, f"level discontinuity survived: {result.to_dict()}"
+    assert step_ratios.min() > 0.90, f"level discontinuity survived: {result.to_dict()}"
+
+
+def test_growth_is_preserved_across_the_rebasing():
+    """Removing the cliff must not flatten the series — the real month-over-
+    month growth published in the rebased vintage has to survive."""
+    from trading_crab_lib.platform.ingestion.alfred import align_with_fallback
+
+    releases = _rebasing_releases()
+    as_of_dates = pd.DatetimeIndex(["1988-01-31", "1988-02-29"])
+    shift_series = pd.Series(340.0, index=as_of_dates)
+
+    result = align_with_fallback(releases, as_of_dates, shift_series)
+
+    # In the rebased vintage 1987-12 -> 1988-01 grows 345.9/345.5.
+    expected_growth = 345.9 / 345.5
+    actual_growth = result.iloc[-1] / result.iloc[-2]
+    assert actual_growth == pytest.approx(expected_growth, rel=1e-6)
+
+
+def test_chaining_is_a_no_op_when_no_rebasing_occurs():
+    """The property that bounds the blast radius: with a single consistent
+    base the ratios telescope, so chained output equals the raw published
+    level exactly. Rates (fred_unrate) and headcounts (fred_payems) are
+    therefore untouched by this change."""
+    from trading_crab_lib.platform.ingestion.alfred import align_with_fallback
+
+    refs = pd.to_datetime(["2020-01-01", "2020-02-01", "2020-03-01"])
+    levels = [3.5, 3.8, 4.4]
+    releases = pd.DataFrame(
+        {
+            "realtime_start": refs + pd.DateOffset(months=1, days=14),
+            "date": refs,
+            "value": levels,
+        }
+    )
+    as_of_dates = pd.DatetimeIndex(["2020-02-29", "2020-03-31", "2020-04-30"])
+    # shift_series agrees with the first vintage value, so the join scale is 1.0
+    # and the whole segment must reproduce the published levels untouched.
+    shift_series = pd.Series(3.5, index=as_of_dates)
+
+    result = align_with_fallback(releases, as_of_dates, shift_series)
+
+    assert list(result.to_numpy()) == pytest.approx(levels)
+
+
+def test_point_in_time_guarantee_is_unaffected_by_chaining():
+    """Chaining must not let a later revision leak backward: every value still
+    derives only from rows with realtime_start <= as_of."""
+    from trading_crab_lib.platform.ingestion.alfred import align_with_fallback
+
+    all_releases = _make_all_releases_df()  # 2020-01 revised 100 -> 150 on 2020-05-01
+    as_of_dates = pd.DatetimeIndex(["2020-03-01", "2020-06-20"])
+    shift_series = pd.Series(100.0, index=as_of_dates)
+
+    result = align_with_fallback(all_releases, as_of_dates, shift_series)
+
+    # At 2020-03-01 only the original 100.0 was published; the 150.0 revision
+    # lands 2020-05-01 and must be invisible.
+    assert result.loc[pd.Timestamp("2020-03-01")] == pytest.approx(100.0)
