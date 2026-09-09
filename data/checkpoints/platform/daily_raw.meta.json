@@ -1,6 +1,6 @@
 {
   "name": "daily_raw",
-  "created": "2026-09-08T16:49:13.466325",
+  "created": "2026-09-09T10:16:06.350730",
   "config_hash": "6c209fad",
   "rows": 14290,
   "columns": 22,
@@ -58,10 +58,10 @@
       "VYM"
     ],
     "rows_kept_from_disk": 0,
-    "rows_added": 1,
+    "rows_added": 0,
     "cells_filled_from_disk": 0,
     "pre_merge_shape": {
-      "rows": 14289,
+      "rows": 14290,
       "columns": 22
     }
   }
