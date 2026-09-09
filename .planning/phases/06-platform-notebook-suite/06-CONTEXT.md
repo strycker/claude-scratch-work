@@ -366,3 +366,96 @@ hard-stop at 2020-12. That was over-restrictive and contradicted the platform's 
 
 *Phase: 6-Platform Notebook Suite*
 *Context gathered: 2026-08-04*
+
+---
+
+# AMENDMENT — 2026-09-09 (read before `/gsd-plan-phase 6`)
+
+Four decisions above rest on facts that have since changed, and one is now
+**empirically disproven**. Source: `.planning/UAT-AUDIT-2026-09-09.md` and
+`.planning/BASELINE-v1-tracer-bullet.md`.
+
+## A. D-11 is REVERSED — reinstate the plausibility check alongside drift
+
+**D-11 rejected a "plausibility banner" in favour of D-09's drift-against-baseline.**
+That decision is now disproven by the event it would have prevented.
+
+The percent-vs-decimal yield defect compounded `long_duration_tr` to **2.3e128** across
+the *entire* span, 1962→2026. D-09 compares the current window against the pre-2021
+fitted window. **A uniformly wrong series shows zero drift.** Drift-against-baseline
+was structurally incapable of catching the largest defect in the project's history; it
+would have reported the corrupted series as perfectly stable.
+
+D-11's stated rejection reason — "guessed thresholds would get tuned to whatever the
+current data happens to look like" — does not survive contact with the actual case.
+The bounds do not come from the data; they come from economics:
+
+- a US Treasury yield has never exceeded 100% annualized
+- a long-only book cannot average **+21.9% per month** (the corrupted strategy did)
+- a 60/40 portfolio cannot cross 1972–2020 with a **−2.27%** max drawdown
+- a total-return index cannot reach 10¹²⁸
+
+None of those is tuned. They are facts about the domain, and each one alone would have
+tripped instantly.
+
+**Amended decision:** keep D-09 drift **and** add a plausibility check. They catch
+different failure modes — drift catches a feature *decaying*, plausibility catches a
+value that *cannot exist*. Neither substitutes for the other. Three such assertions
+already exist in the suite (`assert_yield_units_plausible`,
+`TestKpisAreOnAPlausibleScale`, `test_percent_yields_produce_a_plausible_treasury_index`);
+Phase 6 should surface the same idea in the notebooks rather than leave it as an
+artifact of one incident. This is audit item **A3**.
+
+## B. D-20 is SATISFIED — the holdout carve is done
+
+D-20 called the carve "urgent, and independent of Phase 6," and recorded that
+`data/holdout/` did not exist and fitting was unfenced. **Completed 2026-09-08**
+(commit `7f99548`): `build_monthly_spine()` writes through
+`write_monthly_features_split()`, `scripts/build_platform_data.py` asserts the boundary
+and fails the build on violation, and the dev checkpoint now runs 1962-01 → 2020-12
+(708 rows) with 68 post-cutoff rows in `data/holdout/`.
+
+**Planner note for D-06:** the full-span opt-in now has an implementation —
+`honesty.holdout.load_full_span(name)` returns dev + holdout concatenated in index
+order. Notebooks should call it rather than opening two managers by hand.
+
+## C. D-18 and D-19 environment premises are STALE
+
+Both state that the human half cannot be completed here because "`daily_raw` is empty
+(0,0) and there is no `regime_labels` checkpoint." As of 2026-09-09:
+
+| Checkpoint | D-18/D-19 premise | Actual |
+|---|---|---|
+| `daily_raw` | empty (0,0) | **14,290 × 22** |
+| `regime_labels` | does not exist | **372 × 1** (plus `regime_confidences` 372×5, `regime_profiles` 5×2) |
+| `monthly_features` | — | 708 × 53 dev (776 via `load_full_span`) |
+
+P3/P4/P5 **do** have inputs now. D-19's "P3 first orders the code, not the answer"
+caveat can be relaxed: P3 can be built *and* run.
+
+## D. NEW BLOCKER for P2/P3 — audit item A4
+
+An unfixed defect sits directly upstream of the two notebooks Phase 6 cares most about.
+`fred_cpi` carries two artificial ~3× discontinuities (1970-12 `39.60` → 1971-01
+`119.03`; 1988-01 `345.9` → 1988-02 `115.9`) because ALFRED point-in-time vintages of a
+**rebased index** are not level-comparable across rebasings. `real_rate_level` inherits
+it and ranges **−209.49 … +74.51**, and it is a defining feature of labeler states 2
+and 3 — **64.3% of total occupancy**.
+
+Building P2 (features/taxonomy) and P3 (regime labeling) on top of that means the
+cold-start sign-off in D-15 would be a human signing off on a corrupted feature.
+**Recommend fixing A4 before Phase 6 planning**, on exactly the same reasoning that made
+D-20 pre-Phase-6 work: it is upstream, it is not notebook work, and it changes what the
+notebooks would show.
+
+## E. Expectation-setting for D-14 / D-16 (no change, but the planner should know)
+
+The first trustworthy backtest is now recorded in `BASELINE-v1-tracer-bullet.md`. The
+labeler produces **6 transitions in 59 years**, median sojourn 95 months, median
+detection lag **76 months**, headline ratio **1.25** against a design bar of ~5. The
+strategy finishes **last of five legs** and the regime layer adds +0.0732 log wealth
+while making drawdown 1.95pp worse.
+
+D-14 (no (K, λ) sweep) still holds as scope. D-16 (a negative P3 verdict is recorded and
+does not block) is very likely to be exercised — P3 should be built expecting a negative
+verdict, and that is the phase working as designed, not failing.

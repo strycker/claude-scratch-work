@@ -122,3 +122,58 @@ large-sample estimate.
 - [x] Holdout discipline intact — no DSR, no 2021+ read
 
 **PHASE 5 CLOSED — 2026-08-04.**
+
+---
+
+## ⚠ Evidence Invalidated — Re-verification Record (2026-09-09)
+
+**The 4/4 sign-off above stands. The numbers in it do not.**
+
+A percent-vs-decimal yield units defect in Phase 1 code (`splice.py`, fixed 2026-09-08,
+commit `75dedc7`, PR #140) meant every number recorded in this file was computed on a
+`long_duration_tr` series that compounded to 2.3e128 and a `cash` series whose
+"returns" were month-over-month changes in the T-bill yield. See
+`.planning/UAT-AUDIT-2026-09-09.md` for the full audit.
+
+### Per-criterion re-verdict
+
+| # | Criterion | Re-verdict |
+|---|---|---|
+| 1 | Walk-forward runs L1→L4, no 2021+ read | **GENUINELY VERIFIED** — a mechanism claim; mechanism confirmed again 2026-09-08 |
+| 2 | Baseline gauntlet + ablation, same window | **WIRING VERIFIED / VALUES VOID** |
+| 3 | Sojourn/lag ratio is the headline | **PLACEMENT VERIFIED / VALUE VOID** |
+| 4 | Model-metrics artifacts persisted | **PLUMBING VERIFIED / CONTENTS VOID** |
+
+Every criterion is satisfied *as phrased*, on today's code. Phase 5 is **not** re-opened
+as failed. What is void is the recorded evidence and two conclusions drawn from it.
+
+### Specific values now known to be impossible
+
+- **60/40 at 131.03 log wealth / −2.27% max drawdown** (criterion 2). e¹³¹ ≈ 10⁵⁷, and
+  no 60/40 portfolio survived 1972–2020 losing at most 2.27%.
+- **Faber at 1.1391 / −99.69%** (criterion 2) — a defensive timing rule losing 99.7%.
+- **Terminal log wealth 32.18, then 111.06** in the closure record — e¹¹¹ ≈ 10⁴⁸. The
+  phase closed by tabulating the move from 10¹³ to 10⁴⁸ as an improvement.
+- **Median detection lag 107.0 months, then 161.5** — recorded without remark.
+
+SPY was recorded at 5.68 / −48.95%, which is **correct** — SPY is a real price series
+that never touches the spliced yield math. Four legs side by side; three impossible,
+one right.
+
+### Conclusions re-opened
+
+1. **"The detection-lag figure is a small-sample artifact, not a model defect."**
+   Plausibly still true (corrected run: 76 months, 5 resolved of 6), but the reasoning
+   was performed on invalid numbers. Currently an unsupported claim.
+2. **Deferred item 1 (`feature_min_history`) "RESOLVED"**, justified by "32.2 → 111.06".
+   The fix is probably sound — the corrected run uses it — but its benefit is
+   **unquantified**.
+
+### Superseding evidence
+
+`.planning/BASELINE-v1-tracer-bullet.md` — the first run whose arithmetic is possible.
+Strategy 3.7204 / −21.75%; Faber 6.3726 / −18.94%; ablation 3.6472 / −19.81%; ratio 1.25.
+
+The honest finding is unchanged in direction and sharper in degree: **the regime layer
+does not pay rent** — +0.0732 log wealth over the ablation while making drawdown
+1.95pp worse — and the strategy now finishes **last of five legs**.
