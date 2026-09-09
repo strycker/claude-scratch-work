@@ -473,3 +473,71 @@ while making drawdown 1.95pp worse.
 D-14 (no (K, λ) sweep) still holds as scope. D-16 (a negative P3 verdict is recorded and
 does not block) is very likely to be exercised — P3 should be built expecting a negative
 verdict, and that is the phase working as designed, not failing.
+
+---
+
+# AMENDMENT 2 — 2026-09-09 (supersedes items B and D of Amendment 1)
+
+## D. **CLEARED.** The A4 blocker is fixed and verified.
+
+Amendment 1 recommended fixing audit item A4 before planning. Done and confirmed
+against rebuilt data: zero discontinuity warnings, `real_rate_level` −4.91…9.27
+(economically correct — +3.38 mean through 1981, −3.26 through 1974), occupancy
+matching the repair experiment exactly.
+
+**Phase 6 planning is unblocked.**
+
+## E. **REVISED — the P3 expectation has flipped.**
+
+Amendment 1 said "a negative P3 verdict is very likely; build P3 expecting one."
+That was written when the labeling was degenerate (one state at 49.6%, another at
+1.7%). It is no longer the right prior. The corrected labeling maps onto
+recognizable economic history:
+
+| transition | state | reading |
+|---|---|---|
+| 1973-09 | → 1 | oil shock / stagflation |
+| 1981-10 | → 4 | Volcker |
+| 1988-09 | → 2 | post-Volcker disinflation |
+| 1996-08 | → 3 | late-90s expansion |
+| **2008-07** | **→ 0** | **GFC** — state 0 is the 1.6% crisis state |
+| 2009-06 | → 3 | recovery |
+
+D-12's economic-history overlay and D-13's regime×era contingency table now have
+a real chance of showing agreement rather than noise. **Build P3 expecting a
+genuine question, not a foregone negative.** D-16 (a negative verdict is recorded
+and does not block) still stands as the safety valve.
+
+## F. **NEW SCOPE ITEM for P3 — surface audit item A13.**
+
+Two labelings coexist and are compared as if they were the same thing:
+
+- `report._reference_label_columns` → a **fixed 9 columns**, 695 months from 1963.
+- `driver._window_active_features` → a set that **changes 7 times** across the
+  backtest (4 → 6 → 8 → 9 → 10 → 12 → 13 features), admitting each column once it
+  clears `feature_min_history` in-window.
+
+§5.4's detection lag is defined as how long the *filtered* path takes to agree
+with the *smoothed reference*. With different and time-varying inputs, their
+disagreement is not purely detection delay. The current run reports a 164-month
+lag and a 0.591 ratio, and **that number is not interpretable** until this is
+settled.
+
+**A13 is not a blocker for Phase 6 — it is Phase 6's most valuable subject.**
+Deciding what the labeler *should* see is a judgment call that benefits from the
+viewing surface, which is exactly what the notebooks are for (D-16 anticipates
+"a finding that ... is an *input* to Phases 7 and 8"). So:
+
+- **P3 must render both labelings side by side** — the fixed reference and the
+  walk-forward's per-window labeling — with their disagreement quantified and the
+  feature-set change dates marked.
+- This does **not** breach D-14 (no (K, λ) sweep). It changes no hyperparameter;
+  it displays two labelings the code already produces.
+- Until resolved, the §5.4 ratio should be shown with an explicit "not
+  interpretable — see A13" caveat wherever it appears.
+
+## G. A14 was measured and closed — no Phase 6 impact.
+
+The `trailing_return_1m` canonicalization fallback fires on **1 of 588 steps**
+(0.2%), the first step, which degrades anyway. It is not distorting churn or
+detection lag, and P3's churn panel needs no special handling for it.

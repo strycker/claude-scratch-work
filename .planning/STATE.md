@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Platform Notebook Suite
 status: planning
-stopped_at: "UAT audit of Phases 1-5 complete 2026-09-09 (.planning/UAT-AUDIT-2026-09-09.md, Parts I+II); A4 (ALFRED index-base splice) FIXED 976f7c8 — REQUIRES A REBUILD to take effect; baseline recorded (.planning/BASELINE-v1-tracer-bullet.md); 06-CONTEXT.md AMENDED (D-11 reversed, D-20 satisfied, D-18/D-19 partly stale). Next: rebuild + confirm the guard stays silent, then /gsd-plan-phase 6."
+stopped_at: "UAT audit Phases 1-5 complete (Parts I-V). A4/A12 CLOSED empirically on rebuilt data — regime structure now maps onto real economic history (1973 oil shock, 1981 Volcker, 2008 GFC). A14 measured at 0.2% of steps, closed. A13 (driver active feature set changes 7x vs the reference fixed 9) is the top open item and makes the §5.4 ratio uninterpretable. 06-CONTEXT.md has AMENDMENT 1 + AMENDMENT 2 — read both. PHASE 6 PLANNING IS UNBLOCKED; A13 folded in as a P3 scope item."
 last_updated: "2026-09-09T00:00:00.000Z"
 last_activity: 2026-09-09
-last_activity_desc: UAT audit Phases 1-5; A4 ALFRED index-base splice fixed; pytest-clobbers-holdout bug fixed; Phase 6 context amended
+last_activity_desc: A4/A12 closed empirically; A14 closed as negligible; A13 confirmed top open item; Phase 6 unblocked
 progress:
   total_phases: 8
   completed_phases: 5
@@ -30,16 +30,16 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 6 — Platform Notebook Suite
-Plan: Discussion complete and **amended 2026-09-09** — read `06-CONTEXT.md` *including*
-its AMENDMENT section before planning (D-11 reversed, D-20 satisfied, D-18/D-19 partly
-stale).
-Status: **Ready to plan after one rebuild.** A4 is fixed in code (`976f7c8`) but it is
-an *ingestion* fix, so the committed `monthly_raw.parquet` still carries the corrupted
-`fred_cpi`. Run `python scripts/build_platform_data.py` with a live `FRED_API_KEY` and
-confirm `_warn_on_level_discontinuity` stays silent for `fred_cpi`; then
-`/gsd-plan-phase 6` is unblocked.
-Last activity: 2026-09-09 — UAT audit of Phases 1–5; A4 fixed; a bug where pytest
-destroyed the production holdout checkpoint found and fixed; Phase 6 context amended
+Plan: Discussion complete and **amended twice on 2026-09-09** — read `06-CONTEXT.md`
+*including both AMENDMENT sections* before planning. A1: D-11 reversed, D-20 satisfied,
+D-18/D-19 partly stale. A2: the A4 blocker is cleared, the P3 expectation has flipped
+positive, and A13 is folded in as a P3 scope item.
+Status: **READY TO PLAN.** A4/A12 closed empirically on the 2026-09-09 rebuild —
+zero discontinuity warnings, `real_rate_level` −4.91…9.27, occupancy matching the
+repair experiment exactly. Run `/gsd-plan-phase 6` reading `06-CONTEXT.md` **plus
+both amendments**.
+Last activity: 2026-09-09 — A4/A12 closed empirically; A14 closed as negligible;
+A13 confirmed as the top open item; Phase 6 unblocked and amended twice
 
 ### ⚠ UAT audit outcome (2026-09-09) — `.planning/UAT-AUDIT-2026-09-09.md`
 
@@ -58,19 +58,33 @@ the same reason: it only surfaces pending/skipped/blocked, never
 "passed-on-evidence-that-no-longer-holds". Audit item **A3** proposes a plausibility
 gate as a standing criterion for every phase emitting numeric output.
 
-**A4, found by applying that very lens — now FIXED (`976f7c8`), pending a rebuild:** ALFRED
-point-in-time vintages of *rebased index* series are not level-comparable across
-rebasings. `fred_cpi` carries two artificial ~3× discontinuities (1970-12 `39.60` →
-1971-01 `119.03`; 1988-01 `345.9` → 1988-02 `115.9`). `real_rate_level` inherits it,
-ranging **−209.49 … +74.51**, and is a defining feature of labeler states 2 and 3 —
-**64.3% of occupancy**. This sits directly upstream of Phase 6's P2 and P3 notebooks.
+**A4 — found by applying that very lens, now CLOSED EMPIRICALLY (`976f7c8` + `8095498`).**
+ALFRED point-in-time vintages of *rebased index* series are not level-comparable across
+rebasings, and the pre-vintage fallback compounded it by picking each period's
+first-published value from whichever vintage happened to be earliest. Verified on the
+2026-09-09 rebuild: zero discontinuity warnings, `real_rate_level` −4.91…9.27 (+3.38
+mean through 1981, −3.26 through 1974 — economically correct), occupancy matching the
+repair experiment exactly.
+
+**The regime structure is now legible**: 1973-09 oil shock, 1981-10 Volcker, 1988-09
+disinflation, 1996-08 late-90s expansion, **2008-07 → the 1.6% crisis state (GFC)**,
+2009-06 recovery. Before the fix one state held 49.6% and another 1.7%.
+
+**A13 is now the top open item.** The driver's active feature set changes **7 times**
+across the backtest (4→6→8→9→10→12→13) while the report's reference is a fixed 9
+columns. §5.4's detection lag measures how long the filtered path takes to agree with
+that reference, so their disagreement is not purely detection delay — which is why the
+current 164-month lag / 0.591 ratio is **not interpretable**. A14 was measured at 1 of
+588 steps (0.2%) and closed as negligible.
 
 ### First trustworthy baseline — `.planning/BASELINE-v1-tracer-bullet.md`
 
-All prior recorded numbers are void. Reference point going forward: strategy 3.7204
-log wealth / −21.75% max DD, **last of five legs**; Faber 6.3726 / −18.94% beats it on
-both dimensions; regime layer adds +0.0732 while making drawdown 1.95pp worse; headline
-sojourn/lag ratio **1.25** against a design bar of ~5.
+All prior recorded numbers are void. **Current reference (2026-09-09, both CPI defects
+fixed):** strategy 4.0265 log wealth / −21.24% max DD (33 mo underwater), ablation delta
+**+0.3793** (5× the original baseline), CVaR −0.0463, turnover 0.0734, Brier 0.2087,
+crisis down-capture .12/.83/.05/.10. Still **last of five legs**; Faber 6.3726 / −18.94%
+still beats it on both §23.1 dimensions. The §5.4 ratio (0.591) is **not interpretable**
+pending A13.
 
 ### Phase 6 discussion outcome (2026-08-04)
 

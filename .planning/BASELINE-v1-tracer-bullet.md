@@ -10,34 +10,76 @@ they were produced under the percent-vs-decimal yield defect (see
 `UAT-AUDIT-2026-09-09.md`). Compare all future work against this row, not against
 anything in `05-VERIFICATION.md` or the phase summaries.
 
-> **Caveat, stated up front:** a defect found *during* this audit (`UAT-AUDIT`
-> §3a — ALFRED vintage index-base splice corrupting `fred_cpi` and therefore
-> `real_rate_level`) was **half-fixed** on 2026-09-09. These numbers are trustworthy
-> in the sense that the arithmetic is now possible; they are not a *final*
-> characterization of the design.
->
-> **SUPERSEDED 2026-09-09** — see the table below. The 1988 rebasing is fixed; the
-> 1971 handoff survives (item **A12**) and is proven to distort regime occupancy
-> (`UAT-AUDIT` Part III, Q2). Treat the rows below as the current reference and the
-> original baseline as history.
+> **SUPERSEDED TWICE, now CURRENT as of 2026-09-09 (both CPI base defects fixed).**
+> The rows immediately below are the reference point. The original tables further
+> down are kept as history — do not compare against them.
 
-## Superseding run — 2026-09-09, after the 1988 rebasing fix
+## Current reference run — 2026-09-09, A4/A12 fully closed
 
-| metric | original baseline | current |
+| metric | original baseline | 1988 fix only | **current (both fixed)** |
+|---|---|---|---|
+| strategy terminal log wealth | 3.7204 | 3.9090 | **4.0265** |
+| max drawdown | −21.75% (62 mo) | −21.24% (33 mo) | **−21.24% (33 mo)** |
+| no-regime-ablation delta | +0.0732 | +0.2618 | **+0.3793** |
+| CVaR(5%) | −0.0469 | — | **−0.0463** |
+| mean monthly turnover | 0.0765 | — | **0.0734** |
+| median sojourn | 95.0 mo | 95.0 mo | **97.0 mo** |
+| median detection lag | 76.0 mo | 61.5 mo | **164.0 mo** ⚠ |
+| sojourn / lag ratio | 1.25 | 1.545 | **0.591** ⚠ |
+| resolved transitions | 5 of 6 | 4 of 6 | 4 of 6 |
+| multiclass Brier | 0.1816 | 0.1838 | **0.2087** |
+| crisis down-capture | .13/.91/.12/.17 | — | **.12/.83/.05/.10** |
+
+Gauntlet unchanged (none of these touch the agency series): Faber 6.3726/−18.94%,
+SPY 5.6805/−48.95%, 60/40 5.0471/−26.96%, ablation 3.6472/−19.81%.
+
+### What improved
+
+The regime layer's contribution rose **5x** (+0.0732 → +0.3793 log wealth), months
+underwater halved (62 → 33), turnover fell, and crisis down-capture improved in
+three of four crises (dot-com 0.12 → 0.05, GFC 0.17 → 0.10).
+
+**The regime structure is now economically legible**, which it was not before:
+
+| transition | state | reading |
 |---|---|---|
-| strategy terminal log wealth | 3.7204 | **3.9090** |
-| max drawdown | −21.75% (62 mo underwater) | **−21.24% (33 mo)** |
-| no-regime-ablation delta | +0.0732 | **+0.2618** |
-| median detection lag | 76.0 mo | **61.5 mo** |
-| sojourn / lag ratio | 1.25 | **1.545** |
-| resolved transitions | 5 of 6 | 4 of 6 |
-| multiclass Brier | 0.1816 | 0.1838 |
+| 1973-09 | → 1 | oil shock / stagflation |
+| 1981-10 | → 4 | Volcker |
+| 1988-09 | → 2 | post-Volcker disinflation |
+| 1996-08 | → 3 | late-90s expansion |
+| **2008-07** | **→ 0** | **GFC** — state 0 is the 1.6%-occupancy crisis state (high credit spread, high VIX, high realized vol) |
+| 2009-06 | → 3 | recovery |
 
-Faber (6.3726 / −18.94%), SPY (5.6805 / −48.95%) and 60/40 (5.0471 / −26.96%) are
-unchanged — none of them touches the agency series. The strategy is **still last of
-five legs on log wealth** and Faber still beats it on both §23.1 dimensions.
+Occupancy went from a degenerate 1.6 / 18.4 / **49.6** / **1.7** / 28.6 to
+1.6 / 14.0 / 31.9 / 40.6 / 11.9.
+
+### ⚠ The headline ratio is currently NOT interpretable
+
+Detection lag jumped to 164 months and the ratio fell to 0.591. Do **not** read
+that as a go/no-go signal:
+
+1. It is a median over **4 resolved transitions**. A move on 4 observations is not
+   a measurement.
+2. The labeling itself changed, so lag is being measured against different targets
+   than before — the two numbers are not comparable.
+3. **Audit item A13 is unresolved**: detection lag measures how long the *filtered*
+   (walk-forward) labeling takes to agree with the *smoothed* reference, and those
+   two are fit on different feature sets. The reference uses a fixed 9 columns over
+   1963-2020; the walk-forward's active set changes **7 times** across the backtest
+   (4 → 6 → 8 → 9 → 10 → 12 → 13 features). They are not tracking the same regimes,
+   so their disagreement is not purely detection delay.
+
+Treat the strategy KPIs and the Brier as the reliable signals until A13 is settled —
+which is what the report's own small-sample caveat already says.
+
+### Still true
+
+The strategy is **still last of five legs on log wealth** and Faber still beats it on
+both §23.1 dimensions. The tracer bullet still beats nothing.
 
 ---
+
+## Historical: the original baseline (both CPI breaks present)
 
 ## Baseline gauntlet
 
