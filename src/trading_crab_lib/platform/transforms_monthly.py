@@ -37,6 +37,7 @@ import logging
 from datetime import date
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from trading_crab_lib.platform import splice, taxonomy
@@ -72,6 +73,72 @@ def _shift_fallback_series(
 
     monthly = first.resample(monthly_freq).last().reindex(monthly_index).ffill()
     return monthly.shift(1)
+
+
+_DISCONTINUITY_RATIO = 1.5
+
+
+def _warn_on_level_discontinuity(series: pd.Series, name: str, *, kind: str = "index") -> list[pd.Timestamp]:
+    """Flag month-over-month jumps too large to be economics (audit item A3).
+
+    An index-level series does not move 50% in a month. When one does, it is a
+    units or index-base error, and the specific failure this guards is the one
+    that shipped: point-in-time vintages of a *rebased* index spliced as if the
+    bases were comparable, which put two ~2.99x cliffs into ``fred_cpi``
+    (1970-12 39.60 -> 1971-01 119.03; 1988-01 345.9 -> 1988-02 115.9) and drove
+    ``real_rate_level`` to a range of -209..+74 — silently, for weeks.
+
+    **Only applied to index-level series** (``kind="index"``, the default).
+    Rates genuinely make moves of this size: UNRATE went 4.4% -> 14.7% in April
+    2020 (3.3x) and the 10-year yield fell 42% in March 2020. Running a ratio
+    threshold over them produces false positives on the most economically
+    important months in the sample, which is the fastest way to teach everyone
+    to ignore the warning. Declare a rate series with ``kind: rate`` in
+    ``cfg['fred_vintage']['series']``.
+
+    That distinction is a fact about the series, not a threshold fitted to the
+    data — which is the answer to Phase 6 D-11's objection that plausibility
+    bounds "get tuned to whatever the current data happens to look like".
+
+    WARNING rather than raise: a genuine level break that the source itself
+    publishes should be seen, not used to abort an otherwise good build. The A3
+    finding is that nothing was *looking*, not that everything should be fatal.
+
+    Returns:
+        list: the dates whose step exceeded the threshold (empty when clean, or
+        when ``kind`` is not an index-level series).
+    """
+    if kind != "index":
+        return []
+    clean = series.dropna()
+    if len(clean) < 2:
+        return []
+    prev = clean.shift(1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = (clean / prev).replace([np.inf, -np.inf], np.nan).dropna()
+    breaks = ratio[(ratio > _DISCONTINUITY_RATIO) | (ratio < 1 / _DISCONTINUITY_RATIO)]
+    if len(breaks):
+        log.warning(
+            "align_agency_monthly: %s has %d implausible month-over-month step(s) "
+            "(>%.0f%% or <%.0f%%) at %s — a units or index-base error, not economics. "
+            "First: %s -> %s.",
+            name, len(breaks), (_DISCONTINUITY_RATIO - 1) * 100,
+            (1 / _DISCONTINUITY_RATIO - 1) * 100,
+            [str(d.date()) for d in breaks.index[:5]],
+            round(float(prev.loc[breaks.index[0]]), 4),
+            round(float(clean.loc[breaks.index[0]]), 4),
+        )
+    return list(breaks.index)
+
+
+def _series_kind(cfg: dict[str, Any], friendly_name: str) -> str:
+    """The declared ``kind`` for a vintage series — ``index`` unless config says
+    otherwise. Index-level is the safe default: a rate mistakenly guarded costs
+    a false warning, an index mistakenly unguarded costs a silent base splice."""
+    for meta in cfg.get("fred_vintage", {}).get("series", {}).values():
+        if meta.get("name") == friendly_name:
+            return str(meta.get("kind", "index"))
+    return "index"
 
 
 def align_agency_monthly(
@@ -117,6 +184,7 @@ def align_agency_monthly(
         shift_series = _shift_fallback_series(releases, monthly_index, monthly_freq)
         aligned = alfred.align_with_fallback(releases, monthly_index, shift_series)
         aligned.name = name
+        _warn_on_level_discontinuity(aligned, name, kind=_series_kind(cfg, name))
         columns[name] = aligned
 
     df = pd.concat(columns, axis=1)

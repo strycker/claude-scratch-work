@@ -240,3 +240,57 @@ class TestBuildAppliesTheCarve:
             "live scoring must opt into the full span, or it scores the cutoff "
             "month as 'today' forever"
         )
+
+
+# ── Production isolation: pytest must never write the real holdout tree ──────
+
+
+class TestProductionCheckpointIsolation:
+    """The 2021+ holdout is the one dataset the honesty framework exists to
+    protect, and the one that a dev-fenced rebuild CANNOT regenerate — a build
+    carves from live data, so a clobbered holdout is simply gone.
+
+    It was clobbered for real. Once ``build_monthly_spine()`` began writing
+    through ``write_monthly_features_split()``, every run of
+    ``test_platform_transforms.py`` carved its 24-month synthetic frame at the
+    2020-12 boundary and saved the empty post-cutoff side over the production
+    checkpoint, replacing 68 rows x 53 columns with 0 x 24. That file's
+    per-file fixture redirects ``PLATFORM_CHECKPOINT_DIR`` only; it could not
+    know about a namespace that was not a write target when it was written.
+
+    These assert the session-scoped redirect in conftest, so no individual test
+    file has to remember.
+    """
+
+    def _production_data_dir(self):
+        import trading_crab_lib
+
+        return trading_crab_lib.DATA_DIR
+
+    def test_holdout_namespace_is_redirected_away_from_production(self):
+        import trading_crab_lib.platform.honesty.holdout as holdout_mod
+
+        production = self._production_data_dir() / "holdout"
+        assert holdout_mod.HOLDOUT_CHECKPOINT_DIR != production, (
+            "pytest is pointed at the REAL holdout tree; any test that writes "
+            "monthly_features destroys the 2021+ holdout"
+        )
+
+    def test_holdout_manager_resolves_to_the_redirected_directory(self):
+        """Guards the constant AND the accessor: a manager built through the
+        public factory must not land on production either."""
+        production = self._production_data_dir() / "holdout"
+
+        assert get_holdout_checkpoint_manager().dir != production
+
+    def test_all_three_checkpoint_namespaces_are_isolated(self):
+        """Incumbent, platform, and holdout. The first two were already
+        redirected; holdout was the gap."""
+        import trading_crab_lib.checkpoints as ckpt_mod
+        import trading_crab_lib.platform.checkpoints as platform_ckpt_mod
+        import trading_crab_lib.platform.honesty.holdout as holdout_mod
+
+        data_dir = self._production_data_dir()
+        assert ckpt_mod.CHECKPOINT_DIR != data_dir / "checkpoints"
+        assert platform_ckpt_mod.PLATFORM_CHECKPOINT_DIR != data_dir / "checkpoints" / "platform"
+        assert holdout_mod.HOLDOUT_CHECKPOINT_DIR != data_dir / "holdout"

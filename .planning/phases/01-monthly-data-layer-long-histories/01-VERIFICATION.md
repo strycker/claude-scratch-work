@@ -143,3 +143,54 @@ Everything else — monthly cadence, the 5 core-asset splices with documented ru
 *Verified: 2026-07-15*
 *Verifier: Claude (gsd-verifier)*
 *Gap closed: 2026-07-16*
+
+---
+
+## ⚠ Evidence Invalidated — Re-verification Record (2026-09-09)
+
+Two defects lived in Phase 1 code through this 5/5 sign-off and were found months
+later by real runs, not by this gate. See `.planning/UAT-AUDIT-2026-09-09.md`.
+
+- **Yield units** (fixed 2026-09-08, `75dedc7`): FRED yields are PERCENT;
+  `bond_price`/`monthly_total_return` are decimal-domain. `long_duration_tr` compounded
+  to **2.3e128**; `cash` returned a yield *level* that consumers `pct_change()`d.
+- **ALFRED vintages** (fixed 2026-08-05, quick task `260805-570`): a required-column
+  constant demanded a field `fredapi` does not emit, so vintage ingestion failed
+  **0/5 forever** — point-in-time vintages had never once been fetched.
+
+### Per-criterion re-verdict
+
+| # | Criterion | Re-verdict |
+|---|---|---|
+| 1 | Monthly dataset, agency series lagged | **GENUINELY VERIFIED** — `test_quarterly_series_alignment` asserts a real outcome (a GDP value published 2018-04-27 is invisible in the March row), not a wiring |
+| 2 | Core asset histories to ~1962, splicing documented | **CERTIFIED OVER INVALID EVIDENCE** — the three cited proofs were dispatch-exists, docs-exist, and a pure-function par-pricing test **on decimals**. None looked at the composed output, which was 2.3e128 |
+| 3 | ALFRED point-in-time vintages + fallback | **CERTIFIED OVER INVALID EVIDENCE** — cited a unit test of the *fallback*; the live fetch it falls back from had never succeeded |
+| 4 | Taxonomy; lean 1962+ set "proven computable" | **FAILS TODAY** — see below |
+| 5 | Satellites/holdings NULL-tolerant | **GENUINELY VERIFIED** — behavioral, asserts an outcome |
+
+**Restated: 2 genuinely verified, 3 certified over invalid evidence.** The artifacts and
+wiring are real; that the composed pipeline emits *possible values* was never asked.
+
+### Criterion 4 — new defect, open
+
+Applying a plausibility check to criterion 4 during the audit found a live defect
+immediately. `fred_cpi` carries two artificial ~3× discontinuities —
+1970-12 `39.60` → 1971-01 `119.03`, and 1988-01 `345.9` → 1988-02 `115.9` — because
+ALFRED point-in-time vintages of a **rebased index** are not level-comparable across
+rebasings, and `align_agency_monthly` splices them as if they were.
+
+`real_rate_level` inherits it: units are correct (median 2.14; 1981 Volcker +1.5…+4.3;
+1974 inflation −3.0…−4.8) but the range runs **−209.49 … +74.51**. It is a defining
+feature of labeler states 2 and 3, which are **64.3% of total occupancy**.
+
+Criterion 4 cannot be re-closed until this is fixed. Tracked as audit item **A4
+(highest priority)**.
+
+### Closing evidence available now
+
+- Criterion 2: composed output on real data — equities_tr 10.87%/12.31%,
+  long_duration_tr 5.87%/6.67%, gold 7.80%/15.59%, oil 9.78%/37.79%, cash 4.42%/0.91%;
+  cash compounds $1 (1962) → $17.24. Plus `TestYieldUnits` / `TestBuildCashIndex` in
+  the suite.
+- Criterion 3: ALFRED confirmed **5/5** on real data after the 2026-08-05 fix.
+- Criterion 4: **blocked** on A4.

@@ -500,3 +500,72 @@ class TestBuildMonthlySpineEndToEnd:
         assert "IAU" in result.columns
         assert pd.isna(result.loc[idx[0], "IAU"])  # pre-inception: NaN, not dropped
         assert not pd.isna(result.loc[idx[-1], "IAU"])
+
+
+# ── Index-base discontinuity guard (audit item A3) ──────────────────────────
+
+
+class TestLevelDiscontinuityGuard:
+    """Nothing was *looking* for physically impossible values, which is how a
+    ~2.99x index-base splice sat in fred_cpi for weeks. This is the A3 gate
+    applied at the agency-alignment boundary."""
+
+    def _cpi_with_a_base_splice(self) -> pd.Series:
+        """The real shape: 1982-84=100 values, then a segment on 1967=100."""
+        idx = pd.date_range("1970-09-30", periods=6, freq="ME")
+        return pd.Series([39.0, 39.2, 39.4, 39.6, 119.03, 119.36], index=idx)
+
+    def test_flags_an_index_base_splice(self):
+        from trading_crab_lib.platform.transforms_monthly import _warn_on_level_discontinuity
+
+        breaks = _warn_on_level_discontinuity(self._cpi_with_a_base_splice(), "fred_cpi")
+
+        assert len(breaks) == 1
+        assert breaks[0] == pd.Timestamp("1971-01-31")
+
+    def test_clean_index_series_is_not_flagged(self):
+        from trading_crab_lib.platform.transforms_monthly import _warn_on_level_discontinuity
+
+        idx = pd.date_range("1970-09-30", periods=6, freq="ME")
+        clean = pd.Series([39.0, 39.2, 39.4, 39.6, 39.9, 40.1], index=idx)
+
+        assert _warn_on_level_discontinuity(clean, "fred_cpi") == []
+
+    def test_rate_series_are_exempt_because_rates_really_do_move_like_that(self):
+        """UNRATE 4.4% -> 14.7% in April 2020 is a genuine 3.3x monthly move.
+        Guarding it would fire on the most economically important month in the
+        sample and train everyone to ignore the warning."""
+        from trading_crab_lib.platform.transforms_monthly import _warn_on_level_discontinuity
+
+        idx = pd.date_range("2020-01-31", periods=4, freq="ME")
+        unrate = pd.Series([3.6, 3.5, 4.4, 14.7], index=idx)
+
+        assert _warn_on_level_discontinuity(unrate, "fred_unrate", kind="rate") == []
+        # ...and the same series WOULD be flagged if it were mislabelled index.
+        assert _warn_on_level_discontinuity(unrate, "fred_unrate", kind="index") != []
+
+    def test_series_kind_read_from_config_defaults_to_index(self):
+        from trading_crab_lib.platform.transforms_monthly import _series_kind
+
+        cfg = {
+            "fred_vintage": {
+                "series": {
+                    "UNRATE": {"name": "fred_unrate", "kind": "rate"},
+                    "CPIAUCSL": {"name": "fred_cpi"},
+                }
+            }
+        }
+        assert _series_kind(cfg, "fred_unrate") == "rate"
+        # Index-level is the safe default: a rate wrongly guarded costs a false
+        # warning; an index wrongly unguarded costs a silent base splice.
+        assert _series_kind(cfg, "fred_cpi") == "index"
+        assert _series_kind(cfg, "not_configured") == "index"
+
+    def test_shipped_config_exempts_unrate_and_guards_cpi(self):
+        """Pins the real config, not a synthetic one."""
+        from trading_crab_lib.platform.config import load_platform_config
+        from trading_crab_lib.platform.transforms_monthly import _series_kind
+
+        cfg = load_platform_config()
+        assert _series_kind(cfg, "fred_unrate") == "rate"
+        assert _series_kind(cfg, "fred_cpi") == "index"

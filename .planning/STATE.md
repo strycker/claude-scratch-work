@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Platform Notebook Suite
 status: planning
-stopped_at: "Phase 6 discussion COMPLETE 2026-08-04 — 06-CONTEXT.md written (21 decisions). Honesty framing amended across PROJECT.md/ROADMAP.md/REQUIREMENTS.md: the fence is on fitting, not looking. Ready for /gsd-plan-phase 6."
-last_updated: "2026-08-04T00:00:00.000Z"
-last_activity: 2026-08-04
-last_activity_desc: Phase 6 context gathered; notebooks reframed as periodic V&V surface with one cold-start gate at P3
+stopped_at: "UAT audit of Phases 1-5 complete 2026-09-09 (.planning/UAT-AUDIT-2026-09-09.md, Parts I+II); A4 (ALFRED index-base splice) FIXED 976f7c8 — REQUIRES A REBUILD to take effect; baseline recorded (.planning/BASELINE-v1-tracer-bullet.md); 06-CONTEXT.md AMENDED (D-11 reversed, D-20 satisfied, D-18/D-19 partly stale). Next: rebuild + confirm the guard stays silent, then /gsd-plan-phase 6."
+last_updated: "2026-09-09T00:00:00.000Z"
+last_activity: 2026-09-09
+last_activity_desc: UAT audit Phases 1-5; A4 ALFRED index-base splice fixed; pytest-clobbers-holdout bug fixed; Phase 6 context amended
 progress:
   total_phases: 8
   completed_phases: 5
@@ -30,10 +30,47 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 6 — Platform Notebook Suite
-Plan: Discussion complete — `06-CONTEXT.md` written. Ready for `/gsd-plan-phase 6`
-Status: Ready to plan
-Last activity: 2026-08-05 — Completed quick task 260805-570: fixed Stooq/macrotrends
-bot-blocking, ALFRED vintage schema (had never worked), build guard, yfinance rate-limit
+Plan: Discussion complete and **amended 2026-09-09** — read `06-CONTEXT.md` *including*
+its AMENDMENT section before planning (D-11 reversed, D-20 satisfied, D-18/D-19 partly
+stale).
+Status: **Ready to plan after one rebuild.** A4 is fixed in code (`976f7c8`) but it is
+an *ingestion* fix, so the committed `monthly_raw.parquet` still carries the corrupted
+`fred_cpi`. Run `python scripts/build_platform_data.py` with a live `FRED_API_KEY` and
+confirm `_warn_on_level_discontinuity` stays silent for `fred_cpi`; then
+`/gsd-plan-phase 6` is unblocked.
+Last activity: 2026-09-09 — UAT audit of Phases 1–5; A4 fixed; a bug where pytest
+destroyed the production holdout checkpoint found and fixed; Phase 6 context amended
+
+### ⚠ UAT audit outcome (2026-09-09) — `.planning/UAT-AUDIT-2026-09-09.md`
+
+Phases 1 and 5 were signed off against arithmetically impossible output (Phase 5's
+closure record tabulates terminal log wealth of 111.06 — e¹¹¹ ≈ 10⁴⁸ — as an
+*improvement*). Neither phase is re-opened as failed: **every criterion is satisfied as
+phrased**. What is void is the recorded evidence and the conclusions drawn from it.
+
+Restated scores: **Phase 1 — 2 of 5 genuinely verified, 3 certified over invalid
+evidence. Phase 5 — 1 of 4 genuinely verified, 3 wiring-verified with void values.**
+
+**The systemic finding:** every criterion in both phases is satisfied by evidence of one
+of four shapes — existence, shape, pure-function correctness, or placement. None can
+detect a physically impossible value. `gsd-tools query audit-uat` returns 0 items for
+the same reason: it only surfaces pending/skipped/blocked, never
+"passed-on-evidence-that-no-longer-holds". Audit item **A3** proposes a plausibility
+gate as a standing criterion for every phase emitting numeric output.
+
+**A4, found by applying that very lens — now FIXED (`976f7c8`), pending a rebuild:** ALFRED
+point-in-time vintages of *rebased index* series are not level-comparable across
+rebasings. `fred_cpi` carries two artificial ~3× discontinuities (1970-12 `39.60` →
+1971-01 `119.03`; 1988-01 `345.9` → 1988-02 `115.9`). `real_rate_level` inherits it,
+ranging **−209.49 … +74.51**, and is a defining feature of labeler states 2 and 3 —
+**64.3% of occupancy**. This sits directly upstream of Phase 6's P2 and P3 notebooks.
+
+### First trustworthy baseline — `.planning/BASELINE-v1-tracer-bullet.md`
+
+All prior recorded numbers are void. Reference point going forward: strategy 3.7204
+log wealth / −21.75% max DD, **last of five legs**; Faber 6.3726 / −18.94% beats it on
+both dimensions; regime layer adds +0.0732 while making drawdown 1.95pp worse; headline
+sojourn/lag ratio **1.25** against a design bar of ~5.
 
 ### Phase 6 discussion outcome (2026-08-04)
 
@@ -223,3 +260,32 @@ Items acknowledged and carried forward from previous milestone close:
 Last session: 2026-07-25T14:56:06.038Z
 Stopped at: Completed 05-06-PLAN.md (honest backtest report capstone: assemble_backtest_report + write_backtest_report + run_full_backtest_evaluation + main CLI)
 Resume file: None
+
+### Audit Part II — Phases 2, 3, 4 (2026-09-09)
+
+**Evidence quality is not uniform, and these three hold up far better than 1 and 5.**
+Phase 3's DP-decode oracle test — proven identical to brute-force enumeration across
+7 (T,K,λ) cases — is the strongest verification artifact in the project and should be
+the pattern wherever a brute-force reference is affordable.
+
+Five criteria need attention, not a blanket re-verification:
+
+- **P2 C1** (holdout) — mechanism verified, application never invoked. Closed 2026-09-08.
+- **P2 C5** (causal gating) — the rail IS live (`nowcaster.py:114`), but the gate is a
+  name-suffix scan; a centered feature not following the convention passes silently.
+- **P3 C4** (calibration) — "uses `CalibratedClassifierCV`" stands in for "is
+  calibrated". Brier is 0.1816; no pass band exists.
+- **P4 C2** (EWMA vol) — verified by import-grep; the consumer `portfolio_vol` then
+  crashed on ragged universes, the condition holding for 43 of 49 backtest years.
+- **P4 C3** (hysteresis) — **the criterion's purpose clause was never tested.**
+  `update_active_regime` is a correct Schmitt trigger, but `active_regime` gates
+  nothing: weights come from `vol_targeted_tilt(regime_probs, …)` in both the backtest
+  driver and the weekly report. The thresholds stabilize a *reported label*, not a
+  *portfolio*. Needs an explicit decision (item A7).
+
+**The gap spanning all five phases:** no criterion anywhere asks whether the output is
+any good. Phase 3 proved the DP decode is exactly optimal — and it is exactly decoding
+a degenerate solution of 6 transitions in 59 years. Phase 5 D-01 and Phase 6 D-16 make
+this deliberate, which is a defensible tracer-bullet stance, but it means the project
+has **no gate that can fail on a bad model, only on a broken one**. Item A11: make that
+a conscious choice re-examined at design freeze.

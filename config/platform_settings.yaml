@@ -81,6 +81,10 @@ fred_vintage:
     UNRATE:
       name: "fred_unrate"
       tier: agency
+      # A rate, not an index level. Exempt from the index-base discontinuity
+      # guard: UNRATE went 4.4% -> 14.7% in April 2020, a genuine 3.3x monthly
+      # move that a ratio threshold would flag every single run.
+      kind: rate
     INDPRO:
       name: "fred_indpro"
       tier: agency

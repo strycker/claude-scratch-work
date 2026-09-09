@@ -201,6 +201,24 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     original_platform_checkpoint_dir = platform_ckpt_mod.PLATFORM_CHECKPOINT_DIR
     platform_ckpt_mod.PLATFORM_CHECKPOINT_DIR = session_dir / "platform"
 
+    # HOLDOUT_CHECKPOINT_DIR is the SAME trap one namespace over, and it bit
+    # for real: once build_monthly_spine() started writing through
+    # write_monthly_features_split(), every run of test_platform_transforms.py
+    # carved its 24-month synthetic frame at the 2020-12 boundary and saved the
+    # empty post-cutoff side straight over the production holdout checkpoint,
+    # replacing 68 real rows x 53 columns with 0 x 24. That file is the 2021+
+    # holdout — the one dataset the whole honesty framework exists to protect,
+    # and the one that is NOT reproducible from a dev-fenced rebuild.
+    #
+    # The per-file autouse fixture in test_platform_transforms.py redirects
+    # PLATFORM_CHECKPOINT_DIR only; it could not know about a namespace that
+    # was not a write target when it was written. Redirect it here so no test
+    # file has to remember.
+    import trading_crab_lib.platform.honesty.holdout as holdout_mod
+
+    original_holdout_dir = holdout_mod.HOLDOUT_CHECKPOINT_DIR
+    holdout_mod.HOLDOUT_CHECKPOINT_DIR = session_dir / "holdout"
+
     # Ensure all checkpoint-dependent constraint tests run rather than skip.
     # When data/raw/ and data/checkpoints/ are cleared, synthesise minimal
     # stand-ins with the correct structure.  Real production data always wins —
@@ -219,6 +237,7 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     ckpt_mod.CHECKPOINT_DIR = original_checkpoint_dir
     os.environ.pop("TC_CHECKPOINT_DIR", None)
     platform_ckpt_mod.PLATFORM_CHECKPOINT_DIR = original_platform_checkpoint_dir
+    holdout_mod.HOLDOUT_CHECKPOINT_DIR = original_holdout_dir
 
 
 @pytest.fixture
