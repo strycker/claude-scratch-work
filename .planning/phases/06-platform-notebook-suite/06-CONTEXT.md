@@ -419,19 +419,33 @@ and fails the build on violation, and the dev checkpoint now runs 1962-01 → 20
 `honesty.holdout.load_full_span(name)` returns dev + holdout concatenated in index
 order. Notebooks should call it rather than opening two managers by hand.
 
-## C. D-18 and D-19 environment premises are STALE
+## C. D-18 and D-19 environment premises are PARTLY stale
+
+*(Corrected 2026-09-09 — the first version of this section overstated the case; see
+the note at the end.)*
 
 Both state that the human half cannot be completed here because "`daily_raw` is empty
 (0,0) and there is no `regime_labels` checkpoint." As of 2026-09-09:
 
 | Checkpoint | D-18/D-19 premise | Actual |
 |---|---|---|
-| `daily_raw` | empty (0,0) | **14,290 × 22** |
-| `regime_labels` | does not exist | **372 × 1** (plus `regime_confidences` 372×5, `regime_profiles` 5×2) |
+| `daily_raw` | empty (0,0) | **14,290 × 22 — premise is stale** |
 | `monthly_features` | — | 708 × 53 dev (776 via `load_full_span`) |
+| `regime_labels` | does not exist | **still does not exist as a committed artifact — premise HOLDS** |
 
-P3/P4/P5 **do** have inputs now. D-19's "P3 first orders the code, not the answer"
-caveat can be relaxed: P3 can be built *and* run.
+`daily_raw` is genuinely fixed (Tiingo). The **`regime_labels` half of D-18/D-19
+still stands**: no `regime_labels` / `regime_confidences` / `regime_profiles`
+checkpoint is produced by the build or committed to the repo. `label_regimes()` will
+generate them on demand from `monthly_features`, but nothing in the pipeline persists
+them, so D-19's caveat — *"P3 needs `regime_labels`, which does not exist in this
+environment"* — remains true and the planner must still handle it.
+
+**Correction note:** the first draft of this amendment claimed `regime_labels` existed
+at 372 × 1. It did — but only because a diagnostic `label_regimes()` call made during
+this audit had created it minutes earlier. Checking a file's existence right after your
+own tooling created it is not evidence. The files were removed; the claim is withdrawn.
+Worth recording precisely because it is the same error shape the audit is about:
+confirming what you went looking for.
 
 ## D. NEW BLOCKER for P2/P3 — audit item A4
 
