@@ -569,3 +569,71 @@ class TestLevelDiscontinuityGuard:
         cfg = load_platform_config()
         assert _series_kind(cfg, "fred_unrate") == "rate"
         assert _series_kind(cfg, "fred_cpi") == "index"
+
+
+class TestShiftFallbackBaseConsistency:
+    """The 1971 half of audit item A4. ALFRED's real-time database starts
+    part-way through a series: for CPIAUCSL the earliest realtime_start is
+    1972-07-21, and that first vintage only covers reference periods from
+    1970-12 on. Picking each period's FIRST-published value therefore reads a
+    1994 vintage (1982-84=100) for 1970-11 and the 1972 vintage (1967=100) for
+    1970-12 — a 3.0x base cliff at exactly the boundary."""
+
+    def _alfred_shaped_releases(self) -> pd.DataFrame:
+        """Mirrors the real CPIAUCSL frame, verified via a live diagnostic run."""
+        rows = [
+            # ref <= 1970-11: only ever restated by the modern (1994) vintage
+            ("1994-02-17", "1970-10-01", 39.4),
+            ("1994-02-17", "1970-11-01", 39.6),
+            # ref >= 1970-12: covered by the 1972 vintage on the OLD base,
+            # then restated by the 1994 vintage on the modern base
+            ("1972-07-21", "1970-12-01", 119.03),
+            ("1994-02-17", "1970-12-01", 39.8),
+            ("1972-07-21", "1971-01-01", 119.36),
+            ("1994-02-17", "1971-01-01", 39.9),
+            ("1972-07-21", "1971-02-01", 119.65),
+            ("1994-02-17", "1971-02-01", 40.1),
+        ]
+        return pd.DataFrame(
+            {
+                "realtime_start": pd.to_datetime([r[0] for r in rows]),
+                "date": pd.to_datetime([r[1] for r in rows]),
+                "value": [r[2] for r in rows],
+            }
+        )
+
+    def test_fallback_does_not_mix_index_bases(self):
+        from trading_crab_lib.platform.transforms_monthly import _shift_fallback_series
+
+        idx = pd.date_range("1970-11-30", "1971-03-31", freq="ME")
+        fallback = _shift_fallback_series(self._alfred_shaped_releases(), idx, "ME").dropna()
+
+        ratios = (fallback / fallback.shift(1)).dropna()
+        assert ratios.max() < 1.10, f"base cliff survived: {fallback.to_dict()}"
+        # And it is the MODERN base that survives, so levels stay interpretable.
+        assert fallback.max() < 60, f"expected 1982-84=100 levels, got {fallback.to_dict()}"
+
+    def test_non_numeric_release_rows_never_win_the_pick(self):
+        """fredapi emits NaT/NaN in `value` for a release that restated nothing.
+        If such a row is the latest for a period it must not be selected."""
+        from trading_crab_lib.platform.transforms_monthly import _shift_fallback_series
+
+        releases = self._alfred_shaped_releases()
+        releases = pd.concat(
+            [
+                releases,
+                pd.DataFrame(
+                    {
+                        "realtime_start": pd.to_datetime(["2020-01-01"]),
+                        "date": pd.to_datetime(["1971-01-01"]),
+                        "value": [pd.NaT],
+                    }
+                ),
+            ]
+        )
+        idx = pd.date_range("1970-11-30", "1971-03-31", freq="ME")
+
+        fallback = _shift_fallback_series(releases, idx, "ME").dropna()
+
+        assert fallback.notna().all()
+        assert fallback.max() < 60

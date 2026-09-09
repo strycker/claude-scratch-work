@@ -6,10 +6,18 @@ The shift_series -> vintage handoff at 1971-01 did NOT get fixed: the series
 still jumps 39.60 -> 119.03, a factor of 3.0058, and then carries the 1967=100
 base forward (2020 reads ~769 instead of ~258).
 
-``align_with_fallback`` is supposed to ratio-splice the vintage segment onto
-shift_series' base at that join, which would make the step continuous. It
-evidently did not fire, and the reason is not determinable without seeing the
-actual ALFRED frame — which needs a live FRED_API_KEY.
+**DIAGNOSED 2026-09-09 — kept as a re-verification tool.** The break was never
+in ``align_with_fallback`` at all. A live run showed ALFRED's CPIAUCSL vintages
+begin at ``realtime_start`` 1972-07-21, so *every* as-of date around 1971 takes
+the fallback branch (§5 prints "known is EMPTY" on both sides). The cliff was in
+``_shift_fallback_series``, which picked each reference period's *first-published*
+value — and that first vintage only covers reference periods from 1970-12 on:
+
+    reference 1970-11 -> earliest row is a 1994 vintage ->  39.6  (1982-84=100)
+    reference 1970-12 -> earliest row is the 1972 vintage -> 119.03 (1967=100)
+
+Fixed by reading one consistent (latest) vintage instead. After the fix §4
+should be smooth and §7 should end near ~258, not ~769.
 
 Run this and paste the output:
 
@@ -37,11 +45,14 @@ PRIOR = pd.Timestamp("1970-12-31")
 
 
 def main() -> int:
+    # load_platform_config() is what calls load_dotenv() (platform/config.py),
+    # so .env is NOT read merely by importing this module. Config first, then
+    # check the key — the reverse order made this script report "FRED_API_KEY
+    # not set" on a machine whose .env had it all along.
+    load_platform_config()
     if not os.environ.get("FRED_API_KEY"):
-        print("FRED_API_KEY not set — this diagnostic needs a live key.")  # noqa: T201
+        print("FRED_API_KEY not set — add it to .env or export it.")  # noqa: T201
         return 1
-
-    cfg = load_platform_config()
     fred = alfred.Fred(api_key=os.environ["FRED_API_KEY"])
     releases = alfred.fetch_vintage_series(fred, "CPIAUCSL")
 
@@ -98,7 +109,6 @@ def main() -> int:
     aligned = alfred.align_with_fallback(releases, monthly_index, shift_series)
     print(aligned.loc["1970-09-30":"1971-04-30"].round(4).to_string())  # noqa: T201
     print(f"\naligned 2020-08-31 = {aligned.get(pd.Timestamp('2020-08-31'))}   (~258 correct, ~769 = 1967 base)")  # noqa: T201
-    _ = cfg
     return 0
 
 
