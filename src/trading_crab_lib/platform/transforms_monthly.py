@@ -54,24 +54,52 @@ log = logging.getLogger(__name__)
 def _shift_fallback_series(
     all_releases: pd.DataFrame, monthly_index: pd.DatetimeIndex, monthly_freq: str
 ) -> pd.Series:
-    """Build the D-06 pre-vintage-era fallback: each reference period's
-    first-published value, resampled onto the monthly spine and shifted by
-    one period (mirrors the incumbent's publication-lag ``shift()``
+    """Build the D-06 pre-vintage-era fallback: each reference period's value
+    from the **latest** vintage, resampled onto the monthly spine and shifted
+    by one period (mirrors the incumbent's publication-lag ``shift()``
     convention — ``ingestion/fred.py`` ADR #7).
+
+    Latest vintage, not first-published, and the distinction is the whole
+    point. ALFRED's real-time database begins part-way through a series'
+    history — for CPIAUCSL the earliest ``realtime_start`` is 1972-07-21, and
+    that first vintage only covers reference periods from 1970-12 onward.
+    Taking each period's *first-published* value therefore mixes bases at that
+    boundary:
+
+      * reference <= 1970-11 -> earliest available row is a 1994 vintage -> 39.6
+        (1982-84=100)
+      * reference >= 1970-12 -> earliest available row is the 1972 vintage -> 119.03
+        (1967=100)
+
+    which put a 3.0x cliff into ``fred_cpi`` at 1971-01 after the ``shift(1)``.
+    Reading one consistent (latest) vintage cannot do that.
+
+    Nothing point-in-time is lost. ``align_with_fallback`` consults this series
+    only for as-of dates *before* the earliest recorded vintage — where no
+    vintage existed, so "first published" was already a later revision anyway.
+    Using today's revision there is D-06's documented accepted compromise, and
+    it is what the incumbent shift convention this docstring cites actually
+    does.
     """
     cols = alfred._detect_vintage_columns(all_releases)
     date_col, rs_col, value_col = cols["date"], cols["realtime_start"], cols["value"]
 
-    first = (
-        all_releases.sort_values(rs_col)
+    releases = all_releases.copy()
+    # fredapi emits NaT/NaN in `value` for a release that restated nothing.
+    # Those rows must not win the per-period pick.
+    releases[value_col] = pd.to_numeric(releases[value_col], errors="coerce")
+    releases = releases.dropna(subset=[value_col])
+
+    latest = (
+        releases.sort_values(rs_col)
         .groupby(date_col)
-        .head(1)
+        .tail(1)
         .set_index(date_col)[value_col]
         .sort_index()
     )
-    first.index = pd.to_datetime(first.index)
+    latest.index = pd.to_datetime(latest.index)
 
-    monthly = first.resample(monthly_freq).last().reindex(monthly_index).ffill()
+    monthly = latest.resample(monthly_freq).last().reindex(monthly_index).ffill()
     return monthly.shift(1)
 
 
