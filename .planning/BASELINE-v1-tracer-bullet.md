@@ -12,9 +12,30 @@ anything in `05-VERIFICATION.md` or the phase summaries.
 
 > **Caveat, stated up front:** a defect found *during* this audit (`UAT-AUDIT`
 > §3a — ALFRED vintage index-base splice corrupting `fred_cpi` and therefore
-> `real_rate_level`) is **not yet fixed** and may be materially affecting the labeler.
-> These numbers are trustworthy in the sense that the arithmetic is now possible; they
-> are not yet trustworthy as a *final* characterization of the design.
+> `real_rate_level`) was **half-fixed** on 2026-09-09. These numbers are trustworthy
+> in the sense that the arithmetic is now possible; they are not a *final*
+> characterization of the design.
+>
+> **SUPERSEDED 2026-09-09** — see the table below. The 1988 rebasing is fixed; the
+> 1971 handoff survives (item **A12**) and is proven to distort regime occupancy
+> (`UAT-AUDIT` Part III, Q2). Treat the rows below as the current reference and the
+> original baseline as history.
+
+## Superseding run — 2026-09-09, after the 1988 rebasing fix
+
+| metric | original baseline | current |
+|---|---|---|
+| strategy terminal log wealth | 3.7204 | **3.9090** |
+| max drawdown | −21.75% (62 mo underwater) | **−21.24% (33 mo)** |
+| no-regime-ablation delta | +0.0732 | **+0.2618** |
+| median detection lag | 76.0 mo | **61.5 mo** |
+| sojourn / lag ratio | 1.25 | **1.545** |
+| resolved transitions | 5 of 6 | 4 of 6 |
+| multiclass Brier | 0.1816 | 0.1838 |
+
+Faber (6.3726 / −18.94%), SPY (5.6805 / −48.95%) and 60/40 (5.0471 / −26.96%) are
+unchanged — none of them touches the agency series. The strategy is **still last of
+five legs on log wealth** and Faber still beats it on both §23.1 dimensions.
 
 ---
 
