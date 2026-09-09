@@ -58,7 +58,7 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Notebooks (NB)
 
-- [ ] **NB-01**: Six platform notebooks (`P1_data_spine`, `P2_features_taxonomy`, `P3_regime_labeling`, `P4_nowcaster`, `P5_assets_allocation`, `P6_backtest_evaluation`) covering L0–L4 + evaluation, serving as a **periodic V&V surface** (regimes still well-defined? data still behaving as historic?); each runs top-to-bottom against real checkpoints, reads the full span via the explicit holdout opt-in while fitting stays fenced at 2020-12, compares current behavior against the pre-2021 fitted baseline, and calls plotting logic from `platform/plotting/` rather than defining it inline. **`P3_regime_labeling` additionally carries a cold-start sign-off cell**; the other five carry no per-run gate
+- [x] **NB-01**: Six platform notebooks (`P1_data_spine`, `P2_features_taxonomy`, `P3_regime_labeling`, `P4_nowcaster`, `P5_assets_allocation`, `P6_backtest_evaluation`) covering L0–L4 + evaluation, serving as a **periodic V&V surface** (regimes still well-defined? data still behaving as historic?); each runs top-to-bottom against real checkpoints, reads the full span via the explicit holdout opt-in while fitting stays fenced at 2020-12, compares current behavior against the pre-2021 fitted baseline, and calls plotting logic from `platform/plotting/` rather than defining it inline. **`P3_regime_labeling` additionally carries a cold-start sign-off cell**; the other five carry no per-run gate
 
 ### Migration (MIG)
 
@@ -152,7 +152,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-02 | Phase 5 | Complete |
 | EVAL-03 | Phase 5 | Complete |
 | EVAL-04 | Phase 5 | Complete |
-| NB-01 | Phase 6 | Pending |
+| NB-01 | Phase 6 | Complete |
 | MIG-01 | Phase 7 | Pending |
 | INV-01 | Phase 8 | Pending |
 

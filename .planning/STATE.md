@@ -5,16 +5,15 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Platform Notebook Suite
 status: planned
-stopped_at: "Phase 6 PLANNED. Seven plans (06-01..06-07) written, plan-checker PASS. Wave 1: 06-01 plotting spine + P1, 06-02 additive artifact persistence. Wave 2 (five in parallel): 06-03 P3+A13, 06-04 P2, 06-05 P4, 06-06 P5, 06-07 P6. Two research open questions settled as AMENDMENT 3 in 06-CONTEXT.md: (H) persist full_sample_states + filtered_state_probs from evaluation/report.py as an additive write; (I) no causal-vs-centered panel in P2 - the variant does not exist and honesty/gating.py forbids it. Next: /gsd-execute-phase 6."
-last_updated: "2026-09-09T00:00:00.000Z"
+stopped_at: Completed 06-01-PLAN.md (platform plotting spine + P1 tracer notebook)
+last_updated: "2026-09-09T21:23:43.239Z"
 last_activity: 2026-09-09
-last_activity_desc: Phase 6 planned - 7 plans, research + validation strategy + pattern map, checker PASS
+last_activity_desc: Phase 6 planned end to end (research → validation strategy →
 progress:
-  total_phases: 8
+  total_phases: 6
   completed_phases: 5
-  total_plans: 35
-  completed_plans: 28
-  percent: 63
+  total_plans: 36
+  completed_plans: 29
 ---
 
 # Project State
@@ -53,6 +52,7 @@ one file. The reason is recorded in the module docstring.
 contract), `06-PATTERNS.md` (analog map, 15/19 files matched), `06-CONTEXT.md` AMENDMENT 3.
 
 **Two research open questions settled as AMENDMENT 3 before planning:**
+
 - **(H) A13's filtered path — persist a new artifact.** Two of three A13 ingredients are cheap
   (reference labeling 0.62s; the 588-step active-feature-count timeline 1.2s, which reproduced
   the audit's exact change points 4→6→8→9→10→12→13 and independently corroborates A13). The
@@ -62,19 +62,23 @@ contract), `06-PATTERNS.md` (analog map, 15/19 files matched), `06-CONTEXT.md` A
   byte-identical**, and 06-02 Task 2 byte-compares all seven to prove it. `full_sample_states`
   was already computed in-function (report.py:593); it only needed adding to the existing
   `artifacts` dict. Written once by 06-02, read by both P3 and P6.
+
 - **(I) P2 has no causal-vs-centered panel.** `transforms_monthly.py` has zero occurrences of
   center/centered/causal, and `honesty/gating.py` defines
   `FORBIDDEN_CENTERED_SUFFIXES = ("_centered","_c5","_zerophase")` and raises on sight. The
   platform did not inherit legacy ADR #1's split. P2 says so in prose instead.
 
 **Corrections to CONTEXT.md found during research (CONTEXT.md is stale on these):**
+
 - The **Faber / 60-40 KPI anomalies are already fixed.** The live artifacts show Faber
   6.3726/−18.94% and 60/40 5.0471/−26.96%, matching BASELINE. The −99.7% / −2.3% figures
   CONTEXT.md told P6 to surface are void; P6 narrates the fix history from live values instead.
+
 - **`regime_labels` / `regime_confidences` / `regime_profiles` do NOT exist on disk**
   (contradicting Amendment 1 item C). P3/P4/P5 call `label_regimes()` themselves via
   `loaders.compute_regime_labeling`, routed at a scratch checkpoint namespace so no notebook
   can write `data/checkpoints/platform/`.
+
 - **Brier is bounded [0,1] here, not the textbook [0,2]** — `compute_brier_multiclass` computes
   `mean(diff²)` over the full (n,K) array. The K=5 no-skill floor is (K−1)/K² = 0.16 and the
   observed 0.2087 sits **above** it, so the metric cannot currently claim the nowcaster beats
@@ -143,6 +147,7 @@ project constraints:
 - **Purpose:** periodic verification & validation (are the regimes still well-defined?
   is the data still behaving as historic?), **not** a per-run human gate. One cold-start
   selection gate at `P3_regime_labeling`; the other five carry no gate.
+
 - **Honesty framing amended** in `PROJECT.md`: the fence is on *fitting*, not *looking*.
   Notebooks read the full span (incl. post-2020) via the explicit
   `get_holdout_checkpoint_manager()` opt-in — which `holdout.py` already documented as
@@ -150,8 +155,10 @@ project constraints:
   change a decision are recorded with their date. The prior "firewalled from all
   selection decisions" wording was unworkable: catching feature decay *is* a selection
   decision informed by recent data.
+
 - **`ROADMAP.md` criterion 2 rewritten** (+ new 2b on the holdout opt-in) and **NB-01
   reworded** in `REQUIREMENTS.md` to match.
+
 - **Scope held:** no tuning ((K,λ) sweeps stay deferred to v2 per Phase 3 D-02), no
   report wiring, no package restructuring (Phase 7), no holdout-carve repair (separate).
 
@@ -174,7 +181,7 @@ scoring now uses it — **required, not cosmetic**: it scores
 2020 as "today" every week. Three tests pin the wiring specifically and fail
 against the unwired code.
 
-Progress: [██████░░░░] 63% (5 of 8 phases)
+Progress: [████████░░] 81% (5 of 8 phases)
 
 ### Roadmap restructure (2026-08-04)
 
@@ -212,6 +219,11 @@ quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analy
 | Phase 05 P04 | 15min | 2 tasks | 2 files |
 | Phase 05 P05 | 22min | 3 tasks | 2 files |
 | Phase 05 P06 | 7min | 3 tasks | 2 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 06 P01 | 55 | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -244,6 +256,7 @@ Recent decisions affecting current work:
 - [Phase 05-05]: no_regime_ablation adds a cash_returns passthrough kwarg not in the plan's literal one-line-delegation snippet (Rule 2 auto-fix) - omitting it would silently default the ablation's cash residual to 0%, breaking F4 cash-return symmetry; the function stays a single delegating return statement.
 - [Phase 05-06]: run_full_backtest_evaluation computes the smoothed-vs-filtered gap via a hindsight-oracle vol_targeted_tilt driven by the full-sample smoothed states at each real walk-forward decision date (never inventing new allocation math) rather than a simpler point-estimate proxy — matches the design's non-causal batch-labeling doctrine and keeps the gap input genuinely distinct from the filtered strategy performance (Pitfall 1).
 - [Phase 05-06]: The investable asset_returns universe fed to run_backtest excludes the 'cash' splice class (FZFXX) — cash is never tilted into as a risk position; it is the vol-target residual that earns cash_ret directly via run_backtest's cash_returns parameter (review F4).
+- [Phase ?]: 06-01: D-01 fresh-package boundary verified via static AST import-graph closure (not sys.modules) to survive test-order pollution
 
 ### Pending Todos
 
@@ -320,8 +333,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-25T14:56:06.038Z
-Stopped at: Completed 05-06-PLAN.md (honest backtest report capstone: assemble_backtest_report + write_backtest_report + run_full_backtest_evaluation + main CLI)
+Last session: 2026-09-09T21:23:43.217Z
+Stopped at: Completed 06-01-PLAN.md (platform plotting spine + P1 tracer notebook)
 Resume file: None
 
 ### Audit Part II — Phases 2, 3, 4 (2026-09-09)
@@ -336,10 +349,13 @@ Five criteria need attention, not a blanket re-verification:
 - **P2 C1** (holdout) — mechanism verified, application never invoked. Closed 2026-09-08.
 - **P2 C5** (causal gating) — the rail IS live (`nowcaster.py:114`), but the gate is a
   name-suffix scan; a centered feature not following the convention passes silently.
+
 - **P3 C4** (calibration) — "uses `CalibratedClassifierCV`" stands in for "is
   calibrated". Brier is 0.1816; no pass band exists.
+
 - **P4 C2** (EWMA vol) — verified by import-grep; the consumer `portfolio_vol` then
   crashed on ragged universes, the condition holding for 43 of 49 backtest years.
+
 - **P4 C3** (hysteresis) — **the criterion's purpose clause was never tested.**
   `update_active_regime` is a correct Schmitt trigger, but `active_regime` gates
   nothing: weights come from `vol_targeted_tilt(regime_probs, …)` in both the backtest

@@ -266,7 +266,16 @@ labeling before it is trusted for live use.
 
   5. `P6_backtest_evaluation` renders the equity curves, baseline gauntlet, ablation
      delta, calibration, and the sojourn/lag headline with its resolved-transition count.
-**Plans**: 7 — 06-01 (plotting spine + P1), 06-02 (artifact persistence),
+**Plans**: 1/7 plans executed
+
+- [x] 06-01-PLAN.md
+- [ ] 06-02-PLAN.md
+- [ ] 06-03-PLAN.md
+- [ ] 06-04-PLAN.md
+- [ ] 06-05-PLAN.md
+- [ ] 06-06-PLAN.md
+- [ ] 06-07-PLAN.md
+
 06-03 (P3 + A13), 06-04 (P2), 06-05 (P4), 06-06 (P5), 06-07 (P6)
 
 **Why this precedes migration**: the migration's per-step validation gate is "run the
@@ -350,6 +359,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
-| 6. Platform Notebook Suite | 0/7 | Planned (7 plans, checker PASS) | - |
+| 6. Platform Notebook Suite | 1/7 | In Progress|  |
 | 7. Migration to Public Repo | 0/TBD | Not started | - |
 | 8. Invariants & Dimensional Reduction | 0/TBD | Not started | - |
