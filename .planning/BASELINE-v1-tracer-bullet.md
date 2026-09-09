@@ -1,18 +1,17 @@
 # Baseline — v1 Tracer Bullet, First Trustworthy Run
 
-**Recorded:** 2026-09-09
+**Last updated:** 2026-09-09, after both CPI index-base defects were fixed
 **Run:** `python -m trading_crab_lib.platform.evaluation.report`, real data, live FRED
-**Code state:** `main` @ `599614c` (after PR #140 — yield-units fix + holdout fence)
 **Window:** 588 monthly steps, 1972-01 → 2020-12 (dev only; 2021+ holdout untouched)
 
-This is the **reference point**. Every prior recorded number in the project is void —
-they were produced under the percent-vs-decimal yield defect (see
-`UAT-AUDIT-2026-09-09.md`). Compare all future work against this row, not against
-anything in `05-VERIFICATION.md` or the phase summaries.
+**Read only the "Current reference run" section immediately below.** Everything from
+"Historical" onward is kept for provenance and is SUPERSEDED — do not compare new
+work against it.
 
-> **SUPERSEDED TWICE, now CURRENT as of 2026-09-09 (both CPI base defects fixed).**
-> The rows immediately below are the reference point. The original tables further
-> down are kept as history — do not compare against them.
+Every number recorded in this project before 2026-09-08 is void: they were produced
+under a percent-vs-decimal yield defect that compounded `long_duration_tr` to
+2.3e128. See `UAT-AUDIT-2026-09-09.md`. Do not compare against `05-VERIFICATION.md`
+or any phase summary.
 
 ## Current reference run — 2026-09-09, A4/A12 fully closed
 
