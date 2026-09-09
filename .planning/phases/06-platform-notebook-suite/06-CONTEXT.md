@@ -541,3 +541,60 @@ viewing surface, which is exactly what the notebooks are for (D-16 anticipates
 The `trailing_return_1m` canonicalization fallback fires on **1 of 588 steps**
 (0.2%), the first step, which degrades anyway. It is not distorting churn or
 detection lag, and P3's churn panel needs no special handling for it.
+
+---
+
+# AMENDMENT 3 — 2026-09-09 (settled during `/gsd-plan-phase 6`)
+
+Two open questions from `06-RESEARCH.md` were resolved before planning. Both are binding.
+
+## H. A13's filtered path — **PERSIST A NEW ARTIFACT** (resolves RESEARCH OQ1)
+
+A13's side-by-side needs three ingredients. Two are cheap, timed live during research:
+the smoothed reference labeling fits in **0.62s**, and reconstructing the 588-step
+active-feature-count timeline takes **1.2s** — and that reconstruction reproduced the
+audit's exact change points (4→6→8→9→10→12→13 at 1972-01, 1972-02, 1972-04, 1973-02,
+1986-06, 1995-02, 2000-01), which independently corroborates the A13 finding.
+
+The third ingredient — the walk-forward's actual **filtered probability path** — exists
+only in memory during `run_full_backtest_evaluation()` (minutes) and is persisted nowhere.
+
+**Decision: extend `platform/evaluation/report.py` to additionally persist
+`full_sample_states` and a per-date filtered-state artifact**, alongside the
+`backtest_equity_curve_*.parquet` artifacts that same function already writes. P3 then
+**loads** rather than recomputes.
+
+Rationale and boundary:
+- It matches the codebase's existing pattern — that function is already the place where
+  evaluation artifacts get persisted.
+- It is an **additive write only**. No logic, no metric, and no hyperparameter changes.
+  Every existing Phase-5 output must be byte-identical afterward; a task that changes an
+  existing artifact has exceeded this decision.
+- It is a knowing, bounded exception to "touches nothing verified in Phases 1–5." The
+  exception is granted because Amendment 2 item F makes the P3 side-by-side a stated
+  requirement, and the alternatives were worse: having P3 run a full backtest is
+  conceptually wrong for a labeling notebook and duplicates P6's work, while deferring the
+  comparison to P6 would not satisfy Amendment 2 item F.
+- P6 consumes the same artifact — it is written once and read twice.
+
+**This does not resolve A13.** It builds the surface on which A13 can be judged. The §5.4
+ratio stays labelled "not interpretable — see A13" wherever it appears, and no plan task
+may claim otherwise.
+
+## I. P2 has no causal-vs-centered panel — **the variant does not exist and is forbidden**
+   (resolves RESEARCH OQ2)
+
+Verified during planning: `transforms_monthly.py` contains **zero** occurrences of
+`center` / `centered` / `causal`, and `honesty/gating.py` defines
+`FORBIDDEN_CENTERED_SUFFIXES = ("_centered", "_c5", "_zerophase")` and refuses loudly on
+sight. There is no centered feature variant to overlay, and creating one would trip the
+platform's own gating rail.
+
+P2 must **not** attempt a causal-vs-centered comparison. Its prose framing instead:
+*platform features are causal-only by construction, and a centered variant is actively
+rejected by the gating rail; the only hindsight in the system is the L1 labeler's
+deliberate non-causal batch DP-decode, not the features.*
+
+This is a genuine difference from the legacy quarterly pipeline's ADR #1 (centered for
+clustering, causal for supervised) — the platform did not inherit that split, and P2
+should say so rather than imply a missing feature.
