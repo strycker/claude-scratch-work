@@ -4,15 +4,15 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 6
 current_phase_name: Platform Notebook Suite
-status: planning
-stopped_at: "UAT audit Phases 1-5 complete (Parts I-V). A4/A12 CLOSED empirically on rebuilt data — regime structure now maps onto real economic history (1973 oil shock, 1981 Volcker, 2008 GFC). A14 measured at 0.2% of steps, closed. A13 (driver active feature set changes 7x vs the reference fixed 9) is the top open item and makes the §5.4 ratio uninterpretable. 06-CONTEXT.md has AMENDMENT 1 + AMENDMENT 2 — read both. PHASE 6 PLANNING IS UNBLOCKED; A13 folded in as a P3 scope item."
+status: planned
+stopped_at: "Phase 6 PLANNED. Seven plans (06-01..06-07) written, plan-checker PASS. Wave 1: 06-01 plotting spine + P1, 06-02 additive artifact persistence. Wave 2 (five in parallel): 06-03 P3+A13, 06-04 P2, 06-05 P4, 06-06 P5, 06-07 P6. Two research open questions settled as AMENDMENT 3 in 06-CONTEXT.md: (H) persist full_sample_states + filtered_state_probs from evaluation/report.py as an additive write; (I) no causal-vs-centered panel in P2 - the variant does not exist and honesty/gating.py forbids it. Next: /gsd-execute-phase 6."
 last_updated: "2026-09-09T00:00:00.000Z"
 last_activity: 2026-09-09
-last_activity_desc: A4/A12 closed empirically; A14 closed as negligible; A13 confirmed top open item; Phase 6 unblocked
+last_activity_desc: Phase 6 planned - 7 plans, research + validation strategy + pattern map, checker PASS
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 28
+  total_plans: 35
   completed_plans: 28
   percent: 63
 ---
@@ -25,21 +25,70 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 6 — platform notebook suite (pre-planning)
+**Current focus:** Phase 6 — platform notebook suite (planned; ready to execute)
 
 ## Current Position
 
 Phase: 6 — Platform Notebook Suite
-Plan: Discussion complete and **amended twice on 2026-09-09** — read `06-CONTEXT.md`
-*including both AMENDMENT sections* before planning. A1: D-11 reversed, D-20 satisfied,
-D-18/D-19 partly stale. A2: the A4 blocker is cleared, the P3 expectation has flipped
-positive, and A13 is folded in as a P3 scope item.
-Status: **READY TO PLAN.** A4/A12 closed empirically on the 2026-09-09 rebuild —
-zero discontinuity warnings, `real_rate_level` −4.91…9.27, occupancy matching the
-repair experiment exactly. Run `/gsd-plan-phase 6` reading `06-CONTEXT.md` **plus
-both amendments**.
-Last activity: 2026-09-09 — A4/A12 closed empirically; A14 closed as negligible;
-A13 confirmed as the top open item; Phase 6 unblocked and amended twice
+Status: **PLANNED — ready to execute.** Seven plans written and committed; plan-checker
+returned PASS on all twelve dimensions plus the phase-specific constraint set.
+
+| Plan | Notebook | Wave | depends_on | New module |
+|---|---|---|---|---|
+| 06-01 | P1_data_spine | 1 | — | `plotting/{core,loaders,data,drift}.py` |
+| 06-02 | *(artifact persistence)* | 1 | — | additive write in `evaluation/report.py` |
+| 06-03 | P3_regime_labeling | 2 | 06-01, 06-02 | `plotting/{history,regime}.py` |
+| 06-04 | P2_features_taxonomy | 2 | 06-01 | `plotting/features.py` |
+| 06-05 | P4_nowcaster | 2 | 06-01 | `plotting/nowcaster.py` |
+| 06-06 | P5_assets_allocation | 2 | 06-01 | `plotting/allocation.py` |
+| 06-07 | P6_backtest_evaluation | 2 | 06-01, 06-02 | `plotting/backtest.py` |
+
+19 tasks. Zero new dependencies. The five wave-2 plans are genuinely parallel — verified no
+`files_modified` overlap. That is by design: `plotting/__init__.py` re-exports **only** shared
+constants and loaders (created once in 06-01); per-layer plot functions are deliberately NOT
+barrelled and are imported by submodule path, so the per-layer plans never contend for that
+one file. The reason is recorded in the module docstring.
+
+**Planning artifacts:** `06-RESEARCH.md` (900 lines), `06-VALIDATION.md` (the plausibility-band
+contract), `06-PATTERNS.md` (analog map, 15/19 files matched), `06-CONTEXT.md` AMENDMENT 3.
+
+**Two research open questions settled as AMENDMENT 3 before planning:**
+- **(H) A13's filtered path — persist a new artifact.** Two of three A13 ingredients are cheap
+  (reference labeling 0.62s; the 588-step active-feature-count timeline 1.2s, which reproduced
+  the audit's exact change points 4→6→8→9→10→12→13 and independently corroborates A13). The
+  third needs a full `run_full_backtest_evaluation()`. Decision: extend
+  `platform/evaluation/report.py` to additionally persist `full_sample_states` and
+  `filtered_state_probs`. **Additive write only — every existing Phase-5 artifact must be
+  byte-identical**, and 06-02 Task 2 byte-compares all seven to prove it. `full_sample_states`
+  was already computed in-function (report.py:593); it only needed adding to the existing
+  `artifacts` dict. Written once by 06-02, read by both P3 and P6.
+- **(I) P2 has no causal-vs-centered panel.** `transforms_monthly.py` has zero occurrences of
+  center/centered/causal, and `honesty/gating.py` defines
+  `FORBIDDEN_CENTERED_SUFFIXES = ("_centered","_c5","_zerophase")` and raises on sight. The
+  platform did not inherit legacy ADR #1's split. P2 says so in prose instead.
+
+**Corrections to CONTEXT.md found during research (CONTEXT.md is stale on these):**
+- The **Faber / 60-40 KPI anomalies are already fixed.** The live artifacts show Faber
+  6.3726/−18.94% and 60/40 5.0471/−26.96%, matching BASELINE. The −99.7% / −2.3% figures
+  CONTEXT.md told P6 to surface are void; P6 narrates the fix history from live values instead.
+- **`regime_labels` / `regime_confidences` / `regime_profiles` do NOT exist on disk**
+  (contradicting Amendment 1 item C). P3/P4/P5 call `label_regimes()` themselves via
+  `loaders.compute_regime_labeling`, routed at a scratch checkpoint namespace so no notebook
+  can write `data/checkpoints/platform/`.
+- **Brier is bounded [0,1] here, not the textbook [0,2]** — `compute_brier_multiclass` computes
+  `mean(diff²)` over the full (n,K) array. The K=5 no-skill floor is (K−1)/K² = 0.16 and the
+  observed 0.2087 sits **above** it, so the metric cannot currently claim the nowcaster beats
+  random guessing. P4 surfaces this; fixing it is explicitly out of scope. Independently
+  corroborates audit item **A8**.
+
+**The plausibility contract (D-11 reversed).** Every task that displays a number carries a
+stated numeric band. 06-01 Task 2 builds the bands as pure functions and pins the two
+historical failures as regression cases that must RAISE: a 60/40-shaped leg at −2.27% max DD
+fails its **domain per-leg** band (the universal [−1,0] bound does not catch it — that is the
+whole lesson), and terminal log wealth 111.06 fails the universal `abs(x) < 10` band.
+
+Last activity: 2026-09-09 — Phase 6 planned end to end (research → validation strategy →
+pattern map → 7 plans → checker PASS)
 
 ### ⚠ UAT audit outcome (2026-09-09) — `.planning/UAT-AUDIT-2026-09-09.md`
 
