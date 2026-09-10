@@ -28,6 +28,7 @@ import pytest  # noqa: E402
 
 from trading_crab_lib.platform.assets.returns import returns_by_regime_stats  # noqa: E402
 from trading_crab_lib.platform.plotting import allocation as pallocation  # noqa: E402
+from trading_crab_lib.platform.plotting import drift as pdrift  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
 
@@ -240,6 +241,145 @@ class TestPlotEwmaVolTimeline:
 
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
+
+
+class TestComputeSmoothedTiltWeightsOverTime:
+    def test_rows_sum_to_one_and_carry_every_asset_plus_cash(self, states, asset_returns):
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+
+        assert not weights_df.empty
+        assert list(weights_df.columns) == [*asset_returns.columns, "cash"]
+        assert set(weights_df.index).issubset(set(states.index))
+        totals = weights_df.sum(axis=1)
+        assert np.allclose(totals.to_numpy(), 1.0, atol=1e-9), totals[~np.isclose(totals, 1.0)]
+
+    def test_every_row_passes_the_exact_weight_band_contract(self, states, asset_returns):
+        """drift.assert_portfolio_weights_plausible is the single source of the band."""
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+        asset_columns = list(asset_returns.columns)
+
+        for timestamp, row in weights_df.iterrows():
+            # Raises on a negative weight or a total departing 1.0 — no assert
+            # here re-derives that rule.
+            pdrift.assert_portfolio_weights_plausible(
+                row[asset_columns], cash_weight=float(row["cash"])
+            )
+            assert timestamp in states.index
+
+    def test_no_weight_is_negative_long_only_by_design(self, states, asset_returns):
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+
+        assert (weights_df.to_numpy() >= 0).all()
+        assert (weights_df.to_numpy() <= 1.0 + 1e-9).all()
+
+    def test_warmup_months_are_excluded(self, states, asset_returns):
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(
+            states, asset_returns, SPLICE_CFG, min_obs=12
+        )
+
+        assert len(weights_df) == len(states) - 12
+        assert weights_df.index[0] == states.index[12]
+
+    def test_an_asset_gets_no_weight_before_its_inception(self, states, asset_returns):
+        """Asset EXISTENCE is not hindsight — a ticker issued in month 40 is 0.0 before it."""
+        ragged = asset_returns.copy()
+        ragged.loc[ragged.index[:40], "USO"] = np.nan
+
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, ragged, SPLICE_CFG)
+
+        pre_inception = weights_df.loc[weights_df.index < ragged.index[40], "USO"]
+        assert (pre_inception == 0.0).all()
+        # ...and the rows are still exactly-normalized while USO is absent.
+        assert np.allclose(weights_df.sum(axis=1).to_numpy(), 1.0, atol=1e-9)
+
+    def test_empty_states_returns_an_empty_framed_result(self, asset_returns):
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(
+            pd.Series(dtype=int), asset_returns, SPLICE_CFG
+        )
+
+        assert weights_df.empty
+        assert list(weights_df.columns) == [*asset_returns.columns, "cash"]
+
+    def test_reads_the_configured_allocation_parameters(self, states, asset_returns):
+        """A tighter vol target can only reduce the position scale (cash absorbs the rest)."""
+        tight = {**SPLICE_CFG, "allocation": {**SPLICE_CFG["allocation"], "target_vol_annual": 0.01}}
+
+        default_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+        tight_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, tight)
+
+        assert (tight_df["cash"] >= default_df["cash"] - 1e-12).all()
+
+    def test_does_not_mutate_its_inputs(self, states, asset_returns):
+        states_before, returns_before = states.copy(), asset_returns.copy()
+
+        pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+
+        pd.testing.assert_series_equal(states, states_before)
+        pd.testing.assert_frame_equal(asset_returns, returns_before)
+
+
+class TestPlotTiltWeightsOverTime:
+    def test_does_not_crash(self, states, asset_returns):
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+
+        fig = pallocation.plot_tilt_weights_over_time(weights_df)
+
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_title_states_the_illustrative_caveat(self, states, asset_returns):
+        """T-06-25: a weights chart detached from its markdown must still say so."""
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+
+        fig = pallocation.plot_tilt_weights_over_time(weights_df)
+
+        assert "illustrative" in fig.axes[0].get_title()
+        plt.close(fig)
+
+    def test_cash_is_not_drawn_in_a_regime_palette_color(self, states, asset_returns):
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+
+        fig = pallocation.plot_tilt_weights_over_time(weights_df)
+
+        labels = [text.get_text() for text in fig.axes[0].get_legend().get_texts()]
+        assert labels[-1] == "cash"
+        plt.close(fig)
+
+    def test_empty_input(self):
+        fig = pallocation.plot_tilt_weights_over_time(pd.DataFrame())
+
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_save_path_writes_a_file(self, states, asset_returns, tmp_path):
+        weights_df = pallocation.compute_smoothed_tilt_weights_over_time(states, asset_returns, SPLICE_CFG)
+        target = tmp_path / "weights.png"
+
+        pallocation.plot_tilt_weights_over_time(weights_df, save_path=target)
+
+        assert target.exists()
+        plt.close("all")
+
+
+class TestNoAllocationMathIsReDerived:
+    """The tilt formula lives in allocation/tilt.py; this module only orchestrates."""
+
+    def test_calls_vol_targeted_tilt_and_returns_by_regime_stats(self):
+        tree = ast.parse(Path(pallocation.__file__).read_text())
+        called = {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+
+        assert "vol_targeted_tilt" in called
+        assert "returns_by_regime_stats" in called
+
+    def test_does_not_re_derive_the_tilt_formulas(self):
+        source = Path(pallocation.__file__).read_text()
+
+        for banned in ("vol_target_scale", "regime_tilt_weights", "_per_regime_tilt", "portfolio_vol("):
+            assert banned not in source, banned
 
 
 # ── D-01 fresh-package boundary + T-06-24 no-persistence proof ───────────────

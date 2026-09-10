@@ -46,7 +46,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from trading_crab_lib.platform.assets.returns import compute_monthly_returns
+from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
+from trading_crab_lib.platform.assets.returns import compute_monthly_returns, returns_by_regime_stats
 from trading_crab_lib.platform.assets.vol import MONTHLY_ANNUALIZATION, ewma_vol
 from trading_crab_lib.platform.plotting import core
 from trading_crab_lib.platform.splice import build_core_research_series
@@ -244,5 +245,141 @@ def plot_ewma_vol_timeline(
     # Legend below the axes: vol spikes reach the top-left and top-right of the
     # frame at exactly the crisis months an operator most wants to read.
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.10), ncol=min(6, drawn), fontsize=8, frameon=False)
+    fig.tight_layout()
+    return core._save_or_show(fig, save_path=save_path, show=show)
+
+
+# ── L4: the vol-targeted tilt's weights over history ─────────────────────────
+
+
+def compute_smoothed_tilt_weights_over_time(
+    states: pd.Series,
+    asset_returns: pd.DataFrame,
+    cfg: dict,
+    *,
+    min_obs: int | None = None,
+) -> pd.DataFrame:
+    """Per-month weight vectors from ``vol_targeted_tilt``, driven by *states*.
+
+    **This is a SMOOTHED, hindsight-informed illustration of the allocation
+    math over history — not a live recommendation and not the real strategy.**
+    Three things make that precise:
+
+    * The regime-conditional statistics are computed ONCE over the *entire*
+      *states* series, so every decision date is scored against stats that
+      include months after it. Non-causal by construction.
+    * The tilt is driven by a one-hot probability on the full-sample smoothed
+      state, not by the real-time nowcaster's probabilities.
+    * v1 has no live weekly scoring path at all, so nothing here is (or could
+      be) what the live strategy would recommend today.
+
+    What the real walk-forward strategy actually held at each date is a
+    different and far more expensive computation, and it belongs to P6. This
+    function calls neither ``run_backtest`` nor ``run_full_backtest_evaluation``.
+
+    One kind of hindsight is intended (the regime labels); asset *existence*
+    is not. An asset gets weight only from its own inception date onward —
+    without that filter IAU and USO would draw full-sample Sharpe entries and
+    pick up real weight decades before they were issued. This mirrors (without
+    importing) the per-step universe restriction in ``report.py``'s private
+    ``_smoothed_hindsight_perf``.
+
+    No allocation math is re-derived here: :func:`vol_targeted_tilt` and
+    :func:`returns_by_regime_stats` are called verbatim, and this function
+    contributes only the per-decision-date orchestration around them.
+
+    Args:
+        states: the full-sample smoothed regime labeling (int state per month).
+        asset_returns: one column per tradable ticker.
+        cfg: platform config — reads ``allocation.target_vol_annual``,
+            ``allocation.ewma_halflife_months``, ``allocation.portfolio_vol_min_obs``.
+        min_obs: overrides the configured ``portfolio_vol_min_obs``; also sets
+            how many leading warmup months are skipped.
+
+    Returns:
+        pd.DataFrame: indexed by the visited decision dates, with one column
+        per ``asset_returns`` column plus ``cash``. Every row's asset weights
+        plus ``cash`` sum to 1.0 — the contract
+        :func:`trading_crab_lib.platform.plotting.drift.assert_portfolio_weights_plausible`
+        checks (that function is the single source of the band; it is not
+        re-derived here).
+    """
+    allocation_cfg = cfg.get("allocation", {})
+    effective_min_obs = int(min_obs) if min_obs is not None else int(allocation_cfg.get("portfolio_vol_min_obs", 12))
+    columns = [*asset_returns.columns, _CASH_COLUMN]
+
+    if states.empty or asset_returns.empty or not len(asset_returns.columns):
+        return pd.DataFrame(columns=columns)
+
+    smoothed_stats = returns_by_regime_stats(asset_returns, states)
+    inception = {col: asset_returns[col].first_valid_index() for col in asset_returns.columns}
+
+    rows: dict = {}
+    for timestamp in states.index[effective_min_obs:]:
+        available = [col for col, start in inception.items() if start is not None and start <= timestamp]
+        if not available:
+            continue
+        step_stats = smoothed_stats[smoothed_stats["asset"].isin(available)]
+        tilt = vol_targeted_tilt(
+            {int(states.loc[timestamp]): 1.0},
+            step_stats,
+            asset_returns.loc[:timestamp, available],
+            target_vol_annual=allocation_cfg.get("target_vol_annual", 0.10),
+            halflife=allocation_cfg.get("ewma_halflife_months", 6),
+            min_obs=effective_min_obs,
+        )
+        weights = tilt["weights"].reindex(asset_returns.columns).fillna(0.0)
+        row = weights.to_dict()
+        row[_CASH_COLUMN] = float(tilt["cash"])
+        rows[timestamp] = row
+
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame.from_dict(rows, orient="index")[columns]
+
+
+def plot_tilt_weights_over_time(
+    weights_df: pd.DataFrame,
+    *,
+    title: str = "Smoothed-labeling tilt weights over time (illustrative, not the live strategy)",
+    save_path: Path | None = None,
+    show: bool = False,
+) -> core.plt.Figure:
+    """Stacked-area rendering of every column of *weights_df* (assets + cash).
+
+    The title carries the illustrative caveat deliberately: a weights chart
+    detached from its markdown context is exactly the artifact most likely to
+    be mistaken for a live allocation instruction (T-06-25).
+
+    Returns:
+        matplotlib Figure — "no data" annotated for an empty frame.
+    """
+    if weights_df.empty or not len(weights_df.columns):
+        return _no_data_figure(title, save_path=save_path, show=show)
+
+    asset_columns = [c for c in weights_df.columns if c != _CASH_COLUMN]
+    ordered = [*asset_columns, _CASH_COLUMN] if _CASH_COLUMN in weights_df.columns else asset_columns
+    colors = [core.CUSTOM_COLORS[i % len(core.CUSTOM_COLORS)] for i in range(len(asset_columns))]
+    if _CASH_COLUMN in weights_df.columns:
+        colors.append(_CASH_COLOR)
+
+    values = weights_df[ordered].fillna(0.0).to_numpy(dtype=float).T
+
+    fig, ax = core.plt.subplots(figsize=(12, 4.5))
+    ax.stackplot(weights_df.index, values, colors=colors, labels=[str(c) for c in ordered], alpha=0.9)
+    ax.set_ylim(0.0, 1.0)
+    if len(weights_df.index) > 1:
+        ax.set_xlim(weights_df.index.min(), weights_df.index.max())
+    ax.set_ylabel("portfolio weight")
+    ax.set_title(title)
+    # Legend below the axes, never inside: a stacked area chart fills its whole
+    # frame, so an in-axes legend occludes the very bands it labels.
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.10),
+        ncol=min(6, max(1, len(ordered))),
+        fontsize=8,
+        frameon=False,
+    )
     fig.tight_layout()
     return core._save_or_show(fig, save_path=save_path, show=show)
