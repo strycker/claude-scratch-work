@@ -54,25 +54,31 @@ jobs:
 
       - name: Decide whether to publish this package
         id: gate
+        env:
+          PKG: ${{ matrix.name }}
+          TAG_PREFIX: ${{ matrix.tag_prefix }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PKG: ${{ github.event.inputs.package }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          EVENT="${{ github.event_name }}"
-          PKG="${{ matrix.name }}"
-          PREFIX="${{ matrix.tag_prefix }}"
-          INPUT="${{ github.event.inputs.package }}"
 
-          if [[ "$EVENT" == "workflow_dispatch" ]]; then
-            if [[ "$INPUT" == "both" || "$INPUT" == "lib" && "$PKG" == "trading-crab-lib" || "$INPUT" == "app" && "$PKG" == "trading-crab" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$INPUT_PKG" == "both" || "$INPUT_PKG" == "lib" && "$PKG" == "trading-crab-lib" || "$INPUT_PKG" == "app" && "$PKG" == "trading-crab" ]]; then
               echo "publish=true" >> "$GITHUB_OUTPUT"
+              echo "PUBLISH: $PKG via workflow_dispatch (input=$INPUT_PKG)"
             else
               echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "SKIP: $PKG tag=(workflow_dispatch) prefix=$TAG_PREFIX reason=workflow_dispatch input '$INPUT_PKG' does not select this package"
             fi
           elif [[ "$TAG" == both-v* ]]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG" == ${PREFIX}* ]]; then
+            echo "PUBLISH: $PKG tag=$TAG"
+          elif [[ "$TAG" == ${TAG_PREFIX}* ]]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "PUBLISH: $PKG tag=$TAG"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "SKIP: $PKG tag=$TAG prefix=$TAG_PREFIX reason=tag does not match this package's prefix or the both-v prefix"
           fi
 
       - name: Set up Python
@@ -88,6 +94,64 @@ jobs:
       - name: Build ${{ matrix.name }}
         if: steps.gate.outputs.publish == 'true'
         run: python -m build ${{ matrix.build_dir }}
+
+      - name: Verify built artifacts
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          PKG: ${{ matrix.name }}
+          BUILD_DIR: ${{ matrix.build_dir }}
+          TAG_PREFIX: ${{ matrix.tag_prefix }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          ARTIFACTS=("$BUILD_DIR"/dist/*)
+          if [ ${#ARTIFACTS[@]} -eq 0 ]; then
+            echo "ERROR: no artifacts found in $BUILD_DIR/dist" >&2
+            exit 1
+          fi
+          echo "Found ${#ARTIFACTS[@]} artifact(s) in $BUILD_DIR/dist:"
+          for f in "${ARTIFACTS[@]}"; do
+            echo "  $f"
+          done
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "workflow_dispatch run: no tag to compare against, skipping version check"
+            exit 0
+          fi
+
+          TAG="${GITHUB_REF#refs/tags/}"
+          BOTH_PREFIX="both-v"
+          PREFIX="$TAG_PREFIX"
+          if [[ "$TAG" == ${BOTH_PREFIX}* ]]; then
+            TAG_VERSION="${TAG#$BOTH_PREFIX}"
+          else
+            TAG_VERSION="${TAG#$PREFIX}"
+          fi
+
+          for f in "${ARTIFACTS[@]}"; do
+            BASENAME=$(basename "$f")
+            case "$BASENAME" in
+              *.whl)
+                ARTIFACT_VERSION=$(echo "$BASENAME" | cut -d- -f2)
+                ;;
+              *.tar.gz)
+                STEM="${BASENAME%.tar.gz}"
+                ARTIFACT_VERSION="${STEM##*-}"
+                ;;
+              *)
+                echo "ERROR: unrecognized artifact extension: $BASENAME" >&2
+                exit 1
+                ;;
+            esac
+            if [[ "$ARTIFACT_VERSION" != "$TAG_VERSION" ]]; then
+              echo "ERROR: version mismatch for $PKG: artifact $BASENAME has version $ARTIFACT_VERSION but tag $TAG implies version $TAG_VERSION. Bump the version in this package's pyproject.toml or retag." >&2
+              exit 1
+            fi
+          done
+
+          echo "All artifacts match expected version $TAG_VERSION"
 
       - name: Publish ${{ matrix.name }} to PyPI
         if: steps.gate.outputs.publish == 'true'
