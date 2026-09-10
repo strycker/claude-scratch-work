@@ -203,7 +203,7 @@ quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analy
 **Velocity:**
 
 - Total plans completed: 12 (7 Phase 1 + 5 Phase 2) + 4 in Phase 05
-- Full test suite: 1120 passed (post 05-05)
+- Full test suite: 1705 passed, 0 skipped (post Phase 6)
 
 **By Phase:**
 

@@ -398,3 +398,33 @@ def _forbid_real_network(monkeypatch, request):
         monkeypatch.setattr(urllib.request, "urlopen", _blocked, raising=False)
     except ImportError:
         pass
+
+
+# ── matplotlib figures never accumulate across tests ────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _close_matplotlib_figures():
+    """Close every pyplot figure after each test.
+
+    ``platform/plotting/core.py::_save_or_show`` deliberately does NOT close the
+    figure it returns — per D-02 the caller (a notebook cell, or a test asserting
+    on the returned object) needs it live. That is correct for the library, but it
+    makes closing the *caller's* responsibility, and the Phase 6 plotting test
+    files were inconsistent about it: 3 of 10 closed their figures, 7 did not.
+
+    The result was a real (if benign) leak — a full run tripped matplotlib's
+    ``More than 20 figures have been opened`` RuntimeWarning, and the count grows
+    with every plot function added.
+
+    Closing here rather than per-test keeps it uniform and covers future plotting
+    tests automatically. Teardown runs after the test body, so assertions on a
+    returned ``Figure`` are unaffected, and an explicit ``plt.close(fig)`` inside a
+    test stays harmless.
+    """
+    yield
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:  # matplotlib is an optional extra
+        return
+    plt.close("all")

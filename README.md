@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-769%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1705%20passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 
 Market regime classification and prediction pipeline. Predict market conditions, best portfolios, and stock picks.
@@ -454,7 +454,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ ~635 tests (unit + integration), all passing
+- ✓ 1705 tests (unit + integration), all passing
 - ✓ Exploration notebooks (01–12)
 
 ---
