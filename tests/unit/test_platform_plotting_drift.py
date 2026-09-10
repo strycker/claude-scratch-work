@@ -13,7 +13,6 @@ import pytest
 
 from trading_crab_lib.platform.plotting import drift
 
-
 # ── Terminal log wealth ──────────────────────────────────────────────────────
 
 class TestAssertTerminalLogWealthPlausible:
