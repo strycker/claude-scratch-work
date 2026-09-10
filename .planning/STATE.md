@@ -6,7 +6,7 @@ current_phase: 6
 current_phase_name: Regime Representation
 status: pending
 stopped_at: Phase 7 context gathered (wave 1 scoped for planning)
-last_updated: "2026-09-10T22:50:17.725Z"
+last_updated: "2026-09-10T23:15:16.297Z"
 last_activity: 2026-09-10
 last_activity_desc: Phase 6 closed; roadmap restructured — Phase 7 Regime Representation added, migration to Phase 8
 progress:
@@ -322,6 +322,7 @@ Recent decisions affecting current work:
 | 260908-qwe | fix hindsight-oracle IndexError: restrict the smoothed oracle's per-step universe to assets that have started (phantom IAU/USO weight in 1974), guard portfolio_vol's per-asset EWMA fallback conservatively | 2026-09-08 | 18f68af | [260908-qwe-fix-hindsight-oracle-indexerror-phantom-](./quick/260908-qwe-fix-hindsight-oracle-indexerror-phantom-/) |
 | 260908-rh4 | fix percent-vs-decimal yield units at the splice boundary (long_duration_tr compounded to 2.3e128; cash booked yield CHANGES as returns), add an asymmetric units guard, correct three test defects incl. an integration test whose 24/24 steps all degraded | 2026-09-08 | 75dedc7 | [260908-rh4-fix-percent-vs-decimal-yield-units-at-th](./quick/260908-rh4-fix-percent-vs-decimal-yield-units-at-th/) |
 | 260908-fnc | close the holdout fence at rest: carve at build, assert at build, add load_full_span() looking opt-in, repoint live weekly scoring | 2026-09-08 | 7f99548 | (in this STATE entry) |
+| 260910-vyi | fix PyPI publish: corrected doubled dist path (dist/dist), added loud PUBLISH/SKIP gate logging so a skipped matrix leg is no longer indistinguishable from a publish, added a Verify built artifacts guard that fails on empty dist or tag/artifact version mismatch; bumped both packages 0.1.2 -> 0.1.4 (0.1.3 burned on PyPI) | 2026-09-10 | 9d0153c + 0c6fb8d | [260910-vyi-fix-pypi-publish-workflow-dist-path-and-](./quick/260910-vyi-fix-pypi-publish-workflow-dist-path-and-/) |
 
 ## Deferred Items
 
