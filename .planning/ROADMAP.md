@@ -25,9 +25,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe (completed 2026-07-22)
 - [x] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire (completed 2026-07-23)
 - [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
-- [ ] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation
-- [ ] **Phase 7: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
-- [ ] **Phase 8: Invariants & Dimensional Reduction** - Discover named, era-stable conserved quantities as candidate regime features (research track)
+- [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation
+- [ ] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01)
+- [ ] **Phase 8: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
 
@@ -266,18 +266,92 @@ labeling before it is trusted for live use.
 
   5. `P6_backtest_evaluation` renders the equity curves, baseline gauntlet, ablation
      delta, calibration, and the sojourn/lag headline with its resolved-transition count.
-**Plans**: TBD
+**Plans**: 1/7 plans executed
+
+- [x] 06-01-PLAN.md
+- [ ] 06-02-PLAN.md
+- [ ] 06-03-PLAN.md
+- [ ] 06-04-PLAN.md
+- [ ] 06-05-PLAN.md
+- [ ] 06-06-PLAN.md
+- [ ] 06-07-PLAN.md
+
+06-03 (P3 + A13), 06-04 (P2), 06-05 (P4), 06-06 (P5), 06-07 (P6)
 
 **Why this precedes migration**: the migration's per-step validation gate is "run the
 notebook and verify." The platform currently has **zero** notebooks — all 12 in
 `notebooks/` drive the legacy quarterly pipeline. Without this phase there is nothing to
 validate a migrated step against, and five phases of verified work remain un-inspectable.
 
-### Phase 7: Migration to Public Repo
+### Phase 7: Regime Representation
+
+**Goal**: Decide what the regime labeler should see, prove that decision walk-forward, and
+add a **second, independent labeler on relative/leadership features** so the platform can
+inform allocation during ordinary markets — not only crisis avoidance.
+**Depends on**: Phase 6
+**Requirements**: REG-01, INV-01
+**Full scope**: `.planning/PROPOSAL-phase-regime-representation.md`
+
+**Why this phase exists**: audit items **A13** (HIGHEST) and **A15** were assigned to no
+phase. Phase 6 was scoped only to *display* A13 and did so — the reference and filtered
+labelings disagree on **389/470 = 82.8%** of compared months with no diagonal structure —
+but nothing was scheduled to resolve it. Separately, the Phase 6 P3 sign-off accepted the
+regimes with the caveat that they are *crisis* regimes, not *allocation* regimes. Both trace
+to one cause: what the labeler is allowed to see.
+
+**A13's mechanism** (diagnosed 2026-09-10): `backtest/driver.py::_window_active_features`
+admits a feature once it has `feature_min_history` (120) months in-window. With staggered
+start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-06, `gold`/`oil`
+1985-02→1995-02, `fred_vix` 1990-01→2000-01. Meanwhile
+`evaluation/report.py::_reference_label_columns` freezes a set at the first decision date.
+§5.4 compares two estimators fit on different feature spaces. A policy disagreement, not a defect.
+
+**Wave 1 — resolve A13/A15. This is a gate; wave 2 does not start unless it passes.**
+**Wave 2 — the leadership classifier**, fit unsupervised on relative/invariant features.
+
+**Success Criteria** (what must be TRUE):
+
+  1. Driver and report label under **one documented feature policy**; a test fails if they
+     diverge. The choice and its rejected alternatives are recorded as an ADR.
+
+  2. The §5.4 sojourn/lag ratio is **interpretable** — computed between two labelings fit on
+     the same feature space, shown with its resolved-transition count. The A13 caveat is
+     removed only because the cause is fixed, never because the wording was softened.
+
+  3. Post-fix labeling disagreement is measured and reported against the 82.8% pre-fix
+     baseline. No target is set — a number, not a goal, to avoid fitting to it.
+
+  4. Classifier #1's ablation delta is re-measured on **both** axes (`wealth_delta` and
+     `dd_delta`, currently +0.379267 / −0.014364), each within its `06-VALIDATION.md` band.
+
+  5. Classifier #2 exists, is fit **unsupervised** on a feature set disjoint from classifier
+     #1's 13 (a test asserts disjointness), with occupancy summing to 1.0 and no state below
+     the §4.4 5% floor left unmarked.
+
+  6. Statistical dependence between the two labelings is measured and reported. High
+     dependence is a **failure to add an axis** and is recorded as such.
+
+  7. Joint (#1 × #2) allocation lift is measured walk-forward against #1 alone, every
+     configuration logged to the trial registry, deflated-Sharpe applied for the full count.
+
+  8. `platform/` still imports nothing from the legacy library — the import-guard test is
+     extended to the new modules. (Verified 2026-09-10: platform is currently fully
+     decoupled, so the relative-strength algorithms must be **ported**, not imported.)
+**Plans**: TBD
+
+**Explicit non-goals**: no fitting to forward returns; no raising K on classifier #1; no
+2021+ holdout use for any selection decision; no migration work.
+
+**Absorbs INV-01** (formerly Phase 8): named invariant candidates (M2/GDP, market-cap/GDP,
+credit/GDP) are wave 2's feature-discovery work, and INV-01's constraint that survivors be
+admitted as **named** features — never anonymous principal components, preserving design
+decision R4 — is exactly the interpretability requirement a leadership classifier needs.
+
+### Phase 8: Migration to Public Repo
 
 **Goal**: The validated platform lives in `strycker/trading-crab`, the public/PyPI
 two-package repo, ready for continued development outside the heavy-dev workbench.
-**Depends on**: Phase 6
+**Depends on**: Phase 7
 **Requirements**: MIG-01
 **Success Criteria** (what must be TRUE):
 
@@ -299,48 +373,11 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 **Plans**: TBD
 **Detailed step plan**: `MIGRATION-PLAN.md` (P0–P6)
 
-### Phase 8: Invariants & Dimensional Reduction
-
-**Goal**: Identify a small number of **named, economically interpretable** quantities
-that are stable across market eras ("history rhymes") and carry more regime signal than
-any single asset price — then admit the survivors as features through the existing
-honesty rails.
-**Depends on**: Phase 6 (needs the EDA surface); may run in parallel with Phase 7
-**Requirements**: INV-01
-**Success Criteria** (what must be TRUE):
-
-  1. A candidate set of named ratio/invariant series is constructed (e.g. M2/GDP, total
-     market cap/GDP, credit/GDP, real M2 growth) with each series' economic meaning
-     documented.
-
-  2. Dimensional-reduction techniques (PCA, SVD, sparse PCA, Lasso) are applied **as
-     discovery tools** over the wide feature space, and loading stability is tested
-     across eras (1962–1985 / 1985–2005 / 2005–2020).
-
-  3. Every candidate that is evaluated is logged to the trial registry and assessed
-     walk-forward — no candidate enters on in-sample fit.
-
-  4. Survivors are admitted as **named features**, never as an anonymous principal-
-     component block. Design decision **R4** ("prefer standardized curated features, no
-     PCA in L1") stays intact unless the evidence justifies formally revisiting it — in
-     which case the revision is recorded as a design-doc change, not an implicit drift.
-
-  5. The phase produces understanding as well as accuracy: a written account of which
-     quantities appear conserved and why they plausibly govern regime transitions.
-**Plans**: TBD
-
-**Design tension to resolve deliberately**: `platform_design.md` §11 row R4 rejected PCA
-before clustering because "PCA on mixed-unit features obscures interpretability and the
-semantic skeleton; skeleton constraints need named dimensions." This phase is compatible
-with R4 *as long as* the deliverable is named interpretable series discovered with the
-help of reduction techniques — not anonymous components wired into L1. See
-`.planning/STATUS-REVIEW-2026-08.md` §3.
-
 ## Progress
 
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
-(Phase 8 may run in parallel with Phase 7 once Phase 6 lands.)
+(Phase 7 gates internally: wave 2 does not start unless wave 1 passes.)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -349,6 +386,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Regime Labeling & Prediction | 4/4 | Complete   | 2026-07-22 |
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
-| 6. Platform Notebook Suite | 0/TBD | Not started | - |
-| 7. Migration to Public Repo | 0/TBD | Not started | - |
-| 8. Invariants & Dimensional Reduction | 0/TBD | Not started | - |
+| 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
+| 7. Regime Representation | 0/TBD | Not started | - |
+| 8. Migration to Public Repo | 0/TBD | Not started | - |

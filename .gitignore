@@ -18,6 +18,14 @@ build/
 
 # Data — raw/processed data should not be versioned
 data/raw/
+
+# Platform NOTEBOOK scratch checkpoint namespace (plotting/loaders.py
+# NOTEBOOK_SCRATCH_DIR). Notebooks route label_regimes() writes here so they can
+# never touch the tracked production namespace at data/checkpoints/platform/
+# (D-10, threat T-06-12). Because that production namespace IS tracked in this
+# repo, the scratch twin must be ignored explicitly — otherwise every P3 run
+# leaves untracked files one `git add data/` away from being committed.
+data/checkpoints/platform_notebook/
 # data/processed/
 # data/regimes/
 # outputs/figures/

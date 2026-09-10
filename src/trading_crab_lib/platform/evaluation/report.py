@@ -490,7 +490,23 @@ def run_full_backtest_evaluation(
         (``honesty/gap_lag.py::compute_gap``, using a hindsight-oracle
         performance number distinct from the actual walk-forward run).
     (g) ``report_model_metrics`` on the date-joined ``per_step_metrics``.
-    (h) assemble + write the report + artifacts.
+    (h) assemble + write the report + artifacts. The smoothed reference
+        states and the per-date filtered state probabilities computed in
+        (d) are now persisted alongside the equity curves and KPI table,
+        rather than living only in memory for the duration of this call.
+
+    Persisted artifacts (Amendment 3 item H, ``06-CONTEXT.md``):
+    ``backtest_full_sample_states.parquet`` (the smoothed reference labeling
+    from (d), one ``state`` column indexed by date) and
+    ``backtest_filtered_state_probs.parquet`` (the walk-forward's per-date
+    multiclass probability matrix from (d), also indexed by date). The
+    filtered artifact's columns are stored as ``state_{k}`` strings for
+    parquet safety and must be converted back to integer state ids
+    (``rename(columns=...)``) before being passed to
+    ``compute_sojourn_lag_headline``. These two artifacts exist so the
+    regime and evaluation notebooks (P3, P6) can render the two-labeling
+    comparison without re-running the walk-forward. Persisting them does
+    NOT resolve audit item A13 — it makes A13 inspectable.
 
     Args:
         monthly_features: causal monthly features (Phase 1 checkpoint
@@ -648,7 +664,13 @@ def run_full_backtest_evaluation(
     # (g) Model-metrics artifacts (Brier/calibration/confusion).
     model_metrics_paths = report_model_metrics(per_step_metrics, output_dir=output_dir)
 
-    # (h) Assemble + write the report + artifacts.
+    # (h) Assemble + write the report + artifacts. Two additional artifacts
+    # (Amendment 3 item H) ride along on this same call: `full_sample_states`
+    # (already computed above at (d)) and a parquet-safe copy of
+    # `filtered_probs_matrix` (also already computed above at (d)) whose
+    # integer state-id columns are renamed to `state_{k}` strings — parquet
+    # column names must be strings, and this is the ONLY change made to the
+    # matrix (column order and float values are untouched).
     markdown = assemble_backtest_report(
         sojourn_lag=headline,
         strategy_kpis=strategy_kpis,
@@ -658,12 +680,18 @@ def run_full_backtest_evaluation(
         excluded_assets=_excluded,
     )
     kpi_table = _build_kpi_table(strategy_kpis, ablation_kpis, baseline_kpis)
+    full_sample_states_df = full_sample_states.to_frame()
+    filtered_state_probs_df = filtered_probs_matrix.rename(
+        columns={col: f"state_{col}" for col in filtered_probs_matrix.columns}
+    )
     report_path = write_backtest_report(
         markdown,
         {
             "equity_curve_strategy": equity_curve,
             "equity_curve_ablation": ablation_curve,
             "kpi_table": kpi_table,
+            "full_sample_states": full_sample_states_df,
+            "filtered_state_probs": filtered_state_probs_df,
         },
         output_dir=output_dir,
     )

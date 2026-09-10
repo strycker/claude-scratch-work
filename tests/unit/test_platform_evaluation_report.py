@@ -26,6 +26,7 @@ import pytest
 
 from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.evaluation import report
+from trading_crab_lib.platform.evaluation.sojourn_lag import compute_sojourn_lag_headline
 
 
 def _sojourn_lag() -> dict:
@@ -169,6 +170,100 @@ class TestArtifactsWritten:
         nested = tmp_path / "reports" / "platform"
         report_path = report.write_backtest_report("# Report\n", {}, output_dir=nested)
         assert report_path.exists()
+
+
+class TestNewLabelingArtifacts:
+    """Amendment 3 item H — the additive persistence of `full_sample_states`
+    and `filtered_state_probs` at the SAME `write_backtest_report` call site.
+    Exercises `write_backtest_report` directly with a five-key artifacts
+    dict shaped like the new caller-side dict (06-02-PLAN.md Task 1)."""
+
+    def _five_key_artifacts(self):
+        equity_curve = pd.DataFrame(
+            {"return": [0.01, -0.02], "turnover": [0.1, 0.05]},
+            index=pd.date_range("2000-01-31", periods=2, freq="ME"),
+        )
+        ablation_curve = pd.DataFrame(
+            {"return": [0.005, -0.01], "turnover": [0.08, 0.04]},
+            index=pd.date_range("2000-01-31", periods=2, freq="ME"),
+        )
+        kpi_table = pd.DataFrame(
+            [{"leg": "strategy", "terminal_log_wealth": 0.55, "max_drawdown": -0.12}]
+        )
+        states_idx = pd.date_range("1963-01-31", periods=5, freq="ME")
+        states_df = pd.DataFrame({"state": [0, 0, 1, 1, 2]}, index=states_idx)
+
+        probs_idx = pd.date_range("1972-01-31", periods=4, freq="ME")
+        raw = np.array(
+            [
+                [0.7, 0.1, 0.1, 0.05, 0.05],
+                [0.2, 0.6, 0.1, 0.05, 0.05],
+                [0.1, 0.1, 0.7, 0.05, 0.05],
+                [0.05, 0.05, 0.1, 0.7, 0.10],
+            ]
+        )
+        probs_df = pd.DataFrame(
+            raw, index=probs_idx, columns=[f"state_{k}" for k in range(5)]
+        )
+        return {
+            "equity_curve_strategy": equity_curve,
+            "equity_curve_ablation": ablation_curve,
+            "kpi_table": kpi_table,
+            "full_sample_states": states_df,
+            "filtered_state_probs": probs_df,
+        }, states_df, probs_df
+
+    def test_all_five_parquet_files_written_with_backtest_prefix(self, tmp_path):
+        artifacts, _states_df, _probs_df = self._five_key_artifacts()
+        report.write_backtest_report("# report\n", artifacts, output_dir=tmp_path)
+
+        for name in artifacts:
+            assert (tmp_path / f"backtest_{name}.parquet").exists()
+
+    def test_states_frame_round_trips_with_datetime_index_and_int_states(self, tmp_path):
+        artifacts, states_df, _probs_df = self._five_key_artifacts()
+        report.write_backtest_report("# report\n", artifacts, output_dir=tmp_path)
+
+        roundtrip = pd.read_parquet(tmp_path / "backtest_full_sample_states.parquet")
+        assert isinstance(roundtrip.index, pd.DatetimeIndex)
+        assert list(roundtrip.index) == list(states_df.index)
+        assert list(roundtrip["state"].astype(int)) == list(states_df["state"])
+
+    def test_probability_frame_round_trips_with_state_k_columns_summing_to_one(self, tmp_path):
+        artifacts, _states_df, probs_df = self._five_key_artifacts()
+        report.write_backtest_report("# report\n", artifacts, output_dir=tmp_path)
+
+        roundtrip = pd.read_parquet(tmp_path / "backtest_filtered_state_probs.parquet")
+        assert list(roundtrip.columns) == [f"state_{k}" for k in range(5)]
+        assert np.allclose(roundtrip.sum(axis=1).to_numpy(), 1.0, atol=1e-9)
+        assert float(roundtrip.to_numpy().min()) >= 0.0
+        assert float(roundtrip.to_numpy().max()) <= 1.0
+        pd.testing.assert_frame_equal(roundtrip, probs_df, check_dtype=False, check_freq=False)
+
+    def test_round_tripped_pair_feeds_compute_sojourn_lag_headline(self, tmp_path):
+        """The round trip P6 depends on: rename `state_{k}` columns back to
+        integers, then feed the pair to `compute_sojourn_lag_headline`."""
+        artifacts, _states_df, _probs_df = self._five_key_artifacts()
+        report.write_backtest_report("# report\n", artifacts, output_dir=tmp_path)
+
+        states_roundtrip = pd.read_parquet(tmp_path / "backtest_full_sample_states.parquet")
+        probs_roundtrip = pd.read_parquet(tmp_path / "backtest_filtered_state_probs.parquet")
+
+        states_series = states_roundtrip["state"].astype(int)
+        rename_map = {
+            col: int(col.rsplit("_", 1)[-1])
+            for col in probs_roundtrip.columns
+            if isinstance(col, str) and col.startswith("state_")
+        }
+        probs_int_cols = probs_roundtrip.rename(columns=rename_map)
+
+        headline = compute_sojourn_lag_headline(states_series, probs_int_cols, act_threshold=0.70)
+
+        for key in ("median_sojourn", "median_lag", "ratio", "n_transitions", "n_resolved", "act_threshold"):
+            assert key in headline
+        assert isinstance(headline["n_resolved"], int)
+        assert 0 <= headline["n_resolved"] <= headline["n_transitions"]
+        assert np.isnan(headline["ratio"]) or np.isfinite(headline["ratio"])
 
 
 class TestExcludedAssets:
