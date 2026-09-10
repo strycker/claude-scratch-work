@@ -486,3 +486,64 @@ class TestNeverPersistsAnything:
                 called.add(func.attr)
         for banned in ("run_backtest", "run_full_backtest_evaluation"):
             assert banned not in called, banned
+
+
+# ── P5 notebook source discipline (guarded until the notebook lands) ─────────
+
+_P5_NOTEBOOK = Path("notebooks/platform/P5_assets_allocation.ipynb")
+
+
+def _p5_cells():
+    import nbformat
+
+    return nbformat.read(_P5_NOTEBOOK, as_version=4).cells
+
+
+@pytest.mark.skipif(not _P5_NOTEBOOK.exists(), reason="P5 notebook not yet built")
+class TestP5NotebookSource:
+    def test_carries_no_sign_off_cell(self):
+        """D-15: the sign-off cell is P3-exclusive; P5 records no verdict."""
+        combined = "\n".join(cell.source for cell in _p5_cells())
+
+        assert "Sign-Off" not in combined
+        assert "Sign-off" not in combined
+
+    def test_never_invokes_the_full_walk_forward_entrypoints(self):
+        """The weights panel is a cheap smoothed illustration, never the real backtest."""
+        code = "\n".join(c.source for c in _p5_cells() if c.cell_type == "code")
+
+        for banned in ("run_full_backtest_evaluation", "run_backtest("):
+            assert banned not in code, banned
+
+    def test_never_writes_a_checkpoint_or_a_trial(self):
+        code = "\n".join(c.source for c in _p5_cells() if c.cell_type == "code")
+
+        for banned in (".save(", ".save_model(", "append_trial", "report_returns_by_regime"):
+            assert banned not in code, banned
+
+    def test_states_the_weights_panel_is_illustrative(self):
+        """T-06-25: the panel must not be readable as a live allocation instruction."""
+        combined = "\n".join(cell.source for cell in _p5_cells())
+
+        assert "illustrative" in combined
+        assert "not a live weekly recommendation" in combined or "never a trading instruction" in combined
+
+    def test_routes_the_weight_band_check_through_drift(self):
+        code = "\n".join(c.source for c in _p5_cells() if c.cell_type == "code")
+
+        assert "assert_portfolio_weights_plausible" in code
+
+    def test_hardcodes_no_ticker_list(self):
+        """The universe is re-derived from cfg['splice'], never typed out in a cell."""
+        code = "\n".join(c.source for c in _p5_cells() if c.cell_type == "code")
+
+        assert "investable_asset_returns" in code
+        for hardcoded in ('"SPY"', "'SPY'", '"IAU"', "'IAU'"):
+            assert hardcoded not in code, hardcoded
+
+    def test_sweeps_no_allocation_or_labeling_hyperparameter(self):
+        """D-14 extended to L3/L4: the shipped config's values only."""
+        code = "\n".join(c.source for c in _p5_cells() if c.cell_type == "code")
+
+        for banned in ("target_vol_annual=", "ewma_halflife_months=", "halflife=", "n_restarts", "K="):
+            assert banned not in code, banned
