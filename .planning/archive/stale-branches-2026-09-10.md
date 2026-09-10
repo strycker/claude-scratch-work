@@ -1,19 +1,45 @@
-# Deleted remote branches — 2026-09-10
+# Stale remote branches — inventory 2026-09-10
 
-Deleted after PR #145 merged, at the operator's request ("delete origin/develop … and we can
-clean up other unnecessary old branches, too").
+**Status: NOT deleted.** The operator authorised deletion after PR #145 merged, but this
+session's git credentials cannot delete remote branches — `git push origin --delete` returns
+**HTTP 403** for all 51, and the GitHub MCP server exposes `create_branch` but no delete
+equivalent. The inventory below is kept so the cleanup can be done from a machine with push
+rights, and so nothing is lost if it is.
 
-**Every branch below can be recreated** while GitHub retains the objects:
+## To delete them (run locally, with push rights)
+
+```bash
+git fetch origin --prune
+# review first:
+git branch -r | grep -v 'origin/main$' | grep -v HEAD
+# then delete every remote branch except main:
+git branch -r | grep -v 'origin/main$' | grep -v HEAD | sed 's#\s*origin/##' \
+  | xargs -I{} git push origin --delete {}
 ```
+
+GitHub's web UI also offers **Branches → delete**, and its "restore" button works for a while
+after deletion.
+
+## Recovery
+
+Any branch here can be recreated while GitHub retains the objects:
+
+```bash
 git push origin <sha>:refs/heads/<branch-name>
 ```
 
 Neither ancestry (`git branch --merged`) nor patch-id (`git cherry`) could prove these were
-contained in main — which is expected for squash-merged PRs, since a squashed commit has a
-different patch-id than the commits it replaced. Absence of proof is not proof of absence, so
-the SHAs are recorded here rather than relying on that judgement.
+contained in main — expected for squash-merged PRs, whose squashed commit has a different
+patch-id than the commits it replaced. Absence of proof is not proof of absence, so the SHAs
+are recorded rather than relying on that judgement.
 
-`main` at time of deletion: `0c4cab30ddaffe949b3b868dbfc05353233ec45b`
+Only these 5 were provably merged (0 commits ahead of main): `claude/gsd-phase-5-closeout-vy3fk1`,
+`claude/gsd-review-phase-5-vy3fk1`, `claude/gsd-review-phase-5-vy3fk1-status`,
+`claude/gsd-discuss-phase-6-8wne0z`, `claude/phase-6-planning-fymr21`. The rest carry commits
+not in main's history; for the 2026-03/04 branches that is largely divergence from the old
+pre-platform era rather than unique work.
+
+`main` at time of inventory: `0c4cab30ddaffe949b3b868dbfc05353233ec45b`
 
 | branch | sha | last commit | ahead of main |
 |---|---|---|---|
