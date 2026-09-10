@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 7
+current_phase: 6
 current_phase_name: Regime Representation
 status: pending
-stopped_at: Completed 06-01-PLAN.md (platform plotting spine + P1 tracer notebook)
-last_updated: "2026-09-09T21:23:43.239Z"
+stopped_at: Phase 7 context gathered (wave 1 scoped for planning)
+last_updated: "2026-09-10T22:50:17.725Z"
 last_activity: 2026-09-10
 last_activity_desc: Phase 6 closed; roadmap restructured — Phase 7 Regime Representation added, migration to Phase 8
 progress:
-  total_phases: 6
-  completed_phases: 6
+  total_phases: 7
+  completed_phases: 5
   total_plans: 36
-  completed_plans: 29
+  completed_plans: 35
 ---
 
 # Project State
@@ -333,9 +333,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-09T21:23:43.217Z
-Stopped at: Completed 06-01-PLAN.md (platform plotting spine + P1 tracer notebook)
-Resume file: None
+Last session: 2026-09-10T22:50:17.661Z
+Stopped at: Phase 7 context gathered (wave 1 scoped for planning)
+Resume file: .planning/phases/07-regime-representation/07-CONTEXT.md
 
 ### Audit Part II — Phases 2, 3, 4 (2026-09-09)
 
