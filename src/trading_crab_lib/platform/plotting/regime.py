@@ -120,32 +120,52 @@ def plot_regime_timeline(
     dates = pd.DatetimeIndex(clean.index)
     colors = [_regime_color(int(s)) for s in clean.to_numpy()]
 
-    fig, ax = plt.subplots(figsize=(14, 4))
-    ax.vlines(dates, 0.0, 1.0, colors=colors, linewidth=1.4)
+    # Three stacked tracks inside one axes, so nothing is hidden behind the
+    # opaque regime bands and nothing collides with the title: regimes on top,
+    # NBER recessions in the middle, the dated event ranges at the bottom with
+    # their labels staggered across two rows beneath them.
+    regime_band = (0.62, 1.00)
+    recession_band = (0.44, 0.58)
+    event_band = (0.24, 0.38)
+    label_rows = (0.13, 0.02)
+
+    fig, ax = plt.subplots(figsize=(14, 4.6))
+    ax.vlines(dates, regime_band[0], regime_band[1], colors=colors, linewidth=1.4)
 
     if recessions:
         for start, end in recessions:
-            ax.axvspan(start, end, ymin=0.0, ymax=1.0, color="grey", alpha=0.28, zorder=0)
+            ax.axvspan(
+                start,
+                end,
+                ymin=recession_band[0],
+                ymax=recession_band[1],
+                color="grey",
+                alpha=0.85,
+            )
 
     if events:
         for offset, (start, end, label) in enumerate(events):
             start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
-            ax.axvspan(start_ts, end_ts, ymin=1.02, ymax=1.30, color="black", alpha=0.55, clip_on=False)
+            ax.axvspan(start_ts, end_ts, ymin=event_band[0], ymax=event_band[1], color="black", alpha=0.75)
             ax.annotate(
                 label,
-                xy=(start_ts, 1.34 + 0.13 * (offset % 2)),
-                xycoords=("data", "axes fraction"),
+                xy=(start_ts, label_rows[offset % len(label_rows)]),
                 fontsize=7,
-                rotation=0,
                 ha="left",
                 va="bottom",
-                annotation_clip=False,
             )
 
     ax.set_ylim(0.0, 1.0)
-    ax.set_yticks([])
+    ax.set_yticks(
+        [
+            sum(regime_band) / 2,
+            sum(recession_band) / 2,
+            sum(event_band) / 2,
+        ]
+    )
+    ax.set_yticklabels(["regime", "NBER recession", "dated eras"], fontsize=8)
     ax.set_xlabel("month")
-    ax.set_title(title, pad=44)
+    ax.set_title(title)
 
     n_states = int(clean.max()) + 1 if len(clean) else 0
     handles = [
@@ -216,6 +236,7 @@ def plot_occupancy_and_sojourn(
     axes[1].set_xticks(ids)
     axes[1].set_xlabel("state")
     axes[1].set_ylabel("median sojourn (months)")
+    axes[1].margins(y=0.18)  # headroom so the tallest bar's label clears the title
     overall = diagnostics["overall_median_sojourn_months"]
     axes[1].set_title(f"Median sojourn — pooled median {overall:.1f} months")
 
@@ -453,13 +474,17 @@ def plot_active_feature_count(
     fig, ax = plt.subplots(figsize=(14, 4))
     ax.step(pd.DatetimeIndex(counts.index), counts.to_numpy(), where="post", color="#0000d0", linewidth=1.8)
 
+    highest = int(counts.max())
     for stamp in feature_set_change_dates(timeline):
         value = int(counts.loc[stamp])
         ax.axvline(stamp, color="black", linestyle=":", linewidth=1, alpha=0.6)
+        # Annotate below the step when it sits at the top of the range, so the
+        # final (largest) change never collides with the title.
+        offset = (3, -16) if value == highest else (3, 6)
         ax.annotate(
             f"{stamp.date()}\n{value}",
             xy=(stamp, value),
-            xytext=(3, 6),
+            xytext=offset,
             textcoords="offset points",
             fontsize=7,
         )
@@ -559,9 +584,12 @@ def plot_label_comparison(
 
     fig, ax = plt.subplots(figsize=(14, 1.1 * n_tracks + 3.0))
 
+    # Track r occupies [n_tracks - r + 0.2, n_tracks - r + 1.0]; the
+    # disagreement strip gets its own reserved band at [0.10, 0.90] below them,
+    # so the strip never overdraws the bottom labeling's track.
     for row, name in enumerate(names):
         series = cleaned[name]
-        top = n_tracks - row
+        top = n_tracks - row + 1.0
         bottom = top - 0.8
         ax.vlines(
             pd.DatetimeIndex(series.index),
@@ -580,7 +608,7 @@ def plot_label_comparison(
     if not comparable.empty:
         differs = comparable.nunique(axis=1, dropna=True) > 1
         disagreement_dates = comparable.index[differs.to_numpy()]
-        ax.vlines(pd.DatetimeIndex(disagreement_dates), 0.05, 0.75, colors="black", linewidth=1.0)
+        ax.vlines(pd.DatetimeIndex(disagreement_dates), 0.10, 0.90, colors="black", linewidth=1.0)
         n_comparable = int(len(comparable))
         n_differ = int(differs.sum())
         strip_label = f"disagree ({n_differ}/{n_comparable} comparable months)"
@@ -591,8 +619,8 @@ def plot_label_comparison(
         for stamp in change_dates:
             ax.axvline(pd.Timestamp(stamp), color="red", linestyle="--", linewidth=1.0, alpha=0.7)
 
-    ax.set_ylim(0.0, n_tracks + 0.25)
-    ax.set_yticks([n_tracks - row - 0.4 for row in range(n_tracks)] + [0.4])
+    ax.set_ylim(0.0, n_tracks + 1.25)
+    ax.set_yticks([n_tracks - row + 0.6 for row in range(n_tracks)] + [0.5])
     ax.set_yticklabels(names + [strip_label], fontsize=8)
     ax.set_xlabel("month")
     ax.set_title(title)
