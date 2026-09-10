@@ -66,6 +66,14 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Invariants (INV)
 
+- [ ] **REG-01**: One documented feature policy shared by the walk-forward driver and the
+  evaluation reference (resolves audit items A13/A15), with the §5.4 sojourn/lag ratio made
+  interpretable and classifier #1's ablation delta re-measured on both wealth and drawdown;
+  then a **second, independent regime classifier** fit unsupervised on relative/leadership
+  features disjoint from classifier #1's, with orthogonality measured (not assumed) and the
+  joint allocation lift assessed walk-forward against classifier #1 alone — every
+  configuration logged to the trial registry. Scope in
+  `.planning/PROPOSAL-phase-regime-representation.md`
 - [ ] **INV-01**: Named, era-stable invariant candidates (e.g. M2/GDP, market cap/GDP, credit/GDP) constructed and screened using dimensional-reduction techniques as discovery tools; loading stability tested across eras; every candidate logged to the trial registry and assessed walk-forward; survivors admitted as **named** features, never anonymous principal components (preserves design decision R4)
 
 ## v2 Requirements
@@ -153,13 +161,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-03 | Phase 5 | Complete |
 | EVAL-04 | Phase 5 | Complete |
 | NB-01 | Phase 6 | Complete |
-| MIG-01 | Phase 7 | Pending |
-| INV-01 | Phase 8 | Pending |
+| REG-01 | Phase 7 | Pending |
+| INV-01 | Phase 7 | Pending |
+| MIG-01 | Phase 8 | Pending |
 
 **Coverage:**
 
-- v1 requirements: 30 total
-- Mapped to phases: 30
+- v1 requirements: 31 total
+- Mapped to phases: 31
 - Unmapped: 0 ✓
 
 ---
