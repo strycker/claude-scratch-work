@@ -1,11 +1,11 @@
 ---
 phase: 6
 slug: platform-notebook-suite
-status: in_progress
+status: complete
 created: 2026-09-10
 tests_total: 2
-tests_passed: 1
-tests_pending: 1
+tests_passed: 2
+tests_pending: 0
 ---
 
 # Phase 6 — UAT
@@ -46,7 +46,7 @@ This upgrades criterion 1's evidence from *"a committed artifact shows a run hap
 to *"a fresh run today reproduces it."* Note the standing limit: this is a one-off
 manual check, not a standing CI gate — D-17 chose that deliberately.
 
-## UAT-2 — Criterion 2/4: the P3 cold-start sign-off ⏳ AWAITING OPERATOR
+## UAT-2 — Criterion 2/4: the P3 cold-start sign-off ✅ RECORDED — accept-with-caveats
 
 The verdict is inherently human (D-15/D-16); no agent may record it. The cell is blank
 by design. Evidence the operator is judging is reproduced below.
@@ -97,3 +97,27 @@ Pooled median sojourn 97.0 months.
 **To record the verdict:** open `notebooks/platform/P3_regime_labeling.ipynb`, fill the
 final markdown cell's Date / Verdict / Reasoning. Per D-16 a negative verdict is valid
 and does not block the phase.
+
+
+---
+
+## UAT-2 verdict — recorded 2026-09-10
+
+**accept-with-caveats**, recorded by the operator in P3's sign-off cell.
+
+**Accepted:** the crisis-era structure is real, predictable and interpretable.
+
+**Caveat — objective, not quality:** the labeling is optimised for the *negative*
+(drawdowns, crises). The decision the platform must actually serve is "would portfolio A
+outperform portfolio B right now?" — a relative-performance question. The near-baseline
+NBER row and the 100%-GFC purity of state 0 both confirm these are crisis states, not
+business-cycle or leadership states.
+
+**Direction set (does not block Phase 6):** add a *second, independent* regime classifier
+on leadership / relative-strength features, keeping the existing crisis classifier as-is;
+carry both jointly into the downstream optimisers so their interaction can supply lift.
+Explicitly **not** by raising K on the existing classifier. Analysis in
+`.planning/PROPOSAL-dual-regime-classifiers.md`.
+
+**Phase 6 is complete.** Both human-verification items are closed; no gaps, no fix plans
+required.
