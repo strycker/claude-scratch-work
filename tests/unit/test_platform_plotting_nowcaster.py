@@ -86,6 +86,52 @@ def diagnostics(monthly_features: pd.DataFrame, labels: pd.Series) -> dict:
     return pnowcaster.fit_nowcaster_diagnostics(monthly_features, labels, SYNTHETIC_CFG)
 
 
+def _calibration_frame() -> pd.DataFrame:
+    """Two classes x three bins, matching model_metrics.calibration_bins' real schema."""
+    rows = []
+    for class_label in ("0", "1"):
+        for b, (low, high) in enumerate([(0.0, 0.2), (0.2, 0.4), (0.8, 1.0)], start=1):
+            rows.append(
+                {
+                    "class_label": class_label,
+                    "bin": b,
+                    "bin_low": low,
+                    "bin_high": high,
+                    "predicted_prob_mean": (low + high) / 2,
+                    "observed_freq": (low + high) / 2 + (0.05 if class_label == "1" else -0.05),
+                    "n_in_bin": 10 + b,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+_CALIBRATION_COLUMNS = [
+    "class_label",
+    "bin",
+    "bin_low",
+    "bin_high",
+    "predicted_prob_mean",
+    "observed_freq",
+    "n_in_bin",
+]
+_CONFUSION_COLUMNS = ["true_label", "pred_label", "count"]
+
+
+def _confusion_frame() -> pd.DataFrame:
+    """A dense 5x5 tidy confusion frame, matching model_metrics.confusion_tidy's schema."""
+    rng = np.random.default_rng(3)
+    rows = [
+        {
+            "true_label": str(t),
+            "pred_label": str(p),
+            "count": int(40 if t == p else rng.integers(1, 8)),
+        }
+        for t in range(5)
+        for p in range(5)
+    ]
+    return pd.DataFrame(rows)
+
+
 # ── fit_nowcaster_diagnostics ────────────────────────────────────────────────
 
 
@@ -214,6 +260,49 @@ class TestPlotProbaOverTime:
         plt.close(fig)
 
 
+# ── plot_calibration_curve ───────────────────────────────────────────────────
+
+
+class TestPlotCalibrationCurve:
+    def test_does_not_crash(self):
+        fig = pnowcaster.plot_calibration_curve(_calibration_frame())
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_one_line_per_class_plus_the_reference_diagonal(self):
+        fig = pnowcaster.plot_calibration_curve(_calibration_frame())
+        # 2 classes + 1 dashed 45-degree reference line
+        assert len(fig.axes[0].lines) == 3
+        plt.close(fig)
+
+    def test_empty_frame_returns_a_no_data_figure(self):
+        fig = pnowcaster.plot_calibration_curve(pd.DataFrame(columns=_CALIBRATION_COLUMNS))
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+
+# ── plot_confusion_matrix ────────────────────────────────────────────────────
+
+
+class TestPlotConfusionMatrix:
+    def test_does_not_crash(self):
+        fig = pnowcaster.plot_confusion_matrix(_confusion_frame())
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_pivots_to_a_square_matrix_over_every_observed_label(self):
+        fig = pnowcaster.plot_confusion_matrix(_confusion_frame())
+        ax = fig.axes[0]
+        assert [t.get_text() for t in ax.get_xticklabels()] == ["0", "1", "2", "3", "4"]
+        assert [t.get_text() for t in ax.get_yticklabels()] == ["0", "1", "2", "3", "4"]
+        plt.close(fig)
+
+    def test_empty_frame_returns_a_no_data_figure(self):
+        fig = pnowcaster.plot_confusion_matrix(pd.DataFrame(columns=_CONFUSION_COLUMNS))
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+
 # ── D-01 fresh-package boundary + module hygiene ─────────────────────────────
 
 _FORBIDDEN_LEGACY_MODULE = "trading_crab_lib.plotting"
@@ -280,6 +369,10 @@ class TestFreshPackageBoundary:
 
         assert not hasattr(pplot, "fit_nowcaster_diagnostics")
 
+    def test_module_docstring_states_the_a13_relationship(self):
+        assert "A13" in (pnowcaster.__doc__ or "")
+
+
 # ── P4 notebook source discipline (guarded until the notebook lands) ─────────
 
 _P4_NOTEBOOK = Path("notebooks/platform/P4_nowcaster.ipynb")
@@ -309,3 +402,7 @@ class TestP4NotebookSource:
         for banned in ("append_trial", "save_model", "evaluate_nowcaster"):
             assert banned not in code, banned
 
+    def test_states_the_brier_no_skill_comparison(self):
+        combined = "\n".join(cell.source for cell in _p4_cells())
+        for token in ("no_skill", "beats_no_skill", "A13", "transition_accuracy"):
+            assert token in combined, token

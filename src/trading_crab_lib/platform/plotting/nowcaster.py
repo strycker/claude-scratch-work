@@ -270,3 +270,139 @@ def plot_proba_over_time(
     )
     fig.tight_layout()
     return core._save_or_show(fig, save_path=save_path, show=show)
+
+
+# ── The REAL walk-forward's persisted forecast-quality artifacts ─────────────
+# Everything below renders parquet written by
+# platform/evaluation/model_metrics.py during the honest walk-forward. Nothing
+# here recomputes a metric, and nothing here calls run_backtest() or
+# run_full_backtest_evaluation().
+
+
+def _regime_color_for_label(class_label: Any, fallback_index: int) -> str:
+    """Palette color for a ``class_label`` that parquet stores as ``str``."""
+    try:
+        return core._regime_color(int(class_label))
+    except (TypeError, ValueError):
+        return core._regime_color(fallback_index)
+
+
+def plot_calibration_curve(
+    calibration_df: pd.DataFrame,
+    *,
+    title: str = "Calibration (walk-forward, per-class reliability)",
+    save_path: Path | None = None,
+    show: bool = False,
+) -> core.plt.Figure:
+    """Per-class reliability diagram from ``model_metrics_calibration.parquet``.
+
+    One line per distinct ``class_label`` of ``observed_freq`` against
+    ``predicted_prob_mean`` (ordered by ``bin``), over a dashed 45-degree
+    perfect-calibration reference. Marker area scales with ``n_in_bin`` so a
+    bin holding one observation cannot be mistaken for one holding 380.
+
+    Returns:
+        matplotlib Figure — "no data" annotated on an empty frame.
+    """
+    required = {"class_label", "bin", "predicted_prob_mean", "observed_freq"}
+    if calibration_df.empty or not required.issubset(calibration_df.columns):
+        return _no_data_figure(title, save_path=save_path, show=show)
+
+    fig, ax = core.plt.subplots(figsize=(7.5, 7))
+    ax.plot([0, 1], [0, 1], linestyle="--", color="black", linewidth=1.0, alpha=0.6,
+            label="perfectly calibrated")
+
+    for position, (class_label, group) in enumerate(calibration_df.groupby("class_label", sort=True)):
+        ordered = group.sort_values("bin")
+        sizes = (
+            25.0 + 3.0 * np.sqrt(ordered["n_in_bin"].astype(float))
+            if "n_in_bin" in ordered.columns
+            else 40.0
+        )
+        color = _regime_color_for_label(class_label, position)
+        ax.plot(
+            ordered["predicted_prob_mean"],
+            ordered["observed_freq"],
+            marker="o",
+            markersize=4,
+            color=color,
+            linewidth=1.4,
+            label=f"state {class_label}",
+        )
+        ax.scatter(
+            ordered["predicted_prob_mean"],
+            ordered["observed_freq"],
+            s=sizes,
+            color=color,
+            alpha=0.35,
+            edgecolors="none",
+        )
+
+    # A hair beyond [0, 1] so a bin sitting exactly at 0.0 or 1.0 (the real
+    # artifact has both) draws a whole marker instead of a clipped half.
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.04)
+    ax.set_xlabel("mean predicted probability in bin")
+    ax.set_ylabel("observed frequency in bin")
+    ax.set_title(title)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8, loc="upper left", framealpha=0.9)
+    fig.tight_layout()
+    return core._save_or_show(fig, save_path=save_path, show=show)
+
+
+def plot_confusion_matrix(
+    confusion_df: pd.DataFrame,
+    *,
+    title: str = "Confusion (walk-forward argmax predictions)",
+    save_path: Path | None = None,
+    show: bool = False,
+) -> core.plt.Figure:
+    """Annotated heatmap of ``model_metrics_confusion.parquet``'s tidy counts.
+
+    Pivots ``true_label`` x ``pred_label`` -> ``count`` (absent cells are zero,
+    since ``confusion_tidy`` writes only nonzero cells). Cell text is the raw
+    count; the color scale is the count, so an operator reads both the shape
+    and the magnitude.
+
+    Returns:
+        matplotlib Figure — "no data" annotated on an empty frame.
+    """
+    required = {"true_label", "pred_label", "count"}
+    if confusion_df.empty or not required.issubset(confusion_df.columns):
+        return _no_data_figure(title, save_path=save_path, show=show)
+
+    matrix = (
+        confusion_df.pivot(index="true_label", columns="pred_label", values="count")
+        .fillna(0)
+        .sort_index()
+        .sort_index(axis=1)
+    )
+    values = matrix.to_numpy(dtype=float)
+
+    fig, ax = core.plt.subplots(figsize=(7.5, 6.5))
+    image = ax.imshow(values, cmap="Blues", aspect="auto")
+    fig.colorbar(image, ax=ax, label="count")
+
+    threshold = values.max() / 2.0 if values.size else 0.0
+    for i in range(values.shape[0]):
+        for j in range(values.shape[1]):
+            ax.text(
+                j,
+                i,
+                f"{int(values[i, j])}",
+                ha="center",
+                va="center",
+                fontsize=9,
+                color="white" if values[i, j] > threshold else "black",
+            )
+
+    ax.set_xticks(np.arange(values.shape[1]))
+    ax.set_xticklabels([str(c) for c in matrix.columns])
+    ax.set_yticks(np.arange(values.shape[0]))
+    ax.set_yticklabels([str(r) for r in matrix.index])
+    ax.set_xlabel("predicted state")
+    ax.set_ylabel("true state")
+    ax.set_title(title)
+    fig.tight_layout()
+    return core._save_or_show(fig, save_path=save_path, show=show)
