@@ -81,6 +81,25 @@ jobs:
             echo "SKIP: $PKG tag=$TAG prefix=$TAG_PREFIX reason=tag does not match this package's prefix or the both-v prefix"
           fi
 
+      - name: Check PyPI token is present
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          PKG: ${{ matrix.name }}
+          SECRET_NAME: ${{ matrix.secret_name }}
+          TWINE_PASSWORD: ${{ secrets[matrix.secret_name] }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TWINE_PASSWORD:-}" ]; then
+            echo "ERROR: PyPI token for $PKG is missing or empty." >&2
+            echo "Expected secret name: $SECRET_NAME." >&2
+            echo "It must be defined either as a repository secret, or as an environment secret on the 'pypi' environment." >&2
+            echo "Note: GitHub's dynamic secrets[...] lookup resolves an unknown or mistyped secret name to an empty string rather than erroring, so an exact-name typo looks identical to an absent secret. Double-check the name is exactly '$SECRET_NAME'." >&2
+            exit 1
+          fi
+
+          echo "Token present for $PKG (secret: $SECRET_NAME) - value intentionally not shown."
+
       - name: Set up Python
         if: steps.gate.outputs.publish == 'true'
         uses: actions/setup-python@v5
