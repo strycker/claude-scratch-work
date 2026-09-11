@@ -219,6 +219,16 @@ jobs:
       # reason. The only evidence that an artifact is usable is installing it and
       # importing it -- from a directory with no repo checkout on sys.path, so a local
       # copy cannot stand in for the missing one.
+      #
+      # --no-deps is REQUIRED, not an optimization. The two matrix legs run in
+      # PARALLEL with no ordering between them. On a both-v tag the app's wheel
+      # declares `trading-crab-lib>=<this version>`, which does not exist on PyPI
+      # until the lib leg's publish step completes -- so resolving dependencies here
+      # made the app leg fail on a version its sibling was about to upload seconds
+      # later. That is exactly what happened on both-v0.1.5: the app smoke test ran at
+      # 18:36:08 and the lib published at 18:36:20, leaving the release half-shipped.
+      # This gate exists to prove the wheel CONTAINS ITS OWN CODE. Dependency
+      # resolution is a different question and must not be entangled with it.
       - name: Smoke-test the built wheel (install and import)
         if: steps.gate.outputs.publish == 'true'
         env:
@@ -238,7 +248,7 @@ jobs:
           SMOKE_DIR=$(mktemp -d)
           python -m venv "$SMOKE_DIR/venv"
           "$SMOKE_DIR/venv/bin/python" -m pip install --quiet --upgrade pip
-          "$SMOKE_DIR/venv/bin/python" -m pip install --quiet "${WHEELS[0]}"
+          "$SMOKE_DIR/venv/bin/python" -m pip install --quiet --no-deps "${WHEELS[0]}"
 
           # cd off the checkout: importing from the repo would succeed even if the
           # wheel were empty, which is the exact failure this gate exists to catch.

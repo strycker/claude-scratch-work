@@ -250,3 +250,47 @@ unzip -l /tmp/w/*.whl | grep '\.py$' | head
 python -m venv /tmp/v && /tmp/v/bin/pip install /tmp/w/*.whl
 cd /tmp && /tmp/v/bin/python -c "import trading_crab_lib; print(trading_crab_lib.__file__)"
 ```
+
+## 10. The two matrix legs run in parallel — never couple them
+
+The `publish` job is a matrix with two legs (app and library) that run
+**simultaneously with no ordering guarantee**. Anything in one leg that depends on
+the other leg having already finished is a race.
+
+This bit the `both-v0.1.5` release. The smoke test originally ran a plain
+`pip install <wheel>`, which resolves dependencies from PyPI. The app's wheel
+declares `trading-crab-lib>=0.1.5`, and at the moment the app leg ran its smoke
+test that version did not exist on PyPI yet — the lib leg published it **six
+seconds later**:
+
+| 18:36:08–18:36:14 | app smoke test runs, fails to resolve `trading-crab-lib>=0.1.5` |
+| 18:36:20–18:36:23 | lib leg publishes `trading-crab-lib` 0.1.5 |
+
+The app's publish step was skipped, leaving a **half-shipped release**: the library
+at 0.1.5 and the app stuck at 0.1.4.
+
+The fix is `pip install --no-deps` in the smoke test. That gate exists to prove a
+wheel **contains its own code** (§9); dependency resolution is a separate question
+and must not be entangled with it. Ordering the legs would not be a real fix either
+— PyPI index propagation is not instantaneous, so a sibling's upload completing is
+still no guarantee the next `pip install` can see it.
+
+**Rule: no step in one matrix leg may depend on state produced by the other leg.**
+If you ever need cross-leg ordering, restructure into separate jobs with an explicit
+`needs:`, and even then do not assume PyPI visibility is immediate.
+
+### Recovering a half-shipped release
+
+Because the per-package tag prefixes are independent, a half-shipped release is
+recoverable without burning a version — publish only the missing half:
+
+```bash
+# library already at 0.1.5, app still at 0.1.4:
+git tag -a v0.1.5 -m "Release app 0.1.5"   # `v` prefix = app only
+git push origin v0.1.5
+```
+
+Do NOT re-tag `both-v0.1.5`: the lib half would be rejected as already-published
+(harmless, `--skip-existing` absorbs it), but reaching for a fresh version number
+when the failed half is still unpublished burns a version for no reason.
+
