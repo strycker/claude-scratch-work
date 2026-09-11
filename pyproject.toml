@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trading-crab"
-version = "0.1.2"
+version = "0.1.4"
 description = "Market regime classification pipeline — CLI and pipeline orchestration"
 readme = "README.md"
 license = {text = "MIT"}
@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "trading-crab-lib>=0.1.2",   # the library this app wraps
+    "trading-crab-lib>=0.1.4",   # the library this app wraps
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
 ]
@@ -109,7 +109,7 @@ trading-crab-lib = { workspace = true }
 # overrides — in particular, the path dependency for trading-crab-lib so that
 # `poetry install` installs the library from source instead of PyPI.
 #
-# pip / uv use [project.dependencies] (trading-crab-lib>=0.1.2).
+# pip / uv use [project.dependencies] (trading-crab-lib>=0.1.4).
 # Poetry uses [tool.poetry.dependencies] (path dep below).
 #
 # To set up locally with Poetry:
