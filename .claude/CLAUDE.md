@@ -81,7 +81,7 @@ overhead; it is the product. A beautiful but leaky backtest is worthless.
 
 ## Key Dependencies
 
-- trading-crab-lib >= 0.1.4 - Library package (for app); installed via path in `src/trading_crab_lib/`
+- trading-crab-lib >= 0.1.5 - Library package (for app); installed via path in `src/trading_crab_lib/`
 - pandas >= 2.0 - DataFrames, time-series operations
 - numpy >= 1.25 - Numerical computing
 - scikit-learn >= 1.4 - ML algorithms (KMeans, RF, PCA, StandardScaler)
