@@ -13,6 +13,12 @@ dist/
 build/
 .eggs/
 
+# Stray duplicate created by `python -m build src/trading_crab_lib` (setuptools
+# packages.find with where=[".."] re-discovers the package one level down when
+# built from inside its own subdirectory). Never commit — a second copy of the
+# library nested inside itself breaks package discovery. Delete after building.
+src/trading_crab_lib/trading_crab_lib/
+
 # Jupyter
 .ipynb_checkpoints/
 
