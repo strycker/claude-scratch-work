@@ -5,6 +5,11 @@
 #   v0.1.3      → publishes trading-crab (app) only
 #   both-v0.1.3 → publishes both in one run (useful when versions are in sync)
 #
+# Every artifact is validated with `twine check --strict` before upload. A
+# package missing README/long_description metadata now fails the job here
+# instead of silently rendering a blank PyPI project page after a real,
+# irreversible publish.
+#
 # Requires two repository secrets:
 #   PYPI_LIB_TOKEN  — API token scoped to trading-crab-lib
 #   PYPI_APP_TOKEN  — API token scoped to trading-crab
@@ -171,6 +176,14 @@ jobs:
           done
 
           echo "All artifacts match expected version $TAG_VERSION"
+
+      - name: Check package metadata with twine
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          BUILD_DIR: ${{ matrix.build_dir }}
+        run: |
+          set -euo pipefail
+          twine check --strict "$BUILD_DIR"/dist/*
 
       - name: Publish ${{ matrix.name }} to PyPI
         if: steps.gate.outputs.publish == 'true'
