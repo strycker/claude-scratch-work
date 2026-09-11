@@ -10,9 +10,19 @@
 # instead of silently rendering a blank PyPI project page after a real,
 # irreversible publish.
 #
-# Requires two repository secrets:
-#   PYPI_LIB_TOKEN  — API token scoped to trading-crab-lib
-#   PYPI_APP_TOKEN  — API token scoped to trading-crab
+# workflow_dispatch runs carry a `target` input (default "testpypi", the
+# safe rehearsal choice) that lets an operator upload to TestPyPI instead
+# of production without changing anything else about the run. A tag push
+# always targets production PyPI regardless of this input, because a tag
+# push has no `target` input to read at all — see docs/RELEASING.md for
+# the full walkthrough.
+#
+# Requires three repository secrets:
+#   PYPI_LIB_TOKEN      — API token scoped to trading-crab-lib
+#   PYPI_APP_TOKEN      — API token scoped to trading-crab
+#   TEST_PYPI_API_TOKEN — TestPyPI token shared by both packages for
+#                          workflow_dispatch dry runs (not used for
+#                          tag-triggered publishes)
 
 name: Publish to PyPI
 
@@ -30,6 +40,12 @@ on:
         default: "both"
         type: choice
         options: ["lib", "app", "both"]
+      target:
+        description: "Upload target: 'testpypi' is a safe rehearsal upload; 'pypi' is a real publish"
+        required: true
+        default: "testpypi"
+        type: choice
+        options: ["testpypi", "pypi"]
 
 permissions:
   contents: read
@@ -64,7 +80,16 @@ jobs:
           TAG_PREFIX: ${{ matrix.tag_prefix }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_PKG: ${{ github.event.inputs.package }}
+          INPUT_TARGET: ${{ github.event.inputs.target }}
         run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            TARGET="$INPUT_TARGET"
+          else
+            TARGET="pypi"
+          fi
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "TARGET: $PKG will publish to '$TARGET' (event=$EVENT_NAME)"
+
           TAG="${GITHUB_REF#refs/tags/}"
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
@@ -90,20 +115,21 @@ jobs:
         if: steps.gate.outputs.publish == 'true'
         env:
           PKG: ${{ matrix.name }}
-          SECRET_NAME: ${{ matrix.secret_name }}
-          TWINE_PASSWORD: ${{ secrets[matrix.secret_name] }}
+          TARGET: ${{ steps.gate.outputs.target }}
+          SECRET_NAME: ${{ steps.gate.outputs.target == 'testpypi' && 'TEST_PYPI_API_TOKEN' || matrix.secret_name }}
+          TWINE_PASSWORD: ${{ secrets[ steps.gate.outputs.target == 'testpypi' && 'TEST_PYPI_API_TOKEN' || matrix.secret_name ] }}
         run: |
           set -euo pipefail
 
           if [ -z "${TWINE_PASSWORD:-}" ]; then
-            echo "ERROR: PyPI token for $PKG is missing or empty." >&2
+            echo "ERROR: PyPI token for $PKG (target: $TARGET) is missing or empty." >&2
             echo "Expected secret name: $SECRET_NAME." >&2
             echo "It must be defined either as a repository secret, or as an environment secret on the 'pypi' environment." >&2
             echo "Note: GitHub's dynamic secrets[...] lookup resolves an unknown or mistyped secret name to an empty string rather than erroring, so an exact-name typo looks identical to an absent secret. Double-check the name is exactly '$SECRET_NAME'." >&2
             exit 1
           fi
 
-          echo "Token present for $PKG (secret: $SECRET_NAME) - value intentionally not shown."
+          echo "Token present for $PKG (target: $TARGET) (secret: $SECRET_NAME) - value intentionally not shown."
 
       - name: Set up Python
         if: steps.gate.outputs.publish == 'true'
@@ -189,7 +215,8 @@ jobs:
         if: steps.gate.outputs.publish == 'true'
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets[matrix.secret_name] }}
+          TWINE_PASSWORD: ${{ secrets[ steps.gate.outputs.target == 'testpypi' && 'TEST_PYPI_API_TOKEN' || matrix.secret_name ] }}
+          TWINE_REPOSITORY_URL: ${{ steps.gate.outputs.target == 'testpypi' && 'https://test.pypi.org/legacy/' || '' }}
         run: |
           DIST_DIR="${{ matrix.build_dir }}/dist"
           twine upload --skip-existing "$DIST_DIR"/*
