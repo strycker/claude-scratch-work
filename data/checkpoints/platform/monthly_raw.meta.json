@@ -1,16 +1,17 @@
 {
   "name": "monthly_raw",
-  "created": "2026-09-11T12:06:32.414254",
+  "created": "2026-09-11T12:50:32.304692",
   "config_hash": "6c209fad",
   "rows": 776,
   "columns": 45,
   "col_names": [
+    "fred_aaa",
     "fred_baa",
-    "fred_gs10",
-    "fred_tb3ms",
-    "fred_t10y3m",
     "wti_fred",
+    "fred_tb3ms",
+    "fred_gs10",
     "fred_vix",
+    "fred_t10y3m",
     "fred_t10y2y",
     "sp500",
     "div_yield",
@@ -45,26 +46,24 @@
     "oil",
     "cash",
     "fred_unrate",
-    "fred_gdp",
     "fred_cpi",
+    "fred_gdp",
     "fred_payems",
-    "fred_indpro",
-    "fred_aaa"
+    "fred_indpro"
   ],
   "index_start": "1962-01-31 00:00:00",
   "index_end": "2026-08-31 00:00:00",
   "merge": {
-    "cols_kept_from_disk": [
-      "fred_aaa"
-    ],
+    "cols_kept_from_disk": [],
     "cols_added": [],
     "cols_updated": [
+      "fred_aaa",
       "fred_baa",
-      "fred_gs10",
-      "fred_tb3ms",
-      "fred_t10y3m",
       "wti_fred",
+      "fred_tb3ms",
+      "fred_gs10",
       "fred_vix",
+      "fred_t10y3m",
       "fred_t10y2y",
       "sp500",
       "div_yield",
@@ -99,14 +98,14 @@
       "oil",
       "cash",
       "fred_unrate",
-      "fred_gdp",
       "fred_cpi",
+      "fred_gdp",
       "fred_payems",
       "fred_indpro"
     ],
     "rows_kept_from_disk": 0,
     "rows_added": 0,
-    "cells_filled_from_disk": 1053,
+    "cells_filled_from_disk": 277,
     "pre_merge_shape": {
       "rows": 776,
       "columns": 45

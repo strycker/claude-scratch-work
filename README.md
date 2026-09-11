@@ -2,10 +2,26 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-1705%20passing-brightgreen)
-![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 
-Market regime classification and prediction pipeline. Predict market conditions, best portfolios, and stock picks.
+Market regime classification and prediction pipeline.
+
+<br>
+
+Predict market conditions, best portfolios, and stock picks.
+
+<br>
+
+Classifies each calendar quarter with a macro regime (e.g. Stagflation, Growth Boom), then predicts today's regime and forward transition probabilities to generate weekly portfolio recommendations.
+
+<br>
+
+![Glenn with crab 2025](https://raw.githubusercontent.com/strycker/claude-scratch-work/refs/heads/main/images/glenn_with_crab_2025_300x400.png)
+
+<br>
+
+___
+
+<br>
 
 ## Overview
 
