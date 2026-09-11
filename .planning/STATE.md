@@ -6,7 +6,7 @@ current_phase: 6
 current_phase_name: Regime Representation
 status: pending
 stopped_at: Phase 7 context gathered (wave 1 scoped for planning)
-last_updated: "2026-09-10T23:15:16.297Z"
+last_updated: "2026-09-11T14:57:21.524Z"
 last_activity: 2026-09-10
 last_activity_desc: Phase 6 closed; roadmap restructured — Phase 7 Regime Representation added, migration to Phase 8
 progress:
@@ -323,6 +323,7 @@ Recent decisions affecting current work:
 | 260908-rh4 | fix percent-vs-decimal yield units at the splice boundary (long_duration_tr compounded to 2.3e128; cash booked yield CHANGES as returns), add an asymmetric units guard, correct three test defects incl. an integration test whose 24/24 steps all degraded | 2026-09-08 | 75dedc7 | [260908-rh4-fix-percent-vs-decimal-yield-units-at-th](./quick/260908-rh4-fix-percent-vs-decimal-yield-units-at-th/) |
 | 260908-fnc | close the holdout fence at rest: carve at build, assert at build, add load_full_span() looking opt-in, repoint live weekly scoring | 2026-09-08 | 7f99548 | (in this STATE entry) |
 | 260910-vyi | fix PyPI publish: corrected doubled dist path (dist/dist), added loud PUBLISH/SKIP gate logging so a skipped matrix leg is no longer indistinguishable from a publish, added a Verify built artifacts guard that fails on empty dist or tag/artifact version mismatch; bumped both packages 0.1.2 -> 0.1.4 (0.1.3 burned on PyPI) | 2026-09-10 | 9d0153c + 0c6fb8d | [260910-vyi-fix-pypi-publish-workflow-dist-path-and-](./quick/260910-vyi-fix-pypi-publish-workflow-dist-path-and-/) |
+| 260911-kkj | add a PyPI token-presence guard: fails the job before any build/upload when the leg's API token secret is absent or empty, naming the exact secret and noting that a dynamic secrets[...] lookup yields an empty string on a name mismatch rather than erroring | 2026-09-11 | 118bd06 | [260911-kkj-add-a-token-presence-guard-to-the-pypi-p](./quick/260911-kkj-add-a-token-presence-guard-to-the-pypi-p/) |
 
 ## Deferred Items
 
