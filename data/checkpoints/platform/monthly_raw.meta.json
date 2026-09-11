@@ -1,14 +1,14 @@
 {
   "name": "monthly_raw",
-  "created": "2026-09-10T14:13:33.362070",
+  "created": "2026-09-11T12:50:32.304692",
   "config_hash": "6c209fad",
   "rows": 776,
   "columns": 45,
   "col_names": [
+    "fred_aaa",
     "fred_baa",
     "wti_fred",
     "fred_tb3ms",
-    "fred_aaa",
     "fred_gs10",
     "fred_vix",
     "fred_t10y3m",
@@ -45,8 +45,8 @@
     "gold",
     "oil",
     "cash",
-    "fred_cpi",
     "fred_unrate",
+    "fred_cpi",
     "fred_gdp",
     "fred_payems",
     "fred_indpro"
@@ -57,10 +57,10 @@
     "cols_kept_from_disk": [],
     "cols_added": [],
     "cols_updated": [
+      "fred_aaa",
       "fred_baa",
       "wti_fred",
       "fred_tb3ms",
-      "fred_aaa",
       "fred_gs10",
       "fred_vix",
       "fred_t10y3m",
@@ -97,8 +97,8 @@
       "gold",
       "oil",
       "cash",
-      "fred_cpi",
       "fred_unrate",
+      "fred_cpi",
       "fred_gdp",
       "fred_payems",
       "fred_indpro"

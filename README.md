@@ -7,7 +7,25 @@
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
 
-Market regime classification and prediction pipeline. Predict market conditions, best portfolios, and stock picks.
+Market regime classification and prediction pipeline.
+
+<br>
+
+Predict market conditions, best portfolios, and stock picks.
+
+<br>
+
+Classifies each calendar quarter with a macro regime (e.g. Stagflation, Growth Boom), then predicts today's regime and forward transition probabilities to generate weekly portfolio recommendations.
+
+<br>
+
+![Glenn with crab 2025](https://raw.githubusercontent.com/strycker/claude-scratch-work/refs/heads/main/images/glenn_with_crab_2025_300x400.png)
+
+<br>
+
+___
+
+<br>
 
 ## Overview
 
