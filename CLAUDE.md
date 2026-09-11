@@ -263,7 +263,7 @@ This monorepo ships **two independent PyPI packages**:
 | `src/trading_crab_lib/` | `trading-crab-lib` | All library code: transforms, clustering, prediction, reporting, plotting, ingestion | Other Python projects, notebooks, tests |
 | `src/trading_crab/` | `trading-crab` | CLI entry points + pipeline orchestration | End users running the pipeline |
 
-`trading-crab` depends on `trading-crab-lib>=0.1.4`. The library has no dependency on the app.
+`trading-crab` depends on `trading-crab-lib>=0.1.5`. The library has no dependency on the app.
 
 **Optional extras** (library): `[ingestion]`, `[plotting]`, `[hmm]`, `[clustering-extras]`, `[boosting]`, `[all]`, `[dev]`.
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 
 def _resolve_dir(env_var: str, default: Path) -> Path:

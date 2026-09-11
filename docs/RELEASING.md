@@ -57,11 +57,13 @@ A version number once uploaded to PyPI (or TestPyPI) can **never be
 re-uploaded**, even after deleting the release from the PyPI web UI. PyPI
 retains the version number as burned forever, for that project.
 
-This project has already burned one real version this way: **0.1.3 is
-permanently unusable on PyPI for either package.** The current version is
-0.1.4. Do not attempt to reuse 0.1.3, and treat every future version bump
-as one-shot: verify the build and metadata (see §8) before you tag, not
-after.
+This project has already burned **two** real versions this way: **0.1.3 and
+0.1.4 are permanently unusable on PyPI for either package.** 0.1.3 was burned
+by a failed publish attempt; 0.1.4 was published successfully but shipped a
+`trading-crab-lib` wheel containing zero Python modules (see §9), which cannot
+be corrected in place. The current version is 0.1.5. Treat every version bump
+as one-shot: verify the build, the metadata, AND the installed artifact
+(see §8, §9) before you tag, not after.
 
 ## 4. Validating a token without publishing
 
@@ -204,3 +206,47 @@ description. That defect is now fixed (the library ships a real README,
 wired via `readme = "README.md"` in its `pyproject.toml`), and this gate
 exists so the same class of defect fails CI instead of shipping silently
 again.
+
+## 9. A green pipeline can still ship an empty package
+
+**Releases 0.1.0 through 0.1.4 of `trading-crab-lib` shipped ZERO Python
+modules.** The wheel was 4,836 bytes: four metadata files and nothing else.
+`pip install trading-crab-lib==0.1.4` succeeded, then `import trading_crab_lib`
+raised `ModuleNotFoundError`.
+
+Every gate in the pipeline passed, because none of them look at what is
+actually inside the artifact:
+
+| Gate | What it inspects | Catches an empty wheel? |
+|---|---|---|
+| `python -m build` exit code | that the build ran | no |
+| `twine check --strict` | metadata (name, version, description) | no |
+| version-vs-tag guard | the *filename* | no |
+| `build-pkg` job in `python-package.yml` | that the build ran | no |
+
+An empty wheel has flawless metadata and a flawless filename. The only
+evidence that an artifact is usable is **installing it and importing it**.
+That is what the `Smoke-test the built wheel` step does, and it deliberately
+`cd`s off the checkout first — importing from inside the repo would succeed
+even if the wheel were empty, which is precisely the failure being tested for.
+
+**Root cause, for future reference.** `src/trading_crab_lib/` is both the
+project root (where its `pyproject.toml` lives) and the package's own content
+directory. The old config tried to paper over that with
+`[tool.setuptools.packages.find] where = [".."]`, re-discovering the package
+one level up. Modern setuptools refuses to let `where` escape the project root,
+so it silently returned an empty package list and the build exited 0. The fix
+is an explicit `package-dir = {"trading_crab_lib" = "."}` plus an enumerated
+`packages` list. **Do not reintroduce a discovery glob there.**
+
+### Inspecting a built wheel by hand
+
+```bash
+python -m build --wheel --outdir /tmp/w src/trading_crab_lib
+unzip -l /tmp/w/*.whl | tail -3          # file count — 4 means it is empty
+unzip -l /tmp/w/*.whl | grep '\.py$' | head
+
+# the real check: install it somewhere with no repo on sys.path
+python -m venv /tmp/v && /tmp/v/bin/pip install /tmp/w/*.whl
+cd /tmp && /tmp/v/bin/python -c "import trading_crab_lib; print(trading_crab_lib.__file__)"
+```

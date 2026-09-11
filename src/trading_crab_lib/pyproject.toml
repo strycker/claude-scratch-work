@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trading-crab-lib"
-version = "0.1.4"
+version = "0.1.5"
 description = "Market regime classification library — transforms, clustering, prediction, reporting"
 readme = "README.md"
 license = {text = "MIT"}
@@ -93,10 +93,41 @@ dev = [
     "ruff>=0.4",
 ]
 
-# pyproject.toml is at src/trading_crab_lib/ — look one level up (src/) for packages
-[tool.setuptools.packages.find]
-where   = [".."]
-include = ["trading_crab_lib*"]
+# This pyproject.toml lives INSIDE the package: src/trading_crab_lib/ is simultaneously
+# the project root AND the package's own content directory (a flat layout). There is
+# therefore nothing for `packages.find` to discover from here.
+#
+# DO NOT reintroduce a discovery glob. The previous config used
+#     [tool.setuptools.packages.find] where = [".."]
+# to re-discover the package one level up. Modern setuptools refuses to let `where`
+# escape the project root, so it silently returned an EMPTY package list and the build
+# exited 0 — shipping metadata-only wheels containing zero Python modules to PyPI for
+# every release 0.1.0 through 0.1.4. Neither `twine check` (validates metadata) nor
+# `python -m build` succeeding can detect that; only installing the wheel and importing
+# it can. See docs/RELEASING.md.
+#
+# Map the package name to "." explicitly and enumerate subpackages.
+[tool.setuptools]
+package-dir = {"trading_crab_lib" = "."}
+packages = [
+    "trading_crab_lib",
+    "trading_crab_lib.ingestion",
+    "trading_crab_lib.monitoring",
+    "trading_crab_lib.platform",
+    "trading_crab_lib.platform.allocation",
+    "trading_crab_lib.platform.assets",
+    "trading_crab_lib.platform.backtest",
+    "trading_crab_lib.platform.evaluation",
+    "trading_crab_lib.platform.honesty",
+    "trading_crab_lib.platform.ingestion",
+    "trading_crab_lib.platform.labeling",
+    "trading_crab_lib.platform.plotting",
+    "trading_crab_lib.platform.prediction",
+    "trading_crab_lib.platform.report",
+    "trading_crab_lib.platform.tripwire",
+    "trading_crab_lib.plotting",
+    "trading_crab_lib.prediction",
+]
 
 [tool.setuptools.package-data]
 trading_crab_lib = ["py.typed"]

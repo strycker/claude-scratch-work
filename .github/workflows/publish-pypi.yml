@@ -61,10 +61,12 @@ jobs:
         include:
           - name: trading-crab-lib
             build_dir: src/trading_crab_lib
+            import_name: trading_crab_lib
             secret_name: PYPI_LIB_TOKEN
             tag_prefix: lib-v
           - name: trading-crab
             build_dir: .
+            import_name: trading_crab
             secret_name: PYPI_APP_TOKEN
             tag_prefix: v
 
@@ -210,6 +212,47 @@ jobs:
         run: |
           set -euo pipefail
           twine check --strict "$BUILD_DIR"/dist/*
+
+      # A metadata-only wheel passes `twine check` and has a flawless filename, so
+      # neither the metadata gate nor the version guard can see it. Releases 0.1.0
+      # through 0.1.4 of trading-crab-lib shipped ZERO Python modules for exactly this
+      # reason. The only evidence that an artifact is usable is installing it and
+      # importing it -- from a directory with no repo checkout on sys.path, so a local
+      # copy cannot stand in for the missing one.
+      - name: Smoke-test the built wheel (install and import)
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          PKG: ${{ matrix.name }}
+          BUILD_DIR: ${{ matrix.build_dir }}
+          IMPORT_NAME: ${{ matrix.import_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          WHEELS=("$BUILD_DIR"/dist/*.whl)
+          if [ ${#WHEELS[@]} -ne 1 ]; then
+            echo "ERROR: expected exactly 1 wheel in $BUILD_DIR/dist, found ${#WHEELS[@]}" >&2
+            exit 1
+          fi
+
+          SMOKE_DIR=$(mktemp -d)
+          python -m venv "$SMOKE_DIR/venv"
+          "$SMOKE_DIR/venv/bin/python" -m pip install --quiet --upgrade pip
+          "$SMOKE_DIR/venv/bin/python" -m pip install --quiet "${WHEELS[0]}"
+
+          # cd off the checkout: importing from the repo would succeed even if the
+          # wheel were empty, which is the exact failure this gate exists to catch.
+          cd "$SMOKE_DIR"
+          "$SMOKE_DIR/venv/bin/python" -c "
+          import importlib, sys
+          m = importlib.import_module('$IMPORT_NAME')
+          p = getattr(m, '__file__', '') or ''
+          if 'site-packages' not in p:
+              print('ERROR: imported %s from %s, not site-packages' % ('$IMPORT_NAME', p), file=sys.stderr)
+              raise SystemExit(1)
+          print('OK: imported %s %s from %s' % ('$IMPORT_NAME', getattr(m, '__version__', '?'), p))
+          "
+          rm -rf "$SMOKE_DIR"
 
       - name: Publish ${{ matrix.name }} to PyPI
         if: steps.gate.outputs.publish == 'true'
