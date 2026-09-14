@@ -341,10 +341,23 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
   8. `platform/` still imports nothing from the legacy library — the import-guard test is
      extended to the new modules. (Verified 2026-09-10: platform is currently fully
      decoupled, so the relative-strength algorithms must be **ported**, not imported.)
-**Plans**: TBD
+
+**Plans**: 4 plans (**wave 1 only** — criteria 1-4 + the ADR; criteria 5-7 are wave 2 and get a
+second planning pass per `07-CONTEXT.md` D-09)
+
+Plans:
+- [ ] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test (wave 1)
+- [ ] 07-02-PLAN.md — Recompute `monthly_features` from cached `monthly_raw` (D-02-A, ten-column frozen set) and re-pin the A13 golden constant exactly (wave 2)
+- [ ] 07-03-PLAN.md — Re-measure criteria 2/3/4 on real data against bands that name the values they reject, plus the D-03 logged rejection trial (wave 3)
+- [ ] 07-04-PLAN.md — D-05 three-state pre/post table, D-08 A13 caveat resolution, and the policy ADR (wave 4)
 
 **Explicit non-goals**: no fitting to forward returns; no raising K on classifier #1; no
 2021+ holdout use for any selection decision; no migration work.
+
+**Requirement coverage this pass**: REG-01 **partial** — the driver/reference feature policy,
+§5.4 interpretability, and the ablation re-measurement clauses. The second-classifier,
+orthogonality and joint-lift clauses are wave 2. **INV-01 is entirely deferred to wave 2** by
+`07-CONTEXT.md` D-09; the deferral is recorded as a decision in the phase ADR.
 
 **Absorbs INV-01** (formerly Phase 8): named invariant candidates (M2/GDP, market-cap/GDP,
 credit/GDP) are wave 2's feature-discovery work, and INV-01's constraint that survivors be
