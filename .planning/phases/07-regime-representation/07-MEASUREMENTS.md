@@ -20,7 +20,8 @@ Every affected number below carries **three** columns, per D-05/D-02-A:
 - **pre-fix (9-col, stale)** — sourced from `.planning/BASELINE-v1-tracer-bullet.md`'s
   "current reference run" table and `07-PREFIX-EVIDENCE.md`. Produced under BOTH the
   pre-D-01 EXPANDING driver policy AND the stale 9-column `monthly_features` checkpoint
-  (`oil` truncated to 1985-02). **Compound baseline — see §5.**
+  (`oil` truncated to 1985-02). **Compound baseline — see §6.** (Also see §5 for a distinct,
+  additional limitation: the frozen-vs-pre-fix comparison windows differ in size and end date.)
 - **post-fix, frozen (10-col)** — this plan's Variant A, `trial_tag=P7-W1-frozen-10col`,
   the published run under `outputs/reports/platform/*`.
 - **post-fix, impute (13-col, REJECTED)** — this plan's Variant B (D-03), `trial_tag=
@@ -29,13 +30,20 @@ Every affected number below carries **three** columns, per D-05/D-02-A:
 
 ## 2. Main pre/post table (D-05)
 
-| Quantity | Pre-fix (9-col, stale) | Post-fix, frozen (10-col) | Universal bound | Domain band | Verdict |
-|---|---|---|---|---|---|
-| `pct_disagree` (with `n_compared`) | 0.8276595744680851 (389/470) | **0.8089887640449438** (288/356) | `x ∈ [0, 1]` — passed | `< 0.02` suspicious **[ASSUMED]** | in-band; not suspicious (`suspicious=False`) |
-| `median_sojourn` (months) | 97.0 | **83.0** | `∈ [0, 588]` — passed | none (no target, D-04) | in-band |
-| `median_lag` (months) | 164.0 | **138.0** | `∈ [0, 588]` — passed | none | in-band |
-| §5.4 ratio | 0.591 | **0.6014492753623188** | `> 0` — passed | no numeric target (D-04) | in-band |
-| `n_resolved` of `n_transitions` | 4 of 6 | **7 of 7** | `n_resolved ≤ n_transitions` — passed | `n_transitions > 30` implausible **[ASSUMED]** | in-band (7 ≤ 30) |
+**⚠ Read `pct_disagree` and the §5.4 ratio rows below together with their sample windows,
+not as bare percentages.** `n_compared` differs (470 vs. 356) AND the comparison windows have
+different end dates (2020-12 vs. 2017-05) — see the "sample window" column added below and §5
+for the full mechanism. **82.77% → 80.90% is NOT a clean 1.9-point improvement measured over the
+same population; it is two different-sized, different-dated samples that happen to both be
+high.** The same caveat applies to the ratio's `n_resolved`/`n_transitions` denominator.
+
+| Quantity | Pre-fix (9-col, stale) | Post-fix, frozen (10-col) | Sample window (pre-fix vs. post-fix) | Universal bound | Domain band | Verdict |
+|---|---|---|---|---|---|---|
+| `pct_disagree` (with `n_compared`) | 0.8276595744680851 (389/470) | **0.8089887640449438** (288/356) | 470 months, 1974-02→2020-12 **vs. 356 months, 1974-02→2017-05** — **different populations, not directly comparable as a delta** (§5) | `x ∈ [0, 1]` — passed | `< 0.02` suspicious **[ASSUMED]** | in-band; not suspicious (`suspicious=False`); **window-narrowing limitation applies — see callout above and §5** |
+| `median_sojourn` (months) | 97.0 | **83.0** | same window caveat as above (both derived from the same walk-forward run) | `∈ [0, 588]` — passed | none (no target, D-04) | in-band |
+| `median_lag` (months) | 164.0 | **138.0** | same window caveat as above | `∈ [0, 588]` — passed | none | in-band |
+| §5.4 ratio | 0.591 | **0.6014492753623188** | resolved-transition window narrower for frozen (see `n_resolved`/`n_transitions` row) | `> 0` — passed | no numeric target (D-04) | in-band; **window-narrowing limitation applies** |
+| `n_resolved` of `n_transitions` | 4 of 6 | **7 of 7**, but resolved only within the 356-month, 1974-02→2017-05 window | `n_resolved ≤ n_transitions` — passed | `n_transitions > 30` implausible **[ASSUMED]** | in-band (7 ≤ 30); **"7 of 7" is 7-of-7-available, not 7-of-7-over-the-full-588-step decision range — see §5** |
 | strategy `terminal_log_wealth` | 4.0265 | **4.025085120485386** | `abs(x) < 10.0` — passed | `[-3, 12]` per leg [CITED] | in-band |
 | strategy `max_drawdown` | −21.24% (33 mo) | **−26.42% (58 mo)** | `x ∈ [-1, 0]` — passed | trend `> -0.50` [CITED] | in-band |
 | ablation `terminal_log_wealth` | 3.6472 (derived: 4.0265 − 0.379267) | **3.647237762337872** | `abs(x) < 10.0` — passed | `[-3, 12]` per leg | in-band |
@@ -95,7 +103,46 @@ scored against changed. Brier moving from 0.2087 (pre-fix) to 0.20717 (frozen, p
 this mechanical relabeling — it is not evidence the nowcaster's calibration improved or
 worsened, per D-05.
 
-## 5. Compound-baseline statement (required, D-02-A / D-05)
+## 5. Named limitation on criterion 3: the window-narrowing (human sign-off condition, 07-04 MUST carry this)
+
+**This is a named limitation, not a footnote.** `07-04`'s ADR and its own copy of the D-05
+pre/post table MUST state the differing sample size and end date at the point the numbers are
+shown (inline, per §2's table above), not only in a discussion section — the same requirement
+this section satisfies here.
+
+**Mechanism, verified vs. inferred.** Verified directly against `driver.py`: `frozen_l1_features`
+is threaded into `run_backtest`'s per-step loop and reaches ONLY `_refit_l1` (`driver.py`
+lines 461 and 473, both call sites: `_refit_l1(train_features, cfg,
+frozen_features=frozen_l1_features)`). `_refit_l2`'s signature (`driver.py` lines 266-271:
+`_refit_l2(train_features, train_states, feature_row, cfg)`) takes NO
+`frozen_features`/`frozen_l1_features` parameter at all — L2 can
+only be affected through `train_states`, i.e. through L1's changed OUTPUT LABELS, never
+directly by which columns L1 was frozen to. This is consistent with (not proof of) the observed
+occupancy shift (smoothed-reference state 0: 1.6% pre-fix → 11.51% frozen post-fix) and with
+the degrade-count shift (232/588 frozen vs. 118/588 pre-fix/impute) — a different L1 label
+sequence changes which windows present the L2 CV split with only one class present. **The
+mechanism beyond "L1's changed labels are the only channel through which L2 could be
+affected" is INFERRED, not measured** — this record does not claim to have traced the specific
+per-window class-imbalance chain from feature-set to degrade; it states only that the code path
+makes label-mediation the only possible channel, and leaves the rest as a plausible, unproven
+explanation.
+
+**Criterion 3 is satisfied as worded**, per the human sign-off: post-fix disagreement (80.90%,
+288/356) was measured by the located `label_disagreement` methodology (Task 1, delegation
+proven exact against the 389/470 baseline) and is reported against the 82.8% baseline with **no
+target set** — criterion 3 does not require the two numbers to be measured over identical
+windows, only that the same methodology produced both. **The window-narrowing limitation
+qualifies how the 82.77%→80.90% comparison should be READ (not as a clean same-population
+delta); it does not fail the criterion.**
+
+**D-04 holds, unchanged by this finding.** The degrade/window-narrowing finding is NOT grounds
+to reopen the frozen-policy decision or to prefer the imputed (rejected) variant, even though
+the imputed variant's window happens to match the pre-fix baseline's more closely. The policy
+was chosen on the structural driver/reference equivalence requirement (D-01/D-02-A), declared
+before either run in this document executed — this finding is additional reported evidence,
+never a re-selection input.
+
+## 6. Compound-baseline statement (required, D-02-A / D-05)
 
 **The comparison basis moved twice, and this record cannot separate the two causes.** The
 pre-fix numbers above were produced under BOTH:
@@ -123,7 +170,7 @@ rest on a **smaller and differently-dated** sample than either the pre-fix or th
 comparison. This is reported as a finding — a narrower, differently-timed comparison window —
 not as a reason to prefer the imputed alternative (D-04 forbids that inference).
 
-## 6. D-04 restated
+## 7. D-04 restated
 
 None of the numbers in this record were used to select the frozen ten-column policy. The
 policy was chosen on the structural requirement that the driver and the reference fit on the
@@ -142,7 +189,7 @@ both ablation deltas measured above are reported findings. In particular:
   to switch to it. The rejection stands on its substantive, non-causal-imputation reasoning
   (§3 above), decided before either run executed.
 
-## 7. Registry accounting (T-07-15)
+## 8. Registry accounting (T-07-15)
 
 Read live via `read_trials()` immediately before/after each of the two `run_full_backtest_evaluation`
 calls (never quoted from a prior session):
@@ -159,14 +206,14 @@ The last 4 rows of `registry/trials.jsonl`, in order, carry `config.trial_tag`:
 `P7-W1-frozen-10col`, `P7-W1-frozen-10col`, `P7-W1-impute-13col-REJECTED`,
 `P7-W1-impute-13col-REJECTED` — every row attributable to the run that produced it.
 
-## 8. Variant isolation (T-07-14)
+## 9. Variant isolation (T-07-14)
 
 Confirmed directly: `outputs/reports/platform/backtest_kpi_table.parquet`'s `strategy` row
 holds `4.025085120485386` (the frozen variant's number). The impute variant's
 `4.048185034686693` appears only under `outputs/reports/platform/trials/impute-13col/
 backtest_kpi_table.parquet`. The published artifacts were never touched by Variant B.
 
-## 9. Task 1's silent-zero trap — confirmed not triggered in either real run
+## 10. Task 1's silent-zero trap — confirmed not triggered in either real run
 
 Both runs asserted `not (pct_disagree == 0.0 and n_compared == 0)` — the coercion-bug
 signature `07-PREFIX-EVIDENCE.md` documents — and both passed with real, non-zero
@@ -176,8 +223,19 @@ coercion correctly in both real runs.
 
 ---
 
-## Sign-off pending
+## Sign-off: APPROVED
 
-**This document is the input to Task 3's human-verify checkpoint.** No number above was used
-to select or revise the policy (D-04). The checkpoint's job is to confirm the record is honest
-and complete — not to judge whether the regime layer looks good (D-06).
+**Task 3's human-verify checkpoint was reviewed and approved.** No number above was used to
+select or revise the policy (D-04). The human's decision settled two points explicitly:
+
+1. **Criterion 3 is satisfied as worded** — measured and reported against the 82.8% baseline,
+   no target set. The window-narrowing limitation (§5) qualifies the INTERPRETATION of the
+   82.77%→80.90% comparison; it does not fail the criterion.
+2. **D-04 holds** — the degrade/window-narrowing finding is not grounds to reopen the policy
+   decision or to prefer the imputed (rejected) variant.
+
+**Binding condition carried into `07-04`:** the window-narrowing must be foregrounded as a
+named limitation at the point the numbers are shown (§2's table, inline) — not left as a later
+discussion-only footnote. `07-04`'s ADR and its own copy of the D-05 pre/post table MUST repeat
+this treatment. See §5 above and `.planning/phases/07-regime-representation/07-03-SUMMARY.md`'s
+"Binding condition for 07-04" section for the full requirement text.
