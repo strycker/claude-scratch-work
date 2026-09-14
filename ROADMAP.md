@@ -101,6 +101,56 @@ Items within a tier are roughly priority-ordered top → bottom.
 
 ---
 
+## Tier 0.5 — Release Engineering Tech Debt (found during the 0.1.4/0.1.5 releases)
+
+Deferred deliberately on 2026-09-11 — all three are real, none block Phase 7.
+
+### R1. P23 hardening: partial ingestion silently degrades features (HIGH)
+
+A failed FRED fetch does not fail the build. `build_monthly_spine` computes
+`compute_lean_features()` from the **in-memory** `monthly_raw`, while `cm.save()`
+separately merges the missing column back **from disk**. The saved `monthly_raw`
+therefore looks complete while `monthly_features` — built before the merge — is
+silently short two columns. The two checkpoints disagree and only the features one
+is wrong, which is the one that feeds the regime model.
+
+Observed 2026-09-11: a data refresh lost `fred_aaa`, so `credit_spread_baa_aaa` was
+never derived. `monthly_features` went 53 -> 51 columns; `monthly_raw` stayed 45 and
+looked fine. Caught only because
+`test_real_dev_features_reproduce_the_seven_a13_change_points` is pinned to real data
+(`assert 3 >= 4` — the first walk-forward window lost one of its four long-history
+features). Re-running ingestion restored it; the code behaviour is unchanged.
+
+**Phase 7 relevance:** `credit_spread_baa_aaa` is one of the 9 features in the frozen
+common-support set that D-02 locks. A silent loss changes the frozen set from 9 to 8.
+
+Fix direction: make partial ingestion fail loudly, and stop the checkpoint merge from
+repairing `monthly_raw` in a way that conceals a fetch failure which has already
+corrupted `monthly_features`. Existing pitfall P23 in CLAUDE.md; the disk-merge
+masking is worse than P23 as documented.
+
+### R2. `build-pkg` CI job builds both packages but never installs them (MEDIUM)
+
+`python-package.yml`'s `build-pkg` job runs `python -m build` on both packages and
+stops. It cannot detect an empty wheel — exactly the defect that shipped
+`trading-crab-lib` 0.1.0 through 0.1.4 with zero Python modules. The install-and-import
+smoke test added in `publish-pypi.yml` only runs at publish time, so a regression can
+merge to main and stay invisible until a release.
+
+Fix direction: reuse the same install-and-import check in `build-pkg`, with
+`--no-deps` (see RELEASING.md section 10 for why that flag is required).
+
+### R3. `trading_crab_lib.plotting` raises a raw ModuleNotFoundError (LOW / tiny)
+
+`plotting/__init__.py` imports its submodules eagerly, so on a base
+`pip install trading-crab-lib` (no `[plotting]` extra) `import trading_crab_lib.plotting`
+fails with a bare `ModuleNotFoundError: No module named 'matplotlib'`.
+
+The project's own convention is a guarded ImportError naming the extra —
+`platform/plotting/core.py:57` does exactly that ("matplotlib is required ... install
+with `pip install 'trading-crab-lib[plotting]'`"). The legacy plotting package predates
+that convention. Cosmetic, but it is the first thing a new PyPI user hits.
+
 ## Tier 1 — High Impact, Achievable Soon
 
 ### 1.1  LightGBM supervised classifier  `M`
