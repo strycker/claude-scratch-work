@@ -33,12 +33,30 @@ REAL_MONTHLY_FEATURES = Path("data/checkpoints/platform/monthly_features.parquet
 
 # The seven documented A13 change points (audit finding, reproduced in
 # CONTEXT.md Amendment 3 item H).
+#
+# RE-PINNED 2026-09-14, authorised by 07-CONTEXT.md D-02-A. Cause: the
+# on-disk `monthly_features` checkpoint this test reads was STALE — its
+# `oil` column was truncated to a 1985-02 start (431 non-NaN dev months)
+# while the cached `monthly_raw` checkpoint has always carried `oil`'s full
+# 1962-01 history (776 non-NaN months). `scripts/recompute_monthly_features.py`
+# rebuilt `monthly_features` as a pure, offline function of the cached
+# `monthly_raw` (D-02-A), which gives `oil` its correct 708 non-NaN dev
+# months and makes it a member of the frozen reference set from the very
+# first decision date onward (see `07-CONTEXT.md` and
+# `07-PREFIX-EVIDENCE.md` for the full history and the pre-fix baseline).
+# The seven change *dates* below are UNCHANGED from the pre-fix sequence —
+# only the active-feature COUNTS moved, each by +1 (oil now counted from
+# 1972-01-31 onward), except the last two dates, which were already at the
+# lean set's ceiling. This constant remains an EXACT list-equality pin —
+# see the assertion below; do not weaken it to an inequality, subset, or
+# tolerance check, as that would have failed to catch the staleness this
+# amendment fixes.
 EXPECTED_CHANGE_POINTS = [
-    ("1972-01-31", 4),
-    ("1972-02-29", 6),
-    ("1972-04-30", 8),
-    ("1973-02-28", 9),
-    ("1986-06-30", 10),
+    ("1972-01-31", 5),
+    ("1972-02-29", 7),
+    ("1972-04-30", 9),
+    ("1973-02-28", 10),
+    ("1986-06-30", 11),
     ("1995-02-28", 12),
     ("2000-01-31", 13),
 ]
@@ -220,7 +238,10 @@ class TestActiveFeatureCountTimeline:
         )
 
         assert len(timeline) == 588
-        assert int(timeline["n_active"].min()) >= 4
+        # >= 5, not >= 4 (D-02-A, 2026-09-14): the first decision window now
+        # carries five active features (oil joins the frozen set from the
+        # start — see the EXPECTED_CHANGE_POINTS comment above).
+        assert int(timeline["n_active"].min()) >= 5
         assert int(timeline["n_active"].max()) <= 13
 
         change_dates = pregime.feature_set_change_dates(timeline)
