@@ -332,6 +332,7 @@ def run_backtest(
     use_regime_tilt: bool = True,
     registry_path: Any = None,
     frozen_l1_features: list[str] | None = None,
+    trial_tag: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """Run the L1->L4 expanding-window walk-forward loop, log exactly one trial.
 
@@ -379,6 +380,15 @@ def run_backtest(
             each ``_refit_l1`` call falls back to its own per-window
             ``_window_active_features`` rule, reproducing pre-fix behavior
             exactly (07-01/D-01).
+        trial_tag: an optional caller-supplied label merged into the
+            registry row's ``config`` dict under the key ``trial_tag``, so a
+            run can be attributed to the policy variant that produced it
+            (07-01 Task 2). When ``None`` (default), ``trial_config`` keeps
+            its pre-existing four keys exactly — historical registry rows
+            stay shape-comparable. The registry is append-only and never
+            deduplicates identical configs (confirmed against
+            ``registry/trials.jsonl``, where several adjacent rows share an
+            identical ``config`` payload) — the tag is provenance, not a key.
 
     Returns:
         tuple[pd.DataFrame, dict[str, list]]: ``(equity_curve, per_step_metrics)``.
@@ -538,6 +548,13 @@ def run_backtest(
         "min_train": min_train,
         "cost_bps": cost_bps,
     }
+    if trial_tag is not None:
+        # 07-01 Task 2: provenance only, never a dedup key — the registry is
+        # append-only and does not deduplicate identical configs (confirmed
+        # against registry/trials.jsonl, where several adjacent rows already
+        # share an identical config payload). Historical rows keep their
+        # exact pre-existing four-key shape when trial_tag is omitted.
+        trial_config["trial_tag"] = trial_tag
     registry.append_trial(
         config=trial_config,
         features=list(monthly_features.columns),

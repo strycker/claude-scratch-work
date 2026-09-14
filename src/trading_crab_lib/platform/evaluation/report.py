@@ -464,6 +464,7 @@ def run_full_backtest_evaluation(
     *,
     registry_path: Any = None,
     output_dir: Path | None = None,
+    trial_tag: str | None = None,
 ) -> dict[str, Any]:
     """Drive the whole EVAL-01..04 chain end-to-end and write the report.
 
@@ -484,15 +485,17 @@ def run_full_backtest_evaluation(
         ``run_backtest`` for the regime-tilt strategy, passing
         ``cash_returns=cash_ret`` so the strategy's cash residual earns the
         SAME series the baselines earn (review F4), and
-        ``frozen_l1_features=ref_cols`` from (0). Immediately after this
-        call, a permanent guard asserts that (0)'s index-derived
+        ``frozen_l1_features=ref_cols`` / ``trial_tag`` from (0). Immediately
+        after this call, a permanent guard asserts that (0)'s index-derived
         ``first_decision`` is not AFTER ``per_step_metrics["dates"]``'s
         observed minimum — a future change to ``expanding_steps`` that
         decoupled the two would be caught here rather than silently
         producing two different "first decision" values.
     (b) ``no_regime_ablation`` for the ablation leg (same ``cash_ret``, same
-        ``frozen_l1_features`` as (a) — otherwise the ablation leg's
-        discarded L1 fit would silently diverge from the strategy leg's).
+        ``frozen_l1_features`` and ``trial_tag`` as (a) — otherwise the
+        ablation leg's discarded L1 fit would silently diverge from the
+        strategy leg's, and a tagged run would produce one tagged and one
+        untagged registry row).
     (c) the three price baselines over the SAME holdout-bounded window
         (baselines do not enforce the cutoff internally — the report layer
         must slice them, per ``backtest/baselines.py``'s own docstring).
@@ -538,6 +541,11 @@ def run_full_backtest_evaluation(
         cfg: platform config (``load_platform_config()`` output).
         registry_path: overrides the default trial registry ledger path.
         output_dir: overrides the default artifact directory (for tests).
+        trial_tag: an optional label attributing BOTH legs' registry rows
+            (strategy and ablation) to the policy variant that produced them
+            (07-01 Task 2) — passed straight through to ``run_backtest`` and
+            ``no_regime_ablation``. ``None`` (default) logs untagged rows,
+            byte-compatible with every pre-existing registry row.
 
     Returns:
         dict with keys ``report_path``, ``sojourn_lag``, ``strategy_kpis``,
@@ -605,7 +613,7 @@ def run_full_backtest_evaluation(
 
     equity_curve, per_step_metrics = run_backtest(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True,
-        registry_path=registry_path, frozen_l1_features=ref_cols,
+        registry_path=registry_path, frozen_l1_features=ref_cols, trial_tag=trial_tag,
     )
 
     # Permanent guard (07-01/D-01): first_decision was derived from the index
@@ -632,11 +640,13 @@ def run_full_backtest_evaluation(
     )
 
     # (b) No-regime ablation — same cash_ret series (review F4), same frozen
-    # L1 feature list as the strategy leg (a) — otherwise the ablation leg's
-    # discarded L1 fit would silently diverge from the strategy leg's.
+    # L1 feature list and trial_tag as the strategy leg (a) — otherwise the
+    # ablation leg's discarded L1 fit would silently diverge from the
+    # strategy leg's, and a tagged run would produce one tagged and one
+    # untagged registry row.
     ablation_curve, _ablation_metrics = no_regime_ablation(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, registry_path=registry_path,
-        frozen_l1_features=ref_cols,
+        frozen_l1_features=ref_cols, trial_tag=trial_tag,
     )
 
     # (c) Three price baselines — the report layer holdout-bounds them

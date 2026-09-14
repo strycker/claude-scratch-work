@@ -237,6 +237,7 @@ def no_regime_ablation(
     cash_returns: pd.Series | None = None,
     registry_path: Any = None,
     frozen_l1_features: list[str] | None = None,
+    trial_tag: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """The no-regime ablation — a ONE-LINE delegation to the tilt-off driver path.
 
@@ -251,9 +252,12 @@ def no_regime_ablation(
     omitting it would silently default the ablation's cash sleeve to 0%,
     which would break the cash-return symmetry this whole plan documents.
 
-    ``frozen_l1_features`` (07-01 Task 1) is threaded straight through to
-    ``run_backtest`` so the ablation leg's (discarded) L1 fit uses the SAME
-    frozen column list as the strategy leg.
+    ``frozen_l1_features`` and ``trial_tag`` (07-01 Tasks 1/2) are threaded
+    straight through to ``run_backtest`` so the ablation leg's (discarded)
+    L1 fit uses the SAME frozen column list as the strategy leg, and its
+    registry row carries the SAME tag — otherwise a tagged run would produce
+    one tagged and one untagged row and the strategy/ablation pairing would
+    be lost.
 
     When ``cfg["backtest"].get("skip_l1l2_for_ablation", True)`` (review F5),
     ``run_backtest`` skips the discarded L1 jump-model + L2 nowcaster
@@ -283,6 +287,7 @@ def no_regime_ablation(
         use_regime_tilt=False,
         registry_path=registry_path,
         frozen_l1_features=frozen_l1_features,
+        trial_tag=trial_tag,
     )
 
 

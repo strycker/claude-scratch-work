@@ -632,3 +632,85 @@ class TestFrozenPolicyEquivalence:
             "the frozen list must come back in the SAME order it was passed in "
             f"— got {captured['feature_names']}, expected {frozen}"
         )
+
+
+
+# ── TestTrialTag (07-01 Task 2) ───────────────────────────────────────────────
+
+
+class TestTrialTag:
+    """``trial_tag`` attributes a registry row to the policy variant that
+    produced it, without disturbing the shape of an untagged row."""
+
+    def test_trial_tag_lands_in_the_registry_config(self, tmp_path, monkeypatch):
+        monthly_features, asset_returns, cash_returns = _make_synthetic_frame()
+        monkeypatch.setattr(driver, "_refit_l1", _fake_refit_l1)
+        monkeypatch.setattr(driver, "_refit_l2", _fake_refit_l2)
+
+        registry_path = tmp_path / "trials.jsonl"
+        driver.run_backtest(
+            monthly_features,
+            asset_returns,
+            _cfg(),
+            cash_returns=cash_returns,
+            registry_path=registry_path,
+            trial_tag="unit-probe",
+        )
+
+        trials = read_trials(path=registry_path)
+        assert len(trials) == 1
+        config = trials.iloc[0]["config"]
+        assert config["trial_tag"] == "unit-probe"
+
+    def test_no_trial_tag_leaves_config_shape_unchanged(self, tmp_path, monkeypatch):
+        monthly_features, asset_returns, cash_returns = _make_synthetic_frame()
+        monkeypatch.setattr(driver, "_refit_l1", _fake_refit_l1)
+        monkeypatch.setattr(driver, "_refit_l2", _fake_refit_l2)
+
+        registry_path = tmp_path / "trials.jsonl"
+        driver.run_backtest(
+            monthly_features,
+            asset_returns,
+            _cfg(),
+            cash_returns=cash_returns,
+            registry_path=registry_path,
+        )
+
+        trials = read_trials(path=registry_path)
+        assert len(trials) == 1
+        config = trials.iloc[0]["config"]
+        assert set(config.keys()) == {"phase", "use_regime_tilt", "min_train", "cost_bps"}
+        assert "trial_tag" not in config
+
+    def test_one_evaluation_appends_exactly_two_rows(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.backtest.baselines import no_regime_ablation
+
+        monthly_features, asset_returns, cash_returns = _make_synthetic_frame()
+        monkeypatch.setattr(driver, "_refit_l1", _fake_refit_l1)
+        monkeypatch.setattr(driver, "_refit_l2", _fake_refit_l2)
+
+        registry_path = tmp_path / "trials.jsonl"
+        before = len(read_trials(path=registry_path))
+
+        driver.run_backtest(
+            monthly_features,
+            asset_returns,
+            _cfg(),
+            cash_returns=cash_returns,
+            registry_path=registry_path,
+            trial_tag="policy-run",
+        )
+        no_regime_ablation(
+            monthly_features,
+            asset_returns,
+            _cfg(),
+            cash_returns=cash_returns,
+            registry_path=registry_path,
+            trial_tag="policy-run",
+        )
+
+        after = len(read_trials(path=registry_path))
+        assert after - before == 2, (
+            f"one strategy run_backtest + one no_regime_ablation must append "
+            f"exactly 2 rows — got a delta of {after - before}"
+        )
