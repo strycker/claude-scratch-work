@@ -69,6 +69,63 @@ and absorbs **INV-01**.
   decision range; 4 is what the driver's FIRST window had at ≥120 months. Different
   quantities.
 
+- **D-02-A (AMENDMENT, 2026-09-14): the frozen set is TEN, not nine — `oil` joins it.**
+  **D-02's "9" was measured against a STALE checkpoint and is superseded.** Research
+  (`07-RESEARCH.md` Pitfall 1) flagged this; it was then verified independently at plan
+  time against the live code and data:
+
+  | | `monthly_raw.oil` | `monthly_features.oil` |
+  |---|---|---|
+  | first valid | **1962-01-31** | 1985-02-28 |
+  | non-NaN months | **776** | 431 |
+
+  `compute_lean_features` assigns `features["oil"] = monthly_raw["oil"]`
+  (`transforms_monthly.py:253`) — an unwindowed passthrough with no truncation and no
+  alignment to `gold`. The on-disk `monthly_features.oil` therefore **cannot** have been
+  produced from the current `monthly_raw`; the checkpoint predates the splice work that
+  gave oil its full history. Oil's 1985-02 start in features is an artifact, not a data
+  limit.
+
+  Recomputed offline and confirmed with `report.py::_reference_label_columns` itself:
+
+  - as-is → **9** cols; rebuilt → **10** cols, the sole addition being `oil`
+  - the only column that changes at all on recompute is `oil` (**+277** non-NaN months);
+    every other column is byte-for-byte identical
+  - A13 change-point counts shift from `4→6→8→9→10→12→13` to `5→7→9→10→11→12→13`
+    (still 7 change points, still at the same seven dates); `oil` enters the
+    first-decision active set, taking it from 4 features to 5
+
+  **Decision (user, 2026-09-14): recompute `monthly_features` and lock the TEN-column set.**
+  Phase 7 exists to decide what the labeler is allowed to see; locking a set that is wrong
+  by accident would undermine the phase, and certifying numbers against stale evidence is
+  precisely the failure mode `UAT-AUDIT-2026-09-09` documents.
+
+  **Consequences the planner MUST carry, not discover:**
+
+  1. **No network is required.** The recompute is a pure function of the **cached**
+     `monthly_raw` checkpoint — `compute_lean_features(monthly_raw, cfg)` then re-carve at
+     2020-12. Do **not** plan a full `build_monthly_spine()` re-ingest; `07-RESEARCH.md`
+     Pitfall 6 correctly notes a true rebuild is network-dependent, and the known
+     macrotrends/stooq egress blocks make that path unreliable from this container. This
+     also sidesteps R1 (`ROADMAP.md` Tier 0.5) rather than risking it.
+  2. **`tests/unit/test_platform_plotting_regime.py:206`
+     (`test_real_dev_features_reproduce_the_seven_a13_change_points`) WILL go red** — it
+     reads the real checkpoint and asserts exact equality against `EXPECTED_CHANGE_POINTS`.
+     It must be **re-pinned to the new sequence in the same commit that recomputes the
+     checkpoint**, with a comment naming this amendment. Re-pinning a deliberately
+     falsified regression test is correct here; silently loosening it to an inequality is
+     not.
+  3. **The comparison basis changed, and criteria 3 and 4 must say so.** The 82.8%
+     disagreement baseline, the 0.591 §5.4 ratio, Brier 0.2087, and both ablation deltas
+     (`+0.379267` / `−0.014364`) were all measured on the 9-column space. D-05's
+     side-by-side pre/post table must therefore carry a **third** labelled state — pre-fix
+     (9-col, stale), post-fix (10-col) — and must state in prose that part of the movement
+     is the feature-space correction, not the policy change. Attributing the whole delta to
+     the policy would be exactly the "fooled by its own backtest" error.
+  4. **D-02's own arithmetic still holds otherwise**: 10 is the common-support set across
+     the decision range; 5 (was 4) is what the driver's first window has at ≥120 months.
+     Still different quantities — do not conflate them.
+
 - **D-03: The 13-feature + imputation variant runs once as a logged trial.** The 9-feature
   policy is the decision, but the imputation alternative is executed once and registered so
   the ADR's rejection is evidence-backed rather than argued. Rationale for rejecting it on
