@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe (completed 2026-07-22)
 - [x] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire (completed 2026-07-23)
 - [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
-- [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation
+- [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation (completed 2026-09-10)
 - [ ] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01)
 - [ ] **Phase 8: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
@@ -266,17 +266,21 @@ labeling before it is trusted for live use.
 
   5. `P6_backtest_evaluation` renders the equity curves, baseline gauntlet, ablation
      delta, calibration, and the sojourn/lag headline with its resolved-transition count.
-**Plans**: 1/7 plans executed
+**Plans**: 7/7 plans executed
 
-- [x] 06-01-PLAN.md
-- [ ] 06-02-PLAN.md
-- [ ] 06-03-PLAN.md
-- [ ] 06-04-PLAN.md
-- [ ] 06-05-PLAN.md
-- [ ] 06-06-PLAN.md
-- [ ] 06-07-PLAN.md
+- [x] 06-01-PLAN.md — plotting core/loaders/data/drift
+- [x] 06-02-PLAN.md — artifact persistence (additive write in evaluation/report.py)
+- [x] 06-03-PLAN.md — P3_regime_labeling (+ A13 display)
+- [x] 06-04-PLAN.md — P2_features_taxonomy
+- [x] 06-05-PLAN.md — P4_nowcaster
+- [x] 06-06-PLAN.md — P5_assets_allocation
+- [x] 06-07-PLAN.md — P6_backtest_evaluation
 
-06-03 (P3 + A13), 06-04 (P2), 06-05 (P4), 06-06 (P5), 06-07 (P6)
+Verified 2026-09-10 (`06-VERIFICATION.md`, 5/5 criteria, status `human_needed`); UAT closed
+2026-09-10 (`06-UAT.md`, 2/2) — the fresh-run item was settled by executing all six notebooks
+from cleared state via `nbclient`, and the P3 cold-start sign-off was recorded by the operator
+as **accept-with-caveats** (the regimes are *crisis* regimes, not *allocation* regimes — which
+is the finding that motivated Phase 7).
 
 **Why this precedes migration**: the migration's per-step validation gate is "run the
 notebook and verify." The platform currently has **zero** notebooks — all 12 in
