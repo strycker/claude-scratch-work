@@ -173,31 +173,87 @@ def _first_valid_position(X: pd.DataFrame, col: str) -> int:
     return len(X) if first is None else int(X.index.get_loc(first))
 
 
-def _refit_l1(train_features: pd.DataFrame, cfg: dict[str, Any]) -> pd.Series:
+def _refit_l1(
+    train_features: pd.DataFrame,
+    cfg: dict[str, Any],
+    *,
+    frozen_features: list[str] | None = None,
+) -> pd.Series:
     """Refit the L1 jump-model labeler on ``train_features`` ONLY.
 
     Mirrors ``labeling/diagnostics.py::label_regimes``'s wiring order (pull
     lean cols -> standardize -> fit -> canonicalize) but on a train-window
     slice, never the full-sample checkpoint.
 
+    Args:
+        train_features: the train-window feature slice (strictly before the
+            decision date — enforced by the caller's ``expanding_steps``).
+        cfg: platform config.
+        frozen_features: a POLICY INPUT FROM THE CALLER (07-01/D-01) — a
+            single, precomputed column list (typically
+            ``evaluation/report.py::_reference_label_columns``'s output) that
+            OVERRIDES the per-window ``feature_min_history`` admission rule
+            entirely on this call. When given, the active column list is
+            exactly the members of ``frozen_features`` present in
+            ``train_features.columns``, IN THE ORDER GIVEN — order is
+            load-bearing because ``canonicalize_states`` locates
+            ``trailing_return_1m``'s centroid by column position. This is a
+            per-run derived value, never a tunable config key. When ``None``
+            (default), behavior is unchanged: the expanding
+            ``_window_active_features`` rule (``feature_min_history`` months)
+            decides admission, exactly as before this parameter existed.
+            ``_refit_l2`` is deliberately UNAFFECTED by this parameter — its
+            own ``_cv_safe_active_features`` admission path exists for a
+            distinct reason (CV per-class sample counts, not L1's feature
+            policy) and freezing it is out of scope for this plan (Claude's
+            Discretion, ``07-CONTEXT.md``).
+
     Returns:
         pd.Series: canonical state labels (0..K-1), indexed by the
         (post-dropna) subset of ``train_features.index``.
+
+    Raises:
+        ValueError: if ``frozen_features`` resolves to 0 usable columns, or
+            fewer usable columns than ``cfg["labeling"]["K"]`` — an empty or
+            too-short frozen list must fail loudly at this boundary rather
+            than surfacing as an opaque error from inside the clustering fit.
     """
     labeling_cfg = cfg.get("labeling", {})
     K = labeling_cfg.get("K", 5)
     lam = labeling_cfg.get("lambda", 52.0)
     n_restarts = labeling_cfg.get("n_restarts", 10)
 
-    lean_cols = sorted(lean_feature_set(cfg) & set(train_features.columns))
-    # Use the features that have ≥ feature_min_history months of data in THIS
-    # window (a late feature like VIX enters once it qualifies), then train on the
-    # rectangular block where every active feature is present — the block start is
-    # governed by the latest-starting active feature. Labels stay comparable
-    # across feature-set transitions because canonicalize_states sorts by
-    # trailing_return_1m, present in every window.
-    min_history = int(cfg.get("backtest", {}).get("feature_min_history", 120))
-    active = _window_active_features(train_features, lean_cols, min_history=min_history)
+    if frozen_features is not None:
+        # Frozen path (07-01/D-01): the caller's precomputed column list
+        # wins outright — the per-window min_history admission rule below is
+        # not consulted at all on this path.
+        active = [c for c in frozen_features if c in train_features.columns]
+        resolved_count = len(active)
+        if resolved_count == 0:
+            raise ValueError(
+                f"frozen_features resolved to 0 usable columns (of "
+                f"{len(frozen_features)} requested) — none are present in "
+                "train_features.columns. An empty frozen list means "
+                "'frozen, and empty', not 'use the expanding rule' — pass "
+                "frozen_features=None for that."
+            )
+        if resolved_count < K:
+            raise ValueError(
+                f"frozen_features resolved to only {resolved_count} usable "
+                f"column(s), fewer than K={K} — cannot fit a {K}-state jump "
+                "model on fewer feature columns than states."
+            )
+    else:
+        lean_cols = sorted(lean_feature_set(cfg) & set(train_features.columns))
+        # Use the features that have ≥ feature_min_history months of data in THIS
+        # window (a late feature like VIX enters once it qualifies), then train on the
+        # rectangular block where every active feature is present — the block start is
+        # governed by the latest-starting active feature. Labels stay comparable
+        # across feature-set transitions because canonicalize_states sorts by
+        # trailing_return_1m, present in every window.
+        min_history = int(cfg.get("backtest", {}).get("feature_min_history", 120))
+        active = _window_active_features(train_features, lean_cols, min_history=min_history)
+
     X_df = train_features[active].dropna(axis=0, how="any")
     used_cols = list(X_df.columns)
     X = standardize_features(X_df)
@@ -275,6 +331,7 @@ def run_backtest(
     cash_returns: pd.Series | None = None,
     use_regime_tilt: bool = True,
     registry_path: Any = None,
+    frozen_l1_features: list[str] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """Run the L1->L4 expanding-window walk-forward loop, log exactly one trial.
 
@@ -314,6 +371,14 @@ def run_backtest(
             omitted (synthetic tests only — never omit in a real run).
         use_regime_tilt: False runs the no-regime ablation (design §8.7).
         registry_path: overrides the default trial registry ledger path.
+        frozen_l1_features: threaded straight through to EVERY ``_refit_l1``
+            call site in the per-step loop below (the strategy branch and
+            the tilt-off debug branch — both must receive the same value, or
+            the ablation leg's discarded L1 fit would silently diverge from
+            the strategy leg's). ``None`` (default) means "do not freeze" —
+            each ``_refit_l1`` call falls back to its own per-window
+            ``_window_active_features`` rule, reproducing pre-fix behavior
+            exactly (07-01/D-01).
 
     Returns:
         tuple[pd.DataFrame, dict[str, list]]: ``(equity_curve, per_step_metrics)``.
@@ -383,7 +448,7 @@ def run_backtest(
                 # parity) but the output below is discarded either way —
                 # review F5.
                 try:
-                    train_states = _refit_l1(train_features, cfg)
+                    train_states = _refit_l1(train_features, cfg, frozen_features=frozen_l1_features)
                     feature_row = dev_features.loc[[t]]
                     _refit_l2(train_features, train_states, feature_row, cfg)
                 except _L2_DEGRADE_EXCEPTIONS as exc:
@@ -395,7 +460,7 @@ def run_backtest(
             regime_probs = pd.Series({0: 1.0})
         else:
             try:
-                states = _refit_l1(train_features, cfg)
+                states = _refit_l1(train_features, cfg, frozen_features=frozen_l1_features)
                 feature_row = dev_features.loc[[t]]
                 regime_probs = _refit_l2(train_features, states, feature_row, cfg)
             except _L2_DEGRADE_EXCEPTIONS as exc:

@@ -467,19 +467,41 @@ def run_full_backtest_evaluation(
 ) -> dict[str, Any]:
     """Drive the whole EVAL-01..04 chain end-to-end and write the report.
 
+    (0) ONE ``_reference_label_columns`` call, computed BEFORE (a) — the
+        frozen L1 feature-column list (07-01/D-01/D-08a). ``first_decision``
+        is derived directly from ``dev_features.index[min_train]``, never
+        from the walk-forward's output: per
+        ``honesty/walkforward.py:48-49``, ``expanding_steps``'s first
+        yielded step is always ``index[min_train]``, so this is not
+        circular — it just inverts an ordering that used to look causal but
+        was not. ``frozen_l1_features=ref_cols`` is then threaded into BOTH
+        (a) and (b) below, so the walk-forward driver's per-step L1 refits
+        and this function's own full-sample fit at (d) share a SINGLE
+        computed-once column list and cannot resolve to different feature
+        spaces (ROADMAP criterion 1's failing test).
     (a) ``build_core_research_series`` + ``compute_monthly_returns`` ->
         equity/bond/cash return series (and the equity LEVEL for Faber);
         ``run_backtest`` for the regime-tilt strategy, passing
         ``cash_returns=cash_ret`` so the strategy's cash residual earns the
-        SAME series the baselines earn (review F4).
-    (b) ``no_regime_ablation`` for the ablation leg (same ``cash_ret``).
+        SAME series the baselines earn (review F4), and
+        ``frozen_l1_features=ref_cols`` from (0). Immediately after this
+        call, a permanent guard asserts that (0)'s index-derived
+        ``first_decision`` is not AFTER ``per_step_metrics["dates"]``'s
+        observed minimum — a future change to ``expanding_steps`` that
+        decoupled the two would be caught here rather than silently
+        producing two different "first decision" values.
+    (b) ``no_regime_ablation`` for the ablation leg (same ``cash_ret``, same
+        ``frozen_l1_features`` as (a) — otherwise the ablation leg's
+        discarded L1 fit would silently diverge from the strategy leg's).
     (c) the three price baselines over the SAME holdout-bounded window
         (baselines do not enforce the cutoff internally — the report layer
         must slice them, per ``backtest/baselines.py``'s own docstring).
     (d) ONE full-sample ``fit_jump_model`` + ``canonicalize_states`` over the
         holdout-bounded dev window for the SMOOTHED reference labeling — a
         genuinely distinct series from the walk-forward ``per_step_metrics``
-        (Pitfall 1). The multiclass filtered-probs matrix
+        (Pitfall 1). Reuses the SAME ``dev_features``/``ref_cols`` computed
+        once at (0) — no second ``_reference_label_columns`` call and no
+        recomputed ``first_decision``. The multiclass filtered-probs matrix
         (``build_filtered_probs_matrix``) feeds ``compute_sojourn_lag_headline``
         so each transition is scored against P(its own target state), never
         a class-agnostic max (review F1).
@@ -521,7 +543,8 @@ def run_full_backtest_evaluation(
         dict with keys ``report_path``, ``sojourn_lag``, ``strategy_kpis``,
         ``ablation_kpis``, ``baseline_kpis``, ``gap``, ``model_metrics_paths``,
         ``equity_curve``, ``ablation_curve``, ``per_step_metrics``,
-        ``full_sample_states``.
+        ``full_sample_states``, ``frozen_l1_features`` (the ``list[str]``
+        computed once at (0) and shared by both L1 consumers).
     """
     backtest_cfg = cfg.get("backtest", {})
     allocation_cfg = cfg.get("allocation", {})
@@ -531,6 +554,20 @@ def run_full_backtest_evaluation(
     rebalance = backtest_cfg.get("sixty_forty_rebalance", "monthly")
     crisis_windows = backtest_cfg.get("crisis_windows", [])
     act_threshold = allocation_cfg.get("hysteresis", {}).get("act_threshold", 0.70)
+
+    # (0) Compute the frozen L1 feature-column list ONCE, before any
+    # run_backtest call (07-01/D-01/D-08a) — the same ref_cols/dev_features
+    # feed BOTH the walk-forward driver's per-step L1 refits (a)/(b) below
+    # and this function's own full-sample fit at (d), so the two consumers
+    # cannot resolve to different feature spaces. first_decision is derived
+    # from the index directly (honesty/walkforward.py:48-49: expanding_steps'
+    # first yielded step is always index[min_train]) — no walk-forward output
+    # is needed to compute it.
+    dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    lean_cols = sorted(lean_feature_set(cfg) & set(dev_features.columns))
+    min_train = backtest_cfg.get("min_train_months", 120)
+    first_decision = dev_features.index[min_train]
+    ref_cols = _reference_label_columns(dev_features, lean_cols, first_decision)
 
     splice_cfg = cfg["splice"]
     research = build_core_research_series(monthly_raw, cfg)
@@ -567,12 +604,39 @@ def run_full_backtest_evaluation(
         log.warning("Backtest asset universe EXCLUDES unavailable research classes: %s", _excluded)
 
     equity_curve, per_step_metrics = run_backtest(
-        monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True, registry_path=registry_path,
+        monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True,
+        registry_path=registry_path, frozen_l1_features=ref_cols,
     )
 
-    # (b) No-regime ablation — same cash_ret series (review F4).
+    # Permanent guard (07-01/D-01): first_decision was derived from the index
+    # BEFORE this loop ran (0); honesty/walkforward.py:48-49's expanding_steps
+    # always yields index[min_train] first, so the loop's first ATTEMPTED
+    # step is always first_decision. per_step_metrics["dates"] can still
+    # start LATER than that: run_backtest excludes a degraded step from
+    # per_step_metrics entirely (T-05-05 — an early small post-embargo
+    # window starving a K-fold is a documented, graceful degrade, not an
+    # error), so if the very first attempted step(s) degrade, the first
+    # RECORDED date is later than first_decision. The direction that would
+    # be dangerous — the recorded series starting EARLIER than
+    # first_decision, which would mean the loop somehow visited a date
+    # before its declared start — is what this assertion actually guards
+    # against; a later start from benign early degradation is expected and
+    # must not raise.
+    observed_first_decision = pd.DatetimeIndex(per_step_metrics["dates"]).min()
+    assert first_decision <= observed_first_decision, (
+        f"first_decision derived from the index ({first_decision}) is AFTER "
+        f"the walk-forward loop's observed first recorded decision date "
+        f"({observed_first_decision}) — expanding_steps' first yielded step "
+        "should always be index[min_train], so the recorded minimum can "
+        "only be equal to it or later, never earlier."
+    )
+
+    # (b) No-regime ablation — same cash_ret series (review F4), same frozen
+    # L1 feature list as the strategy leg (a) — otherwise the ablation leg's
+    # discarded L1 fit would silently diverge from the strategy leg's.
     ablation_curve, _ablation_metrics = no_regime_ablation(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, registry_path=registry_path,
+        frozen_l1_features=ref_cols,
     )
 
     # (c) Three price baselines — the report layer holdout-bounds them
@@ -591,12 +655,9 @@ def run_full_backtest_evaluation(
     # for EVERY walk-forward decision date, so it labels on the long-history
     # features that span the whole decision range (dropping structural late-starts
     # like fred_vix that begin in 1990) and keeps all rows — NOT the walk-forward's
-    # per-window min_history set. Otherwise an any-NaN row drop would strand every
-    # pre-1990 decision date (which the walk-forward now labels under approach ii).
-    dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    lean_cols = sorted(lean_feature_set(cfg) & set(dev_features.columns))
-    first_decision = pd.DatetimeIndex(per_step_metrics["dates"]).min()
-    ref_cols = _reference_label_columns(dev_features, lean_cols, first_decision)
+    # per-window min_history set. Reuses the SAME dev_features/ref_cols computed
+    # once at (0) — no second _reference_label_columns call and no recomputed
+    # first_decision (07-01/D-01/D-08a).
     X_df = dev_features[ref_cols].dropna()
     X = standardize_features(X_df)
     fit = fit_jump_model(
@@ -708,6 +769,7 @@ def run_full_backtest_evaluation(
         "ablation_curve": ablation_curve,
         "per_step_metrics": per_step_metrics,
         "full_sample_states": full_sample_states,
+        "frozen_l1_features": list(ref_cols),
     }
 
 
