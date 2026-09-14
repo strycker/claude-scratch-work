@@ -742,9 +742,27 @@ stale-but-harmless prose (see Pitfall 5).
 
 **If this table is empty:** N/A — see rows above.
 
-## Open Questions
+## Open Questions (ALL RESOLVED — see resolution notes below, added 2026-09-14 at plan time)
+
+> All three were resolved before planning completed. The original text of each is kept intact
+> below so the reasoning that led to the resolution stays auditable; each carries a
+> **RESOLVED** note naming where the answer now lives.
 
 1. **Does the frozen set become 9 or 10 columns?**
+   - ✅ **RESOLVED — it is TEN.** Answered by the user at plan time and recorded as
+     `07-CONTEXT.md` **D-02-A**, which supersedes D-02's "9". Verified three independent ways
+     before the decision: `monthly_raw.oil` holds 776 non-NaN from 1962-01 while
+     `monthly_features.oil` holds 431 from 1985-02; `compute_lean_features` assigns
+     `features["oil"] = monthly_raw["oil"]` (`transforms_monthly.py:253`, an unwindowed
+     passthrough) so the checkpoint cannot derive from the current raw; and running
+     `report.py::_reference_label_columns` both ways returns 9 as-is and 10 rebuilt, with
+     `oil` the sole addition (+277 months, no other column changed).
+   - The feasibility sub-question is also resolved: **no network is needed.** The recompute is a
+     pure function of the cached `monthly_raw`, so the macrotrends/yfinance reachability concern
+     raised below does not apply — it would only apply to a full `build_monthly_spine()`
+     re-ingest, which `07-02-PLAN.md` explicitly forbids.
+   - Implemented by `07-02-PLAN.md` Task 2; documented in the ADR by `07-04-PLAN.md` Task 3.
+
    - What we know: the current on-disk `monthly_features` checkpoint yields 9 (verified this
      session); a rebuild would very likely yield 10 by promoting `oil` (verified `oil`'s
      underlying `monthly_raw` coverage is complete 1962-2020, and `compute_lean_features` is an
@@ -768,6 +786,12 @@ stale-but-harmless prose (see Pitfall 5).
    - Recommendation: state the ceiling as a formula (`2 × N_policy_variants_evaluated`) in the
      ADR rather than a fixed number, and have the executing task call `registry.read_trials()`
      fresh immediately before and after to record the actual before/after count.
+   - ✅ **RESOLVED — the recommendation was adopted.** The ADR records the ceiling as the
+     formula `2 × N_full_evaluation_runs`, not a fixed number, and the executing tasks call
+     `read_trials()` live rather than trusting the 34 measured here. See `07-01-PLAN.md`
+     (registry `trial_tag` attribution) and `07-04-PLAN.md` Task 3 (ADR trial-ceiling section).
+     This matters because deflated Sharpe is computed over the whole registry (D-16), so a
+     stale hard-coded count would understate the trial burden.
 
 3. **Is there any knock-on effect on L2's `_cv_safe_active_features` degrade pattern from
    freezing L1's admission?**
@@ -783,6 +807,10 @@ stale-but-harmless prose (see Pitfall 5).
      rather than assuming a priori that "L2 untouched" means "L2 numbers unaffected" — the
      y_true-reindex mechanism (D-05) already establishes that L1-side changes ripple into
      L2-adjacent metrics (Brier, confusion) without any L2 code changing.
+   - ✅ **RESOLVED — the recommendation was adopted.** `07-03-PLAN.md` measures and records the
+     L2 degrade frequency alongside the L1 numbers, and `07-04-PLAN.md`'s three-state pre/post
+     table reports any shift as an observed side effect rather than asserting in advance that
+     L2 is unaffected. Nothing is assumed a priori in either direction.
 
 ## Environment Availability
 

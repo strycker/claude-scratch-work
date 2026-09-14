@@ -345,11 +345,16 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
 **Plans**: 4 plans (**wave 1 only** — criteria 1-4 + the ADR; criteria 5-7 are wave 2 and get a
 second planning pass per `07-CONTEXT.md` D-09)
 
-Plans:
-- [ ] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test (wave 1)
-- [ ] 07-02-PLAN.md — Recompute `monthly_features` from cached `monthly_raw` (D-02-A, ten-column frozen set) and re-pin the A13 golden constant exactly (wave 2)
-- [ ] 07-03-PLAN.md — Re-measure criteria 2/3/4 on real data against bands that name the values they reject, plus the D-03 logged rejection trial (wave 3)
-- [ ] 07-04-PLAN.md — D-05 three-state pre/post table, D-08 A13 caveat resolution, and the policy ADR (wave 4)
+> ⚠ **Two senses of "wave" collide in this phase — read carefully.** The phase gates on
+> **phase-wave 1 → phase-wave 2** (resolve A13/A15, then the leadership classifier). All four
+> plans below are **entirely inside phase-wave 1**. The `exec-wave N` labels are GSD *execution*
+> ordering within this pass, not the phase's gate. No plan below touches classifier #2.
+
+Plans (all phase-wave 1):
+- [ ] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test *(exec-wave 1)*
+- [ ] 07-02-PLAN.md — Recompute `monthly_features` from cached `monthly_raw` (D-02-A, ten-column frozen set) and re-pin the A13 golden constant exactly *(exec-wave 2)*
+- [ ] 07-03-PLAN.md — Re-measure criteria 2/3/4 on real data against bands that name the values they reject, plus the D-03 logged rejection trial *(exec-wave 3)*
+- [ ] 07-04-PLAN.md — D-05 three-state pre/post table, D-08 A13 caveat resolution, and the policy ADR *(exec-wave 4)*
 
 **Explicit non-goals**: no fitting to forward returns; no raising K on classifier #1; no
 2021+ holdout use for any selection decision; no migration work.
@@ -404,5 +409,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
-| 7. Regime Representation | 0/TBD | Not started | - |
+| 7. Regime Representation | 0/4 | Planned (wave 1 only, checker PASS 2026-09-14) | - |
 | 8. Migration to Public Repo | 0/TBD | Not started | - |

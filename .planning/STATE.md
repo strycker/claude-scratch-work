@@ -4,15 +4,15 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 7
 current_phase_name: Regime Representation
-status: pending
-stopped_at: Phase 7 context gathered (wave 1 scoped); ready for /gsd-plan-phase 7
-last_updated: "2026-09-14T00:00:00.000Z"
+status: planned
+stopped_at: Phase 7 wave 1 planned and checker-verified; ready for /gsd-execute-phase 7
+last_updated: "2026-09-14T18:30:00.000Z"
 last_activity: 2026-09-14
-last_activity_desc: Status reconciliation — Phase 6 closure reflected in STATE/ROADMAP; release-engineering quick tasks back-filled
+last_activity_desc: Phase 7 wave 1 planned (4 plans, 11 tasks) — research, validation strategy, pattern map, D-02-A amendment, checker PASS
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 35
+  total_plans: 39
   completed_plans: 35
 ---
 
@@ -29,14 +29,50 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **7 — Regime Representation**
-Status: **CONTEXT GATHERED — ready for `/gsd-plan-phase 7`.** Discussion is complete
-(`07-CONTEXT.md`, `07-DISCUSSION-LOG.md`); wave 1 is scoped. No plans written yet.
+Status: **WAVE 1 PLANNED — ready to execute.** Four plans, 11 tasks, checker-verified PASS
+on 2026-09-14. Wave 2 is deliberately unplanned per D-09.
 
-Phase 7 gates internally: **wave 1 (resolve A13/A15 — one feature policy for driver and
-report) must pass before wave 2 (the leadership-axis classifier) starts.** Full scope in
-`.planning/PROPOSAL-phase-regime-representation.md`; success criteria in `ROADMAP.md`.
+| Plan | Wave | depends_on | Tasks | Autonomous | Covers |
+|---|---|---|---|---|---|
+| 07-01 | 1 | — | 2 (leads `type="tracer"`) | yes | criterion 1 — frozen policy threading, equivalence test |
+| 07-02 | 2 | 07-01 | 3 | yes | D-02-A recompute, pre-fix evidence, A13 re-pin |
+| 07-03 | 3 | 07-01, 07-02 | 3 (one `checkpoint:human-verify`) | **no** | criteria 2–4 — disagreement, policy trials, measurements |
+| 07-04 | 4 | 07-01..03 | 3 | yes | three-state report, A13 caveat rewrite, ADR-0001 |
 
-**Resume file:** `.planning/phases/07-regime-representation/07-CONTEXT.md`
+Phase 7 gates internally: **wave 1 (resolve A13/A15) must pass before wave 2 (the
+leadership-axis classifier) starts.** After wave 1's numbers land, run `/gsd-plan-phase 7`
+again to plan wave 2 with real numbers in hand (D-09).
+
+**Requirement scoping:** `requirements: [REG-01]` (PARTIAL — feature-policy clauses only);
+`deferred_requirements: [INV-01]` (entirely wave 2, D-09 cited). Recorded as a decision, not
+an omission.
+
+**Resume file:** `.planning/phases/07-regime-representation/07-01-PLAN.md`
+
+### ⚠ Carried into execution — three things that are not settled
+
+1. **Four `[ASSUMED]` plausibility bands are load-bearing and unlocked**: `abs(wealth_delta) < 5`,
+   `dd_delta ∈ [-0.5, 0.5]`, `n_transitions > 30` implausible, `pct_disagree < 0.02` suspicious.
+   Every plan depending on one labels it provisional and uses it as an advisory flag that
+   triggers a recorded note — **never a hard gate** (D-07). Confirm or revise before trusting
+   any verdict that rests on one.
+
+2. **The decision-coverage gate cannot parse `07-CONTEXT.md`.** `check decision-coverage-plan`
+   returns `total: 0, "no trackable decisions"` and therefore `passed: true` — a **skipped gate
+   reporting a pass**, not a verification. D-10's title wraps across two lines before its closing
+   `**` (unlike every other bullet), but `total: 0` means the parser finds no decisions at all,
+   so the format mismatch is broader than that one bullet. Coverage was confirmed by direct
+   citation count instead: all nine wave-1 decisions appear across the plans (D-09 34×, D-02 15×,
+   D-02-A 13×, D-04 12×, D-08 12×, D-03 8×, D-01 7×, D-05 4×, D-07 4×, D-06 3×). **Do not read a
+   future green from this gate as evidence until the parse is fixed.**
+
+3. **The first plan-checker run (haiku) returned a PASS that was not trustworthy** — it declared
+   `07-VALIDATION.md` and `07-PATTERNS.md` absent (both exist and are committed), skipped the
+   Nyquist and Pattern dimensions on that false premise, and scored coverage against an invented
+   criteria table that marked disagreement measurement as "deferred to wave 2" when it is
+   criterion 3 and squarely wave 1. Re-run on sonnet with a prompt requiring file-existence
+   proof and verbatim criteria quoting: **PASS with one WARNING** (since closed). The recorded
+   verdict for this phase is the sonnet run, not the haiku one.
 
 ---
 
@@ -391,9 +427,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-14 (status reconciliation; no code changes)
-Stopped at: Phase 7 context gathered (wave 1 scoped) — ready for `/gsd-plan-phase 7`
-Resume file: .planning/phases/07-regime-representation/07-CONTEXT.md
+Last session: 2026-09-14 (status reconciliation + Phase 7 wave-1 planning; no source changes)
+Stopped at: Phase 7 wave 1 planned and checker-verified — ready for `/gsd-execute-phase 7`
+Resume file: .planning/phases/07-regime-representation/07-01-PLAN.md
 
 Between the 2026-09-10 context session and this one, the release-engineering work
 (quick tasks 260910-vyi, 260911-kkj, 260911-la3, 260911-nt7) was carried out **partly
