@@ -339,8 +339,20 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
      configuration logged to the trial registry, deflated-Sharpe applied for the full count.
 
   8. `platform/` still imports nothing from the legacy library — the import-guard test is
-     extended to the new modules. (Verified 2026-09-10: platform is currently fully
-     decoupled, so the relative-strength algorithms must be **ported**, not imported.)
+     extended to the new modules.
+
+     > ⚠ **CORRECTION 2026-09-15 — the "Verified 2026-09-10" claim that stood here was FALSE.**
+     > It rested on `MIGRATION-PLAN.md`'s exit check, which ended in `| grep -v platform`. Every
+     > match line begins with a path containing `platform`, so that filter discarded **every**
+     > violation: the check returned nothing whether or not the code was decoupled, and could
+     > never fail. An AST scan finds **31 real legacy import sites** in `platform/` — bare
+     > `trading_crab_lib` ×16, `.checkpoints` ×7, `.ingestion.*` ×7, `.email` ×1. All predate
+     > Phase 7; **wave 1 added none**. Vendoring them is `MIGRATION-PLAN.md` P0 / Phase 8
+     > criterion 1.
+     >
+     > **The "port, don't import" instruction for wave 2 still stands** — but because the
+     > coupling must not be *widened*, not because `platform/` is already clean. Now guarded by
+     > `tests/unit/test_platform_legacy_import_ratchet.py`, a ratchet that may only decrease.
 
 **Plans**: 4 plans (**wave 1 only** — criteria 1-4 + the ADR; criteria 5-7 are wave 2 and get a
 second planning pass per `07-CONTEXT.md` D-09)
@@ -379,7 +391,10 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 
   1. `platform/` imports nothing from the legacy library — the four coupling seams
      (CheckpointManager, multpl/macrotrends scraper helpers, email helpers) are vendored
-     and an import-guard test enforces it.
+     and an import-guard test enforces it. **Baseline measured 2026-09-15: 31 sites remain**
+     (the prior grep-based check was unfalsifiable — see the Phase 7 criterion-8 correction).
+     The enforcing test now exists as `tests/unit/test_platform_legacy_import_ratchet.py`;
+     this phase's exit is that test passing with `MAX_LEGACY_IMPORT_SITES = 0`.
 
   2. The two-package layout (`trading-crab` + `trading-crab-lib`) exists in
      `strycker/trading-crab` with the L0–L4 modules migrated.

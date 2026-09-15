@@ -95,7 +95,23 @@ from the legacy library.
 | P0.3 | Vendor email helpers (M4) | `platform/report/email.py`, `report/weekly.py` |
 | P0.4 | Add an import-guard test asserting zero non-platform `trading_crab_lib` imports | `tests/unit/test_platform_standalone.py` |
 
-**Exit:** `grep -r "from trading_crab_lib\." src/trading_crab_lib/platform | grep -v platform` returns nothing, and the guard test enforces it. Full suite still green.
+**Exit:** `pytest tests/unit/test_platform_legacy_import_ratchet.py -q` passes with
+`MAX_LEGACY_IMPORT_SITES = 0`, and the full suite is green.
+
+> ⚠ **The previous exit criterion here was unfalsifiable and is retained only as a warning.**
+> It read: `grep -r "from trading_crab_lib\." src/trading_crab_lib/platform | grep -v platform`
+> returns nothing. Every match line **begins with the path** `src/trading_crab_lib/platform/...`,
+> which contains the substring `platform`, so the second `grep -v` discards **every** line —
+> including all real violations. It returned nothing on 2026-09-10 and still returns nothing
+> today **with 31 genuine legacy imports in the tree**, which is how ROADMAP criterion 8 came to
+> carry "Verified 2026-09-10: platform is currently fully decoupled." That claim was false.
+> Found 2026-09-15 by the Phase 7 wave-1 verifier via an AST scan. Do not restore the grep —
+> `test_the_broken_grep_is_documented_as_broken` fails if anyone does.
+
+**Current measured state (AST scan, 2026-09-15): 31 legacy import sites** across these seams —
+`trading_crab_lib` (16, mostly `ROOT`/`OUTPUT_DIR`), `trading_crab_lib.checkpoints` (7),
+`trading_crab_lib.ingestion.http` (3), `.ingestion.browser` (2), `.ingestion` (1),
+`.ingestion.assets` (1), `trading_crab_lib.email` (1). These predate Phase 7; wave 1 added none.
 
 ### P1 — Target repo skeleton
 

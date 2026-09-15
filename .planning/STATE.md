@@ -60,7 +60,27 @@ Verified, not inferred: the degrade is L1-label-mediated, **not** a wiring defec
 rate is inferred (occupancy shifted, state 0: 1.6% → 11.51%), **not measured** — do not cite a
 cause as established.
 
-### ⚠ Trial registry is contaminated with 4 untagged rows — matters for D-16
+### ⚠ Criterion 8's "platform is fully decoupled" was FALSE — corrected 2026-09-15
+
+Found by the wave-1 verifier. `MIGRATION-PLAN.md`'s decoupling exit check ended in
+`| grep -v platform`; every match line begins with a path containing `platform`, so the filter
+discarded **every** violation. The check returned nothing whether or not the code was decoupled
+— **it could not fail** — and that false negative is what backed ROADMAP criterion 8's
+"Verified 2026-09-10: platform is currently fully decoupled."
+
+An AST scan finds **31 real legacy import sites** in `platform/`: bare `trading_crab_lib` ×16
+(mostly `ROOT`/`OUTPUT_DIR`), `.checkpoints` ×7, `.ingestion.http` ×3, `.ingestion.browser` ×2,
+`.ingestion` ×1, `.ingestion.assets` ×1, `.email` ×1. **All predate Phase 7; wave 1 added none**
+(confirmed by `git blame`). Vendoring them is `MIGRATION-PLAN.md` P0 / Phase 8 criterion 1.
+
+**Wave 2's "port, don't import" instruction still stands** — but because the coupling must not be
+*widened*, not because `platform/` is already clean. Now guarded by
+`tests/unit/test_platform_legacy_import_ratchet.py`: an AST ratchet pinned at 31 that may only
+decrease, plus an allowlist check that fails on a new seam, plus a test that fails if anyone
+restores the unfalsifiable grep. ROADMAP criteria 7.8 and 8.1 and `MIGRATION-PLAN.md` all
+corrected.
+
+### ✅ Trial registry contamination — FIXED 2026-09-15
 
 The registry stands at **42** rows. Rows 35–38 are this phase's real policy trials
 (`P7-W1-frozen-10col` ×2, `P7-W1-impute-13col-REJECTED` ×2). **Rows 39–42 are UNTAGGED and are
@@ -68,13 +88,21 @@ not policy evaluations** — they were appended by two end-to-end wiring-verific
 `python -m trading_crab_lib.platform.evaluation.report` during 07-04 (the plan's own
 `<verification>` section anticipated this).
 
-**Why it matters:** D-16 computes deflated Sharpe over the *whole registry since project start*,
-so those 4 rows inflate the trial count against which criterion 7's joint-lift search will be
-deflated. **The ledger was deliberately NOT edited** — it is append-only honesty evidence, and
-quietly deleting rows we dislike is a worse failure than the contamination. Wave 2 must decide
-explicitly whether a wiring-verification run counts as a trial, and record that decision.
-**Recommended follow-up:** make `trial_tag` mandatory, or have the report module skip the
-registry append when invoked as a smoke test.
+**Resolved (user-approved: archive + reset, keep count).** The ledger was archived **intact** to
+`registry/archive/trials-pre-P7W1-reset.jsonl` (42 rows, nothing deleted) and restarted with a
+single provenance header carrying `prior_genuine_trials=38`, `discarded_smoke_rows=4`, and an
+explicit note that **D-16's project total = 38 + rows appended after the header**. A bare
+post-reset row count must not be read as the project total.
+
+Three structural fixes so it cannot recur:
+- `append_trial` **refuses** to persist a row without a non-empty `trial_tag` (blank and
+  whitespace rejected; a refused write leaves no file).
+- New `NO_REGISTRY` sentinel: smoke runs build the row, log the skip, return `written=False`,
+  write nothing — and are exempt from the tag requirement, because a smoke run is not a trial.
+- The report CLI now **requires** `--trial-tag` or `--smoke` (mutually exclusive). The exact
+  invocation that caused this can no longer be typed; bare `python -m ...report` exits non-zero.
+- `run_backtest` / `fit_nowcaster` / `run_walkforward` default to naming their own call site, so
+  every persisted row is attributable without breaking callers.
 
 | Plan | Wave | depends_on | Tasks | Autonomous | Covers |
 |---|---|---|---|---|---|
