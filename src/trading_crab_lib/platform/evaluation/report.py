@@ -82,6 +82,7 @@ from trading_crab_lib.platform.evaluation.model_metrics import report_model_metr
 from trading_crab_lib.platform.evaluation.sojourn_lag import build_filtered_probs_matrix, compute_sojourn_lag_headline
 from trading_crab_lib.platform.honesty.gap_lag import compute_gap
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
 from trading_crab_lib.platform.labeling.jump_model import canonicalize_states, fit_jump_model, standardize_features
 from trading_crab_lib.platform.splice import build_core_research_series
 from trading_crab_lib.platform.taxonomy import lean_feature_set
@@ -1073,7 +1074,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Assemble the honest backtest evaluation report (EVAL-01..04)"
     )
-    parser.parse_args(argv)
+    # Phase 7 wave 1 lesson: this CLI previously logged two registry rows on EVERY
+    # invocation, including wiring-verification runs that evaluated nothing. Because
+    # D-16 deflates Sharpe over the whole ledger, those rows inflated the trial count.
+    # The choice is now mandatory and mutually exclusive — you cannot invoke this
+    # without declaring whether the run is a trial.
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--trial-tag",
+        metavar="TAG",
+        help="Log this run to the trial registry under TAG (a real evaluated configuration).",
+    )
+    mode.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Wiring/verification run — write the report but log NOTHING to the registry.",
+    )
+    args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO)
 
@@ -1082,7 +1099,15 @@ def main(argv: list[str] | None = None) -> int:
     monthly_features = cm.load("monthly_features")
     monthly_raw = cm.load("monthly_raw")
 
-    result = run_full_backtest_evaluation(monthly_features, monthly_raw, cfg)
+    if args.smoke:
+        log.info("SMOKE run: report will be written; registry will NOT be touched.")
+        result = run_full_backtest_evaluation(
+            monthly_features, monthly_raw, cfg, registry_path=NO_REGISTRY
+        )
+    else:
+        result = run_full_backtest_evaluation(
+            monthly_features, monthly_raw, cfg, trial_tag=args.trial_tag
+        )
     print(f"Backtest report written: {result['report_path']}")  # noqa: T201 — first-class CLI output
     return 0
 

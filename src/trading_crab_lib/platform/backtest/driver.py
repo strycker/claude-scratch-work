@@ -548,6 +548,11 @@ def run_backtest(
         "min_train": min_train,
         "cost_bps": cost_bps,
     }
+    # Every persisted row must be attributable (registry.append_trial enforces it).
+    # A caller-supplied trial_tag names the policy variant; absent one, fall back to the
+    # call site itself so the ledger is still self-describing. Phase 7 wave 1's four
+    # untagged smoke rows are why: an unattributable row still counts toward D-16.
+    trial_config["trial_tag"] = trial_tag if trial_tag is not None else "run_backtest"
     if trial_tag is not None:
         # 07-01 Task 2: provenance only, never a dedup key — the registry is
         # append-only and does not deduplicate identical configs (confirmed

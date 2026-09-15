@@ -662,7 +662,17 @@ class TestTrialTag:
         config = trials.iloc[0]["config"]
         assert config["trial_tag"] == "unit-probe"
 
-    def test_no_trial_tag_leaves_config_shape_unchanged(self, tmp_path, monkeypatch):
+    # RE-PINNED 2026-09-15 (Phase 7 wave-1 follow-up). This test previously asserted
+    # `"trial_tag" not in config` — i.e. that omitting the kwarg produced an UNTAGGED
+    # registry row, preserving the pre-07-01 four-key shape. That backward-compatibility
+    # guarantee is deliberately withdrawn: wave 1 shipped four unattributable rows from
+    # wiring-verification runs, and because D-16 deflates Sharpe over every row in the
+    # ledger, an untagged row silently inflates the trial count it is deflated against.
+    # append_trial now REFUSES to persist a row without a non-empty trial_tag, and
+    # run_backtest falls back to naming its own call site. The assertion is not relaxed —
+    # it is inverted to pin the new contract, and is strictly stronger: it now forbids
+    # the untagged state the old one permitted.
+    def test_no_trial_tag_falls_back_to_the_call_site_name(self, tmp_path, monkeypatch):
         monthly_features, asset_returns, cash_returns = _make_synthetic_frame()
         monkeypatch.setattr(driver, "_refit_l1", _fake_refit_l1)
         monkeypatch.setattr(driver, "_refit_l2", _fake_refit_l2)
@@ -679,8 +689,11 @@ class TestTrialTag:
         trials = read_trials(path=registry_path)
         assert len(trials) == 1
         config = trials.iloc[0]["config"]
-        assert set(config.keys()) == {"phase", "use_regime_tilt", "min_train", "cost_bps"}
-        assert "trial_tag" not in config
+        # The four pre-existing keys are all still present — nothing was dropped.
+        assert {"phase", "use_regime_tilt", "min_train", "cost_bps"} <= set(config.keys())
+        # ...and the row is attributable. The rejected value is a persisted row with no
+        # trial_tag at all, which is precisely what wave 1 wrote four of.
+        assert config["trial_tag"] == "run_backtest"
 
     def test_one_evaluation_appends_exactly_two_rows(self, tmp_path, monkeypatch):
         from trading_crab_lib.platform.backtest.baselines import no_regime_ablation
