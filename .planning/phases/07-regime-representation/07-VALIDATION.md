@@ -19,13 +19,19 @@ supersedes: 07-VALIDATION-WAVE1.md (wave 1's, status validated — reused, not r
 
 ---
 
+> **CORRECTION 2026-09-15:** two test filenames in the original draft of this file did not
+> exist — I invented `test_platform_allocation_joint_tilt.py` and
+> `test_platform_ingestion_macro_monthly.py`. The real files are **`test_platform_tilt.py`**
+> and **`test_platform_macro_ingest.py`**. Caught by the wave-2 planner checking the tree
+> rather than trusting this document. Corrected throughout.
+
 ## Test Infrastructure
 
 | Property | Value |
 |----------|-------|
 | **Framework** | pytest 8.0+ |
 | **Config** | root `pyproject.toml` → `[tool.pytest.ini_options]` |
-| **Quick run** | `pytest tests/unit/test_platform_labeling.py tests/unit/test_platform_features_relative.py tests/unit/test_platform_evaluation_dependence.py tests/unit/test_platform_allocation_joint_tilt.py tests/unit/test_platform_legacy_import_ratchet.py -x` |
+| **Quick run** | `pytest tests/unit/test_platform_labeling.py tests/unit/test_platform_features_relative.py tests/unit/test_platform_evaluation_dependence.py tests/unit/test_platform_tilt.py tests/unit/test_platform_legacy_import_ratchet.py -x` |
 | **Full suite** | `pytest tests/ -q` |
 | **Current baseline** | **1752 passed, 0 skipped, ~72s** (measured on `main` @ `34ffa30`) |
 | **New dependencies** | **none** |
@@ -49,11 +55,11 @@ supersedes: 07-VALIDATION-WAVE1.md (wave 1's, status validated — reused, not r
 | **5** canonicalize fix | `canonicalize_states` never silently falls back for #2; **raises `ValueError`** on an absent `sort_column` | `-k canonicalize` in `test_platform_labeling.py` | ❌ Wave 0 (extends `TestCanonicalizeStates`) |
 | **5** occupancy | sums to 1.0; every state under the §4.4 5% floor flagged (`_MIN_OCCUPANCY_THRESHOLD`, `labeling/diagnostics.py:67`) | `-k occupancy` | ✅ generic helpers exist — extend with a #2-shaped fixture |
 | **6** dependence | ARI + NMI + Cramér's V + crosstab, **no pass/fail gate** (D-15) | `test_platform_evaluation_dependence.py` | ❌ Wave 0 |
-| **7** joint tilt | `blend_regime_tilts` weights sum to `scale`; degrades on empty input | `test_platform_allocation_joint_tilt.py` | ❌ Wave 0 |
+| **7** joint tilt | `blend_regime_tilts` weights sum to `scale`; degrades on empty input | `test_platform_tilt.py` | ❌ Wave 0 |
 | **7** deflated Sharpe | DSR vs a hand-worked oracle; `total_trial_count` **reads the provenance header** | `test_platform_evaluation_deflated_sharpe.py` | ❌ Wave 0 — **nothing exists to extend** |
 | **7** joint lift, real data | measured vs #1 alone, inside its own reported window | manual | Manual-only (multi-minute real walk-forward) |
 | **8** ratchet guard | porting must not raise legacy imports past 31 | `test_platform_legacy_import_ratchet.py` | ✅ **exists — this IS the guard** |
-| **INV-01** | M2SL/TOTALSL ingested, aligned monthly, no interpolation | new cases in `test_platform_ingestion_macro_monthly.py` + one live fetch | ❌ Wave 0 |
+| **INV-01** | M2SL/TOTALSL ingested, aligned monthly, no interpolation | new cases in `test_platform_macro_ingest.py` + one live fetch | ❌ Wave 0 |
 | **ADR** | sort convention, credit aggregate, blend weight, L2-window decision, DSR estimator, trial ceiling | document review | N/A |
 
 ---
@@ -63,7 +69,7 @@ supersedes: 07-VALIDATION-WAVE1.md (wave 1's, status validated — reused, not r
 - [ ] `test_platform_labeling.py` — `sort_column` no-fallback oracle + missing-column `ValueError`
 - [ ] `test_platform_features_relative.py` — **NEW**: disjointness + ported-function parity vs hand-computed examples
 - [ ] `test_platform_evaluation_dependence.py` — **NEW**: identical labelings → ARI=NMI=1; independent → near null
-- [ ] `test_platform_allocation_joint_tilt.py` — **NEW**: blend vs hand-computed; degenerate inputs
+- [ ] `test_platform_tilt.py` — **NEW**: blend vs hand-computed; degenerate inputs
 - [ ] `test_platform_evaluation_deflated_sharpe.py` — **NEW**: DSR oracle (N=1 → raw significance; N→∞ → toward null) + `total_trial_count` against a synthetic header row
 - [ ] INV-01 ingestion config entries + live smoke
 - [ ] Framework install: none
