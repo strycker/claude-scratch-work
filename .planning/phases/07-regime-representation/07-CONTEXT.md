@@ -362,11 +362,24 @@ and absorbs **INV-01**.
   than being rewritten.
 
 ### Established Patterns
-- **`platform/` imports nothing from the legacy library.** Re-verified this session:
-  `grep` over all 59 `platform/*.py` modules returns zero legacy imports. Criterion 8 is
-  currently TRUE and must stay true — wave 2's relative-strength code is ported, and the
-  import-guard test (static AST import-graph closure, Phase 6 D-01, not `sys.modules`) is
-  extended to the new modules.
+- **`platform/` imports nothing from the legacy library.**
+  > ⚠ **CORRECTED 2026-09-15 — this claim was FALSE, and so was its evidence.** The "`grep`
+  > over all 59 `platform/*.py` modules returns zero legacy imports" cited here was
+  > `MIGRATION-PLAN.md`'s exit check, which ends in `| grep -v platform`. Every match line
+  > begins with a path containing `platform`, so that filter discarded **every** violation:
+  > the grep returns zero whether or not the code is decoupled, and **cannot fail**. An AST
+  > scan finds **31 real legacy import sites** — bare `trading_crab_lib` ×16, `.checkpoints`
+  > ×7, `.ingestion.*` ×7, `.email` ×1. Found by the wave-1 verifier.
+  >
+  > **Criterion 8 is currently FALSE.** All 31 sites predate Phase 7 and wave 1 added none, so
+  > this is pre-existing coupling a broken check hid, not a wave-1 regression. Vendoring them
+  > is `MIGRATION-PLAN.md` P0 / Phase 8 criterion 1.
+  >
+  > **What this does NOT change:** wave 2's relative-strength code is still **ported, not
+  > imported** — because the coupling must not be *widened*, not because `platform/` is
+  > already clean. Now enforced by `tests/unit/test_platform_legacy_import_ratchet.py`, an
+  > AST ratchet pinned at 31 that may only decrease, with an allowlist that fails on a new
+  > seam and a test that fails if anyone restores the grep.
 - Functions-only library, `from __future__ import annotations`, type hints on public
   functions, `log = logging.getLogger(__name__)`, no `print()` in library code.
 - New config sections read defensively via `cfg.get()`, never added to
