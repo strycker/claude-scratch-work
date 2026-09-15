@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 7
 current_phase_name: Regime Representation
-status: executed
-stopped_at: Phase 7 phase-wave 1 executed (4/4 plans); wave 2 needs its own /gsd-plan-phase 7 pass
+status: planned
+stopped_at: Phase 7 wave 2 planned (8 plans, 23 tasks, checker PASS); ready for /gsd-execute-phase 7
 last_updated: "2026-09-15T01:00:00.000Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 7 phase-wave 1 executed end to end — A13/A15 resolved, D-02-A recompute landed, ADR-0001 written, suite 1705 → 1735
@@ -29,7 +29,29 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **7 — Regime Representation**
-Status: **PHASE-WAVE 1 CLOSED.** Executed 4/4, verified 4/4 criteria by live re-derivation
+Status: **WAVE 1 CLOSED · WAVE 2 PLANNED (8 plans, `07-05`…`07-12`, checker PASS 2026-09-15).**
+
+| Plan | Wave | Depends | Auto | Delivers |
+|---|---|---|---|---|
+| 07-05 | 1 | — | yes | **tracer** — `sort_column` fix (raises), relative-features port, M2SL/TOTALSL config |
+| 07-06 | 1 | — | yes | deflated Sharpe from scratch + `total_trial_count` reading the header |
+| 07-07 | 2 | 05 | yes | INV-01 screen — PCA discovery-only, era stability, named survivors |
+| 07-08 | 3 | 05,07 | **no** | `checkpoint:decision` pinning 6 constants · ADR-0002 Proposed · classifier #2 fit |
+| 07-09 | 4 | 08 | **no** | criterion 6 — ARI/NMI/Cramér's V, no gate · human-verify |
+| 07-10 | 4 | 08 | **no** | `blend_regime_tilts` · human-verify confirming the four `[ASSUMED]` bands |
+| 07-11 | 5 | 06,09,10 | yes | criterion 7 — joint lift + DSR, window inline |
+| 07-12 | 6 | 07,09,11 | yes | ADR-0002 Accepted · 8 probe edges · REG-01 + INV-01 claimed |
+
+**Both requirements are now CLAIMED** — wave 1's plans carried `deferred_requirements: [INV-01]`;
+that deferral ends here. **Three blocking checkpoints**: 07-08 decision, 07-09 and 07-10 human-verify.
+
+**The sequencing that matters** (verified, not asserted): the `canonicalize_states` `sort_column`
+fix is wave **1**; the first classifier-#2 fit is wave **3**. The band-confirmation checkpoint is
+wave **4**; the first joint-lift number is wave **5**. Both gaps are structural, not conventional.
+
+---
+
+### Previously: **PHASE-WAVE 1 CLOSED.** Executed 4/4, verified 4/4 criteria by live re-derivation
 (`07-VERIFICATION.md`), validated `nyquist_compliant: true` (`07-VALIDATION.md`), UAT signed
 **accept-with-caveats** 2026-09-15 (`07-UAT.md`, 3/3 items closed). Suite **1752 passed, 0 skipped**. Wave 2 remains deliberately unplanned per D-09
 and needs its own `/gsd-plan-phase 7` pass. Suite 1705 → **1735 passed, 0 skipped**.
