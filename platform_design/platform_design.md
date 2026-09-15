@@ -136,6 +136,8 @@ Filtered/nowcast probabilities oscillate near transitions. Allocation responds t
 - **Detection lag:** periods from each ex-post transition until real-time probability crosses the action threshold (typically 1–3 months). The ratio **median sojourn / detection lag** largely determines whether regime timing can work; report it prominently. If sojourns ≈ 18m and lag ≈ 2m, most of the regime is captured; if sojourns ≈ 5m, the lag eats the trade.
 - **Label churn:** fraction of trailing-24-month labels that change on each L1 refresh.
 
+> **See `platform_design/adr/0001-l1-feature-policy.md`** for the L1 feature-policy decision (audit item A13's resolution) that this metric's interpretability depends on.
+
 ---
 
 ## 6. Layer 3 — Asset Prediction (regime-conditional mixture of experts)
