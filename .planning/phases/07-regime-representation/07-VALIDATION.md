@@ -2,10 +2,11 @@
 phase: 7
 slug: regime-representation
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-09-14
+audited: 2026-09-15
 ---
 
 # Phase 7 — Validation Strategy
@@ -149,4 +150,61 @@ not satisfy a numeric criterion here.
 - [ ] `[ASSUMED]` bands confirmed or revised before execution
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-15 (audit below)
+
+---
+
+## Validation Audit 2026-09-15
+
+`/gsd-validate-phase 7`, State A (audit existing). **Zero MISSING gaps** — the auditor spawn
+was skipped per the workflow's own "no gaps" branch. Every requirement re-run live, not
+inferred from SUMMARY claims.
+
+| Requirement | Contract said | Actual | Tests |
+|---|---|---|---|
+| C1 — driver/report equivalence | ❌ Wave 0, test did not exist | ✅ **COVERED** | `TestFrozenPolicyEquivalence` — 6 passed |
+| C2 — §5.4 interpretable | ✅ extend existing | ✅ **COVERED** | `test_platform_evaluation_sojourn_lag` — 6 passed |
+| C3 — disagreement vs baseline | ⚠️ PARTIAL — methodology unlocated | ✅ **COVERED** | `test_platform_evaluation_disagreement` — 6 passed |
+| C4 — both ablation axes | manual-only | ✅ done, human-approved | stays manual-only by design (needs a real ~2-min walk-forward) |
+| A13 re-pin | ✅ exists | ✅ **COVERED** | `-k a13` — 1 passed, exact list equality intact |
+| C8 — import guard | ✅ "exists" | ✅ **NOW REAL** | `test_platform_legacy_import_ratchet` — 11 passed |
+| Wave 0 — offline recompute | ❌ | ✅ **COVERED** | `test_platform_recompute_monthly_features` — 6 passed |
+
+**All three Wave 0 gaps closed:**
+1. The criterion-1 equivalence test now exists and fails on divergence.
+2. The 389/470 = 82.8% methodology was **located** — `platform/plotting/regime.py:499::label_disagreement`
+   (in the *plotting* package, which is why research searching `evaluation/` and `labeling/`
+   missed it) — and reproduced exactly, so criterion 3 compares against a **reproduced**
+   baseline rather than a quoted one.
+3. `monthly_features` recomputed offline from cached `monthly_raw`; no network needed.
+
+**Sign-off checklist:**
+
+- [x] Every requirement has an automated command or a documented manual-only reason
+- [x] Sampling continuity — no 3 consecutive tasks without an automated verify
+- [x] Wave 0 covers all MISSING references (incl. the 389/470 provenance hunt)
+- [x] No watch-mode flags
+- [x] Feedback latency **~72s** < 92s budget (full suite, 1752 tests)
+- [ ] ⚠️ **`[ASSUMED]` bands still unconfirmed** — see below
+- [x] `nyquist_compliant: true`
+
+### ⚠ The one item deliberately left open
+
+The four `[ASSUMED]` bands — `abs(wealth_delta) < 5`, `dd_delta ∈ [-0.5, 0.5]`,
+`n_transitions > 30` implausible, `pct_disagree < 0.02` suspicious — were **used** during wave 1
+but never **confirmed**. That is correct rather than an oversight: D-07 makes them advisory flags
+that trigger a recorded note, never gates, so nothing in wave 1 turned on their exact values.
+
+It becomes load-bearing in wave 2, where criterion 7's joint-lift search is judged against them.
+**Confirm or revise all four before criterion 7 leans on them.** Marking this ticked without a
+human actually reviewing the numbers would be precisely the existence-shaped evidence
+`UAT-AUDIT-2026-09-09` indicts.
+
+### One band earned its keep already
+
+`pct_disagree < 0.02` was proposed as a "suspiciously resolved" guard. It is not hypothetical:
+passing the persisted `state_N` **strings** to `label_disagreement` raw returns
+`{'n_compared': 0, 'pct_disagree': 0.0}` **silently, with no exception** — a reading of "0%
+disagreement, A13 totally fixed" produced by comparing nothing at all. Reproduced at plan time
+and now pinned by `test_platform_evaluation_disagreement`, which asserts `n_compared` is
+non-zero. The band would have caught it even if the test had not.
