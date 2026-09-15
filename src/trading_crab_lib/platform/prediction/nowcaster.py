@@ -216,6 +216,8 @@ def evaluate_nowcaster(
             "min_train": min_train,
         }
     )
+    # Attributable-row requirement (registry.append_trial): name the call site.
+    trial_config.setdefault("trial_tag", "fit_nowcaster")
     registry.append_trial(
         config=trial_config,
         features=list(X.columns),

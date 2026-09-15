@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Regime Labeling & Prediction** - Jump-model regime labeler plus calibrated logistic nowcaster, both walk-forward safe (completed 2026-07-22)
 - [x] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire (completed 2026-07-23)
 - [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
-- [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation
+- [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation (completed 2026-09-10)
 - [ ] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01)
 - [ ] **Phase 8: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
@@ -266,17 +266,21 @@ labeling before it is trusted for live use.
 
   5. `P6_backtest_evaluation` renders the equity curves, baseline gauntlet, ablation
      delta, calibration, and the sojourn/lag headline with its resolved-transition count.
-**Plans**: 1/7 plans executed
+**Plans**: 7/7 plans executed
 
-- [x] 06-01-PLAN.md
-- [ ] 06-02-PLAN.md
-- [ ] 06-03-PLAN.md
-- [ ] 06-04-PLAN.md
-- [ ] 06-05-PLAN.md
-- [ ] 06-06-PLAN.md
-- [ ] 06-07-PLAN.md
+- [x] 06-01-PLAN.md — plotting core/loaders/data/drift
+- [x] 06-02-PLAN.md — artifact persistence (additive write in evaluation/report.py)
+- [x] 06-03-PLAN.md — P3_regime_labeling (+ A13 display)
+- [x] 06-04-PLAN.md — P2_features_taxonomy
+- [x] 06-05-PLAN.md — P4_nowcaster
+- [x] 06-06-PLAN.md — P5_assets_allocation
+- [x] 06-07-PLAN.md — P6_backtest_evaluation
 
-06-03 (P3 + A13), 06-04 (P2), 06-05 (P4), 06-06 (P5), 06-07 (P6)
+Verified 2026-09-10 (`06-VERIFICATION.md`, 5/5 criteria, status `human_needed`); UAT closed
+2026-09-10 (`06-UAT.md`, 2/2) — the fresh-run item was settled by executing all six notebooks
+from cleared state via `nbclient`, and the P3 cold-start sign-off was recorded by the operator
+as **accept-with-caveats** (the regimes are *crisis* regimes, not *allocation* regimes — which
+is the finding that motivated Phase 7).
 
 **Why this precedes migration**: the migration's per-step validation gate is "run the
 notebook and verify." The platform currently has **zero** notebooks — all 12 in
@@ -335,12 +339,42 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
      configuration logged to the trial registry, deflated-Sharpe applied for the full count.
 
   8. `platform/` still imports nothing from the legacy library — the import-guard test is
-     extended to the new modules. (Verified 2026-09-10: platform is currently fully
-     decoupled, so the relative-strength algorithms must be **ported**, not imported.)
-**Plans**: TBD
+     extended to the new modules.
+
+     > ⚠ **CORRECTION 2026-09-15 — the "Verified 2026-09-10" claim that stood here was FALSE.**
+     > It rested on `MIGRATION-PLAN.md`'s exit check, which ended in `| grep -v platform`. Every
+     > match line begins with a path containing `platform`, so that filter discarded **every**
+     > violation: the check returned nothing whether or not the code was decoupled, and could
+     > never fail. An AST scan finds **31 real legacy import sites** in `platform/` — bare
+     > `trading_crab_lib` ×16, `.checkpoints` ×7, `.ingestion.*` ×7, `.email` ×1. All predate
+     > Phase 7; **wave 1 added none**. Vendoring them is `MIGRATION-PLAN.md` P0 / Phase 8
+     > criterion 1.
+     >
+     > **The "port, don't import" instruction for wave 2 still stands** — but because the
+     > coupling must not be *widened*, not because `platform/` is already clean. Now guarded by
+     > `tests/unit/test_platform_legacy_import_ratchet.py`, a ratchet that may only decrease.
+
+**Plans**: 4 plans (**wave 1 only** — criteria 1-4 + the ADR; criteria 5-7 are wave 2 and get a
+second planning pass per `07-CONTEXT.md` D-09)
+
+> ⚠ **Two senses of "wave" collide in this phase — read carefully.** The phase gates on
+> **phase-wave 1 → phase-wave 2** (resolve A13/A15, then the leadership classifier). All four
+> plans below are **entirely inside phase-wave 1**. The `exec-wave N` labels are GSD *execution*
+> ordering within this pass, not the phase's gate. No plan below touches classifier #2.
+
+Plans (all phase-wave 1):
+- [ ] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test *(exec-wave 1)*
+- [ ] 07-02-PLAN.md — Recompute `monthly_features` from cached `monthly_raw` (D-02-A, ten-column frozen set) and re-pin the A13 golden constant exactly *(exec-wave 2)*
+- [ ] 07-03-PLAN.md — Re-measure criteria 2/3/4 on real data against bands that name the values they reject, plus the D-03 logged rejection trial *(exec-wave 3)*
+- [ ] 07-04-PLAN.md — D-05 three-state pre/post table, D-08 A13 caveat resolution, and the policy ADR *(exec-wave 4)*
 
 **Explicit non-goals**: no fitting to forward returns; no raising K on classifier #1; no
 2021+ holdout use for any selection decision; no migration work.
+
+**Requirement coverage this pass**: REG-01 **partial** — the driver/reference feature policy,
+§5.4 interpretability, and the ablation re-measurement clauses. The second-classifier,
+orthogonality and joint-lift clauses are wave 2. **INV-01 is entirely deferred to wave 2** by
+`07-CONTEXT.md` D-09; the deferral is recorded as a decision in the phase ADR.
 
 **Absorbs INV-01** (formerly Phase 8): named invariant candidates (M2/GDP, market-cap/GDP,
 credit/GDP) are wave 2's feature-discovery work, and INV-01's constraint that survivors be
@@ -357,7 +391,10 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 
   1. `platform/` imports nothing from the legacy library — the four coupling seams
      (CheckpointManager, multpl/macrotrends scraper helpers, email helpers) are vendored
-     and an import-guard test enforces it.
+     and an import-guard test enforces it. **Baseline measured 2026-09-15: 31 sites remain**
+     (the prior grep-based check was unfalsifiable — see the Phase 7 criterion-8 correction).
+     The enforcing test now exists as `tests/unit/test_platform_legacy_import_ratchet.py`;
+     this phase's exit is that test passing with `MAX_LEGACY_IMPORT_SITES = 0`.
 
   2. The two-package layout (`trading-crab` + `trading-crab-lib`) exists in
      `strycker/trading-crab` with the L0–L4 modules migrated.
@@ -387,5 +424,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
-| 7. Regime Representation | 0/TBD | Not started | - |
+| 7. Regime Representation | 4/4 | Wave 1 verified 4/4 + validated + UAT accept-with-caveats; wave 2 unplanned (D-09) | 2026-09-15 |
 | 8. Migration to Public Repo | 0/TBD | Not started | - |

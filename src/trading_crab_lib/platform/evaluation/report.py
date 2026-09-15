@@ -71,6 +71,7 @@ from trading_crab_lib.platform.backtest.baselines import faber_sma, no_regime_ab
 from trading_crab_lib.platform.backtest.driver import run_backtest
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
 from trading_crab_lib.platform.evaluation.kpis import (
     crisis_capture_ratio,
     cvar,
@@ -81,11 +82,55 @@ from trading_crab_lib.platform.evaluation.model_metrics import report_model_metr
 from trading_crab_lib.platform.evaluation.sojourn_lag import build_filtered_probs_matrix, compute_sojourn_lag_headline
 from trading_crab_lib.platform.honesty.gap_lag import compute_gap
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
 from trading_crab_lib.platform.labeling.jump_model import canonicalize_states, fit_jump_model, standardize_features
 from trading_crab_lib.platform.splice import build_core_research_series
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
+
+
+# ── Pre-fix historical baseline (07-04/D-05, Phase 7 ADR-0001) ────────────────
+#
+# TRANSCRIBED ONCE, 2026-09-14, from two documents this record never re-reads:
+#   - `.planning/phases/07-regime-representation/07-PREFIX-EVIDENCE.md`
+#     (labeling-disagreement figures, `pct_disagree`/`n_compared`/`n_disagree`
+#     and the disagreement date window — REPRODUCED there directly from the
+#     persisted pre-fix artifacts at commit 46557c1, artifact vintage
+#     2026-09-11, not merely quoted from an earlier doc).
+#   - `.planning/BASELINE-v1-tracer-bullet.md`'s "Current reference run"
+#     table (2026-09-09) — the sojourn/lag/ratio/Brier/KPI/gauntlet figures.
+#
+# This is a HISTORICAL RECORD and is NEVER RECOMPUTED by this module: it
+# reflects a codebase state that no longer exists on disk to re-run against
+# (the pre-fix EXPANDING driver feature-admission policy, frozen only by
+# this phase's D-01, AND a STALE nine-column `monthly_features` checkpoint
+# whose `oil` column was truncated to 1985-02 instead of its full 1962-01
+# history, corrected by D-02-A). Any post-fix number computed by THIS
+# module's own live run is compared against this constant, never the other
+# way around — see `_build_policy_comparison` and D-05's pre/post table.
+_PREFIX_BASELINE_20260914: dict[str, Any] = {
+    "median_sojourn": 97.0,
+    "median_lag": 164.0,
+    "ratio": 0.591,
+    "n_resolved": 4,
+    "n_transitions": 6,
+    "window": "1974-02 -> 2020-12",
+    "pct_disagree": 0.8276595744680851,
+    "n_disagree": 389,
+    "n_compared": 470,
+    "disagreement_window": "1974-02 -> 2020-12",
+    "brier": 0.2087,
+    "wealth_delta": 0.379267,
+    "dd_delta": -0.014364,
+    "strategy_terminal_log_wealth": 4.0265,
+    "strategy_max_drawdown": -0.2124,
+    "strategy_max_drawdown_months": 33,
+    "ablation_terminal_log_wealth": 3.6472,
+    "ablation_max_drawdown": -0.1981,
+    "ablation_max_drawdown_months": None,
+    "n_frozen_columns": 9,
+}
 
 
 # ── assemble_backtest_report ──────────────────────────────────────────────────
@@ -99,6 +144,7 @@ def assemble_backtest_report(
     baseline_kpis: dict,
     gap: float,
     excluded_assets: list[str] | None = None,
+    policy_comparison: dict | None = None,
 ) -> str:
     """Assemble the honest backtest report markdown from precomputed inputs.
 
@@ -112,6 +158,11 @@ def assemble_backtest_report(
     2. Baseline comparison: Faber 10-month SMA (§23.1 standing target, NOT a
        pass/fail gate).
     3. No-regime-ablation delta ("does the regime layer pay rent", §8.7).
+    3b. Feature-policy pre/post comparison (07-04/D-05, Wave 1 ADR-0001) —
+        OPTIONAL, rendered only when ``policy_comparison`` is supplied.
+        Placed here deliberately: a reader meets the comparability caveat
+        about the compound (D-01 + D-02-A) pre-fix baseline BEFORE meeting
+        the smoothed-vs-filtered gap number the caveat qualifies.
     4. Smoothed-vs-filtered gap (HON-05).
     5. Baseline gauntlet table (SPY, 60/40, Faber).
     6. Strategy KPI table + a documented "Conventions" note (cash-return
@@ -125,6 +176,19 @@ def assemble_backtest_report(
             ``crisis_capture`` (dict[str, float]).
         ablation_kpis: dict with (at least) ``terminal_log_wealth``,
             ``max_drawdown`` for the no-regime-tilt ablation leg.
+        policy_comparison: OPTIONAL (default ``None`` — every existing
+            caller's rendering is byte-identical when omitted). A dict with
+            keys ``rows`` (list of ``{"quantity", "pre_fix", "post_fix"}``
+            dicts, each PRE-FORMATTED as a display string by the caller —
+            this function never reformats a number, so a caller-embedded
+            ``n_compared``/date-window annotation survives verbatim into the
+            same table cell, per the 07-03 human sign-off's binding
+            condition: window-narrowing must appear INLINE at the point the
+            number is shown, never only in a later paragraph) and
+            ``frozen_l1_features`` (``list[str]``, the labeler's full
+            admitted column set, rendered by name — a bare count is not
+            sufficient). See ``_build_policy_comparison`` for the real
+            wiring's row construction.
         baseline_kpis: dict keyed by ``"spy_buy_hold"``/``"sixty_forty"``/
             ``"faber_sma"``, each a dict with ``terminal_log_wealth``,
             ``max_drawdown``.
@@ -211,6 +275,69 @@ def assemble_backtest_report(
         f"ablation={ablation_kpis['max_drawdown']:.2%})"
     )
     lines.append("")
+
+    # ── 3b. Feature-policy pre/post comparison (07-04/D-05, Wave 1 ADR-0001) ──
+    # OPTIONAL — omitted entirely (byte-identical rendering) when the caller
+    # does not supply `policy_comparison` (None default), so every existing
+    # caller and every existing assertion against today's report layout
+    # stays valid (07-04-PLAN.md Task 1, Test 2).
+    if policy_comparison is not None:
+        lines.append("## Feature-Policy Pre/Post Comparison (Wave 1, ADR-0001)")
+        lines.append("")
+        lines.append(
+            "**Comparability caveat.** The pre-fix column below reflects BOTH the "
+            "pre-fix EXPANDING driver feature-admission policy (audit item A13's "
+            "original asymmetry between `driver.py::_window_active_features` and "
+            "`report.py::_reference_label_columns`, frozen only by this phase's "
+            "D-01) AND a stale nine-column `monthly_features` checkpoint whose "
+            "`oil` column began 1985-02 instead of its full 1962-01 history "
+            "(corrected by D-02-A, which is why the frozen set below has ten "
+            "columns, not nine). This run therefore changed TWO things at once, "
+            "and this record cannot separate how much of any movement below is "
+            "the driver-freeze policy change versus the feature-space "
+            "correction — attributing the whole delta to either cause alone "
+            "would repeat exactly the 'fooled by its own backtest' failure mode "
+            "`.planning/UAT-AUDIT-2026-09-09.md` documents."
+        )
+        lines.append("")
+        lines.append(
+            "**Sample-comparability note** (read alongside the disagreement and "
+            "§5.4-ratio rows below): each cell carries its own "
+            "`n_compared`/`n_resolved` denominator and date window INLINE, on "
+            "purpose. When the two runs' non-degraded step counts differ, the "
+            "two percentages compare different-sized, differently-dated "
+            "populations, and a bare percentage-point delta between them is NOT "
+            "a same-population improvement — read the denominator and the dates "
+            "inside each cell before reading the percentage itself."
+        )
+        lines.append("")
+        lines.append(
+            "| Quantity | Pre-fix (superseded, 9-column, stale checkpoint) "
+            "| Post-fix (frozen, 10-column policy) |"
+        )
+        lines.append("|---|---|---|")
+        for row in policy_comparison.get("rows", []):
+            lines.append(f"| {row['quantity']} | {row['pre_fix']} | {row['post_fix']} |")
+        lines.append("")
+        frozen_cols = policy_comparison.get("frozen_l1_features") or []
+        if frozen_cols:
+            lines.append(
+                f"**Frozen L1 feature columns (all {len(frozen_cols)}, the "
+                "labeler's full admitted set):** "
+                + ", ".join(f"`{c}`" for c in frozen_cols) + "."
+            )
+            lines.append("")
+        lines.append(
+            "**Why the Multiclass Brier and confusion tables move.** "
+            "`full_sample_states` is reindexed onto the walk-forward's decision "
+            "dates as `y_true` (step (e) of `run_full_backtest_evaluation`). "
+            "Both the feature-space correction (D-02-A) and the driver freeze "
+            "(D-01) change WHICH smoothed labeling gets reindexed, so the "
+            "labels the nowcaster is scored against changed — a Brier movement "
+            "here is this mechanical relabeling, not because the nowcaster "
+            "improved."
+        )
+        lines.append("")
 
     # ── 4. Smoothed-vs-filtered gap (HON-05) ──
     lines.append("## Smoothed-vs-Filtered Gap")
@@ -457,6 +584,119 @@ def _reference_label_columns(
     return [c for c in lean_cols if bool(decision_slice[c].notna().all())]
 
 
+def _fmt_dd(value: float, months: int | None) -> str:
+    """Format a max-drawdown figure with its optional underwater-duration."""
+    if months is None:
+        return f"{value:.2%}"
+    return f"{value:.2%} ({months} mo)"
+
+
+def _build_policy_comparison(
+    *,
+    sojourn_lag: dict,
+    strategy_kpis: dict,
+    ablation_kpis: dict,
+    disagreement: dict,
+    brier_value: float,
+    brier_n_steps: int,
+    wealth_delta: float,
+    dd_delta: float,
+    frozen_l1_features: list[str],
+) -> dict[str, Any]:
+    """Build ``assemble_backtest_report``'s ``policy_comparison`` mapping
+    (07-04/D-05) from THIS run's own live-computed numbers plus the
+    transcribed ``_PREFIX_BASELINE_20260914`` historical constant.
+
+    Every post-fix cell is read from THIS call's own arguments — never a
+    second hard-coded number — so it can never drift from what this run
+    actually measured. Every disagreement/ratio cell embeds its own
+    ``n_compared``/``n_resolved`` denominator and date window INLINE in the
+    same string (07-03's human sign-off binding condition: the window
+    narrowing must be visible at the point the number is shown, never only
+    in a later paragraph).
+    """
+    pre = _PREFIX_BASELINE_20260914
+
+    def _fmt_month(value: Any) -> str:
+        """``YYYY-MM``, matching the pre-fix constant's window-string
+        granularity — a bare ``str(Timestamp)`` would render a spurious
+        ``00:00:00`` and make the two windows visually inconsistent."""
+        return "n/a" if value is None else pd.Timestamp(value).strftime("%Y-%m")
+
+    post_window = (
+        f"{_fmt_month(disagreement.get('first_common_date'))} -> "
+        f"{_fmt_month(disagreement.get('last_common_date'))}"
+    )
+
+    rows = [
+        {
+            "quantity": "Median regime sojourn (months)",
+            "pre_fix": f"{pre['median_sojourn']:.1f}",
+            "post_fix": f"{sojourn_lag['median_sojourn']:.1f}",
+        },
+        {
+            "quantity": "Median detection lag (months)",
+            "pre_fix": f"{pre['median_lag']:.1f}",
+            "post_fix": f"{sojourn_lag['median_lag']:.1f}",
+        },
+        {
+            "quantity": "§5.4 ratio (`n_resolved` of `n_transitions`)",
+            "pre_fix": f"{pre['ratio']:.4f} ({pre['n_resolved']} of {pre['n_transitions']}; {pre['window']})",
+            "post_fix": (
+                f"{sojourn_lag['ratio']:.4f} ({sojourn_lag.get('n_resolved')} of "
+                f"{sojourn_lag.get('n_transitions')}, resolved within {post_window})"
+            ),
+        },
+        {
+            "quantity": "Labeling disagreement (`pct_disagree`, `n_compared`)",
+            "pre_fix": (
+                f"{pre['pct_disagree']:.2%} ({pre['n_disagree']}/{pre['n_compared']}; "
+                f"{pre['disagreement_window']})"
+            ),
+            "post_fix": (
+                f"{disagreement['pct_disagree']:.2%} "
+                f"({disagreement['n_disagree']}/{disagreement['n_compared']}; {post_window})"
+            ),
+        },
+        {
+            "quantity": "Multiclass Brier",
+            "pre_fix": f"{pre['brier']:.4f} (n_steps not recorded in the pre-fix source)",
+            "post_fix": f"{brier_value:.4f} (n_steps={brier_n_steps})",
+        },
+        {
+            "quantity": "`wealth_delta` (no-regime-ablation, terminal log wealth)",
+            "pre_fix": f"{pre['wealth_delta']:+.4f}",
+            "post_fix": f"{wealth_delta:+.4f}",
+        },
+        {
+            "quantity": "`dd_delta` (no-regime-ablation, max drawdown)",
+            "pre_fix": f"{pre['dd_delta']:+.2%}",
+            "post_fix": f"{dd_delta:+.2%}",
+        },
+        {
+            "quantity": "Strategy terminal log wealth",
+            "pre_fix": f"{pre['strategy_terminal_log_wealth']:.4f}",
+            "post_fix": f"{strategy_kpis['terminal_log_wealth']:.4f}",
+        },
+        {
+            "quantity": "Strategy max drawdown",
+            "pre_fix": _fmt_dd(pre["strategy_max_drawdown"], pre["strategy_max_drawdown_months"]),
+            "post_fix": _fmt_dd(strategy_kpis["max_drawdown"], strategy_kpis.get("duration_months")),
+        },
+        {
+            "quantity": "Ablation terminal log wealth",
+            "pre_fix": f"{pre['ablation_terminal_log_wealth']:.4f}",
+            "post_fix": f"{ablation_kpis['terminal_log_wealth']:.4f}",
+        },
+        {
+            "quantity": "Ablation max drawdown",
+            "pre_fix": _fmt_dd(pre["ablation_max_drawdown"], pre["ablation_max_drawdown_months"]),
+            "post_fix": _fmt_dd(ablation_kpis["max_drawdown"], ablation_kpis.get("duration_months")),
+        },
+    ]
+    return {"rows": rows, "frozen_l1_features": list(frozen_l1_features)}
+
+
 def run_full_backtest_evaluation(
     monthly_features: pd.DataFrame,
     monthly_raw: pd.DataFrame,
@@ -464,22 +704,47 @@ def run_full_backtest_evaluation(
     *,
     registry_path: Any = None,
     output_dir: Path | None = None,
+    trial_tag: str | None = None,
 ) -> dict[str, Any]:
     """Drive the whole EVAL-01..04 chain end-to-end and write the report.
 
+    (0) ONE ``_reference_label_columns`` call, computed BEFORE (a) — the
+        frozen L1 feature-column list (07-01/D-01/D-08a). ``first_decision``
+        is derived directly from ``dev_features.index[min_train]``, never
+        from the walk-forward's output: per
+        ``honesty/walkforward.py:48-49``, ``expanding_steps``'s first
+        yielded step is always ``index[min_train]``, so this is not
+        circular — it just inverts an ordering that used to look causal but
+        was not. ``frozen_l1_features=ref_cols`` is then threaded into BOTH
+        (a) and (b) below, so the walk-forward driver's per-step L1 refits
+        and this function's own full-sample fit at (d) share a SINGLE
+        computed-once column list and cannot resolve to different feature
+        spaces (ROADMAP criterion 1's failing test).
     (a) ``build_core_research_series`` + ``compute_monthly_returns`` ->
         equity/bond/cash return series (and the equity LEVEL for Faber);
         ``run_backtest`` for the regime-tilt strategy, passing
         ``cash_returns=cash_ret`` so the strategy's cash residual earns the
-        SAME series the baselines earn (review F4).
-    (b) ``no_regime_ablation`` for the ablation leg (same ``cash_ret``).
+        SAME series the baselines earn (review F4), and
+        ``frozen_l1_features=ref_cols`` / ``trial_tag`` from (0). Immediately
+        after this call, a permanent guard asserts that (0)'s index-derived
+        ``first_decision`` is not AFTER ``per_step_metrics["dates"]``'s
+        observed minimum — a future change to ``expanding_steps`` that
+        decoupled the two would be caught here rather than silently
+        producing two different "first decision" values.
+    (b) ``no_regime_ablation`` for the ablation leg (same ``cash_ret``, same
+        ``frozen_l1_features`` and ``trial_tag`` as (a) — otherwise the
+        ablation leg's discarded L1 fit would silently diverge from the
+        strategy leg's, and a tagged run would produce one tagged and one
+        untagged registry row).
     (c) the three price baselines over the SAME holdout-bounded window
         (baselines do not enforce the cutoff internally — the report layer
         must slice them, per ``backtest/baselines.py``'s own docstring).
     (d) ONE full-sample ``fit_jump_model`` + ``canonicalize_states`` over the
         holdout-bounded dev window for the SMOOTHED reference labeling — a
         genuinely distinct series from the walk-forward ``per_step_metrics``
-        (Pitfall 1). The multiclass filtered-probs matrix
+        (Pitfall 1). Reuses the SAME ``dev_features``/``ref_cols`` computed
+        once at (0) — no second ``_reference_label_columns`` call and no
+        recomputed ``first_decision``. The multiclass filtered-probs matrix
         (``build_filtered_probs_matrix``) feeds ``compute_sojourn_lag_headline``
         so each transition is scored against P(its own target state), never
         a class-agnostic max (review F1).
@@ -516,12 +781,23 @@ def run_full_backtest_evaluation(
         cfg: platform config (``load_platform_config()`` output).
         registry_path: overrides the default trial registry ledger path.
         output_dir: overrides the default artifact directory (for tests).
+        trial_tag: an optional label attributing BOTH legs' registry rows
+            (strategy and ablation) to the policy variant that produced them
+            (07-01 Task 2) — passed straight through to ``run_backtest`` and
+            ``no_regime_ablation``. ``None`` (default) logs untagged rows,
+            byte-compatible with every pre-existing registry row.
 
     Returns:
         dict with keys ``report_path``, ``sojourn_lag``, ``strategy_kpis``,
         ``ablation_kpis``, ``baseline_kpis``, ``gap``, ``model_metrics_paths``,
         ``equity_curve``, ``ablation_curve``, ``per_step_metrics``,
-        ``full_sample_states``.
+        ``full_sample_states``, ``frozen_l1_features`` (the ``list[str]``
+        computed once at (0) and shared by both L1 consumers), ``disagreement``
+        (07-04/D-05: ``measure_label_disagreement``'s output, computed from
+        THIS run's own ``full_sample_states``/``filtered_probs_matrix`` — the
+        criterion-3 post-fix number), and ``policy_comparison`` (the mapping
+        threaded into ``assemble_backtest_report``'s optional pre/post
+        comparison section, built by ``_build_policy_comparison``).
     """
     backtest_cfg = cfg.get("backtest", {})
     allocation_cfg = cfg.get("allocation", {})
@@ -531,6 +807,20 @@ def run_full_backtest_evaluation(
     rebalance = backtest_cfg.get("sixty_forty_rebalance", "monthly")
     crisis_windows = backtest_cfg.get("crisis_windows", [])
     act_threshold = allocation_cfg.get("hysteresis", {}).get("act_threshold", 0.70)
+
+    # (0) Compute the frozen L1 feature-column list ONCE, before any
+    # run_backtest call (07-01/D-01/D-08a) — the same ref_cols/dev_features
+    # feed BOTH the walk-forward driver's per-step L1 refits (a)/(b) below
+    # and this function's own full-sample fit at (d), so the two consumers
+    # cannot resolve to different feature spaces. first_decision is derived
+    # from the index directly (honesty/walkforward.py:48-49: expanding_steps'
+    # first yielded step is always index[min_train]) — no walk-forward output
+    # is needed to compute it.
+    dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    lean_cols = sorted(lean_feature_set(cfg) & set(dev_features.columns))
+    min_train = backtest_cfg.get("min_train_months", 120)
+    first_decision = dev_features.index[min_train]
+    ref_cols = _reference_label_columns(dev_features, lean_cols, first_decision)
 
     splice_cfg = cfg["splice"]
     research = build_core_research_series(monthly_raw, cfg)
@@ -567,12 +857,41 @@ def run_full_backtest_evaluation(
         log.warning("Backtest asset universe EXCLUDES unavailable research classes: %s", _excluded)
 
     equity_curve, per_step_metrics = run_backtest(
-        monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True, registry_path=registry_path,
+        monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True,
+        registry_path=registry_path, frozen_l1_features=ref_cols, trial_tag=trial_tag,
     )
 
-    # (b) No-regime ablation — same cash_ret series (review F4).
+    # Permanent guard (07-01/D-01): first_decision was derived from the index
+    # BEFORE this loop ran (0); honesty/walkforward.py:48-49's expanding_steps
+    # always yields index[min_train] first, so the loop's first ATTEMPTED
+    # step is always first_decision. per_step_metrics["dates"] can still
+    # start LATER than that: run_backtest excludes a degraded step from
+    # per_step_metrics entirely (T-05-05 — an early small post-embargo
+    # window starving a K-fold is a documented, graceful degrade, not an
+    # error), so if the very first attempted step(s) degrade, the first
+    # RECORDED date is later than first_decision. The direction that would
+    # be dangerous — the recorded series starting EARLIER than
+    # first_decision, which would mean the loop somehow visited a date
+    # before its declared start — is what this assertion actually guards
+    # against; a later start from benign early degradation is expected and
+    # must not raise.
+    observed_first_decision = pd.DatetimeIndex(per_step_metrics["dates"]).min()
+    assert first_decision <= observed_first_decision, (
+        f"first_decision derived from the index ({first_decision}) is AFTER "
+        f"the walk-forward loop's observed first recorded decision date "
+        f"({observed_first_decision}) — expanding_steps' first yielded step "
+        "should always be index[min_train], so the recorded minimum can "
+        "only be equal to it or later, never earlier."
+    )
+
+    # (b) No-regime ablation — same cash_ret series (review F4), same frozen
+    # L1 feature list and trial_tag as the strategy leg (a) — otherwise the
+    # ablation leg's discarded L1 fit would silently diverge from the
+    # strategy leg's, and a tagged run would produce one tagged and one
+    # untagged registry row.
     ablation_curve, _ablation_metrics = no_regime_ablation(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, registry_path=registry_path,
+        frozen_l1_features=ref_cols, trial_tag=trial_tag,
     )
 
     # (c) Three price baselines — the report layer holdout-bounds them
@@ -591,12 +910,9 @@ def run_full_backtest_evaluation(
     # for EVERY walk-forward decision date, so it labels on the long-history
     # features that span the whole decision range (dropping structural late-starts
     # like fred_vix that begin in 1990) and keeps all rows — NOT the walk-forward's
-    # per-window min_history set. Otherwise an any-NaN row drop would strand every
-    # pre-1990 decision date (which the walk-forward now labels under approach ii).
-    dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    lean_cols = sorted(lean_feature_set(cfg) & set(dev_features.columns))
-    first_decision = pd.DatetimeIndex(per_step_metrics["dates"]).min()
-    ref_cols = _reference_label_columns(dev_features, lean_cols, first_decision)
+    # per-window min_history set. Reuses the SAME dev_features/ref_cols computed
+    # once at (0) — no second _reference_label_columns call and no recomputed
+    # first_decision (07-01/D-01/D-08a).
     X_df = dev_features[ref_cols].dropna()
     X = standardize_features(X_df)
     fit = fit_jump_model(
@@ -610,6 +926,15 @@ def run_full_backtest_evaluation(
 
     filtered_probs_matrix = build_filtered_probs_matrix(per_step_metrics)
     headline = compute_sojourn_lag_headline(full_sample_states, filtered_probs_matrix, act_threshold=act_threshold)
+
+    # Criterion-3 disagreement measurement (07-CONTEXT.md D-05, 07-03's
+    # measure_label_disagreement), computed here — not re-read from disk —
+    # because full_sample_states and filtered_probs_matrix are already the
+    # SAME in-memory objects step (d) just produced. `_comparison_from_state_
+    # probs` tolerates either integer or "state_{k}"-string column labels
+    # (only the persisted parquet round-trip needs the string form), so no
+    # rename is required before this call.
+    disagreement = measure_label_disagreement(full_sample_states, filtered_probs_matrix)
 
     # (e) Join y_true by REINDEXING the smoothed reference onto the
     # walk-forward's own decision dates (review F2) — never loop-sourced.
@@ -654,6 +979,14 @@ def run_full_backtest_evaluation(
         "sixty_forty": _leg_kpis(sixty_forty_ret),
         "faber_sma": _leg_kpis(faber_ret),
     }
+    # kpi_table/wealth_delta/dd_delta computed here (moved up from the
+    # original (h) location) so they are available to build the
+    # policy_comparison mapping BEFORE assemble_backtest_report is called —
+    # the same subtraction section 3's own rendering performs, not a second
+    # formula (07-04/D-05).
+    kpi_table = _build_kpi_table(strategy_kpis, ablation_kpis, baseline_kpis)
+    wealth_delta = strategy_kpis["terminal_log_wealth"] - ablation_kpis["terminal_log_wealth"]
+    dd_delta = strategy_kpis["max_drawdown"] - ablation_kpis["max_drawdown"]
 
     smoothed_perf = _smoothed_hindsight_perf(
         full_sample_states, asset_returns, cash_ret, list(per_step_metrics["dates"]), allocation_cfg,
@@ -663,6 +996,27 @@ def run_full_backtest_evaluation(
 
     # (g) Model-metrics artifacts (Brier/calibration/confusion).
     model_metrics_paths = report_model_metrics(per_step_metrics, output_dir=output_dir)
+
+    # Read the Brier VALUE back from what report_model_metrics just wrote,
+    # rather than re-deriving it — model_metrics.py owns that computation
+    # and this module must not compute a second, potentially divergent copy.
+    brier_df = pd.read_parquet(model_metrics_paths["brier"])
+    brier_value = float(brier_df["brier"].iloc[0]) if not brier_df.empty else float("nan")
+
+    # 07-04/D-05: the feature-policy pre/post comparison, built from THIS
+    # run's own live numbers plus the transcribed pre-fix historical
+    # constant — never the other way around.
+    policy_comparison = _build_policy_comparison(
+        sojourn_lag=headline,
+        strategy_kpis=strategy_kpis,
+        ablation_kpis=ablation_kpis,
+        disagreement=disagreement,
+        brier_value=brier_value,
+        brier_n_steps=len(per_step_metrics["dates"]),
+        wealth_delta=wealth_delta,
+        dd_delta=dd_delta,
+        frozen_l1_features=ref_cols,
+    )
 
     # (h) Assemble + write the report + artifacts. Two additional artifacts
     # (Amendment 3 item H) ride along on this same call: `full_sample_states`
@@ -678,8 +1032,8 @@ def run_full_backtest_evaluation(
         baseline_kpis=baseline_kpis,
         gap=gap,
         excluded_assets=_excluded,
+        policy_comparison=policy_comparison,
     )
-    kpi_table = _build_kpi_table(strategy_kpis, ablation_kpis, baseline_kpis)
     full_sample_states_df = full_sample_states.to_frame()
     filtered_state_probs_df = filtered_probs_matrix.rename(
         columns={col: f"state_{col}" for col in filtered_probs_matrix.columns}
@@ -708,6 +1062,9 @@ def run_full_backtest_evaluation(
         "ablation_curve": ablation_curve,
         "per_step_metrics": per_step_metrics,
         "full_sample_states": full_sample_states,
+        "frozen_l1_features": list(ref_cols),
+        "disagreement": disagreement,
+        "policy_comparison": policy_comparison,
     }
 
 
@@ -717,7 +1074,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Assemble the honest backtest evaluation report (EVAL-01..04)"
     )
-    parser.parse_args(argv)
+    # Phase 7 wave 1 lesson: this CLI previously logged two registry rows on EVERY
+    # invocation, including wiring-verification runs that evaluated nothing. Because
+    # D-16 deflates Sharpe over the whole ledger, those rows inflated the trial count.
+    # The choice is now mandatory and mutually exclusive — you cannot invoke this
+    # without declaring whether the run is a trial.
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--trial-tag",
+        metavar="TAG",
+        help="Log this run to the trial registry under TAG (a real evaluated configuration).",
+    )
+    mode.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Wiring/verification run — write the report but log NOTHING to the registry.",
+    )
+    args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO)
 
@@ -726,7 +1099,15 @@ def main(argv: list[str] | None = None) -> int:
     monthly_features = cm.load("monthly_features")
     monthly_raw = cm.load("monthly_raw")
 
-    result = run_full_backtest_evaluation(monthly_features, monthly_raw, cfg)
+    if args.smoke:
+        log.info("SMOKE run: report will be written; registry will NOT be touched.")
+        result = run_full_backtest_evaluation(
+            monthly_features, monthly_raw, cfg, registry_path=NO_REGISTRY
+        )
+    else:
+        result = run_full_backtest_evaluation(
+            monthly_features, monthly_raw, cfg, trial_tag=args.trial_tag
+        )
     print(f"Backtest report written: {result['report_path']}")  # noqa: T201 — first-class CLI output
     return 0
 

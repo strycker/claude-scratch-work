@@ -16,7 +16,7 @@
 > pipeline** — ingest → features → clustering → regime → predict → assets → diagnostics
 > → tactics → CLI. It was written in April 2026, before the platform existed.
 >
-> That is **not** what we are migrating. `.planning/ROADMAP.md` Phase 7 targets the
+> That is **not** what we are migrating. `.planning/ROADMAP.md` Phase 8 targets the
 > **L0–L4 platform** built and verified across GSD Phases 1–5. Following the old plan
 > would port 10,935 lines of superseded quarterly code and none of the 6,977 lines that
 > five phases of verification actually cover.
@@ -71,10 +71,10 @@ Everything `platform/` borrows from the legacy library:
 
 | # | Prerequisite | Why it blocks |
 |---|---|---|
-| **PRE-1** | GSD **Phase 6 (Platform Notebook Suite)** complete | Every step below validates via "run the notebook." Today `platform/` has **zero** notebooks — all 12 cover the quarterly pipeline. Without them there is nothing to validate against. |
+| **PRE-1** | GSD **Phase 6 (Platform Notebook Suite)** complete | ✅ Done 2026-09-10 — `P1`–`P6` exist under `notebooks/platform/`, verified 5/5 and UAT-closed. Every step below validates via "run the notebook"; before Phase 6 there was nothing to validate against. |
 | **PRE-2** | Phase 5 closed | ✅ Done 2026-08-04 (`05-VERIFICATION.md` Phase Closure Record) |
-| **PRE-3** | Full suite green on `main` | ✅ 1157 passing |
-| **PRE-4** | Target repo `trading-crab` reachable and writable | Currently an empty gitlink submodule here |
+| **PRE-3** | Full suite green on `main` | ✅ 1705 passing, 0 skipped (re-verified 2026-09-14 @ `c6605a4`) |
+| **PRE-4** | Target repo `trading-crab` reachable and writable | ⚠ Partial — the submodule is no longer empty (checks out `b3e80b3`, `strycker/trading-crab`, populated with the legacy quarterly layout). **Reachable confirmed 2026-09-14; writability from a session container is still unverified.** |
 
 ---
 
@@ -95,7 +95,23 @@ from the legacy library.
 | P0.3 | Vendor email helpers (M4) | `platform/report/email.py`, `report/weekly.py` |
 | P0.4 | Add an import-guard test asserting zero non-platform `trading_crab_lib` imports | `tests/unit/test_platform_standalone.py` |
 
-**Exit:** `grep -r "from trading_crab_lib\." src/trading_crab_lib/platform | grep -v platform` returns nothing, and the guard test enforces it. Full suite still green.
+**Exit:** `pytest tests/unit/test_platform_legacy_import_ratchet.py -q` passes with
+`MAX_LEGACY_IMPORT_SITES = 0`, and the full suite is green.
+
+> ⚠ **The previous exit criterion here was unfalsifiable and is retained only as a warning.**
+> It read: `grep -r "from trading_crab_lib\." src/trading_crab_lib/platform | grep -v platform`
+> returns nothing. Every match line **begins with the path** `src/trading_crab_lib/platform/...`,
+> which contains the substring `platform`, so the second `grep -v` discards **every** line —
+> including all real violations. It returned nothing on 2026-09-10 and still returns nothing
+> today **with 31 genuine legacy imports in the tree**, which is how ROADMAP criterion 8 came to
+> carry "Verified 2026-09-10: platform is currently fully decoupled." That claim was false.
+> Found 2026-09-15 by the Phase 7 wave-1 verifier via an AST scan. Do not restore the grep —
+> `test_the_broken_grep_is_documented_as_broken` fails if anyone does.
+
+**Current measured state (AST scan, 2026-09-15): 31 legacy import sites** across these seams —
+`trading_crab_lib` (16, mostly `ROOT`/`OUTPUT_DIR`), `trading_crab_lib.checkpoints` (7),
+`trading_crab_lib.ingestion.http` (3), `.ingestion.browser` (2), `.ingestion` (1),
+`.ingestion.assets` (1), `trading_crab_lib.email` (1). These predate Phase 7; wave 1 added none.
 
 ### P1 — Target repo skeleton
 

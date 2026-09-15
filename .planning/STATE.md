@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 6
+current_phase: 7
 current_phase_name: Regime Representation
-status: pending
-stopped_at: Phase 7 context gathered (wave 1 scoped for planning)
-last_updated: "2026-09-11T14:57:21.524Z"
-last_activity: 2026-09-10
-last_activity_desc: Phase 6 closed; roadmap restructured — Phase 7 Regime Representation added, migration to Phase 8
+status: executed
+stopped_at: Phase 7 phase-wave 1 executed (4/4 plans); wave 2 needs its own /gsd-plan-phase 7 pass
+last_updated: "2026-09-15T01:00:00.000Z"
+last_activity: 2026-09-15
+last_activity_desc: Phase 7 phase-wave 1 executed end to end — A13/A15 resolved, D-02-A recompute landed, ADR-0001 written, suite 1705 → 1735
 progress:
-  total_phases: 7
-  completed_phases: 5
-  total_plans: 36
-  completed_plans: 35
+  total_phases: 8
+  completed_phases: 6
+  total_plans: 39
+  completed_plans: 39
 ---
 
 # Project State
@@ -28,9 +28,137 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 6 — Platform Notebook Suite
-Status: **PLANNED — ready to execute.** Seven plans written and committed; plan-checker
-returned PASS on all twelve dimensions plus the phase-specific constraint set.
+Phase: **7 — Regime Representation**
+Status: **PHASE-WAVE 1 CLOSED.** Executed 4/4, verified 4/4 criteria by live re-derivation
+(`07-VERIFICATION.md`), validated `nyquist_compliant: true` (`07-VALIDATION.md`), UAT signed
+**accept-with-caveats** 2026-09-15 (`07-UAT.md`, 3/3 items closed). Suite **1752 passed, 0 skipped**. Wave 2 remains deliberately unplanned per D-09
+and needs its own `/gsd-plan-phase 7` pass. Suite 1705 → **1735 passed, 0 skipped**.
+
+### What phase-wave 1 delivered
+
+| Criterion | Outcome |
+|---|---|
+| 1 — one documented feature policy, test fails on divergence, ADR | ✅ `frozen_l1_features` threaded from ONE `_reference_label_columns` call; `TestFrozenPolicyEquivalence`; `platform_design/adr/0001-l1-feature-policy.md` |
+| 2 — §5.4 ratio interpretable, with resolved-transition count | ✅ **0.60145 (7/7 resolved)**, both labelings on one feature space; A13 caveat retired by cause (D-08), not softened |
+| 3 — post-fix disagreement vs the 82.8% baseline | ⚠️ **80.90% (288/356)** vs 82.77% (389/470) — satisfied as worded, but see the named limitation below |
+| 4 — ablation delta on both axes, in band | ✅ `wealth_delta` +0.377847, `dd_delta` −0.066124; both in band (both bands `[ASSUMED]`) |
+
+**D-02-A landed:** `monthly_features` recomputed offline from cached `monthly_raw` — `oil`
+431 → **708** non-NaN dev months, frozen set 9 → **10**, shape `(708, 53)`, holdout fence intact
+(68 rows from 2021-01). A13 golden constant re-pinned `4,6,8,9,10,12,13` → `5,7,9,10,11,12,13`,
+still exact list equality.
+
+### ⚠ Named limitation on criterion 3 — human-approved with this condition attached
+
+The frozen policy produced **232/588** L2-degraded steps versus **118/588** pre-fix, so the
+post-fix disagreement rests on **356** steps ending **2017-05** against a baseline of **470**
+ending **2020-12**. `82.77% → 80.90%` is **not** a clean 1.9-point improvement — different
+sample, different window. Foregrounded inline (same table cell as the numbers) in both
+`backtest_report.md` and ADR-0001, per the human sign-off at 07-03's checkpoint.
+
+Verified, not inferred: the degrade is L1-label-mediated, **not** a wiring defect —
+`frozen_l1_features` reaches only `_refit_l1` (`driver.py:461`, `:473`); `_refit_l2`
+(`driver.py:266-271`) takes no such parameter. **Why** freezing L1 nearly doubles L2's degrade
+rate is inferred (occupancy shifted, state 0: 1.6% → 11.51%), **not measured** — do not cite a
+cause as established.
+
+### ⚠ Criterion 8's "platform is fully decoupled" was FALSE — corrected 2026-09-15
+
+Found by the wave-1 verifier. `MIGRATION-PLAN.md`'s decoupling exit check ended in
+`| grep -v platform`; every match line begins with a path containing `platform`, so the filter
+discarded **every** violation. The check returned nothing whether or not the code was decoupled
+— **it could not fail** — and that false negative is what backed ROADMAP criterion 8's
+"Verified 2026-09-10: platform is currently fully decoupled."
+
+An AST scan finds **31 real legacy import sites** in `platform/`: bare `trading_crab_lib` ×16
+(mostly `ROOT`/`OUTPUT_DIR`), `.checkpoints` ×7, `.ingestion.http` ×3, `.ingestion.browser` ×2,
+`.ingestion` ×1, `.ingestion.assets` ×1, `.email` ×1. **All predate Phase 7; wave 1 added none**
+(confirmed by `git blame`). Vendoring them is `MIGRATION-PLAN.md` P0 / Phase 8 criterion 1.
+
+**Wave 2's "port, don't import" instruction still stands** — but because the coupling must not be
+*widened*, not because `platform/` is already clean. Now guarded by
+`tests/unit/test_platform_legacy_import_ratchet.py`: an AST ratchet pinned at 31 that may only
+decrease, plus an allowlist check that fails on a new seam, plus a test that fails if anyone
+restores the unfalsifiable grep. ROADMAP criteria 7.8 and 8.1 and `MIGRATION-PLAN.md` all
+corrected.
+
+### ✅ Trial registry contamination — FIXED 2026-09-15
+
+The registry stands at **42** rows. Rows 35–38 are this phase's real policy trials
+(`P7-W1-frozen-10col` ×2, `P7-W1-impute-13col-REJECTED` ×2). **Rows 39–42 are UNTAGGED and are
+not policy evaluations** — they were appended by two end-to-end wiring-verification runs of
+`python -m trading_crab_lib.platform.evaluation.report` during 07-04 (the plan's own
+`<verification>` section anticipated this).
+
+**Resolved (user-approved: archive + reset, keep count).** The ledger was archived **intact** to
+`registry/archive/trials-pre-P7W1-reset.jsonl` (42 rows, nothing deleted) and restarted with a
+single provenance header carrying `prior_genuine_trials=38`, `discarded_smoke_rows=4`, and an
+explicit note that **D-16's project total = 38 + rows appended after the header**. A bare
+post-reset row count must not be read as the project total.
+
+Three structural fixes so it cannot recur:
+- `append_trial` **refuses** to persist a row without a non-empty `trial_tag` (blank and
+  whitespace rejected; a refused write leaves no file).
+- New `NO_REGISTRY` sentinel: smoke runs build the row, log the skip, return `written=False`,
+  write nothing — and are exempt from the tag requirement, because a smoke run is not a trial.
+- The report CLI now **requires** `--trial-tag` or `--smoke` (mutually exclusive). The exact
+  invocation that caused this can no longer be typed; bare `python -m ...report` exits non-zero.
+- `run_backtest` / `fit_nowcaster` / `run_walkforward` default to naming their own call site, so
+  every persisted row is attributable without breaking callers.
+
+| Plan | Wave | depends_on | Tasks | Autonomous | Covers |
+|---|---|---|---|---|---|
+| 07-01 | 1 | — | 2 (leads `type="tracer"`) | yes | criterion 1 — frozen policy threading, equivalence test |
+| 07-02 | 2 | 07-01 | 3 | yes | D-02-A recompute, pre-fix evidence, A13 re-pin |
+| 07-03 | 3 | 07-01, 07-02 | 3 (one `checkpoint:human-verify`) | **no** | criteria 2–4 — disagreement, policy trials, measurements |
+| 07-04 | 4 | 07-01..03 | 3 | yes | three-state report, A13 caveat rewrite, ADR-0001 |
+
+Phase 7 gates internally: **wave 1 (resolve A13/A15) must pass before wave 2 (the
+leadership-axis classifier) starts.** After wave 1's numbers land, run `/gsd-plan-phase 7`
+again to plan wave 2 with real numbers in hand (D-09).
+
+**Requirement scoping:** `requirements: [REG-01]` (PARTIAL — feature-policy clauses only);
+`deferred_requirements: [INV-01]` (entirely wave 2, D-09 cited). Recorded as a decision, not
+an omission.
+
+**Resume file:** `.planning/phases/07-regime-representation/07-01-PLAN.md`
+
+### ⚠ Carried into execution — three things that are not settled
+
+1. **Four `[ASSUMED]` plausibility bands are load-bearing and unlocked**: `abs(wealth_delta) < 5`,
+   `dd_delta ∈ [-0.5, 0.5]`, `n_transitions > 30` implausible, `pct_disagree < 0.02` suspicious.
+   Every plan depending on one labels it provisional and uses it as an advisory flag that
+   triggers a recorded note — **never a hard gate** (D-07). Confirm or revise before trusting
+   any verdict that rests on one.
+
+2. **The decision-coverage gate cannot parse `07-CONTEXT.md`.** `check decision-coverage-plan`
+   returns `total: 0, "no trackable decisions"` and therefore `passed: true` — a **skipped gate
+   reporting a pass**, not a verification. D-10's title wraps across two lines before its closing
+   `**` (unlike every other bullet), but `total: 0` means the parser finds no decisions at all,
+   so the format mismatch is broader than that one bullet. Coverage was confirmed by direct
+   citation count instead: all nine wave-1 decisions appear across the plans (D-09 34×, D-02 15×,
+   D-02-A 13×, D-04 12×, D-08 12×, D-03 8×, D-01 7×, D-05 4×, D-07 4×, D-06 3×). **Do not read a
+   future green from this gate as evidence until the parse is fixed.**
+
+3. **The first plan-checker run (haiku) returned a PASS that was not trustworthy** — it declared
+   `07-VALIDATION.md` and `07-PATTERNS.md` absent (both exist and are committed), skipped the
+   Nyquist and Pattern dimensions on that false premise, and scored coverage against an invented
+   criteria table that marked disagreement measurement as "deferred to wave 2" when it is
+   criterion 3 and squarely wave 1. Re-run on sonnet with a prompt requiring file-existence
+   proof and verbatim criteria quoting: **PASS with one WARNING** (since closed). The recorded
+   verdict for this phase is the sonnet run, not the haiku one.
+
+---
+
+### Phase 6 — Platform Notebook Suite (CLOSED 2026-09-10)
+
+Executed 7/7, verified 5/5 criteria (`06-VERIFICATION.md`, status `human_needed` for two
+deliberate human items), UAT closed 2/2 (`06-UAT.md`). The fresh-run item was settled by
+executing all six notebooks from cleared state via `nbclient`; the P3 cold-start sign-off
+was recorded as **accept-with-caveats** — the regimes are *crisis* regimes, not *allocation*
+regimes. That caveat is the direct motivation for Phase 7's wave 2.
+
+The as-executed plan map, retained because Phase 7 builds on these modules:
 
 | Plan | Notebook | Wave | depends_on | New module |
 |---|---|---|---|---|
@@ -91,8 +219,8 @@ historical failures as regression cases that must RAISE: a 60/40-shaped leg at �
 fails its **domain per-leg** band (the universal [−1,0] bound does not catch it — that is the
 whole lesson), and terminal log wealth 111.06 fails the universal `abs(x) < 10` band.
 
-Last activity: 2026-09-09 — Phase 6 planned end to end (research → validation strategy →
-pattern map → 7 plans → checker PASS)
+Phase 6 history: planned 2026-09-09 (research → validation strategy → pattern map → 7 plans
+→ checker PASS), executed and closed 2026-09-10.
 
 ### ⚠ UAT audit outcome (2026-09-09) — `.planning/UAT-AUDIT-2026-09-09.md`
 
@@ -181,7 +309,7 @@ scoring now uses it — **required, not cosmetic**: it scores
 2020 as "today" every week. Three tests pin the wiring specifically and fail
 against the unwired code.
 
-Progress: [████████░░] 81% (5 of 8 phases)
+Progress: [███████▌░░] 75% (6 of 8 phases)
 
 ### Roadmap restructure (2026-08-04)
 
@@ -202,8 +330,10 @@ quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analy
 
 **Velocity:**
 
-- Total plans completed: 12 (7 Phase 1 + 5 Phase 2) + 4 in Phase 05
-- Full test suite: 1705 passed, 0 skipped (post Phase 6)
+- Total plans completed: **35 of 35** written (7 + 5 + 4 + 5 + 7 + 7 across Phases 1–6);
+  Phase 7 plans are TBD.
+- Full test suite: **1705 collected, 0 skipped** (re-verified 2026-09-14 on `main` @ `c6605a4`;
+  unchanged since Phase 6 closure).
 
 **By Phase:**
 
@@ -211,19 +341,30 @@ quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analy
 |-------|-------|--------|
 | 1 — Monthly Data Layer | 7/7 | Verified passed (FRED_API_KEY verified 2026-07-23 — human item cleared) |
 | 2 — Honesty Infrastructure | 5/5 | Verified passed 5/5 |
+| 3 — Regime Labeling & Prediction | 4/4 | Complete 2026-07-22 |
+| 4 — Asset Prediction & Allocation | 5/5 | Complete 2026-07-23 |
+| 5 — Honest Backtest & Evaluation | 7/7 | Complete 2026-07-27, closed 2026-08-04 |
+| 6 — Platform Notebook Suite | 7/7 | Verified 5/5 + UAT closed 2026-09-10 |
+| 7 — Regime Representation | 0/TBD | Context gathered; not planned |
+| 8 — Migration to Public Repo | 0/TBD | Not started |
 
-*Updated after each plan completion*
+⚠ Phases 1 and 5 carry the UAT-audit caveat below: criteria satisfied as phrased, recorded
+numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
+
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
 | Phase 05 P01 | 3min | 2 tasks | 5 files |
 | Phase 05 P02 | 12min | 3 tasks | 2 files |
 | Phase 05 P03 | 18min | 2 tasks | 4 files |
 | Phase 05 P04 | 15min | 2 tasks | 2 files |
 | Phase 05 P05 | 22min | 3 tasks | 2 files |
 | Phase 05 P06 | 7min | 3 tasks | 2 files |
-**Per-Plan Metrics:**
+| Phase 06 P01 | 55min | 3 tasks | 11 files |
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase 06 P01 | 55 | 3 tasks | 11 files |
+*Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
+*Updated after each plan completion.*
 
 ## Accumulated Context
 
@@ -259,6 +400,24 @@ Recent decisions affecting current work:
 - [Phase ?]: 06-01: D-01 fresh-package boundary verified via static AST import-graph closure (not sys.modules) to survive test-order pollution
 
 ### Pending Todos
+
+- **Release-engineering tech debt, recorded as `ROADMAP.md` Tier 0.5 (R1–R4), deferred
+  deliberately 2026-09-11/14 — none block Phase 7, but R1 touches it directly.**
+  - **R1 (HIGH)** — partial ingestion silently degrades `monthly_features` while the
+    checkpoint merge repairs `monthly_raw` from disk, concealing it. Observed 2026-09-11:
+    a lost `fred_aaa` meant `credit_spread_baa_aaa` was never derived; features went
+    53 → 51 columns while raw looked fine. **`credit_spread_baa_aaa` is one of the 9
+    features in the frozen common-support set Phase 7 D-02 locks** — a silent loss changes
+    the frozen set from 9 to 8. Caught only because a real-data test is pinned to the
+    seven A13 change points.
+  - **R2 (MED)** — `build-pkg` CI builds both packages but never installs them, so an
+    empty wheel can reach `main` and stay invisible until release.
+  - **R3 (LOW)** — legacy `trading_crab_lib.plotting` raises a bare `ModuleNotFoundError`
+    instead of the guarded `ImportError` naming the extra.
+  - **R4 (MED, Phase 7 relevant)** — the enumerated `[tool.setuptools] packages` list is
+    unguarded by any test, and the publish smoke test imports only the top-level package.
+    A new Phase 7 subpackage omitted from that list would ship missing with every gate
+    green. Verified in sync 2026-09-14 (17/17).
 
 - Verifier informational note: `holdout.py`/`registry.py` use hardcoded constants that
   match `config/platform_settings.yaml` sections rather than reading them — wire to
@@ -318,13 +477,19 @@ Recent decisions affecting current work:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260805-570 | fix stooq and macrotrends bot-blocking, ALFRED vintage schema, build guard, yfinance rate-limit | 2026-08-05 | e98f1f0 | [260805-570-fix-stooq-and-macrotrends-bot-blocking-a](./quick/260805-570-fix-stooq-and-macrotrends-bot-blocking-a/) |
+| 260805-jt2 | restore Stooq via a headless-Chromium challenge solver behind the optional `[browser]` extra (TLS impersonation proven insufficient) | 2026-08-05 | c57d44d | [260805-jt2-restore-stooq-via-headless-chromium-chal](./quick/260805-jt2-restore-stooq-via-headless-chromium-chal/) |
+| 260805-od0 | implement the live Tiingo daily-price adapter as first fallback ahead of yfinance | 2026-08-05 | ed6e425 + de4b038 | [260805-od0-implement-tiingo-daily-price-adapter-as-](./quick/260805-od0-implement-tiingo-daily-price-adapter-as-/) ⚠ no SUMMARY.md written |
 | 260805-r7w | generalize browser.py to fetch_page_html/fetch_urls_as_text, add Selenium as a second engine, route macrotrends through the browser fallback at both call sites | 2026-08-05 | (see directory) | [260805-r7w-generalize-browser-module-and-add-seleni](./quick/260805-r7w-generalize-browser-module-and-add-seleni/) |
+| 260806-u89 | never lose data: multi-source checkpoint merge + fallback chains so a partial fetch cannot shrink a saved checkpoint | 2026-08-06 | 555cd9b | [260806-u89-never-lose-data-checkpoint-merge-multi-s](./quick/260806-u89-never-lose-data-checkpoint-merge-multi-s/) |
 | 260908-qwe | fix hindsight-oracle IndexError: restrict the smoothed oracle's per-step universe to assets that have started (phantom IAU/USO weight in 1974), guard portfolio_vol's per-asset EWMA fallback conservatively | 2026-09-08 | 18f68af | [260908-qwe-fix-hindsight-oracle-indexerror-phantom-](./quick/260908-qwe-fix-hindsight-oracle-indexerror-phantom-/) |
 | 260908-rh4 | fix percent-vs-decimal yield units at the splice boundary (long_duration_tr compounded to 2.3e128; cash booked yield CHANGES as returns), add an asymmetric units guard, correct three test defects incl. an integration test whose 24/24 steps all degraded | 2026-09-08 | 75dedc7 | [260908-rh4-fix-percent-vs-decimal-yield-units-at-th](./quick/260908-rh4-fix-percent-vs-decimal-yield-units-at-th/) |
 | 260908-fnc | close the holdout fence at rest: carve at build, assert at build, add load_full_span() looking opt-in, repoint live weekly scoring | 2026-09-08 | 7f99548 | (in this STATE entry) |
+| 260909-0hs | stop pytest destroying the production holdout checkpoint | 2026-09-09 | eca8f06 | [260909-0hs-stop-pytest-writing-to-production-platfo](./quick/260909-0hs-stop-pytest-writing-to-production-platfo/) |
+| 260909-0og | fix ALFRED vintage index-base discontinuity — chain vintages on within-vintage growth (audit item A4, closed empirically) | 2026-09-09 | 976f7c8 + 8095498 | [260909-0og-fix-alfred-vintage-index-base-discontinu](./quick/260909-0og-fix-alfred-vintage-index-base-discontinu/) |
 | 260910-vyi | fix PyPI publish: corrected doubled dist path (dist/dist), added loud PUBLISH/SKIP gate logging so a skipped matrix leg is no longer indistinguishable from a publish, added a Verify built artifacts guard that fails on empty dist or tag/artifact version mismatch; bumped both packages 0.1.2 -> 0.1.4 (0.1.3 burned on PyPI) | 2026-09-10 | 9d0153c + 0c6fb8d | [260910-vyi-fix-pypi-publish-workflow-dist-path-and-](./quick/260910-vyi-fix-pypi-publish-workflow-dist-path-and-/) |
 | 260911-kkj | add a PyPI token-presence guard: fails the job before any build/upload when the leg's API token secret is absent or empty, naming the exact secret and noting that a dynamic secrets[...] lookup yields an empty string on a name mismatch rather than erroring | 2026-09-11 | 118bd06 | [260911-kkj-add-a-token-presence-guard-to-the-pypi-p](./quick/260911-kkj-add-a-token-presence-guard-to-the-pypi-p/) |
 | 260911-la3 | fix trading-crab-lib's blank PyPI page (wired real README into pyproject readme key, twine check --strict WARNING -> PASSED), add a twine check --strict gate before every upload, add a workflow_dispatch target input (testpypi default) for a TestPyPI dry-run path with target-aware secret selection, write docs/RELEASING.md | 2026-09-11 | c25cbc6 + beabc63 + e97c8a5 + ca837cd | [260911-la3-harden-the-release-procedure-twine-check](./quick/260911-la3-harden-the-release-procedure-twine-check/) |
+| 260911-nt7 | fix the empty trading-crab-lib wheel (0.1.0–0.1.4 shipped zero Python modules): explicit package-dir + enumerated packages list, install-and-import smoke gate, --no-deps so parallel matrix legs cannot couple; bumped both packages to 0.1.5 | 2026-09-11 | f204de3 + 926ef21 | [260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins](./quick/260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins/) |
 
 ## Deferred Items
 
@@ -336,9 +501,16 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-10T22:50:17.661Z
-Stopped at: Phase 7 context gathered (wave 1 scoped for planning)
-Resume file: .planning/phases/07-regime-representation/07-CONTEXT.md
+Last session: 2026-09-14/15 — status reconciliation, Phase 7 wave-1 planning, then full execution
+Stopped at: Phase 7 phase-wave 1 executed 4/4 — wave 2 needs `/gsd-plan-phase 7`
+Resume file: .planning/phases/07-regime-representation/07-04-SUMMARY.md (then ADR-0001's
+"Deferrals and open items" for wave 2's starting point)
+
+Between the 2026-09-10 context session and this one, the release-engineering work
+(quick tasks 260910-vyi, 260911-kkj, 260911-la3, 260911-nt7) was carried out **partly
+outside GSD** because of model rate limits. 260911-nt7 shipped code and a PLAN but no
+SUMMARY; that summary and the STATE/ROADMAP status entries were back-filled on
+2026-09-14. No code was changed during the reconciliation.
 
 ### Audit Part II — Phases 2, 3, 4 (2026-09-09)
 

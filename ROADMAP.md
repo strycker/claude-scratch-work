@@ -103,7 +103,8 @@ Items within a tier are roughly priority-ordered top → bottom.
 
 ## Tier 0.5 — Release Engineering Tech Debt (found during the 0.1.4/0.1.5 releases)
 
-Deferred deliberately on 2026-09-11 — all three are real, none block Phase 7.
+Deferred deliberately on 2026-09-11 (R1–R3) and 2026-09-14 (R4) — all four are real,
+none block Phase 7, but R1 and R4 both touch it.
 
 ### R1. P23 hardening: partial ingestion silently degrades features (HIGH)
 
@@ -150,6 +151,34 @@ The project's own convention is a guarded ImportError naming the extra —
 `platform/plotting/core.py:57` does exactly that ("matplotlib is required ... install
 with `pip install 'trading-crab-lib[plotting]'`"). The legacy plotting package predates
 that convention. Cosmetic, but it is the first thing a new PyPI user hits.
+
+### R4. The enumerated `packages` list is unguarded (MEDIUM — Phase 7 relevant)
+
+The empty-wheel fix (quick task 260911-nt7) replaced the silently-empty
+`[tool.setuptools.packages.find]` glob with an explicit
+`[tool.setuptools] packages = [...]` list in `src/trading_crab_lib/pyproject.toml`,
+enumerating all 17 packages by hand. That was the correct fix — a discovery glob cannot
+work when the project root and the package content directory are the same directory — but
+it converts a discovery problem into a **maintenance** problem.
+
+Nothing checks the list stays complete:
+
+- No test compares the enumerated list against the `__init__.py` files on disk.
+- The `publish-pypi.yml` smoke test imports only the **top-level** package
+  (`import trading_crab_lib`), not its subpackages.
+- `build-pkg` never installs what it builds (R2).
+
+So a new subpackage omitted from the list would ship missing from the wheel with every
+gate green — the same class of silent failure R4 exists to prevent a repeat of. Verified
+2026-09-14: the list and the tree agree today (17/17), so this is a latent risk, not a
+live defect.
+
+**Phase 7 relevance:** Phase 7 adds a second classifier and its feature machinery, which
+is the most likely source of a new subpackage since this list was written.
+
+Fix direction: a unit test that walks `src/trading_crab_lib/` for `__init__.py` files and
+asserts set-equality against the `packages` list parsed from the TOML. Cheap, and it fails
+at the moment the omission is introduced rather than at release time.
 
 ## Tier 1 — High Impact, Achievable Soon
 

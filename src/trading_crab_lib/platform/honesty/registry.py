@@ -25,7 +25,7 @@ import logging
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pandas as pd
 
@@ -58,6 +58,16 @@ def _git_sha() -> str:
         return "unknown"
 
 
+#: Sentinel for ``append_trial(path=...)`` meaning "this is NOT a trial — build the
+#: row but do not write it." Use it for smoke tests, wiring-verification runs, and any
+#: invocation whose purpose is to check that code runs rather than to evaluate a
+#: configuration. Phase 7 wave 1 appended four untagged rows from exactly such runs;
+#: because D-16 deflates Sharpe over the whole registry, they inflated the trial count
+#: against which later searches are deflated. A run that could never have been selected
+#: on is not a trial and must not be logged as one.
+NO_REGISTRY: Final[str] = "__no_registry__"
+
+
 def append_trial(
     *,
     config: dict[str, Any],
@@ -69,7 +79,52 @@ def append_trial(
 
     Opens the ledger in append ("a") mode only — never truncates or rewrites
     existing lines (D-01).
+
+    Every persisted row MUST carry a non-empty ``config["trial_tag"]`` naming what was
+    evaluated. An untagged row is unattributable after the fact: the ledger cannot say
+    whether it was a real evaluated configuration or an incidental run, and D-16 counts
+    it either way. Callers that are not evaluating anything pass ``path=NO_REGISTRY``.
+
+    Args:
+        config: the evaluated configuration. MUST contain a non-empty string
+            ``trial_tag``.
+        features: feature columns the trial used.
+        metrics: the trial's measured outcome.
+        path: ledger path, ``None`` for the default, or :data:`NO_REGISTRY` to build the
+            row and skip the write entirely (smoke / wiring-verification runs).
+
+    Returns:
+        dict[str, Any]: the row (written, unless ``path`` is :data:`NO_REGISTRY`).
+
+    Raises:
+        ValueError: if ``config["trial_tag"]`` is missing or blank and ``path`` is not
+            :data:`NO_REGISTRY`.
     """
+    if path == NO_REGISTRY:
+        log.info(
+            "Registry append SKIPPED (NO_REGISTRY): this run is not an evaluated "
+            "configuration and must not count toward D-16's trial total."
+        )
+        return {
+            "config_hash": config_hash(config),
+            "config": config,
+            "features": features,
+            "metrics": metrics,
+            "git_sha": _git_sha(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "written": False,
+        }
+
+    tag = config.get("trial_tag") if isinstance(config, dict) else None
+    if not isinstance(tag, str) or not tag.strip():
+        raise ValueError(
+            "append_trial requires a non-empty config['trial_tag'] naming what was "
+            "evaluated — an untagged row cannot be attributed later, and D-16 deflates "
+            "Sharpe over every row in the ledger. If this run is a smoke test or a "
+            "wiring check rather than an evaluated configuration, pass "
+            "path=NO_REGISTRY instead of logging it as a trial."
+        )
+
     row = {
         "config_hash": config_hash(config),
         "config": config,
