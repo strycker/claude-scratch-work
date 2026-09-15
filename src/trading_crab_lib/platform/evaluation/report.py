@@ -71,6 +71,7 @@ from trading_crab_lib.platform.backtest.baselines import faber_sma, no_regime_ab
 from trading_crab_lib.platform.backtest.driver import run_backtest
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
 from trading_crab_lib.platform.evaluation.kpis import (
     crisis_capture_ratio,
     cvar,
@@ -88,6 +89,49 @@ from trading_crab_lib.platform.taxonomy import lean_feature_set
 log = logging.getLogger(__name__)
 
 
+# ── Pre-fix historical baseline (07-04/D-05, Phase 7 ADR-0001) ────────────────
+#
+# TRANSCRIBED ONCE, 2026-09-14, from two documents this record never re-reads:
+#   - `.planning/phases/07-regime-representation/07-PREFIX-EVIDENCE.md`
+#     (labeling-disagreement figures, `pct_disagree`/`n_compared`/`n_disagree`
+#     and the disagreement date window — REPRODUCED there directly from the
+#     persisted pre-fix artifacts at commit 46557c1, artifact vintage
+#     2026-09-11, not merely quoted from an earlier doc).
+#   - `.planning/BASELINE-v1-tracer-bullet.md`'s "Current reference run"
+#     table (2026-09-09) — the sojourn/lag/ratio/Brier/KPI/gauntlet figures.
+#
+# This is a HISTORICAL RECORD and is NEVER RECOMPUTED by this module: it
+# reflects a codebase state that no longer exists on disk to re-run against
+# (the pre-fix EXPANDING driver feature-admission policy, frozen only by
+# this phase's D-01, AND a STALE nine-column `monthly_features` checkpoint
+# whose `oil` column was truncated to 1985-02 instead of its full 1962-01
+# history, corrected by D-02-A). Any post-fix number computed by THIS
+# module's own live run is compared against this constant, never the other
+# way around — see `_build_policy_comparison` and D-05's pre/post table.
+_PREFIX_BASELINE_20260914: dict[str, Any] = {
+    "median_sojourn": 97.0,
+    "median_lag": 164.0,
+    "ratio": 0.591,
+    "n_resolved": 4,
+    "n_transitions": 6,
+    "window": "1974-02 -> 2020-12",
+    "pct_disagree": 0.8276595744680851,
+    "n_disagree": 389,
+    "n_compared": 470,
+    "disagreement_window": "1974-02 -> 2020-12",
+    "brier": 0.2087,
+    "wealth_delta": 0.379267,
+    "dd_delta": -0.014364,
+    "strategy_terminal_log_wealth": 4.0265,
+    "strategy_max_drawdown": -0.2124,
+    "strategy_max_drawdown_months": 33,
+    "ablation_terminal_log_wealth": 3.6472,
+    "ablation_max_drawdown": -0.1981,
+    "ablation_max_drawdown_months": None,
+    "n_frozen_columns": 9,
+}
+
+
 # ── assemble_backtest_report ──────────────────────────────────────────────────
 
 
@@ -99,6 +143,7 @@ def assemble_backtest_report(
     baseline_kpis: dict,
     gap: float,
     excluded_assets: list[str] | None = None,
+    policy_comparison: dict | None = None,
 ) -> str:
     """Assemble the honest backtest report markdown from precomputed inputs.
 
@@ -112,6 +157,11 @@ def assemble_backtest_report(
     2. Baseline comparison: Faber 10-month SMA (§23.1 standing target, NOT a
        pass/fail gate).
     3. No-regime-ablation delta ("does the regime layer pay rent", §8.7).
+    3b. Feature-policy pre/post comparison (07-04/D-05, Wave 1 ADR-0001) —
+        OPTIONAL, rendered only when ``policy_comparison`` is supplied.
+        Placed here deliberately: a reader meets the comparability caveat
+        about the compound (D-01 + D-02-A) pre-fix baseline BEFORE meeting
+        the smoothed-vs-filtered gap number the caveat qualifies.
     4. Smoothed-vs-filtered gap (HON-05).
     5. Baseline gauntlet table (SPY, 60/40, Faber).
     6. Strategy KPI table + a documented "Conventions" note (cash-return
@@ -125,6 +175,19 @@ def assemble_backtest_report(
             ``crisis_capture`` (dict[str, float]).
         ablation_kpis: dict with (at least) ``terminal_log_wealth``,
             ``max_drawdown`` for the no-regime-tilt ablation leg.
+        policy_comparison: OPTIONAL (default ``None`` — every existing
+            caller's rendering is byte-identical when omitted). A dict with
+            keys ``rows`` (list of ``{"quantity", "pre_fix", "post_fix"}``
+            dicts, each PRE-FORMATTED as a display string by the caller —
+            this function never reformats a number, so a caller-embedded
+            ``n_compared``/date-window annotation survives verbatim into the
+            same table cell, per the 07-03 human sign-off's binding
+            condition: window-narrowing must appear INLINE at the point the
+            number is shown, never only in a later paragraph) and
+            ``frozen_l1_features`` (``list[str]``, the labeler's full
+            admitted column set, rendered by name — a bare count is not
+            sufficient). See ``_build_policy_comparison`` for the real
+            wiring's row construction.
         baseline_kpis: dict keyed by ``"spy_buy_hold"``/``"sixty_forty"``/
             ``"faber_sma"``, each a dict with ``terminal_log_wealth``,
             ``max_drawdown``.
@@ -211,6 +274,69 @@ def assemble_backtest_report(
         f"ablation={ablation_kpis['max_drawdown']:.2%})"
     )
     lines.append("")
+
+    # ── 3b. Feature-policy pre/post comparison (07-04/D-05, Wave 1 ADR-0001) ──
+    # OPTIONAL — omitted entirely (byte-identical rendering) when the caller
+    # does not supply `policy_comparison` (None default), so every existing
+    # caller and every existing assertion against today's report layout
+    # stays valid (07-04-PLAN.md Task 1, Test 2).
+    if policy_comparison is not None:
+        lines.append("## Feature-Policy Pre/Post Comparison (Wave 1, ADR-0001)")
+        lines.append("")
+        lines.append(
+            "**Comparability caveat.** The pre-fix column below reflects BOTH the "
+            "pre-fix EXPANDING driver feature-admission policy (audit item A13's "
+            "original asymmetry between `driver.py::_window_active_features` and "
+            "`report.py::_reference_label_columns`, frozen only by this phase's "
+            "D-01) AND a stale nine-column `monthly_features` checkpoint whose "
+            "`oil` column began 1985-02 instead of its full 1962-01 history "
+            "(corrected by D-02-A, which is why the frozen set below has ten "
+            "columns, not nine). This run therefore changed TWO things at once, "
+            "and this record cannot separate how much of any movement below is "
+            "the driver-freeze policy change versus the feature-space "
+            "correction — attributing the whole delta to either cause alone "
+            "would repeat exactly the 'fooled by its own backtest' failure mode "
+            "`.planning/UAT-AUDIT-2026-09-09.md` documents."
+        )
+        lines.append("")
+        lines.append(
+            "**Sample-comparability note** (read alongside the disagreement and "
+            "§5.4-ratio rows below): each cell carries its own "
+            "`n_compared`/`n_resolved` denominator and date window INLINE, on "
+            "purpose. When the two runs' non-degraded step counts differ, the "
+            "two percentages compare different-sized, differently-dated "
+            "populations, and a bare percentage-point delta between them is NOT "
+            "a same-population improvement — read the denominator and the dates "
+            "inside each cell before reading the percentage itself."
+        )
+        lines.append("")
+        lines.append(
+            "| Quantity | Pre-fix (superseded, 9-column, stale checkpoint) "
+            "| Post-fix (frozen, 10-column policy) |"
+        )
+        lines.append("|---|---|---|")
+        for row in policy_comparison.get("rows", []):
+            lines.append(f"| {row['quantity']} | {row['pre_fix']} | {row['post_fix']} |")
+        lines.append("")
+        frozen_cols = policy_comparison.get("frozen_l1_features") or []
+        if frozen_cols:
+            lines.append(
+                f"**Frozen L1 feature columns (all {len(frozen_cols)}, the "
+                "labeler's full admitted set):** "
+                + ", ".join(f"`{c}`" for c in frozen_cols) + "."
+            )
+            lines.append("")
+        lines.append(
+            "**Why the Multiclass Brier and confusion tables move.** "
+            "`full_sample_states` is reindexed onto the walk-forward's decision "
+            "dates as `y_true` (step (e) of `run_full_backtest_evaluation`). "
+            "Both the feature-space correction (D-02-A) and the driver freeze "
+            "(D-01) change WHICH smoothed labeling gets reindexed, so the "
+            "labels the nowcaster is scored against changed — a Brier movement "
+            "here is this mechanical relabeling, not because the nowcaster "
+            "improved."
+        )
+        lines.append("")
 
     # ── 4. Smoothed-vs-filtered gap (HON-05) ──
     lines.append("## Smoothed-vs-Filtered Gap")
@@ -457,6 +583,119 @@ def _reference_label_columns(
     return [c for c in lean_cols if bool(decision_slice[c].notna().all())]
 
 
+def _fmt_dd(value: float, months: int | None) -> str:
+    """Format a max-drawdown figure with its optional underwater-duration."""
+    if months is None:
+        return f"{value:.2%}"
+    return f"{value:.2%} ({months} mo)"
+
+
+def _build_policy_comparison(
+    *,
+    sojourn_lag: dict,
+    strategy_kpis: dict,
+    ablation_kpis: dict,
+    disagreement: dict,
+    brier_value: float,
+    brier_n_steps: int,
+    wealth_delta: float,
+    dd_delta: float,
+    frozen_l1_features: list[str],
+) -> dict[str, Any]:
+    """Build ``assemble_backtest_report``'s ``policy_comparison`` mapping
+    (07-04/D-05) from THIS run's own live-computed numbers plus the
+    transcribed ``_PREFIX_BASELINE_20260914`` historical constant.
+
+    Every post-fix cell is read from THIS call's own arguments — never a
+    second hard-coded number — so it can never drift from what this run
+    actually measured. Every disagreement/ratio cell embeds its own
+    ``n_compared``/``n_resolved`` denominator and date window INLINE in the
+    same string (07-03's human sign-off binding condition: the window
+    narrowing must be visible at the point the number is shown, never only
+    in a later paragraph).
+    """
+    pre = _PREFIX_BASELINE_20260914
+
+    def _fmt_month(value: Any) -> str:
+        """``YYYY-MM``, matching the pre-fix constant's window-string
+        granularity — a bare ``str(Timestamp)`` would render a spurious
+        ``00:00:00`` and make the two windows visually inconsistent."""
+        return "n/a" if value is None else pd.Timestamp(value).strftime("%Y-%m")
+
+    post_window = (
+        f"{_fmt_month(disagreement.get('first_common_date'))} -> "
+        f"{_fmt_month(disagreement.get('last_common_date'))}"
+    )
+
+    rows = [
+        {
+            "quantity": "Median regime sojourn (months)",
+            "pre_fix": f"{pre['median_sojourn']:.1f}",
+            "post_fix": f"{sojourn_lag['median_sojourn']:.1f}",
+        },
+        {
+            "quantity": "Median detection lag (months)",
+            "pre_fix": f"{pre['median_lag']:.1f}",
+            "post_fix": f"{sojourn_lag['median_lag']:.1f}",
+        },
+        {
+            "quantity": "§5.4 ratio (`n_resolved` of `n_transitions`)",
+            "pre_fix": f"{pre['ratio']:.4f} ({pre['n_resolved']} of {pre['n_transitions']}; {pre['window']})",
+            "post_fix": (
+                f"{sojourn_lag['ratio']:.4f} ({sojourn_lag.get('n_resolved')} of "
+                f"{sojourn_lag.get('n_transitions')}, resolved within {post_window})"
+            ),
+        },
+        {
+            "quantity": "Labeling disagreement (`pct_disagree`, `n_compared`)",
+            "pre_fix": (
+                f"{pre['pct_disagree']:.2%} ({pre['n_disagree']}/{pre['n_compared']}; "
+                f"{pre['disagreement_window']})"
+            ),
+            "post_fix": (
+                f"{disagreement['pct_disagree']:.2%} "
+                f"({disagreement['n_disagree']}/{disagreement['n_compared']}; {post_window})"
+            ),
+        },
+        {
+            "quantity": "Multiclass Brier",
+            "pre_fix": f"{pre['brier']:.4f} (n_steps not recorded in the pre-fix source)",
+            "post_fix": f"{brier_value:.4f} (n_steps={brier_n_steps})",
+        },
+        {
+            "quantity": "`wealth_delta` (no-regime-ablation, terminal log wealth)",
+            "pre_fix": f"{pre['wealth_delta']:+.4f}",
+            "post_fix": f"{wealth_delta:+.4f}",
+        },
+        {
+            "quantity": "`dd_delta` (no-regime-ablation, max drawdown)",
+            "pre_fix": f"{pre['dd_delta']:+.2%}",
+            "post_fix": f"{dd_delta:+.2%}",
+        },
+        {
+            "quantity": "Strategy terminal log wealth",
+            "pre_fix": f"{pre['strategy_terminal_log_wealth']:.4f}",
+            "post_fix": f"{strategy_kpis['terminal_log_wealth']:.4f}",
+        },
+        {
+            "quantity": "Strategy max drawdown",
+            "pre_fix": _fmt_dd(pre["strategy_max_drawdown"], pre["strategy_max_drawdown_months"]),
+            "post_fix": _fmt_dd(strategy_kpis["max_drawdown"], strategy_kpis.get("duration_months")),
+        },
+        {
+            "quantity": "Ablation terminal log wealth",
+            "pre_fix": f"{pre['ablation_terminal_log_wealth']:.4f}",
+            "post_fix": f"{ablation_kpis['terminal_log_wealth']:.4f}",
+        },
+        {
+            "quantity": "Ablation max drawdown",
+            "pre_fix": _fmt_dd(pre["ablation_max_drawdown"], pre["ablation_max_drawdown_months"]),
+            "post_fix": _fmt_dd(ablation_kpis["max_drawdown"], ablation_kpis.get("duration_months")),
+        },
+    ]
+    return {"rows": rows, "frozen_l1_features": list(frozen_l1_features)}
+
+
 def run_full_backtest_evaluation(
     monthly_features: pd.DataFrame,
     monthly_raw: pd.DataFrame,
@@ -552,7 +791,12 @@ def run_full_backtest_evaluation(
         ``ablation_kpis``, ``baseline_kpis``, ``gap``, ``model_metrics_paths``,
         ``equity_curve``, ``ablation_curve``, ``per_step_metrics``,
         ``full_sample_states``, ``frozen_l1_features`` (the ``list[str]``
-        computed once at (0) and shared by both L1 consumers).
+        computed once at (0) and shared by both L1 consumers), ``disagreement``
+        (07-04/D-05: ``measure_label_disagreement``'s output, computed from
+        THIS run's own ``full_sample_states``/``filtered_probs_matrix`` — the
+        criterion-3 post-fix number), and ``policy_comparison`` (the mapping
+        threaded into ``assemble_backtest_report``'s optional pre/post
+        comparison section, built by ``_build_policy_comparison``).
     """
     backtest_cfg = cfg.get("backtest", {})
     allocation_cfg = cfg.get("allocation", {})
@@ -682,6 +926,15 @@ def run_full_backtest_evaluation(
     filtered_probs_matrix = build_filtered_probs_matrix(per_step_metrics)
     headline = compute_sojourn_lag_headline(full_sample_states, filtered_probs_matrix, act_threshold=act_threshold)
 
+    # Criterion-3 disagreement measurement (07-CONTEXT.md D-05, 07-03's
+    # measure_label_disagreement), computed here — not re-read from disk —
+    # because full_sample_states and filtered_probs_matrix are already the
+    # SAME in-memory objects step (d) just produced. `_comparison_from_state_
+    # probs` tolerates either integer or "state_{k}"-string column labels
+    # (only the persisted parquet round-trip needs the string form), so no
+    # rename is required before this call.
+    disagreement = measure_label_disagreement(full_sample_states, filtered_probs_matrix)
+
     # (e) Join y_true by REINDEXING the smoothed reference onto the
     # walk-forward's own decision dates (review F2) — never loop-sourced.
     dates_index = pd.DatetimeIndex(per_step_metrics["dates"])
@@ -725,6 +978,14 @@ def run_full_backtest_evaluation(
         "sixty_forty": _leg_kpis(sixty_forty_ret),
         "faber_sma": _leg_kpis(faber_ret),
     }
+    # kpi_table/wealth_delta/dd_delta computed here (moved up from the
+    # original (h) location) so they are available to build the
+    # policy_comparison mapping BEFORE assemble_backtest_report is called —
+    # the same subtraction section 3's own rendering performs, not a second
+    # formula (07-04/D-05).
+    kpi_table = _build_kpi_table(strategy_kpis, ablation_kpis, baseline_kpis)
+    wealth_delta = strategy_kpis["terminal_log_wealth"] - ablation_kpis["terminal_log_wealth"]
+    dd_delta = strategy_kpis["max_drawdown"] - ablation_kpis["max_drawdown"]
 
     smoothed_perf = _smoothed_hindsight_perf(
         full_sample_states, asset_returns, cash_ret, list(per_step_metrics["dates"]), allocation_cfg,
@@ -734,6 +995,27 @@ def run_full_backtest_evaluation(
 
     # (g) Model-metrics artifacts (Brier/calibration/confusion).
     model_metrics_paths = report_model_metrics(per_step_metrics, output_dir=output_dir)
+
+    # Read the Brier VALUE back from what report_model_metrics just wrote,
+    # rather than re-deriving it — model_metrics.py owns that computation
+    # and this module must not compute a second, potentially divergent copy.
+    brier_df = pd.read_parquet(model_metrics_paths["brier"])
+    brier_value = float(brier_df["brier"].iloc[0]) if not brier_df.empty else float("nan")
+
+    # 07-04/D-05: the feature-policy pre/post comparison, built from THIS
+    # run's own live numbers plus the transcribed pre-fix historical
+    # constant — never the other way around.
+    policy_comparison = _build_policy_comparison(
+        sojourn_lag=headline,
+        strategy_kpis=strategy_kpis,
+        ablation_kpis=ablation_kpis,
+        disagreement=disagreement,
+        brier_value=brier_value,
+        brier_n_steps=len(per_step_metrics["dates"]),
+        wealth_delta=wealth_delta,
+        dd_delta=dd_delta,
+        frozen_l1_features=ref_cols,
+    )
 
     # (h) Assemble + write the report + artifacts. Two additional artifacts
     # (Amendment 3 item H) ride along on this same call: `full_sample_states`
@@ -749,8 +1031,8 @@ def run_full_backtest_evaluation(
         baseline_kpis=baseline_kpis,
         gap=gap,
         excluded_assets=_excluded,
+        policy_comparison=policy_comparison,
     )
-    kpi_table = _build_kpi_table(strategy_kpis, ablation_kpis, baseline_kpis)
     full_sample_states_df = full_sample_states.to_frame()
     filtered_state_probs_df = filtered_probs_matrix.rename(
         columns={col: f"state_{col}" for col in filtered_probs_matrix.columns}
@@ -780,6 +1062,8 @@ def run_full_backtest_evaluation(
         "per_step_metrics": per_step_metrics,
         "full_sample_states": full_sample_states,
         "frozen_l1_features": list(ref_cols),
+        "disagreement": disagreement,
+        "policy_comparison": policy_comparison,
     }
 
 

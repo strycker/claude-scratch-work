@@ -459,5 +459,127 @@ class TestSmoothedHindsightUniverse:
         assert perf_with == pytest.approx(perf_without)
 
 
+# ── TestPolicyComparisonSection (07-04-PLAN.md Task 1, D-05) ──────────────────
+
+
+def _policy_comparison() -> dict:
+    """A synthetic policy_comparison mapping shaped like
+    report.py::_build_policy_comparison's real output — pre-formatted
+    strings, each embedding its own denominator/date-window INLINE (the
+    07-03 human sign-off's binding condition)."""
+    return {
+        "rows": [
+            {
+                "quantity": "Labeling disagreement (`pct_disagree`, `n_compared`)",
+                "pre_fix": "82.77% (389/470; 1974-02 -> 2020-12)",
+                "post_fix": "80.90% (288/356; 1974-02 -> 2017-05)",
+            },
+            {
+                "quantity": "§5.4 ratio (`n_resolved` of `n_transitions`)",
+                "pre_fix": "0.5910 (4 of 6; 1974-02 -> 2020-12)",
+                "post_fix": "0.6014 (7 of 7, resolved within 1974-02 -> 2017-05)",
+            },
+            {
+                "quantity": "Multiclass Brier",
+                "pre_fix": "0.2087 (n_steps not recorded in the pre-fix source)",
+                "post_fix": "0.2072 (n_steps=356)",
+            },
+            {
+                "quantity": "`wealth_delta` (no-regime-ablation, terminal log wealth)",
+                "pre_fix": "+0.3793",
+                "post_fix": "+0.3778",
+            },
+            {
+                "quantity": "`dd_delta` (no-regime-ablation, max drawdown)",
+                "pre_fix": "-1.44%",
+                "post_fix": "-6.61%",
+            },
+        ],
+        "frozen_l1_features": [
+            "cape_shiller", "credit_spread_baa_aaa", "curve_10y3m", "div_yield", "oil",
+            "real_rate_level", "realized_vol_1m", "realized_vol_3m", "trailing_return_1m",
+            "trailing_return_3m",
+        ],
+    }
+
+
+def _assemble_with_comparison(policy_comparison: dict | None) -> str:
+    return report.assemble_backtest_report(
+        sojourn_lag=_sojourn_lag(),
+        strategy_kpis=_strategy_kpis(),
+        ablation_kpis=_ablation_kpis(),
+        baseline_kpis=_baseline_kpis(),
+        gap=0.03,
+        policy_comparison=policy_comparison,
+    )
+
+
+class TestPolicyComparisonSection:
+    def test_comparison_section_renders_all_three_states(self):
+        """One row per quantity, with THREE distinct labelled columns: the
+        quantity name, a pre-fix column explicitly named as the superseded
+        9-column stale baseline, and a post-fix column explicitly named as
+        the frozen 10-column policy (D-02-A: a bare 2-column pre/post table
+        is the rejected outcome)."""
+        markdown = _assemble_with_comparison(_policy_comparison())
+
+        assert "Pre-fix (superseded, 9-column, stale checkpoint)" in markdown
+        assert "Post-fix (frozen, 10-column policy)" in markdown
+
+        for row in _policy_comparison()["rows"]:
+            assert row["quantity"] in markdown
+            assert row["pre_fix"] in markdown
+            assert row["post_fix"] in markdown
+
+        # every frozen column name (not just a count) is listed.
+        for col in _policy_comparison()["frozen_l1_features"]:
+            assert f"`{col}`" in markdown
+
+    def test_comparison_section_is_omitted_when_not_supplied(self):
+        """Without the new keyword, output is byte-identical to today's
+        rendering for the same inputs — every existing caller and every
+        existing assertion against the current report layout stays valid."""
+        with_none = _assemble_with_comparison(None)
+        without_kwarg = _assemble()
+        assert with_none == without_kwarg
+        assert "Feature-Policy Pre/Post Comparison" not in without_kwarg
+
+    def test_comparison_section_states_the_compound_cause(self):
+        """The section states that part of the movement is the feature-space
+        correction (D-02-A) rather than the driver-freeze policy (D-01), and
+        that the two runs in this record cannot separate the two causes."""
+        markdown = _assemble_with_comparison(_policy_comparison())
+        assert "cannot separate how much of any movement" in markdown
+
+    def test_brier_row_carries_its_mechanical_explanation(self):
+        """When a Brier row is supplied, the section states the figure moved
+        because y_true changed (the smoothed reference reindexed onto the
+        decision dates) — not because the nowcaster improved."""
+        markdown = _assemble_with_comparison(_policy_comparison())
+        assert "y_true" in markdown
+        assert "not because the nowcaster improved" in markdown
+
+    def test_headline_still_emits_the_resolved_denominator(self):
+        """Regression pin (criterion 2): with n_resolved/n_transitions
+        supplied, the headline still renders both, unaffected by this task's
+        edits to the file."""
+        markdown = report.assemble_backtest_report(
+            sojourn_lag={
+                "median_sojourn": 83.0,
+                "median_lag": 138.0,
+                "ratio": 0.6014492753623188,
+                "n_transitions": 7,
+                "n_resolved": 7,
+                "act_threshold": 0.70,
+            },
+            strategy_kpis=_strategy_kpis(),
+            ablation_kpis=_ablation_kpis(),
+            baseline_kpis=_baseline_kpis(),
+            gap=0.03,
+            policy_comparison=_policy_comparison(),
+        )
+        assert "7 resolved of 7 transitions" in markdown
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-x", "-q"])

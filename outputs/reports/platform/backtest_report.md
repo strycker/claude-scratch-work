@@ -24,6 +24,30 @@ The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regim
 - terminal log wealth delta (strategy - ablation): +0.3778 (strategy=4.0251, ablation=3.6472)
 - max drawdown delta (strategy - ablation): -6.61% (strategy=-26.42%, ablation=-19.81%)
 
+## Feature-Policy Pre/Post Comparison (Wave 1, ADR-0001)
+
+**Comparability caveat.** The pre-fix column below reflects BOTH the pre-fix EXPANDING driver feature-admission policy (audit item A13's original asymmetry between `driver.py::_window_active_features` and `report.py::_reference_label_columns`, frozen only by this phase's D-01) AND a stale nine-column `monthly_features` checkpoint whose `oil` column began 1985-02 instead of its full 1962-01 history (corrected by D-02-A, which is why the frozen set below has ten columns, not nine). This run therefore changed TWO things at once, and this record cannot separate how much of any movement below is the driver-freeze policy change versus the feature-space correction — attributing the whole delta to either cause alone would repeat exactly the 'fooled by its own backtest' failure mode `.planning/UAT-AUDIT-2026-09-09.md` documents.
+
+**Sample-comparability note** (read alongside the disagreement and §5.4-ratio rows below): each cell carries its own `n_compared`/`n_resolved` denominator and date window INLINE, on purpose. When the two runs' non-degraded step counts differ, the two percentages compare different-sized, differently-dated populations, and a bare percentage-point delta between them is NOT a same-population improvement — read the denominator and the dates inside each cell before reading the percentage itself.
+
+| Quantity | Pre-fix (superseded, 9-column, stale checkpoint) | Post-fix (frozen, 10-column policy) |
+|---|---|---|
+| Median regime sojourn (months) | 97.0 | 83.0 |
+| Median detection lag (months) | 164.0 | 138.0 |
+| §5.4 ratio (`n_resolved` of `n_transitions`) | 0.5910 (4 of 6; 1974-02 -> 2020-12) | 0.6014 (7 of 7, resolved within 1974-02 -> 2017-05) |
+| Labeling disagreement (`pct_disagree`, `n_compared`) | 82.77% (389/470; 1974-02 -> 2020-12) | 80.90% (288/356; 1974-02 -> 2017-05) |
+| Multiclass Brier | 0.2087 (n_steps not recorded in the pre-fix source) | 0.2072 (n_steps=356) |
+| `wealth_delta` (no-regime-ablation, terminal log wealth) | +0.3793 | +0.3778 |
+| `dd_delta` (no-regime-ablation, max drawdown) | -1.44% | -6.61% |
+| Strategy terminal log wealth | 4.0265 | 4.0251 |
+| Strategy max drawdown | -21.24% (33 mo) | -26.42% (58 mo) |
+| Ablation terminal log wealth | 3.6472 | 3.6472 |
+| Ablation max drawdown | -19.81% | -19.81% (35 mo) |
+
+**Frozen L1 feature columns (all 10, the labeler's full admitted set):** `cape_shiller`, `credit_spread_baa_aaa`, `curve_10y3m`, `div_yield`, `oil`, `real_rate_level`, `realized_vol_1m`, `realized_vol_3m`, `trailing_return_1m`, `trailing_return_3m`.
+
+**Why the Multiclass Brier and confusion tables move.** `full_sample_states` is reindexed onto the walk-forward's decision dates as `y_true` (step (e) of `run_full_backtest_evaluation`). Both the feature-space correction (D-02-A) and the driver freeze (D-01) change WHICH smoothed labeling gets reindexed, so the labels the nowcaster is scored against changed — a Brier movement here is this mechanical relabeling, not because the nowcaster improved.
+
 ## Smoothed-vs-Filtered Gap
 
 - gap (smoothed hindsight performance - real-time filtered performance): -1.4773 — the measured hindsight content of the strategy (§5.4). The smoothed reference is ONE full-sample labeler fit; the filtered series is the walk-forward driver's actual per-step decisions — genuinely distinct series (Pitfall 1), never the same object reused.
