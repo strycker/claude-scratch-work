@@ -67,7 +67,60 @@ class TestPalette:
 
     def test_a13_caveat_names_audit_item(self):
         assert "A13" in pplot.A13_CAVEAT
-        assert "not interpretable" in pplot.A13_CAVEAT.lower()
+
+
+# ── A13_CAVEAT content (07-04-PLAN.md Task 2, D-08) ──────────────────────────
+#
+# RE-PINNED 2026-09-15, per Phase 7's D-01/D-02-A/D-08: these two assertions
+# were CORRECT for the pre-fix caveat and are invalidated by a DECISION, not
+# a bug — exactly the same re-pin convention plan 07-02 established for the
+# A13 golden change-point constant (07-CONTEXT.md D-02-A). The caveat is
+# retired to a resolution narrative only because both D-08 licensing
+# artifacts are demonstrably present: (a) TestFrozenPolicyEquivalence
+# (re-run by this same task's verify block, tests/unit/test_platform_backtest
+# _driver.py), and (b) the ratio is published with its resolved-transition
+# denominator (07-04-PLAN.md Task 1's regression pin,
+# test_headline_still_emits_the_resolved_denominator). This is a resolution,
+# never a softening of the wording — see the "no longer claims uninterpretable"
+# test below alongside the "still names both licensing artifacts" test: both
+# must pass together, or the retirement is not licensed.
+
+
+class TestA13CaveatResolution:
+    def test_caveat_no_longer_claims_the_ratio_is_uninterpretable(self):
+        """The new text must NOT describe the ratio as uninterpretable. The
+        searched phrase must also be absent from the surrounding module
+        comment (not just quietly kept in a docstring one line up), so this
+        assertion tests the CONSTANT, not an incidental nearby mention."""
+        assert "not interpretable" not in pcore.A13_CAVEAT.lower()
+        assert "uninterpretable" not in pcore.A13_CAVEAT.lower()
+
+        source = Path(pcore.__file__).read_text(encoding="utf-8")
+        # Isolate the block comment + constant definition so a hit anywhere
+        # ELSE in the file (e.g. an unrelated docstring) cannot masquerade
+        # as the constant having been checked.
+        start = source.index("# Single-source caveat string")
+        end = source.index("\n\n\n", start)
+        block = source[start:end].lower()
+        assert "not interpretable" not in block
+        assert "uninterpretable" not in block
+
+    def test_caveat_still_carries_its_audit_identifier(self):
+        """A caveat that erases its own provenance is not a resolution — a
+        reader must be able to trace the fix back to the audit item."""
+        assert "A13" in pcore.A13_CAVEAT
+
+    def test_caveat_names_both_licensing_artifacts(self):
+        """D-08's two conditions, named explicitly so the reason for removal
+        is legible without opening the ADR."""
+        assert "TestFrozenPolicyEquivalence" in pcore.A13_CAVEAT
+        assert "resolved-transition denominator" in pcore.A13_CAVEAT
+
+    def test_caveat_constant_still_exists_and_is_reexported(self):
+        """The constant must not be deleted — plotting/backtest.py still
+        needs caption text for the sojourn/lag panel."""
+        assert pcore.A13_CAVEAT
+        assert pplot.A13_CAVEAT == pcore.A13_CAVEAT
 
 
 # ── D-01 fresh-package boundary ──────────────────────────────────────────────

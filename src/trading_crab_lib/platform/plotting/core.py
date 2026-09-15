@@ -66,18 +66,40 @@ REGIME_CMAP = mcolors.ListedColormap(CUSTOM_COLORS)
 PLATFORM_PLOT_DIR: Path = OUTPUT_DIR / "plots" / "platform"
 
 # Single-source caveat string for every module and notebook that displays the
-# §5.4 detection-lag / sojourn-ratio headline. Audit item A13 found that the
-# "smoothed reference" and the walk-forward's "filtered" path are computed
-# from different and time-varying feature sets, so their disagreement is not
-# purely detection delay — the ratio is not interpretable until A13 is
-# resolved, and no plausibility band around it changes that (06-VALIDATION.md).
+# §5.4 detection-lag / sojourn-ratio headline.
+#
+# UPDATED 2026-09-14 (Phase 7, D-01/D-02-A/D-08, ADR-0001): audit item A13
+# found that the "smoothed reference" and the walk-forward's "filtered" path
+# were computed from DIFFERENT and time-varying feature sets, so their
+# disagreement was not purely detection delay. That cause is now FIXED, not
+# merely reworded: Phase 7's D-01 freezes the walk-forward driver's L1
+# labeler to the SAME feature space `report.py::_reference_label_columns`
+# already computes for the smoothed reference (D-02-A: ten columns, `oil`
+# included). The caveat below is retired to a resolution narrative on the
+# strength of D-08's two licensing artifacts TOGETHER — never because the
+# wording was softened: (a) `TestFrozenPolicyEquivalence`
+# (tests/unit/test_platform_backtest_driver.py), which proves the driver and
+# the reference resolve to IDENTICAL column sets at every sampled decision
+# date, and (b) the ratio is published together with its resolved-transition
+# denominator (see the caption's own "N of M" line), so a reader can judge
+# sample size directly. See `platform_design/adr/0001-l1-feature-policy.md`
+# for the full policy record, including the pre-fix seven-change
+# (4 -> 6 -> 8 -> 9 -> 10 -> 12 -> 13 features) history this caption used to
+# carry — that history now belongs in the ADR, not in a caption describing
+# the CURRENT, resolved state.
 A13_CAVEAT: str = (
-    "NOT INTERPRETABLE (audit item A13): this ratio compares a fixed-feature "
-    "'smoothed reference' labeling against the walk-forward's own per-window "
-    "'filtered' labeling, whose active feature set changes 7 times across the "
-    "backtest (4 -> 6 -> 8 -> 9 -> 10 -> 12 -> 13 features). Their disagreement "
-    "is therefore not purely detection delay, and no plausibility band around "
-    "this number resolves that until A13 is settled."
+    "RESOLVED (audit item A13, Phase 7 D-01/D-02-A/D-08): this ratio compares "
+    "the walk-forward's per-window 'filtered' labeling against a fixed-feature "
+    "'smoothed reference' labeling, both now fit on ONE shared, frozen feature "
+    "space. The driver's L1 labeler and the evaluation's smoothed reference "
+    "resolve their columns from a single shared computation, proved identical "
+    "at every sampled decision date by TestFrozenPolicyEquivalence. The ratio "
+    "is published together with its resolved-transition denominator (the "
+    "'N resolved of M transitions' line above), so a reader can judge whether "
+    "it rests on a handful of transitions or on many. It remains a "
+    "small-sample INDICATIVE number, never a robust go/no-go figure on its "
+    "own — see platform_design/adr/0001-l1-feature-policy.md for the full "
+    "policy record."
 )
 
 
