@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 7
 current_phase_name: Regime Representation
-status: planned
-stopped_at: Phase 7 wave 1 planned and checker-verified; ready for /gsd-execute-phase 7
-last_updated: "2026-09-14T18:30:00.000Z"
-last_activity: 2026-09-14
-last_activity_desc: Phase 7 wave 1 planned (4 plans, 11 tasks) — research, validation strategy, pattern map, D-02-A amendment, checker PASS
+status: executed
+stopped_at: Phase 7 phase-wave 1 executed (4/4 plans); wave 2 needs its own /gsd-plan-phase 7 pass
+last_updated: "2026-09-15T01:00:00.000Z"
+last_activity: 2026-09-15
+last_activity_desc: Phase 7 phase-wave 1 executed end to end — A13/A15 resolved, D-02-A recompute landed, ADR-0001 written, suite 1705 → 1735
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 39
-  completed_plans: 35
+  completed_plans: 39
 ---
 
 # Project State
@@ -29,8 +29,52 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **7 — Regime Representation**
-Status: **WAVE 1 PLANNED — ready to execute.** Four plans, 11 tasks, checker-verified PASS
-on 2026-09-14. Wave 2 is deliberately unplanned per D-09.
+Status: **PHASE-WAVE 1 EXECUTED (4/4 plans).** Wave 2 remains deliberately unplanned per D-09
+and needs its own `/gsd-plan-phase 7` pass. Suite 1705 → **1735 passed, 0 skipped**.
+
+### What phase-wave 1 delivered
+
+| Criterion | Outcome |
+|---|---|
+| 1 — one documented feature policy, test fails on divergence, ADR | ✅ `frozen_l1_features` threaded from ONE `_reference_label_columns` call; `TestFrozenPolicyEquivalence`; `platform_design/adr/0001-l1-feature-policy.md` |
+| 2 — §5.4 ratio interpretable, with resolved-transition count | ✅ **0.60145 (7/7 resolved)**, both labelings on one feature space; A13 caveat retired by cause (D-08), not softened |
+| 3 — post-fix disagreement vs the 82.8% baseline | ⚠️ **80.90% (288/356)** vs 82.77% (389/470) — satisfied as worded, but see the named limitation below |
+| 4 — ablation delta on both axes, in band | ✅ `wealth_delta` +0.377847, `dd_delta` −0.066124; both in band (both bands `[ASSUMED]`) |
+
+**D-02-A landed:** `monthly_features` recomputed offline from cached `monthly_raw` — `oil`
+431 → **708** non-NaN dev months, frozen set 9 → **10**, shape `(708, 53)`, holdout fence intact
+(68 rows from 2021-01). A13 golden constant re-pinned `4,6,8,9,10,12,13` → `5,7,9,10,11,12,13`,
+still exact list equality.
+
+### ⚠ Named limitation on criterion 3 — human-approved with this condition attached
+
+The frozen policy produced **232/588** L2-degraded steps versus **118/588** pre-fix, so the
+post-fix disagreement rests on **356** steps ending **2017-05** against a baseline of **470**
+ending **2020-12**. `82.77% → 80.90%` is **not** a clean 1.9-point improvement — different
+sample, different window. Foregrounded inline (same table cell as the numbers) in both
+`backtest_report.md` and ADR-0001, per the human sign-off at 07-03's checkpoint.
+
+Verified, not inferred: the degrade is L1-label-mediated, **not** a wiring defect —
+`frozen_l1_features` reaches only `_refit_l1` (`driver.py:461`, `:473`); `_refit_l2`
+(`driver.py:266-271`) takes no such parameter. **Why** freezing L1 nearly doubles L2's degrade
+rate is inferred (occupancy shifted, state 0: 1.6% → 11.51%), **not measured** — do not cite a
+cause as established.
+
+### ⚠ Trial registry is contaminated with 4 untagged rows — matters for D-16
+
+The registry stands at **42** rows. Rows 35–38 are this phase's real policy trials
+(`P7-W1-frozen-10col` ×2, `P7-W1-impute-13col-REJECTED` ×2). **Rows 39–42 are UNTAGGED and are
+not policy evaluations** — they were appended by two end-to-end wiring-verification runs of
+`python -m trading_crab_lib.platform.evaluation.report` during 07-04 (the plan's own
+`<verification>` section anticipated this).
+
+**Why it matters:** D-16 computes deflated Sharpe over the *whole registry since project start*,
+so those 4 rows inflate the trial count against which criterion 7's joint-lift search will be
+deflated. **The ledger was deliberately NOT edited** — it is append-only honesty evidence, and
+quietly deleting rows we dislike is a worse failure than the contamination. Wave 2 must decide
+explicitly whether a wiring-verification run counts as a trial, and record that decision.
+**Recommended follow-up:** make `trial_tag` mandatory, or have the report module skip the
+registry append when invoked as a smoke test.
 
 | Plan | Wave | depends_on | Tasks | Autonomous | Covers |
 |---|---|---|---|---|---|
@@ -427,9 +471,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-14 (status reconciliation + Phase 7 wave-1 planning; no source changes)
-Stopped at: Phase 7 wave 1 planned and checker-verified — ready for `/gsd-execute-phase 7`
-Resume file: .planning/phases/07-regime-representation/07-01-PLAN.md
+Last session: 2026-09-14/15 — status reconciliation, Phase 7 wave-1 planning, then full execution
+Stopped at: Phase 7 phase-wave 1 executed 4/4 — wave 2 needs `/gsd-plan-phase 7`
+Resume file: .planning/phases/07-regime-representation/07-04-SUMMARY.md (then ADR-0001's
+"Deferrals and open items" for wave 2's starting point)
 
 Between the 2026-09-10 context session and this one, the release-engineering work
 (quick tasks 260910-vyi, 260911-kkj, 260911-la3, 260911-nt7) was carried out **partly
