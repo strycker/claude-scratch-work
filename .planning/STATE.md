@@ -29,7 +29,9 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **7 — Regime Representation**
-Status: **PHASE-WAVE 1 EXECUTED (4/4 plans).** Wave 2 remains deliberately unplanned per D-09
+Status: **PHASE-WAVE 1 CLOSED.** Executed 4/4, verified 4/4 criteria by live re-derivation
+(`07-VERIFICATION.md`), validated `nyquist_compliant: true` (`07-VALIDATION.md`), UAT signed
+**accept-with-caveats** 2026-09-15 (`07-UAT.md`, 3/3 items closed). Suite **1752 passed, 0 skipped**. Wave 2 remains deliberately unplanned per D-09
 and needs its own `/gsd-plan-phase 7` pass. Suite 1705 → **1735 passed, 0 skipped**.
 
 ### What phase-wave 1 delivered

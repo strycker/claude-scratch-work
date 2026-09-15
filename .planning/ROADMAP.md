@@ -424,5 +424,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
-| 7. Regime Representation | 4/4 | Phase-wave 1 executed (criteria 1-4; wave 2 unplanned per D-09) | 2026-09-15 |
+| 7. Regime Representation | 4/4 | Wave 1 verified 4/4 + validated + UAT accept-with-caveats; wave 2 unplanned (D-09) | 2026-09-15 |
 | 8. Migration to Public Repo | 0/TBD | Not started | - |
