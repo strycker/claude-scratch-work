@@ -23,6 +23,7 @@ from trading_crab_lib.platform.features.relative import (
     compute_rolling_cross_correlation,
     compute_trailing_momentum,
 )
+from trading_crab_lib.platform.labeling.classifier2 import freeze_classifier2_columns
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 N_MONTHS = 60
@@ -265,6 +266,60 @@ class TestAddRelativeFeatures:
         assert "m2_gdp" in result.columns
         assert "credit_gdp" in result.columns
         assert f"equities_tr_mom_{MONTHLY_MOMENTUM_WINDOWS[0]}m" in result.columns
+
+
+
+class TestClassifier2Disjointness:
+    """Criterion 5's disjointness test (D-10, ADR-0002 decision (a)).
+
+    Classifier #2's frozen feature set must share NO raw column with classifier
+    #1's 13 lean columns. Asserted twice: on the configured list, and on the
+    list ``freeze_classifier2_columns`` actually resolves against a frame built
+    by the real ``add_relative_features`` code path — a configured list can be
+    correct while the resolved one is not, if the freeze rule ever admits a
+    column the config never named.
+    """
+
+    def _feature_frame(self) -> pd.DataFrame:
+        """A candidate frame produced by the real code path, not hand-listed."""
+        raw = _make_synthetic_monthly_raw(n_months=120)
+        return add_relative_features(raw, {})
+
+    def test_configured_feature_list_is_disjoint_from_the_lean_set(self):
+        cfg = load_platform_config()
+        configured = set(cfg["labeling_2"]["features"])
+        lean = lean_feature_set(cfg)
+        overlap = configured & lean
+        assert overlap == set(), (
+            f"classifier #2's configured feature list collides with classifier #1's "
+            f"lean set on: {sorted(overlap)}"
+        )
+
+    def test_resolved_frozen_list_is_disjoint_from_the_lean_set(self):
+        cfg = load_platform_config()
+        features = self._feature_frame()
+        frozen = freeze_classifier2_columns(features, cfg, features.index[36])
+        overlap = set(frozen) & lean_feature_set(cfg)
+        assert overlap == set(), (
+            f"classifier #2's RESOLVED frozen list collides with classifier #1's "
+            f"lean set on: {sorted(overlap)}"
+        )
+
+    def test_the_lean_set_is_exactly_thirteen_members(self):
+        """Without this, disjointness could be satisfied by shrinking the
+        denominator — removing a column from classifier #1 instead of keeping
+        classifier #2 off it."""
+        lean = lean_feature_set(load_platform_config())
+        assert len(lean) == 13, f"lean set is {len(lean)} members, not 13: {sorted(lean)}"
+
+    def test_the_resolved_frozen_list_is_the_full_pinned_eight(self):
+        """A frozen list that silently shrank would make disjointness trivially
+        true; pin the count the ADR pinned."""
+        cfg = load_platform_config()
+        features = self._feature_frame()
+        frozen = freeze_classifier2_columns(features, cfg, features.index[36])
+        assert frozen == list(cfg["labeling_2"]["features"])
+        assert len(frozen) == 8
 
 
 if __name__ == "__main__":
