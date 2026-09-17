@@ -354,9 +354,10 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
      > coupling must not be *widened*, not because `platform/` is already clean. Now guarded by
      > `tests/unit/test_platform_legacy_import_ratchet.py`, a ratchet that may only decrease.
 
-**Plans**: 12 plans — 4 in phase-wave 1 (criteria 1-4 + ADR-0001, **complete**, UAT-signed
-accept-with-caveats 2026-09-15) and 8 in phase-wave 2 (criteria 5-7 + INV-01 + ADR-0002,
-planned 2026-09-15 in the second planning pass D-09 called for)
+**Plans**: 12 plans, 8 executed — 4 in phase-wave 1 (criteria 1-4 + ADR-0001, **complete**,
+UAT-signed accept-with-caveats 2026-09-15) and 8 in phase-wave 2 (criteria 5-7 + INV-01 +
+ADR-0002, planned 2026-09-15 in the second planning pass D-09 called for; 07-05..07-08
+executed, 07-09..07-12 outstanding)
 
 > ⚠ **Two senses of "wave" collide in this phase — read carefully.** The phase gates on
 > **phase-wave 1 → phase-wave 2** (resolve A13/A15, then the leadership classifier). All four
@@ -364,16 +365,18 @@ planned 2026-09-15 in the second planning pass D-09 called for)
 > ordering within this pass, not the phase's gate. No plan below touches classifier #2.
 
 Plans (all phase-wave 1):
-- [ ] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test *(exec-wave 1)*
-- [ ] 07-02-PLAN.md — Recompute `monthly_features` from cached `monthly_raw` (D-02-A, ten-column frozen set) and re-pin the A13 golden constant exactly *(exec-wave 2)*
-- [ ] 07-03-PLAN.md — Re-measure criteria 2/3/4 on real data against bands that name the values they reject, plus the D-03 logged rejection trial *(exec-wave 3)*
-- [ ] 07-04-PLAN.md — D-05 three-state pre/post table, D-08 A13 caveat resolution, and the policy ADR *(exec-wave 4)*
+
+- [x] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test *(exec-wave 1)*
+- [x] 07-02-PLAN.md — Recompute `monthly_features` from cached `monthly_raw` (D-02-A, ten-column frozen set) and re-pin the A13 golden constant exactly *(exec-wave 2)*
+- [x] 07-03-PLAN.md — Re-measure criteria 2/3/4 on real data against bands that name the values they reject, plus the D-03 logged rejection trial *(exec-wave 3)*
+- [x] 07-04-PLAN.md — D-05 three-state pre/post table, D-08 A13 caveat resolution, and the policy ADR *(exec-wave 4)*
 
 Plans (all phase-wave 2 — the leadership classifier; criteria 5, 6, 7 + INV-01):
-- [ ] 07-05-PLAN.md — Tracer: `canonicalize_states` gains an explicit `sort_column` that raises instead of silently falling back to centroid column 0; `platform/features/relative.py` ports the leadership features at monthly cadence; M2SL/TOTALSL ingestion config *(exec-wave 1)*
-- [ ] 07-06-PLAN.md — `total_trial_count()` reads the provenance header (38 prior + post-header rows) and `evaluation/deflated_sharpe.py` implements Bailey–López de Prado, with the estimator choice fixed in writing first *(exec-wave 1)*
-- [ ] 07-07-PLAN.md — INV-01 screening: named candidates, dimensional reduction as a discovery tool only, era-stability assessed on expanding windows, every candidate registry-logged, survivors named *(exec-wave 2)*
-- [ ] 07-08-PLAN.md — Pin classifier #2's features/K/λ/sort column and criterion 7's measurement routing at a blocking decision, write ADR-0002 (Proposed) with the trial ceiling **before** running, then fit classifier #2 with the criterion-5 disjointness and occupancy tests *(exec-wave 3)*
+
+- [x] 07-05-PLAN.md — Tracer: `canonicalize_states` gains an explicit `sort_column` that raises instead of silently falling back to centroid column 0; `platform/features/relative.py` ports the leadership features at monthly cadence; M2SL/TOTALSL ingestion config *(exec-wave 1)*
+- [x] 07-06-PLAN.md — `total_trial_count()` reads the provenance header (38 prior + post-header rows) and `evaluation/deflated_sharpe.py` implements Bailey–López de Prado, with the estimator choice fixed in writing first *(exec-wave 1)*
+- [x] 07-07-PLAN.md — INV-01 screening: named candidates, dimensional reduction as a discovery tool only, era-stability assessed on expanding windows, every candidate registry-logged, survivors named *(exec-wave 2)*
+- [x] 07-08-PLAN.md — Pin classifier #2's features/K/λ/sort column and criterion 7's measurement routing at a blocking decision, write ADR-0002 (Proposed) with the trial ceiling **before** running, then fit classifier #2 with the criterion-5 disjointness and occupancy tests *(exec-wave 3)*
 - [ ] 07-09-PLAN.md — Criterion 6: ARI + NMI + Cramér's V + crosstab with no threshold (D-15), tests that fail on a perfect statistic as well as a wrong one, and a human judgement on whether an axis was added *(exec-wave 4)*
 - [ ] 07-10-PLAN.md — `blend_regime_tilts` (new code — `tilt.py` takes one probability input today), and the blocking confirmation of the four now-load-bearing `[ASSUMED]` bands *before* any lift number exists *(exec-wave 4)*
 - [ ] 07-11-PLAN.md — Criterion 7: one harness produces both the joint leg and the #1-alone baseline over an identical step sequence; lift reported with its window inline; deflated Sharpe applied for the full live-read count *(exec-wave 5)*
@@ -440,5 +443,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
-| 7. Regime Representation | 4/12 | Wave 1 closed (verified+validated+UAT); wave 2 planned 07-05..07-12, checker PASS | wave 1: 2026-09-15 |
+| 7. Regime Representation | 8/12 | In progress — wave 1 closed (verified+validated+UAT); 07-05..07-08 executed, ADR-0002 at Proposed; 07-09..07-12 outstanding | wave 1: 2026-09-15; 07-08: 2026-09-17 |
 | 8. Migration to Public Repo | 0/TBD | Not started | - |
