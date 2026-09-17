@@ -35,6 +35,10 @@ log = logging.getLogger(__name__)
 
 DEFAULT_REGISTRY_PATH = ROOT / "registry" / "trials.jsonl"
 
+#: Discriminator string identifying a provenance-header row (a ledger-reset accounting
+#: row, not an evaluated trial). See :func:`total_trial_count`.
+PROVENANCE_RECORD_TYPE: Final[str] = "provenance_header"
+
 
 def _resolve_registry_path(path: Path | str | None) -> Path:
     """Return *path* as a :class:`Path`, or :data:`DEFAULT_REGISTRY_PATH` if None."""
@@ -149,3 +153,61 @@ def read_trials(path: Path | str | None = None) -> pd.DataFrame:
     if not registry_path.exists() or registry_path.stat().st_size == 0:
         return pd.DataFrame()
     return pd.read_json(registry_path, lines=True)
+
+
+def _coerce_int(value: Any) -> int:
+    """Best-effort int coercion; anything unparseable degrades to 0 rather than raising."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def total_trial_count(path: Path | str | None = None) -> int:
+    """D-16's true denominator: the whole registry since project start.
+
+    D-16 deflates Sharpe over EVERY configuration ever evaluated on this data since
+    project start — whether or not the current phase ran it. Phase 7 wave 1 reset the
+    live ledger (:data:`DEFAULT_REGISTRY_PATH`) after appending 4 untagged
+    wiring-verification rows that would have inflated the trial count; the pre-reset
+    history (42 rows) was archived intact to
+    ``registry/archive/trials-pre-P7W1-reset.jsonl`` and the live ledger restarted with
+    a single **provenance-header** row (``config["record_type"] ==
+    PROVENANCE_RECORD_TYPE``) carrying ``config["prior_genuine_trials"]`` — the archived
+    ledger's true trial count.
+
+    :func:`read_trials` is a bare, header-unaware reader (unmodified by this function);
+    a naive ``len(read_trials())`` therefore undercounts the true total by the header's
+    own prior the moment the ledger is reset, and does so silently — this is
+    ``07-RESEARCH.md``'s "closest analog to a security defect" (T-07-05), because it
+    systematically UNDER-penalizes search, the wrong direction for an honesty framework.
+
+    This function sums every provenance-header row's ``prior_genuine_trials`` (the
+    header rows themselves are never counted as trials) and adds the count of all
+    other rows. **Invariant: the return value can never fall below the sum of every
+    header row's own stated prior** — a lower value indicates a parsing bug in this
+    function, not a valid reading of the ledger.
+
+    Args:
+        path: ledger path, or ``None`` for :data:`DEFAULT_REGISTRY_PATH`.
+
+    Returns:
+        int: total trial count. ``0`` for a missing or empty ledger (never raises).
+    """
+    df = read_trials(path)
+    if df.empty:
+        return 0
+    if "config" not in df.columns:
+        # No row in this ledger carries a config column at all -> nothing to
+        # discriminate a header from a trial; every row counts as a trial.
+        return int(len(df))
+
+    def _is_header(cfg: Any) -> bool:
+        return isinstance(cfg, dict) and cfg.get("record_type") == PROVENANCE_RECORD_TYPE
+
+    is_header = df["config"].apply(_is_header)
+    prior_total = sum(
+        _coerce_int(cfg.get("prior_genuine_trials", 0)) for cfg in df.loc[is_header, "config"]
+    )
+    non_header_count = int((~is_header).sum())
+    return prior_total + non_header_count
