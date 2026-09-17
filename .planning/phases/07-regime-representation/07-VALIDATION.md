@@ -53,7 +53,7 @@ supersedes: 07-VALIDATION-WAVE1.md (wave 1's, status validated — reused, not r
 |---|---|---|---|
 | **5** disjointness | #2's raw candidates disjoint from `lean_feature_set(cfg)`'s 13 | `-k disjoint` in `test_platform_features_relative.py` | ❌ Wave 0 |
 | **5** canonicalize fix | `canonicalize_states` never silently falls back for #2; **raises `ValueError`** on an absent `sort_column` | `-k canonicalize` in `test_platform_labeling.py` | ❌ Wave 0 (extends `TestCanonicalizeStates`) |
-| **5** occupancy | sums to 1.0; every state under the §4.4 5% floor flagged (`_MIN_OCCUPANCY_THRESHOLD`, `labeling/diagnostics.py:67`) | `-k occupancy` | ✅ generic helpers exist — extend with a #2-shaped fixture |
+| **5** occupancy | sums to 1.0; every state under §4.4's ~8% floor (§4.4 crit. 1 is ~8%–~35%; see ADR-0001 § AMENDMENT 2026-09-17) flagged (`_MIN_OCCUPANCY_THRESHOLD`, `labeling/diagnostics.py:67`) | `-k occupancy` | ✅ generic helpers exist — extend with a #2-shaped fixture |
 | **6** dependence | ARI + NMI + Cramér's V + crosstab, **no pass/fail gate** (D-15) | `test_platform_evaluation_dependence.py` | ❌ Wave 0 |
 | **7** joint tilt | `blend_regime_tilts` weights sum to `scale`; degrades on empty input | `test_platform_tilt.py` | ❌ Wave 0 |
 | **7** deflated Sharpe | DSR vs a hand-worked oracle; `total_trial_count` **reads the provenance header** | `test_platform_evaluation_deflated_sharpe.py` | ❌ Wave 0 — **nothing exists to extend** |

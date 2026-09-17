@@ -306,9 +306,14 @@ def label_leadership_regimes(
     so a caller passing ``add_relative_features(monthly_raw, cfg)`` straight in
     would otherwise fit on post-cutoff months. Dropped rows are logged.
 
-    §4.4's five-percent occupancy floor is REPORT-ONLY (D-02/D-07): a state
-    below it produces a loud WARNING naming that state, and this function still
-    completes. It is never a gate.
+    §4.4 criterion 1's occupancy band (every state >= ~8% and <= ~35%) is
+    REPORT-ONLY (D-02/D-07): a state outside it produces a loud WARNING naming
+    that state, and this function still completes. It is never a gate.
+
+    NOTE 2026-09-17: as pinned (K=3, lambda=32) this classifier BREACHES that
+    cap on two states (46.12%, 38.51%). See the CORRECTION section of
+    platform_design/adr/0002-l1-second-classifier.md; K and lambda are pending
+    a re-pin against §4.4.
 
     Args:
         features: a feature frame carrying classifier #2's candidate columns.
@@ -384,7 +389,7 @@ def label_leadership_regimes(
     occ_sojourn = occupancy_and_sojourns(states, n_states=K)
 
     # Same report_labeling_diagnostics code path classifier #1 uses — so the
-    # five-percent floor WARNING is emitted by the same code — but routed to its
+    # §4.4 band WARNING is emitted by the same code — but routed to its
     # OWN directory: the default artifact name is shared, and writing there
     # would silently overwrite classifier #1's diagnostics (T-07-15's failure
     # mode applied to the artifact rather than the checkpoint).

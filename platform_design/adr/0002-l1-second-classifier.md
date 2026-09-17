@@ -237,7 +237,7 @@ and a test asserts no produced column name contains "gold".
 
 Cross the two labelings into K₁ × K₂ = 5 × 3 = 15 joint states and tilt on the product.
 **Rejected**: across roughly **590** decision months with occupancy never uniform, rare cells
-fall below design §4.4's five-percent floor — at perfectly uniform occupancy each cell would hold
+fall below design §4.4's ~8% floor — at perfectly uniform occupancy each cell would hold
 ~39 months, and occupancy is not uniform, so the thin tail is thinner than that. The two
 probability vectors feed the allocation tilt as two **separate** inputs instead, blended at the
 weight pinned in (f). The developer's counter-proposal at the checkpoint — one-hot encoding the
@@ -486,3 +486,39 @@ rather than supersedes.*
 record with every failure signature), `07-CONTEXT.md` (D-10 through D-17 and the WAVE-2 OPENING
 AMENDMENT), `07-INV01-SCREENING.md` (the INV-01 screen), `07-DSR-ESTIMATOR-NOTE.md` (the
 estimator reading), `ROADMAP.md` T0.9 and T0.10 (the two standing objections).*
+
+---
+
+## CORRECTION 2026-09-17 — classifier #2 as pinned FAILS design §4.4 criterion 1
+
+This ADR is still **Proposed**, so nothing below is a reversal of an accepted decision.
+
+**Measured on the live fit:** occupancy 15.3736 / 46.1207 / 38.5057 %. Design §4.4 criterion 1
+requires every state ≥ ~8% and ≤ ~35%. **States 1 and 2 breach the cap**, state 1 by 11pp. This
+is not a marginal overshoot.
+
+Three further facts, all measured rather than inferred:
+
+1. **K = 3 is near-infeasible against the band by arithmetic.** Three states summing to 100%
+   under a ≤35% cap must each land in **[30%, 35%]** — effectively forced balance, which §4.3
+   set out to replace. The K = 3 choice was reasoned from the three asset sleeves in the
+   candidate set and was never checked against §4.4. At K = 5 the band is comfortable.
+2. **λ = 32 is badly over-penalized for this feature set.** The fit yields **3 transitions in
+   696 months** (1974-01, 1982-12, 1998-09), then state 2 unbroken from 1998-09 to 2020-12 —
+   268 months, **45.6% of the decision window, and the most recent 45.6%**, spanning dotcom, the
+   GFC and COVID with no change. §4.4 criterion 6 anticipates ~15–30 independent transitions.
+3. **Criterion 7 could not mean what it appears to under this fit.** Post-1998 classifier #2
+   contributes a constant, so blending it with #1's time-varying tilt measures the blend weight,
+   not leadership information.
+
+**The repair is design-sanctioned, not a D-13 breach.** §4.3 states: "λ is the single
+interpretable persistence knob. Tune λ (and K) until **acceptance criteria** (§4.4) pass —
+occupancy and sojourn targets become the tuning objective, not a distortion of the geometry."
+D-13 forbids spending trials to make *lift* look good; §4.4 is a structural gate the design
+explicitly says to tune against, and §14 Phase 2's exit is "all six acceptance criteria pass."
+Any such tuning must still record how much searching it took, so search-creep stays visible.
+
+**Status of the pinned constants.** (a) the frozen Lean 8 columns, (d) `sort_column`, (e) the
+routing and (f) the blend weight are unaffected. **(b) K and (c) λ must be re-pinned** against
+§4.4 criteria 1, 2 and 6 before plans 07-09 through 07-12 run. The `strict=True` xfail in
+`tests/unit/test_platform_labeling_classifier2.py` fails the suite the moment they are.

@@ -89,7 +89,7 @@ columns; §5.4 ratio **0.60145 (7/7 resolved)**; `pct_disagree` **0.80899 (288/3
 - **D-14: Two separate probability inputs — no product state space.** Both labelings'
   probability vectors feed the allocation tilt as separate inputs. Allocation already consumes
   probabilities, not labels (audit item A7: `active_regime` gates nothing). A product space would
-  also thin badly (K₁ × K₂ cells over ~590 decision months, rare cells below the §4.4 5% floor).
+  also thin badly (K₁ × K₂ cells over ~590 decision months, rare cells below §4.4's ~8% floor (§4.4 crit. 1 is ~8%–~35%; see ADR-0001 § AMENDMENT 2026-09-17)).
   Keeping two inputs makes the lift-vs-#1-alone comparison a clean single-change ablation.
   — **Reversibility: costly.**
 
@@ -1079,7 +1079,7 @@ FRED ingestion, and FRED access is live-verified functional in this environment 
 |--------|----------|-----------|-------------------|-------------|
 | REG-01 (criterion 5, disjointness) | Classifier #2's raw candidate columns are disjoint from `lean_feature_set(cfg)`'s 13 | unit | `pytest tests/unit/test_platform_features_relative.py -k disjoint -x` | ❌ Wave 0 — new test |
 | REG-01 (criterion 5, canonicalize fix) | `canonicalize_states` never hits the silent-fallback path for classifier #2's own call; raises `ValueError` if a caller's `sort_column` is absent | unit | `pytest tests/unit/test_platform_labeling.py -k canonicalize -x` | ❌ Wave 0 — new test (extends existing `TestCanonicalizeStates` class per file structure verified this session) |
-| REG-01 (criterion 5, occupancy) | Classifier #2's occupancy sums to 1.0; every state below the §4.4 5% floor is flagged (reuses `_MIN_OCCUPANCY_THRESHOLD=0.05`, `labeling/diagnostics.py:67`) | unit | `pytest tests/unit/test_platform_labeling.py -k occupancy -x` | ✅ `occupancy_and_sojourns`/`report_labeling_diagnostics` already exist and are generic — extend the existing test class with a classifier-#2-shaped fixture |
+| REG-01 (criterion 5, occupancy) | Classifier #2's occupancy sums to 1.0; every state below §4.4's ~8% floor (§4.4 crit. 1 is ~8%–~35%; see ADR-0001 § AMENDMENT 2026-09-17) is flagged (reuses `_MIN_OCCUPANCY_THRESHOLD=0.08` + `_MAX_OCCUPANCY_THRESHOLD=0.35`, `labeling/diagnostics.py:67`) | unit | `pytest tests/unit/test_platform_labeling.py -k occupancy -x` | ✅ `occupancy_and_sojourns`/`report_labeling_diagnostics` already exist and are generic — extend the existing test class with a classifier-#2-shaped fixture |
 | REG-01 (criterion 6) | `measure_labeling_dependence` returns ARI, NMI, Cramér's V, plus the existing `label_disagreement` crosstab fields, with NO pass/fail gate (D-15) | unit | `pytest tests/unit/test_platform_evaluation_dependence.py -x` | ❌ Wave 0 — new test/module |
 | REG-01 (criterion 7, joint tilt) | `blend_regime_tilts` produces weights summing to `scale` (matching `vol_targeted_tilt`'s existing contract), degrades gracefully when either input is empty | unit | `pytest tests/unit/test_platform_allocation_joint_tilt.py -x` | ❌ Wave 0 — new test/module |
 | REG-01 (criterion 7, deflated Sharpe) | `deflated_sharpe_ratio`/`total_trial_count` computed against a hand-worked small-N oracle example; `total_trial_count` correctly reads the provenance header | unit | `pytest tests/unit/test_platform_evaluation_deflated_sharpe.py -x` | ❌ Wave 0 — new test/module; **no existing implementation anywhere to extend (verified by grep)** |
@@ -1192,7 +1192,7 @@ failure mode the honesty framework (HON-01/HON-02) exists to prevent. Treat
 - `src/trading_crab_lib/platform/taxonomy.py` (full file) — `lean_feature_set`,
   `validate_taxonomy`
 - `src/trading_crab_lib/platform/labeling/diagnostics.py` (full file) —
-  `_MIN_OCCUPANCY_THRESHOLD=0.05` (line 67), `occupancy_and_sojourns`,
+  `_MIN_OCCUPANCY_THRESHOLD=0.08` + `_MAX_OCCUPANCY_THRESHOLD=0.35` (line 67), `occupancy_and_sojourns`,
   `report_labeling_diagnostics`
 - `src/trading_crab_lib/momentum.py` (full file, 236 lines) — `compute_relative_strength`
   (:77-110), `compute_trailing_momentum` (:30-64), `compute_rolling_cross_correlation`

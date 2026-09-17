@@ -55,7 +55,7 @@ Classifier #2 (the leadership/relative axis, K=3, λ=32.0 on eight columns disjo
 classifier #1's 13) is pinned in ADR-0002 at status **Proposed** before a single fit, then fit
 on the live dev spine: 696 months, 1963-01-31 → 2020-12-31, occupancy
 **15.3736 / 46.1207 / 38.5057 %** summing to 1.0 with error exactly 0.0 and no state below
-§4.4's five-percent floor.
+§4.4's ~8% floor.
 
 ## Task 1 — the decision checkpoint (resolved before this execution began)
 
@@ -98,7 +98,7 @@ requires the trial ceiling to precede the runs. Contents beyond the six pinned v
   avoid); `TOTBKCR` (starts 1973, after the 1962 spine start); market-cap/GDP (the Buffett
   indicator — **stays blocked** per D-12, restated not worked around); gold/equity relative
   strength (D-10 admits it, D-11 excludes it — `gold` starts 1985-02 while `oil` runs 1962+);
-  the product (state₁, state₂) space (D-14 — 15 cells over ~590 months, thin tail below the 5%
+  the product (state₁, state₂) space (D-14 — 15 cells over ~590 months, thin tail below the ~8%
   floor); and empirical selection of the constants, which is the option Glenn argued for.
 - **The L2-window decision in its own section**, with the comparability consequence and the
   firewall clause both foregrounded.
@@ -170,7 +170,7 @@ denominator.
 - **68 post-2020-12-31 rows carved out of the fit** (HON-01/T-07-17), logged.
 - **Occupancy (696 months, 1963-01 → 2020-12):** state 0 **15.3736 %**, state 1 **46.1207 %**,
   state 2 **38.5057 %**. Sum error `|Σ − 1.0| = 0.0`, exactly K=3 entries.
-- **No state below §4.4's five-percent floor.**
+- **No state below §4.4's ~8% floor.**
 - Median sojourns: 107.0 / 160.5 / 268.0 months. Auto-profiles: state 0 *high rs_oil_equities,
   low rs_equities_bonds, low m2_gdp*; state 1 *high corr_equities_tr_long_duration_tr_24m, low
   m2_gdp, low rs_equities_bonds*; state 2 *high m2_gdp, low
@@ -245,7 +245,7 @@ the test rather than needing a test-only escape hatch.
 
 **2. [Rule 1 — bug] The diagnostics artifact would have overwritten classifier #1's.**
 - **Found during:** Task 3, reading `report_labeling_diagnostics`'s default path.
-- **Issue:** the plan says to report through `report_labeling_diagnostics` so the five-percent
+- **Issue:** the plan says to report through `report_labeling_diagnostics` so §4.4's ~8%
   floor WARNING comes from the same code path as classifier #1. Its default output directory
   writes one shared `labeling_diagnostics.parquet`, so calling it verbatim would have
   overwritten classifier #1's artifact — T-07-15's spoofing failure mode applied to the report

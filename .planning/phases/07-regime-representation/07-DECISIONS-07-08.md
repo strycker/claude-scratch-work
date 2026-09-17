@@ -49,8 +49,24 @@ By construction: three asset sleeves appear in the candidate set (equities,
 long duration, oil), so three leadership states. The K falls out of the feature
 set's structure; no fit was run to choose it.
 
-**Failure signature.** A state with occupancy under §4.4's 5% floor, or two states
-whose centroids differ on no sleeve.
+**Failure signature.** A state outside §4.4 criterion 1's band, or two states whose
+centroids differ on no sleeve.
+
+> **CORRECTION 2026-09-17 — this failure signature was stated against the wrong
+> threshold, and it fired.** I wrote "§4.4's 5% floor", repeating an error that
+> originates in ADR-0001. §4.4 criterion 1 is two-sided: every state ≥ ~8% AND
+> ≤ ~35%. The live fit is 15.3736 / 46.1207 / 38.5057 % — states 1 and 2 breach
+> the cap, state 1 by 11pp, so **K = 3 as pinned here fails criterion 1**.
+>
+> Worse, the K = 3 rationale was unsound in a way I should have caught at the
+> checkpoint: three states summing to 100% under a ~35% cap must each sit in
+> [30%, 35%], which is forced balance — the thing §4.3 set out to replace. I
+> reasoned K = 3 from the three asset sleeves and never scored it against the
+> acceptance criteria. That error is mine, not the executor's.
+>
+> K and λ are pending a re-pin against §4.4 criteria 1, 2 and 6. Per §4.3 that
+> tuning is an acceptance gate, not a D-13 selection trial. Items (a), (d), (e)
+> and (f) are unaffected.
 
 > Same standing objection from Glenn as (a) — K should be selected, not fixed.
 > Accepted for this phase; also covered by **ROADMAP T0.9**.

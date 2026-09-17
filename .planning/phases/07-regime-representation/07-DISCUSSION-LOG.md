@@ -170,7 +170,7 @@
 | Option | Description | Selected |
 |--------|-------------|----------|
 | Two separate probability inputs | No product space; matches how allocation already consumes `regime_probs`; clean single-change ablation. | ✓ |
-| Product state space | Most expressive; K₁ × K₂ cells over ~590 months means rare cells fall below the §4.4 5% floor. | |
+| Product state space | Most expressive; K₁ × K₂ cells over ~590 months means rare cells fall below §4.4's ~8% floor (§4.4 crit. 1 is ~8%–~35%; see ADR-0001 § AMENDMENT 2026-09-17). | |
 | Two inputs now, product as a reported diagnostic | Two inputs for allocation; product cross-tab computed and reported with occupancy per cell. | |
 
 **User's choice:** Two separate probability inputs

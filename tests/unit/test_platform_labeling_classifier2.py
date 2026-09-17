@@ -12,6 +12,7 @@ checkpoint reads. Mirrors tests/unit/test_platform_labeling.py's fixture shape.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -21,9 +22,14 @@ from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.evaluation.report import _reference_label_columns
 from trading_crab_lib.platform.labeling.classifier2 import (
     CLASSIFIER2_CANDIDATE_COLUMNS,
+    CLASSIFIER2_LABELS_CHECKPOINT,
     classifier2_config,
     freeze_classifier2_columns,
     label_leadership_regimes,
+)
+from trading_crab_lib.platform.labeling.diagnostics import (
+    _MAX_OCCUPANCY_THRESHOLD,
+    _MIN_OCCUPANCY_THRESHOLD,
 )
 
 
@@ -46,7 +52,7 @@ def _degenerate_frame(n_months: int = 150) -> pd.DataFrame:
 
     After ``standardize_features`` every row is the zero vector, so K=3 cannot
     find three occupied clusters: two states end up never occupied (occupancy
-    0.0, below §4.4's five-percent floor). No lambda override is needed — the
+    0.0, below §4.4 criterion 1's ~8% floor). No lambda override is needed — the
     collapse comes from the data, so the pinned lambda = 4n stays honest.
     """
     idx = _monthly_index(n_months)
@@ -205,14 +211,16 @@ class TestLabelLeadershipRegimes:
         assert abs(sum(occupancy.values()) - 1.0) < 1e-12
 
     def test_below_floor_state_warns_naming_that_state_and_still_returns(self, tmp_path, caplog):
-        """§4.4's five-percent floor is report-only (D-02/D-07): a loud WARNING
-        naming the offending state index, and the labeler still completes."""
+        """§4.4 criterion 1's ~8% floor is report-only (D-02/D-07): a loud
+        WARNING naming the offending state index, and the labeler still
+        completes. (Corrected 2026-09-17: this asserted a 5% floor, a number
+        that appears nowhere in design §4.4.)"""
         df = _degenerate_frame()
         with caplog.at_level(logging.WARNING):
             result = label_leadership_regimes(
                 df, _cfg(), checkpoint_dir=tmp_path, first_decision=df.index[24]
             )
-        below = [s for s, occ in result["occupancy"].items() if occ < 0.05]
+        below = [s for s, occ in result["occupancy"].items() if occ < _MIN_OCCUPANCY_THRESHOLD]
         assert below, "fixture did not produce a sub-floor state — test cannot fail"
         warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
         for state in below:
@@ -315,3 +323,60 @@ class TestLabelLeadershipRegimes:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-x", "-q"])
+
+
+# ── Design §4.4 criterion 1 against the LIVE fit ────────────────────────────
+#
+# Added 2026-09-17 after the correction described in diagnostics.py: the whole
+# project had been citing a "§4.4 five-percent floor" that does not exist, and
+# the cap ("<= ~35%") had never been implemented or checked for ANY classifier.
+# These two tests check the real criterion against the committed live fit.
+#
+# They are deliberately split. A single strict-xfail test would also "xfail" if
+# the checkpoint were simply missing — passing for the wrong reason, which is
+# exactly the evidence-shape failure this phase exists to catch. So presence is
+# a plain, loud test and only the band assertion carries the marker.
+
+_LIVE_LABELS_PARQUET = (
+    Path(__file__).resolve().parents[2]
+    / "data" / "checkpoints" / "platform" / f"{CLASSIFIER2_LABELS_CHECKPOINT}.parquet"
+)
+
+
+class TestClassifier2LiveOccupancyAgainstDesign44:
+    def test_live_labels_checkpoint_is_present(self):
+        """Guards the xfail below: it must fail on the BAND, never on absence.
+
+        ``data/checkpoints/platform/`` is a git-tracked namespace, so a missing
+        file here is a real defect, not an environment quirk.
+        """
+        assert _LIVE_LABELS_PARQUET.is_file(), (
+            f"{_LIVE_LABELS_PARQUET} missing — the occupancy band test below would "
+            "xfail for the wrong reason and read as expected"
+        )
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "classifier #2 (K=3, lambda=32) breaches design §4.4 criterion 1: "
+            "states 1 and 2 occupy 46.12% and 38.51% against a ~35% cap. "
+            "K=3 is near-infeasible against the 8-35% band at all — three states "
+            "summing to 100% under a 35% cap must each sit in [30%, 35%], which "
+            "is forced balance, the thing §4.3 set out to replace. Pending the "
+            "K/lambda re-pin; design §4.3 licenses tuning both until §4.4 passes. "
+            "strict=True: an xpass FAILS, so this marker cannot outlive the fix."
+        ),
+    )
+    def test_live_occupancy_within_design_44_band(self):
+        states = pd.read_parquet(_LIVE_LABELS_PARQUET)["state"]
+        occupancy = states.value_counts(normalize=True).sort_index()
+        breaches = {
+            int(s): float(occ)
+            for s, occ in occupancy.items()
+            if occ < _MIN_OCCUPANCY_THRESHOLD or occ > _MAX_OCCUPANCY_THRESHOLD
+        }
+        assert not breaches, (
+            "states outside design §4.4 criterion 1's "
+            f"[{_MIN_OCCUPANCY_THRESHOLD:.0%}, {_MAX_OCCUPANCY_THRESHOLD:.0%}] band: "
+            + ", ".join(f"state {s} at {occ:.2%}" for s, occ in sorted(breaches.items()))
+        )

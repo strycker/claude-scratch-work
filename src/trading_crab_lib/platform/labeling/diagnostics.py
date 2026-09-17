@@ -61,10 +61,19 @@ log = logging.getLogger(__name__)
 # metrics is empty.
 _ARTIFACT_COLUMNS = ["state", "occupancy_pct", "median_sojourn_months", "profile"]
 
-# §4.4 report-only sanity threshold: a state occupying less than 5% of
-# months is worth a loud WARNING (degenerate/near-empty regime) but must
-# never block the labeler from completing (D-02).
-_MIN_OCCUPANCY_THRESHOLD = 0.05
+# Design §4.4 acceptance criterion 1, verbatim: "Occupancy: every state >= ~8%
+# and <= ~35% of months." BOTH ends are report-only here (D-02): a breach is a
+# loud WARNING and never blocks the labeler from completing.
+#
+# CORRECTION 2026-09-17: this floor read 0.05 and was cited project-wide as
+# "§4.4's five-percent floor" — a threshold that appears nowhere in the design.
+# The upper bound was never implemented at all, so no regime solution had ever
+# been checked against the cap. Both are now pinned to the design's own numbers.
+# The thresholds are approximate in the design ("~8%", "~35%"), so treat a
+# breach within a few tenths of a point as marginal and read the number, not
+# the boolean.
+_MIN_OCCUPANCY_THRESHOLD = 0.08
+_MAX_OCCUPANCY_THRESHOLD = 0.35
 
 
 def occupancy_and_sojourns(states, n_states: int | None = None) -> dict:
@@ -200,9 +209,10 @@ def auto_profile(centroids: np.ndarray, feature_names: list[str], *, top_k: int 
 def report_labeling_diagnostics(metrics: dict, *, output_dir: Path | None = None) -> Path:
     """Print + persist the §4.4 report-only diagnostics artifact (D-02, D-05 pattern).
 
-    A §4.4 occupancy violation (a state below ``_MIN_OCCUPANCY_THRESHOLD``)
-    is logged loudly at WARNING but the artifact is still written and this
-    function still returns normally — the labeler always completes.
+    A §4.4 criterion-1 occupancy violation — a state below
+    ``_MIN_OCCUPANCY_THRESHOLD`` **or above** ``_MAX_OCCUPANCY_THRESHOLD`` — is
+    logged loudly at WARNING but the artifact is still written and this function
+    still returns normally: the labeler always completes.
 
     Args:
         metrics: dict, any subset of:
@@ -233,8 +243,15 @@ def report_labeling_diagnostics(metrics: dict, *, output_dir: Path | None = None
         })
         if not np.isnan(occ) and occ < _MIN_OCCUPANCY_THRESHOLD:
             log.warning(
-                "State %d occupancy %.1f%% below §4.4 sanity threshold — report-only, not blocking (D-02)",
-                state, occ * 100,
+                "State %d occupancy %.1f%% below §4.4 criterion-1 floor of %.0f%% — "
+                "report-only, not blocking (D-02)",
+                state, occ * 100, _MIN_OCCUPANCY_THRESHOLD * 100,
+            )
+        if not np.isnan(occ) and occ > _MAX_OCCUPANCY_THRESHOLD:
+            log.warning(
+                "State %d occupancy %.1f%% above §4.4 criterion-1 cap of %.0f%% — "
+                "report-only, not blocking (D-02)",
+                state, occ * 100, _MAX_OCCUPANCY_THRESHOLD * 100,
             )
 
     df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=_ARTIFACT_COLUMNS)

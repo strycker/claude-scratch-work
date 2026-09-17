@@ -114,7 +114,7 @@ Its measured numbers, cited here so the rejection is evidence-backed rather than
 | `dd_delta` | -0.0661242048614149 | +0.01898849550676429 |
 | §5.4 ratio (`n_resolved` of `n_transitions`) | 0.6014492753623188 (7 of 7) | 1.2686567164179106 (**3 of 6** — indicative only) |
 | `pct_disagree` (`n_compared`) | 0.8089887640449438 (n=356) | 0.8319148936170213 (n=470) |
-| Regime occupancy (min state) | 9.06% (no state below 5%) | **1.29%** — below the design §4.4 5% occupancy floor |
+| Regime occupancy (min state) | 9.06% (no state below §4.4's ~8% floor) | **1.29%** — below design §4.4's ~8% occupancy floor |
 
 **On several of these raw numbers the rejected variant looks nominally better** — a higher
 terminal log wealth, a positive `dd_delta` versus the accepted variant's negative one. This is
@@ -126,7 +126,7 @@ value — there is no history before a series begins, so any pre-start fill fabr
 model could not have had at the time. Fabricating pre-1990 VIX levels would place an invented
 stress feature inside a crisis classifier, which is precisely the class of look-ahead
 contamination this project's honesty framework exists to prevent. The variant's isolated
-occupancy floor breach (1.29% < 5%) is additional corroborating evidence that its geometry is
+occupancy floor breach (1.29%, against §4.4's ~8% floor) is additional corroborating evidence that its geometry is
 degenerate, not the reason for rejection.
 
 *Note on `oil`:* by the time this trial ran, `oil` had already been added to the frozen set
@@ -379,3 +379,50 @@ cross-reference at that section.*
 *Phase: 07-regime-representation. See also: `.planning/phases/07-regime-representation/07-CONTEXT.md`
 (D-01 through D-17), `07-MEASUREMENTS.md` (the full measured record), `07-PREFIX-EVIDENCE.md`
 (the reproduced pre-fix baseline), `.planning/UAT-AUDIT-2026-09-09.md` (A7, A11, A13, A14, A15).*
+
+---
+
+## AMENDMENT 2026-09-17 — the "§4.4 five-percent floor" cited above does not exist
+
+**What was wrong.** This ADR cited design §4.4's occupancy criterion as a *five-percent floor*,
+in the comparison table and again in the rejection rationale. §4.4 criterion 1 reads, verbatim:
+
+> **Occupancy:** every state ≥ ~8% and ≤ ~35% of months.
+
+There is no 5% threshold anywhere in §4.4, and the criterion is **two-sided** — it carries a
+**~35% cap** that this ADR never mentioned. The error propagated from here into
+`adr/0002-l1-second-classifier.md`, plans `07-08`/`07-10`/`07-12`, `07-MEASUREMENTS.md`,
+`platform/labeling/classifier2.py`, and `platform/labeling/diagnostics.py`, whose
+`_MIN_OCCUPANCY_THRESHOLD` was set to `0.05`. The implementation had **no cap check at all**, so
+no regime solution in this project had ever been tested against half of criterion 1.
+
+**What this does NOT change.** The rejection of the imputed variant stands, unaltered. It rested
+on a structural argument declared before either variant ran — the imputation is non-causal by
+construction — and explicitly *not* on the occupancy number. The corroborating observation also
+survives the correction: **1.29% fails the real ~8% floor exactly as it failed the fabricated
+5% one**, and by a wider margin. The accepted variant's 9.06% minimum clears the real floor too.
+
+**What it does change.** Scored against the correct two-sided criterion, using the occupancy
+recorded in `07-MEASUREMENTS.md`:
+
+| variant | occupancy by state | floor ≥~8% | cap ≤~35% |
+|---|---|---|---|
+| pre-fix | 1.6 / 14.0 / 31.9 / 40.6 / 11.9 % | **state 0 fails** | **state 3 fails (40.6%)** |
+| frozen (accepted) | 11.51 / 9.06 / 35.54 / 31.51 / 12.37 % | all pass | state 2 at 35.54% — **marginal** |
+
+Two consequences worth stating plainly:
+
+1. **The frozen policy looks better under the correct criterion, not worse.** It repairs a breach
+   at *both* ends — floor 1.6% → 11.51%, cap 40.6% → 35.54%. That strengthens this ADR's
+   decision rather than undermining it.
+2. **State 2's 35.54% is a 0.54pp overshoot against an explicitly approximate bound** ("≤ ~35%").
+   It is recorded as marginal and within tolerance, not as a failure. Read the number, not the
+   boolean. It is close enough to the line to be worth watching on the next refit.
+
+**Where this was caught.** Executing plan 07-08 (classifier #2) produced occupancy of
+15.37 / 46.12 / 38.51 %, which the occupancy test passed because that test checked only the
+invented 5% floor. Classifier #2 breaches the real cap on two states, one of them by 11pp. The
+test could confirm and never fail — the same evidence-shape failure class as criterion 8's
+`grep -v platform` exit check. `diagnostics.py` now implements both bounds (report-only per
+D-02), and `tests/unit/test_platform_labeling_classifier2.py` carries a `strict=True` xfail
+recording classifier #2's breach, which fails the suite the moment the breach is fixed.

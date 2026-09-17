@@ -279,7 +279,7 @@ and absorbs **INV-01**.
   hysteresis gates nothing; weights come from `vol_targeted_tilt(regime_probs, …)` in both
   the backtest driver and the weekly report. A product space would also thin badly (K₁ × K₂
   cells over ~590 decision months, with occupancy never uniform, so rare cells fall below
-  the §4.4 5% floor). Keeping two inputs makes the lift-vs-#1-alone comparison a clean
+  §4.4's ~8% floor (§4.4 crit. 1 is ~8%–~35%; see ADR-0001 § AMENDMENT 2026-09-17)). Keeping two inputs makes the lift-vs-#1-alone comparison a clean
   single-change ablation. — **Reversibility:** costly — switching to a product space later
   changes the allocation input contract and invalidates the lift comparison.
 
