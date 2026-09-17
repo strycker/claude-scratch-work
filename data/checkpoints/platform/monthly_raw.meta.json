@@ -1,9 +1,9 @@
 {
   "name": "monthly_raw",
-  "created": "2026-09-11T12:50:32.304692",
+  "created": "2026-09-17T15:06:15.083762",
   "config_hash": "6c209fad",
   "rows": 776,
-  "columns": 45,
+  "columns": 47,
   "col_names": [
     "fred_aaa",
     "fred_baa",
@@ -49,13 +49,18 @@
     "fred_cpi",
     "fred_gdp",
     "fred_payems",
-    "fred_indpro"
+    "fred_indpro",
+    "fred_m2sl",
+    "fred_totalsl"
   ],
   "index_start": "1962-01-31 00:00:00",
   "index_end": "2026-08-31 00:00:00",
   "merge": {
     "cols_kept_from_disk": [],
-    "cols_added": [],
+    "cols_added": [
+      "fred_m2sl",
+      "fred_totalsl"
+    ],
     "cols_updated": [
       "fred_aaa",
       "fred_baa",
@@ -105,7 +110,7 @@
     ],
     "rows_kept_from_disk": 0,
     "rows_added": 0,
-    "cells_filled_from_disk": 277,
+    "cells_filled_from_disk": 0,
     "pre_merge_shape": {
       "rows": 776,
       "columns": 45
