@@ -46,6 +46,28 @@ fred_monthly:
     WTISPLC:
       name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
       shift: false
+    # D-12/INV-01 (07-regime-representation wave 2): M2SL and TOTALSL feed
+    # classifier #2's named invariant ratios (m2_gdp, credit_gdp —
+    # platform/features/relative.py::compute_invariant_ratios). Both are
+    # natively monthly (live-verified: M2SL first valid 1959-01, 811 obs;
+    # TOTALSL first valid 1943-01, 1003 obs), so — like every other series in
+    # this block — neither needs the quarterly-repeat forward-fill fred_gdp
+    # receives via align_agency_monthly, and neither needs a new ingestion
+    # code path: fetch_fred_monthly already iterates this dict generically.
+    # Considered and REJECTED: BCNSDODNS (quarterly-native, 305 obs from
+    # 1945-10 — would require exactly the forward-fill treatment these two
+    # avoid) and TOTBKCR (starts 1973-01, after the 1962 spine start).
+    # Market-cap/GDP stays out of INV-01 for its already-documented reason —
+    # see the `buffett_indicator` comment in the `taxonomy` block below; that
+    # reason is restated here, not worked around. These two series are NOT
+    # added to `taxonomy.fast`/`.slow` — classifier #1's lean set must stay
+    # at exactly 13 raw columns (D-10's disjointness denominator).
+    M2SL:
+      name:  "fred_m2sl"
+      shift: false
+    TOTALSL:
+      name:  "fred_totalsl"
+      shift: false
 
 # ── FRED daily-frequency credit series (L4-04, Phase 4 Pitfall 2) ─────────────
 # BAA/AAA above are monthly-only on FRED; the tripwire's credit-spread-velocity
