@@ -232,6 +232,88 @@ class TestCanonicalize:
         np.testing.assert_allclose(centroids_a, centroids_b)
 
 
+# ── canonicalize_states: sort_column keyword-only, raises rather than warns ─
+# 07-regime-representation D-10/D-11 (wave 2): classifier #2 is fit on a
+# feature set disjoint from classifier #1's 13 raw columns, so the default
+# sort_column ("trailing_return_1m") is NEVER present in classifier #2's
+# feature_names. The prior "warn and fall back to centroid column 0"
+# behavior would therefore fire on EVERY classifier-#2 fit, assigning
+# arbitrary state IDs while every downstream occupancy/dependence/joint-lift
+# number kept looking plausible (audit item A14, UAT-AUDIT-2026-09-09).
+
+
+class TestCanonicalizeStatesSortColumn:
+    FEATURE_NAMES = ["gold", "trailing_return_1m", "oil"]
+
+    def test_explicit_sort_column_present_orders_by_it_no_warning(self, caplog):
+        states = np.array([0, 1, 2, 1, 0])
+        # centroid col 0 ("gold") descending by raw state index
+        centroids = np.array([[5.0, 0.0, 0.0], [-3.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+        with caplog.at_level("WARNING"):
+            new_states, new_centroids = canonicalize_states(
+                states, centroids, self.FEATURE_NAMES, sort_column="gold"
+            )
+        # ascending "gold" order: raw state 1 (-3) -> 0, raw state 2 (1) -> 1,
+        # raw state 0 (5) -> 2
+        assert np.array_equal(new_centroids[:, 0], np.array([-3.0, 1.0, 5.0]))
+        expected_remap = {1: 0, 2: 1, 0: 2}
+        expected_states = np.array([expected_remap[s] for s in states])
+        assert np.array_equal(new_states, expected_states)
+        assert caplog.records == []
+
+    def test_explicit_sort_column_absent_raises(self):
+        states = np.array([0, 1, 2])
+        centroids = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+        with pytest.raises(ValueError, match="sort_column"):
+            canonicalize_states(states, centroids, ["gold", "oil"], sort_column="rs_equities_bonds")
+
+    def test_default_sort_column_absent_raises_no_fallback(self, caplog):
+        """Pins the fallback's removal as deliberate: a feature list lacking
+        trailing_return_1m must raise even with NO explicit sort_column —
+        never warn-and-continue on centroid column 0."""
+        states = np.array([0, 1, 2])
+        centroids = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+        with caplog.at_level("WARNING"), pytest.raises(ValueError, match="sort_column"):
+            canonicalize_states(states, centroids, ["rs_equities_bonds", "cpi_acceleration"])
+        assert caplog.records == []
+
+    def test_disjoint_feature_set_end_to_end_explicit_sort_column(self):
+        """Classifier #2's own feature space (disjoint from #1's 13, D-10):
+        fit + canonicalize with an explicit sort_column is stable under a
+        raw-state permutation and idempotent under a second canonicalization."""
+        disjoint_cols = ["rs_equities_bonds_12m", "corr_equities_bonds_24m", "cpi_acceleration"]
+        centers = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0], [20.0, 20.0, 20.0]])
+        X = _make_blob_array(centers, n_per_block=20, seed=3)
+
+        fit_a = fit_jump_model(X, K=3, lam=5.0, n_restarts=3, max_iter=50, random_state=7)
+        canon_a, _ = canonicalize_states(
+            fit_a["states"], fit_a["centroids"], disjoint_cols, sort_column="rs_equities_bonds_12m"
+        )
+
+        # Permute the raw (pre-canonicalization) state IDs and re-canonicalize
+        # — the physical clustering is identical, only the arbitrary integer
+        # labels differ, so the canonicalized result must be unchanged.
+        perm = {0: 2, 1: 0, 2: 1}
+        permuted_states = np.array([perm[s] for s in fit_a["states"]])
+        permuted_centroids = np.empty_like(fit_a["centroids"])
+        for old, new in perm.items():
+            permuted_centroids[new] = fit_a["centroids"][old]
+        canon_b, _ = canonicalize_states(
+            permuted_states, permuted_centroids, disjoint_cols, sort_column="rs_equities_bonds_12m"
+        )
+        assert np.array_equal(canon_a, canon_b)
+
+        # Idempotent under a second canonicalization call.
+        _, centroids_a = canonicalize_states(
+            fit_a["states"], fit_a["centroids"], disjoint_cols, sort_column="rs_equities_bonds_12m"
+        )
+        canon_twice, centroids_twice = canonicalize_states(
+            canon_a, centroids_a, disjoint_cols, sort_column="rs_equities_bonds_12m"
+        )
+        assert np.array_equal(canon_a, canon_twice)
+        np.testing.assert_allclose(centroids_a, centroids_twice)
+
+
 # ── labeling config: defensive .get(), not a required section ───────────────
 
 
