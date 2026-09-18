@@ -1,15 +1,17 @@
 {
   "name": "monthly_raw",
-  "created": "2026-09-17T15:06:15.083762",
+  "created": "2026-09-18T10:35:26.738461",
   "config_hash": "6c209fad",
   "rows": 776,
   "columns": 47,
   "col_names": [
-    "fred_aaa",
-    "fred_baa",
-    "wti_fred",
-    "fred_tb3ms",
     "fred_gs10",
+    "fred_baa",
+    "fred_tb3ms",
+    "wti_fred",
+    "fred_aaa",
+    "fred_totalsl",
+    "fred_m2sl",
     "fred_vix",
     "fred_t10y3m",
     "fred_t10y2y",
@@ -49,24 +51,21 @@
     "fred_cpi",
     "fred_gdp",
     "fred_payems",
-    "fred_indpro",
-    "fred_m2sl",
-    "fred_totalsl"
+    "fred_indpro"
   ],
   "index_start": "1962-01-31 00:00:00",
   "index_end": "2026-08-31 00:00:00",
   "merge": {
     "cols_kept_from_disk": [],
-    "cols_added": [
-      "fred_m2sl",
-      "fred_totalsl"
-    ],
+    "cols_added": [],
     "cols_updated": [
-      "fred_aaa",
-      "fred_baa",
-      "wti_fred",
-      "fred_tb3ms",
       "fred_gs10",
+      "fred_baa",
+      "fred_tb3ms",
+      "wti_fred",
+      "fred_aaa",
+      "fred_totalsl",
+      "fred_m2sl",
       "fred_vix",
       "fred_t10y3m",
       "fred_t10y2y",
@@ -110,10 +109,10 @@
     ],
     "rows_kept_from_disk": 0,
     "rows_added": 0,
-    "cells_filled_from_disk": 0,
+    "cells_filled_from_disk": 277,
     "pre_merge_shape": {
       "rows": 776,
-      "columns": 45
+      "columns": 47
     }
   }
 }

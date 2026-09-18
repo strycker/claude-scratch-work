@@ -4,25 +4,25 @@
 
 This is the go/no-go number: median regime sojourn (how long a regime typically lasts) divided by the median real-time detection lag (how long the walk-forward nowcaster took to notice a transition, checked against P(its own target state) — review F1). A high ratio means most of a regime's life is capturable after detection; a ratio near 1 means the lag eats the trade.
 
-- median sojourn (months): 83.0
-- median detection lag (months): 138.0
-- **ratio: 0.6014492753623188**
-- sample: median lag over **7 resolved of 7 transitions** (a transition resolves only when P(target) reaches the 70% action threshold).
+- median sojourn (months): 97.0
+- median detection lag (months): 168.0
+- **ratio: 0.5773809523809523**
+- sample: median lag over **2 resolved of 6 transitions** (a transition resolves only when P(target) reaches the 70% action threshold).
 - ⚠ **Small sample:** the ratio is a median over very few resolved transitions — treat it as indicative, not a robust go/no-go number. The strategy KPIs and the multiclass Brier are the more reliable signals at this stage.
 
 ## Baseline Comparison: Faber 10-Month SMA (§23.1)
 
 The Faber 10-month SMA is design §23.1's STANDING TARGET for the regime strategy to beat on both log wealth AND max drawdown — this is recorded, not a pass/fail gate (D-01a).
 
-- strategy: terminal log wealth=4.0251, max drawdown=-26.42%
+- strategy: terminal log wealth=4.2005, max drawdown=-20.24%
 - faber_sma: terminal log wealth=6.3726, max drawdown=-18.94%
 
 ## No-Regime-Ablation Delta (Does the Regime Layer Pay Rent?)
 
 The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regime tilt disabled (backtest/baselines.py::no_regime_ablation) — never a hand-rolled parallel implementation (D-02).
 
-- terminal log wealth delta (strategy - ablation): +0.3778 (strategy=4.0251, ablation=3.6472)
-- max drawdown delta (strategy - ablation): -6.61% (strategy=-26.42%, ablation=-19.81%)
+- terminal log wealth delta (strategy - ablation): +0.5533 (strategy=4.2005, ablation=3.6472)
+- max drawdown delta (strategy - ablation): -0.43% (strategy=-20.24%, ablation=-19.81%)
 
 ## Feature-Policy Pre/Post Comparison (Wave 1, ADR-0001)
 
@@ -32,25 +32,25 @@ The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regim
 
 | Quantity | Pre-fix (superseded, 9-column, stale checkpoint) | Post-fix (frozen, 10-column policy) |
 |---|---|---|
-| Median regime sojourn (months) | 97.0 | 83.0 |
-| Median detection lag (months) | 164.0 | 138.0 |
-| §5.4 ratio (`n_resolved` of `n_transitions`) | 0.5910 (4 of 6; 1974-02 -> 2020-12) | 0.6014 (7 of 7, resolved within 1974-02 -> 2017-05) |
-| Labeling disagreement (`pct_disagree`, `n_compared`) | 82.77% (389/470; 1974-02 -> 2020-12) | 80.90% (288/356; 1974-02 -> 2017-05) |
-| Multiclass Brier | 0.2087 (n_steps not recorded in the pre-fix source) | 0.2072 (n_steps=356) |
-| `wealth_delta` (no-regime-ablation, terminal log wealth) | +0.3793 | +0.3778 |
-| `dd_delta` (no-regime-ablation, max drawdown) | -1.44% | -6.61% |
-| Strategy terminal log wealth | 4.0265 | 4.0251 |
-| Strategy max drawdown | -21.24% (33 mo) | -26.42% (58 mo) |
+| Median regime sojourn (months) | 97.0 | 97.0 |
+| Median detection lag (months) | 164.0 | 168.0 |
+| §5.4 ratio (`n_resolved` of `n_transitions`) | 0.5910 (4 of 6; 1974-02 -> 2020-12) | 0.5774 (2 of 6, resolved within 1974-02 -> 2020-09) |
+| Labeling disagreement (`pct_disagree`, `n_compared`) | 82.77% (389/470; 1974-02 -> 2020-12) | 86.65% (305/352; 1974-02 -> 2020-09) |
+| Multiclass Brier | 0.2087 (n_steps not recorded in the pre-fix source) | 0.2249 (n_steps=352) |
+| `wealth_delta` (no-regime-ablation, terminal log wealth) | +0.3793 | +0.5533 |
+| `dd_delta` (no-regime-ablation, max drawdown) | -1.44% | -0.43% |
+| Strategy terminal log wealth | 4.0265 | 4.2005 |
+| Strategy max drawdown | -21.24% (33 mo) | -20.24% (39 mo) |
 | Ablation terminal log wealth | 3.6472 | 3.6472 |
 | Ablation max drawdown | -19.81% | -19.81% (35 mo) |
 
-**Frozen L1 feature columns (all 10, the labeler's full admitted set):** `cape_shiller`, `credit_spread_baa_aaa`, `curve_10y3m`, `div_yield`, `oil`, `real_rate_level`, `realized_vol_1m`, `realized_vol_3m`, `trailing_return_1m`, `trailing_return_3m`.
+**Frozen L1 feature columns (all 9, the labeler's full admitted set):** `cape_shiller`, `credit_spread_baa_aaa`, `curve_10y3m`, `div_yield`, `real_rate_level`, `realized_vol_1m`, `realized_vol_3m`, `trailing_return_1m`, `trailing_return_3m`.
 
 **Why the Multiclass Brier and confusion tables move.** `full_sample_states` is reindexed onto the walk-forward's decision dates as `y_true` (step (e) of `run_full_backtest_evaluation`). Both the feature-space correction (D-02-A) and the driver freeze (D-01) change WHICH smoothed labeling gets reindexed, so the labels the nowcaster is scored against changed — a Brier movement here is this mechanical relabeling, not because the nowcaster improved.
 
 ## Smoothed-vs-Filtered Gap
 
-- gap (smoothed hindsight performance - real-time filtered performance): -1.4773 — the measured hindsight content of the strategy (§5.4). The smoothed reference is ONE full-sample labeler fit; the filtered series is the walk-forward driver's actual per-step decisions — genuinely distinct series (Pitfall 1), never the same object reused.
+- gap (smoothed hindsight performance - real-time filtered performance): -1.4912 — the measured hindsight content of the strategy (§5.4). The smoothed reference is ONE full-sample labeler fit; the filtered series is the walk-forward driver's actual per-step decisions — genuinely distinct series (Pitfall 1), never the same object reused.
 
 ## Baseline Gauntlet
 
@@ -59,22 +59,22 @@ The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regim
 | SPY Buy & Hold | 5.6805 | -48.95% |
 | 60/40 | 5.0471 | -26.96% |
 | Faber 10-Month SMA | 6.3726 | -18.94% |
-| Strategy (regime tilt) | 4.0251 | -26.42% |
+| Strategy (regime tilt) | 4.2005 | -20.24% |
 | No-Regime Ablation | 3.6472 | -19.81% |
 
-- no-regime-ablation delta vs. strategy: +0.3778 terminal log wealth (-6.61% max drawdown) — does the regime layer pay rent?
+- no-regime-ablation delta vs. strategy: +0.5533 terminal log wealth (-0.43% max drawdown) — does the regime layer pay rent?
 
 ## Strategy KPIs
 
-- terminal log wealth: 4.0251
-- max drawdown: -26.42% (58 months underwater)
-- CVaR(5%): -0.0436
-- turnover (mean monthly): 0.0522
+- terminal log wealth: 4.2005
+- max drawdown: -20.24% (39 months underwater)
+- CVaR(5%): -0.0420
+- turnover (mean monthly): 0.0494
 - in-sample crisis capture ratios (down-capture, A6):
-  - 1973-74_oil_shock: 0.09
-  - 1980-82_volcker_recession: 0.94
+  - 1973-74_oil_shock: 0.12
+  - 1980-82_volcker_recession: 0.83
   - 2000-02_dotcom_bust: -0.04
-  - 2008-09_gfc: -0.02
+  - 2008-09_gfc: -0.04
 
 ### Conventions
 
