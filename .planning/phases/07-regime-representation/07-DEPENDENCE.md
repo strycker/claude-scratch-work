@@ -280,3 +280,72 @@ axis was added, (b) classifier #2 failed to add an axis, or (c) the numbers are 
 — goes here verbatim and is carried into ADR-0002 by plan 07-11.
 
 No agent has marked this satisfied.
+
+---
+
+## PRE-REGISTRATION 2026-09-18 — the decision rule, committed before the control exists
+
+Glenn deferred the criterion-6 verdict at plan 07-09's Task 3 gate and directed that a
+block-permutation control be run first, with its reading **pre-registered**. This section is
+committed **before any control code is written or run**. The commit timestamp is the evidence
+that the rule predates the number; if this section and the result ever appear in the same
+commit, the pre-registration is void and must be re-done.
+
+### Why a control is needed at all
+
+The three statistics assume exchangeable observations. These labelings are not exchangeable —
+they are step functions on a shared time axis. Classifier #1 has 7 contiguous blocks over 695
+months, classifier #2 has 13. Two heavily-smoothed block partitions of one timeline share the
+axis itself as a common factor, so a positive association is expected *before* any shared
+economics is invoked. ARI, NMI and Cramér's V cannot separate "these two classifiers see the
+same market structure" from "these two classifiers are both slow".
+
+This is not a reason to discount the measured numbers. It is a reason to measure the null.
+
+### What the observed numbers are (measured, fixed, not to be recomputed to taste)
+
+Measured on the labelings in force at the time of writing, n_compared = 695:
+
+| statistic | observed |
+|---|---|
+| Adjusted Rand | 0.4686082735798639 |
+| Normalized mutual information | 0.6023322651194867 |
+| Cramér's V | 0.6558187277453474 |
+
+Entropy decomposition of the same table: H(c1) = 1.3274, H(c2) = 1.5912, I(c1;c2) = 0.8790 nats.
+H(c1|c2) = 0.4484, H(c2|c1) = 0.7122. So 66.2% of classifier #1's entropy is explained by #2 and
+55.2% of #2's by #1 — neither a relabeling (both fractions would approach 1.0) nor a strict
+refinement (H(c1|c2) would approach 0).
+
+### The null
+
+Preserve each labeling's own block-length structure exactly; randomise only the arrangement of
+those blocks (permutation of block order and/or circular shift), independently for each labeling.
+Recompute all three statistics per resample. This holds sojourn structure and occupancy fixed and
+destroys only the *alignment* between the two labelings, which is precisely the quantity in
+question. At least 2000 resamples, seeded and recorded.
+
+### The rule — binding, and it decides the verdict mechanically
+
+Read on **NMI**, the statistic whose flag the observed value exceeds and which is invariant to
+label permutation. The other two are reported alongside and do not change the verdict.
+
+- observed NMI **≤ 95th percentile** of the null → verdict **(b) failure to add an axis**.
+  The association is what two block partitions of one timeline produce by construction.
+- observed NMI **> 99th percentile** of the null → verdict **(a) added an axis**.
+  The shared structure exceeds what blockiness alone explains.
+- observed NMI **between the 95th and 99th percentiles** → **inconclusive**, recorded as
+  inconclusive in exactly those terms, with no tie-break and no further tests run to break it.
+
+No other reading is permitted. If the result is inconclusive it is reported as inconclusive; the
+project does not then go looking for a fourth statistic that resolves it, which would be the
+garden of forking paths this pre-registration exists to close.
+
+### Scope note — this will be re-run
+
+Glenn also directed that classifier #1 be re-pinned against §4.4 criterion 1, which it currently
+breaches at both ends (state 0 at 1.5827%, 11 months; state 3 at 39.2806%). Re-pinning changes
+every one of classifier #1's labels, so the observed numbers above become void and the dependence
+measurement is re-run against the new labeling. **The rule above survives that re-run unchanged.**
+It is a rule about how to read a control, not about these particular numbers, and re-stating it
+after seeing new numbers would defeat its purpose.
