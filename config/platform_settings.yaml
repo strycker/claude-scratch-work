@@ -188,10 +188,21 @@ splice:
   oil:
     research_name:  oil
     method:         single_source
-    # Chain: wti_crude (macrotrends, 1946+) tried first; falls back to
-    # wti_fred (FRED WTISPLC, 1946+) when macrotrends is blocked (403 on
-    # datacenter/VPN IPs).
-    source_col:     [wti_crude, wti_fred]
+    # Chain: wti_fred (FRED WTISPLC) tried FIRST; falls back to wti_crude
+    # (macrotrends) when FRED is unavailable.
+    #
+    # REORDERED 2026-09-18. The previous order put wti_crude first on the
+    # stated grounds that macrotrends carries WTI back to 1946. Measured on a
+    # live build, the macrotrends scrape returns only 1985-02 onward (499
+    # monthly observations), while wti_fred covers the entire monthly spine
+    # from 1962-01 (776 observations). The "longer" primary was in fact 23
+    # years SHORTER, which silently cost the regime labeler every 1970s oil
+    # shock — the stagflation episodes oil is in the feature set to identify.
+    #
+    # wti_fred is therefore primary on measured coverage, not on preference.
+    # If the macrotrends scraper is later fixed to reach 1946 (see ROADMAP),
+    # revisit this order and re-pin the A13 change-point test deliberately.
+    source_col:     [wti_fred, wti_crude]
     cross_check_col: wti_fred
     tradable:       USO
   cash:

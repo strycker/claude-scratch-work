@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-18T15:35:26.739168+00:00",
+  "captured_at": "2026-09-18T16:13:11.364693+00:00",
   "provenance": {
     "equities_tr": {
       "class_name": "equities",
@@ -58,10 +58,10 @@
       "sources": {
         "source_col": {
           "candidates": [
-            "wti_crude",
-            "wti_fred"
+            "wti_fred",
+            "wti_crude"
           ],
-          "resolved": "wti_crude",
+          "resolved": "wti_fred",
           "position": 1
         }
       }
