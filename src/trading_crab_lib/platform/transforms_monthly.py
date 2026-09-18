@@ -343,11 +343,36 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
 
     cm = get_platform_checkpoint_manager()
     cm.save(daily, "daily_raw", source="prices_daily.fetch_universe_prices (universe price chain)")
-    cm.save(monthly_raw, "monthly_raw", source="build_monthly_spine (combined monthly ingest: macro+prices+research+agency)")
+    raw_path = cm.save(
+        monthly_raw, "monthly_raw",
+        source="build_monthly_spine (combined monthly ingest: macro+prices+research+agency)",
+    )
 
     splice_provenance = research.attrs.get("splice_provenance") if not research.empty else None
     if splice_provenance:
         splice.write_splice_provenance(splice_provenance, cm.dir / "splice_provenance.json")
+
+    # ── Derive features from the AS-SAVED raw, never the pre-merge frame ─────
+    #
+    # ``monthly_raw`` is a merge-on-save checkpoint: CheckpointManager.save()
+    # merges the frame above with whatever is already on disk
+    # (merge_preserving) so a degraded fetch cannot silently truncate history.
+    # It returns a Path, not the merged frame — so deriving features from the
+    # local ``monthly_raw`` variable builds them from data that is NOT what
+    # landed on disk, and the two checkpoints are then free to disagree.
+    #
+    # They did. A build on 2026-09-18 resolved the oil splice to macrotrends
+    # ``wti_crude`` (1985-02+), merge-on-save preserved an older 1962-01+ oil
+    # column in monthly_raw, and monthly_features got the 1985+ version. The
+    # two checkpoints, written milliseconds apart, disagreed by 23 years on a
+    # frozen labeling feature, and the staleness was diagnosed backwards for a
+    # week because each artifact looked self-consistent.
+    #
+    # Re-reading closes the loop: features are now a pure function of the raw
+    # a reader can actually load. test_platform_monthly_spine_consistency.py
+    # asserts it.
+    monthly_raw = pd.read_parquet(raw_path).reindex(monthly_index)
+    monthly_raw.index.name = "date"
 
     lean = compute_lean_features(monthly_raw, cfg)
     tag_feature_columns(lean, cfg)  # WARNING-only defensive taxonomy-coverage check

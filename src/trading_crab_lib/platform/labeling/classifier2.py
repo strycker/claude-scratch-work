@@ -128,7 +128,7 @@ CLASSIFIER2_SORT_COLUMN: str = "rs_equities_bonds"
 
 #: K by construction (ADR-0002 decision (b)) — three asset sleeves in the
 #: candidate set (equities, long duration, oil) -> three leadership states.
-CLASSIFIER2_K: int = 3
+CLASSIFIER2_K: int = 5
 
 #: Checkpoint names. Deliberately distinct from classifier #1's
 #: ``regime_labels`` / ``regime_confidences`` / ``regime_profiles`` (T-07-15).
@@ -170,17 +170,37 @@ def classifier2_config(cfg: dict[str, Any]) -> dict[str, Any]:
     K = int(section.get("K", CLASSIFIER2_K))
     n_restarts = int(section.get("n_restarts", 10))
     sort_column = section.get("sort_column", CLASSIFIER2_SORT_COLUMN)
-    expected_lam = 4.0 * len(features)
+    # RE-PINNED 2026-09-18 (ADR-0002 § RE-PIN): the coefficient is 2, not 4.
+    #
+    # lambda still scales with the feature count -- D-13's rule that the jump
+    # penalty is a FORMULA of the frozen feature list, not a free knob, is
+    # preserved. Only the coefficient moved, and design §4.3 licenses exactly
+    # that: "Tune lambda (and K) until acceptance criteria (§4.4) pass --
+    # occupancy and sojourn targets become the tuning objective."
+    #
+    # Why: at 4n = 32 with K = 5 the fit produced FIVE contiguous blocks in
+    # sequence (0->1->2->3->4) with no state ever recurring -- a
+    # time-segmentation, not a regime model. §4.4 criterion 3 names that
+    # failure: a state that appears once is an episode, not a regime. The
+    # acceptance window measured at K=5 is lambda in [8, 24]: inside it
+    # criteria 1 and 2 pass AND states recur; at 6 and below criterion 1
+    # breaks (occupancy 3.6% and 36.9%). 2n = 16 sits mid-window on a plateau
+    # (12 and 16 give identical labelings), so it is robust rather than a
+    # cliff-edge pick.
+    #
+    # Classifier #1 is unaffected: it has its own labeling section and its own
+    # 4 x 13 = 52.0, which this function never reads.
+    expected_lam = 2.0 * len(features)
     lam = float(section.get("lambda", expected_lam))
 
     if lam != expected_lam:
         raise ValueError(
-            f"labeling_2.lambda is {lam} but must equal 4 x len(features) = "
-            f"4 x {len(features)} = {expected_lam} (D-13's feature-count formula, "
-            "the same one classifier #1 instantiates at 13 columns -> 52.0). "
-            "A feature list edited without recomputing lambda changes the fit's "
-            "jump penalty away from the value ADR-0002 pinned — recompute it, or "
-            "amend ADR-0002 if the change is intended."
+            f"labeling_2.lambda is {lam} but must equal 2 x len(features) = "
+            f"2 x {len(features)} = {expected_lam} (D-13's feature-count formula "
+            "as re-pinned by ADR-0002 § RE-PIN 2026-09-18; the coefficient is 2 "
+            "for classifier #2). A feature list edited without recomputing "
+            "lambda changes the fit's jump penalty away from the value ADR-0002 "
+            "pinned — recompute it, or amend ADR-0002 if the change is intended."
         )
     if sort_column not in features:
         raise ValueError(

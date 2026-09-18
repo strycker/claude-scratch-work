@@ -522,3 +522,89 @@ Any such tuning must still record how much searching it took, so search-creep st
 routing and (f) the blend weight are unaffected. **(b) K and (c) λ must be re-pinned** against
 §4.4 criteria 1, 2 and 6 before plans 07-09 through 07-12 run. The `strict=True` xfail in
 `tests/unit/test_platform_labeling_classifier2.py` fails the suite the moment they are.
+
+---
+
+## RE-PIN 2026-09-18 — K = 5, lambda = 16.0 (2n); §4.4 criterion 1 now passes
+
+Resolves the CORRECTION above. This ADR remains **Proposed**.
+
+### What changed, and what did not
+
+| item | was | now |
+|---|---|---|
+| (a) frozen columns | Lean 8 | **unchanged** |
+| (b) K | 3 | **5** |
+| (c) lambda | 32.0 (= 4n) | **16.0 (= 2n)** |
+| (d) `sort_column` | `rs_equities_bonds` | **unchanged** |
+| (e) routing | L1 decision-bearing / L2 observational | **unchanged** |
+| (f) `blend_weight_1` | 0.50 | **unchanged** |
+
+**D-13's rule survives.** lambda is still a *formula* of the frozen feature count, never a free
+knob; only the coefficient moved. Design §4.3 licenses precisely this: *"λ is the single
+interpretable persistence knob. Tune λ (and K) until **acceptance criteria** (§4.4) pass —
+occupancy and sojourn targets become the tuning objective, not a distortion of the geometry."*
+§14 Phase 2's exit is "all six acceptance criteria pass." This is an acceptance gate, not a
+selection trial for lift, so no registry row was written and D-16's denominator is unchanged.
+Classifier #1 is untouched: it keeps its own section and its own 4 × 13 = 52.0.
+
+### Measured results (live, dev-carved span 1963-01-31 → 2020-12-31, 696 months)
+
+| state | occupancy | floor ≥~8% | cap ≤~35% | median sojourn |
+|---|---|---|---|---|
+| 0 | 16.6667% | PASS | PASS | 58 mo |
+| 1 | 22.7011% | PASS | PASS | 25 mo |
+| 2 | 22.4138% | PASS | PASS | 29 mo |
+| 3 | 23.8506% | PASS | PASS | 166 mo |
+| 4 | 14.3678% | PASS | PASS | 100 mo |
+
+Occupancy sum error exactly **0.0**. **§4.4 criterion 1 passes on all five states**; criterion 2
+passes (no median sojourn below 3 months).
+
+12 transitions, state sequence `[1, 2, 1, 0, 2, 0, 2, 1, 2, 1, 2, 3, 4]`, transitions at 1970-12,
+1971-12, 1974-01, 1982-09, 1983-11, 1984-11, 1987-04, 1989-05, 1994-03, 1995-04, 1998-11,
+2012-09. Final run 100 months (14.4% of the span), against the pre-re-pin fit's 268 months
+(45.6%).
+
+### Why these two values, by rule rather than by preference
+
+**K = 5.** K = 3 was arithmetically near-infeasible against criterion 1: three states summing to
+100% under a ~35% cap must each sit in **[30%, 35%]** — forced balance, the thing §4.3 set out to
+replace. The original K = 3 rationale (three asset sleeves in the candidate set) was never scored
+against §4.4. K = 5 also matches classifier #1's state-space size, which keeps the ARI / NMI /
+Cramér's V dependence statistics (D-15) comparing like with like.
+
+**lambda = 2n.** At 4n = 32 with K = 5 the fit produced five contiguous blocks in strict sequence
+(`0→1→2→3→4`) with **no state ever recurring** — a time-segmentation, not a regime model. §4.4
+criterion 3 names that failure directly: a state that appears once is an *episode*, not a regime.
+The measured acceptance window at K = 5 is **lambda ∈ [8, 24]**: inside it criteria 1 and 2 pass
+*and* states recur; at 6 and below criterion 1 breaks (occupancy 3.6% and 36.9%). 2n = 16 sits
+mid-window and on a plateau — 12 and 16 produce identical labelings — so it is robust rather than
+a cliff-edge pick.
+
+### Search extent (D-17 — recorded so search-creep stays visible)
+
+Eleven fits total, every one an acceptance-gate evaluation against §4.4, **zero** performance or
+lift evaluations and **zero** registry rows:
+
+- 1 at K=3, λ=32 — confirming the oil data fix did not move occupancy (it did not: 15.37 /
+  46.12 / 38.51%, identical to the pre-fix fit, so this re-pin rests on its own merits);
+- 1 at K=5, λ=32;
+- 8 sweeping λ ∈ {32, 24, 16, 12, 8, 6, 4, 2} at K=5;
+- 1 production re-fit at the pinned K=5, λ=16.
+
+### Two limitations, stated rather than left to be found
+
+1. **States 3 and 4 each occur exactly once**, as the final two blocks (1998-11 → 2012-09 and
+   2012-09 → 2020-12). States 0, 1 and 2 recur properly (2, 4 and 5 occurrences). So the
+   episode-vs-regime concern is **reduced, not eliminated** — it now applies to the last 22 years
+   rather than to the whole span. Whether that is a genuine secular shift or an artifact of K is
+   open; it is not resolved here.
+2. **§4.4 criterion 3 (subsample stability under Hungarian matching) has not been run** for either
+   classifier. Criteria 1 and 2 pass and are tested; criterion 4 has per-state profiles; criterion
+   5 (decision-relevance) is plan 07-11's; criterion 6 constrains complexity. This ADR therefore
+   claims criteria 1 and 2, not "all six".
+
+`tests/unit/test_platform_labeling_classifier2.py::TestClassifier2LiveOccupancyAgainstDesign44`
+now asserts criterion 1 against the live fit as a plain passing test; before the re-pin it carried
+a `strict=True` xfail recording the breach.

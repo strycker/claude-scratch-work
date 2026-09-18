@@ -1,8 +1,8 @@
 {
-  "name": "regime_confidences_2",
-  "created": "2026-09-18T16:40:53.317697",
+  "name": "regime_confidences",
+  "created": "2026-09-18T17:19:59.335975",
   "config_hash": "6c209fad",
-  "rows": 696,
+  "rows": 695,
   "columns": 5,
   "col_names": [
     "state_0",
@@ -11,6 +11,6 @@
     "state_3",
     "state_4"
   ],
-  "index_start": "1963-01-31 00:00:00",
+  "index_start": "1963-02-28 00:00:00",
   "index_end": "2020-12-31 00:00:00"
 }

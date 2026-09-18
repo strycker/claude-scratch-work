@@ -188,10 +188,21 @@ splice:
   oil:
     research_name:  oil
     method:         single_source
-    # Chain: wti_crude (macrotrends, 1946+) tried first; falls back to
-    # wti_fred (FRED WTISPLC, 1946+) when macrotrends is blocked (403 on
-    # datacenter/VPN IPs).
-    source_col:     [wti_crude, wti_fred]
+    # Chain: wti_fred (FRED WTISPLC) tried FIRST; falls back to wti_crude
+    # (macrotrends) when FRED is unavailable.
+    #
+    # REORDERED 2026-09-18. The previous order put wti_crude first on the
+    # stated grounds that macrotrends carries WTI back to 1946. Measured on a
+    # live build, the macrotrends scrape returns only 1985-02 onward (499
+    # monthly observations), while wti_fred covers the entire monthly spine
+    # from 1962-01 (776 observations). The "longer" primary was in fact 23
+    # years SHORTER, which silently cost the regime labeler every 1970s oil
+    # shock — the stagflation episodes oil is in the feature set to identify.
+    #
+    # wti_fred is therefore primary on measured coverage, not on preference.
+    # If the macrotrends scraper is later fixed to reach 1946 (see ROADMAP),
+    # revisit this order and re-pin the A13 change-point test deliberately.
+    source_col:     [wti_fred, wti_crude]
     cross_check_col: wti_fred
     tradable:       USO
   cash:
@@ -338,8 +349,22 @@ labeling:
 # not a config edit — the first fit would otherwise become an unlogged trial.
 # Not added to _REQUIRED_PLATFORM_SECTIONS — read defensively via cfg.get().
 labeling_2:
-  K: 3
-  lambda: 32.0
+  # RE-PINNED 2026-09-18 (ADR-0002 § RE-PIN). Was K: 3, lambda: 32.0 (= 4n).
+  #
+  # K: 3 breached §4.4 criterion 1 ("every state >= ~8% and <= ~35%") on two of
+  # three states (46.12%, 38.51%) and was arithmetically near-infeasible: three
+  # states summing to 100% under a 35% cap must each sit in [30%, 35%], i.e.
+  # forced balance, which §4.3 set out to replace. K: 5 puts all five states at
+  # 16.7-23.9%, comfortably inside the band.
+  #
+  # lambda: 16.0 = 2 x len(features). Still a formula of the feature count
+  # (D-13's rule), re-coefficiented per §4.3's licence to tune lambda until the
+  # §4.4 criteria pass. At 4n = 32 the K=5 fit produced five contiguous blocks
+  # in sequence with NO state recurring -- a segmentation, not a regime model
+  # (§4.4 criterion 3's "episode, not a regime"). Measured acceptance window at
+  # K=5 is lambda in [8, 24]; 16 is mid-window and on a plateau with 12.
+  K: 5
+  lambda: 16.0
   n_restarts: 10
   sort_column: rs_equities_bonds
   features:
