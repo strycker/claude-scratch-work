@@ -349,8 +349,22 @@ labeling:
 # not a config edit — the first fit would otherwise become an unlogged trial.
 # Not added to _REQUIRED_PLATFORM_SECTIONS — read defensively via cfg.get().
 labeling_2:
-  K: 3
-  lambda: 32.0
+  # RE-PINNED 2026-09-18 (ADR-0002 § RE-PIN). Was K: 3, lambda: 32.0 (= 4n).
+  #
+  # K: 3 breached §4.4 criterion 1 ("every state >= ~8% and <= ~35%") on two of
+  # three states (46.12%, 38.51%) and was arithmetically near-infeasible: three
+  # states summing to 100% under a 35% cap must each sit in [30%, 35%], i.e.
+  # forced balance, which §4.3 set out to replace. K: 5 puts all five states at
+  # 16.7-23.9%, comfortably inside the band.
+  #
+  # lambda: 16.0 = 2 x len(features). Still a formula of the feature count
+  # (D-13's rule), re-coefficiented per §4.3's licence to tune lambda until the
+  # §4.4 criteria pass. At 4n = 32 the K=5 fit produced five contiguous blocks
+  # in sequence with NO state recurring -- a segmentation, not a regime model
+  # (§4.4 criterion 3's "episode, not a regime"). Measured acceptance window at
+  # K=5 is lambda in [8, 24]; 16 is mid-window and on a plateau with 12.
+  K: 5
+  lambda: 16.0
   n_restarts: 10
   sort_column: rs_equities_bonds
   features:

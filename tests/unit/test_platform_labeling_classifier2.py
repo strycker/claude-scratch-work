@@ -50,8 +50,8 @@ def _candidate_frame(n_months: int = 120, seed: int = 3, start: str = "1990-01-3
 def _degenerate_frame(n_months: int = 150) -> pd.DataFrame:
     """Every candidate column constant, so the fit collapses onto ONE state.
 
-    After ``standardize_features`` every row is the zero vector, so K=3 cannot
-    find three occupied clusters: two states end up never occupied (occupancy
+    After ``standardize_features`` every row is the zero vector, so K=5 cannot
+    find five occupied clusters: four states end up never occupied (occupancy
     0.0, below §4.4 criterion 1's ~8% floor). No lambda override is needed — the
     collapse comes from the data, so the pinned lambda = 4n stays honest.
     """
@@ -66,8 +66,8 @@ def _cfg(**overrides) -> dict:
     """A minimal platform-config-shaped dict for classifier #2."""
     features = overrides.pop("features", list(CLASSIFIER2_CANDIDATE_COLUMNS))
     section = {
-        "K": 3,
-        "lambda": 4.0 * len(features),
+        "K": 5,
+        "lambda": 2.0 * len(features),
         "n_restarts": 2,
         "sort_column": "rs_equities_bonds",
         "features": features,
@@ -83,8 +83,8 @@ class TestClassifier2Config:
     def test_live_config_carries_the_six_pinned_values(self):
         """ADR-0002's decision (a)-(d), read off the real settings.yaml."""
         resolved = classifier2_config(load_platform_config())
-        assert resolved["K"] == 3
-        assert resolved["lam"] == 32.0
+        assert resolved["K"] == 5  # re-pinned 2026-09-18 (was 3)
+        assert resolved["lam"] == 16.0  # 2n, re-pinned 2026-09-18
         assert resolved["sort_column"] == "rs_equities_bonds"
         assert resolved["features"] == list(CLASSIFIER2_CANDIDATE_COLUMNS)
         assert len(resolved["features"]) == 8
@@ -95,11 +95,11 @@ class TestClassifier2Config:
         configured = load_platform_config()["labeling_2"]["features"]
         assert list(CLASSIFIER2_CANDIDATE_COLUMNS) == list(configured)
 
-    def test_lambda_not_four_times_feature_count_raises(self):
+    def test_lambda_not_two_times_feature_count_raises(self):
         """D-13's formula is an invariant, not a comment: an edit that changes
         the feature list without recomputing lambda must fail loudly."""
         cfg = _cfg()
-        cfg["labeling_2"]["lambda"] = 52.0  # classifier #1's value, 4 x 13, not 4 x 8
+        cfg["labeling_2"]["lambda"] = 52.0  # classifier #1's value, 4 x 13, not 2 x 8
         with pytest.raises(ValueError, match="lambda"):
             classifier2_config(cfg)
 
@@ -107,13 +107,13 @@ class TestClassifier2Config:
         """Drop a column but keep lambda: the exact drift this guard exists for."""
         cfg = _cfg()
         cfg["labeling_2"]["features"] = list(CLASSIFIER2_CANDIDATE_COLUMNS)[:-1]  # n = 7
-        assert cfg["labeling_2"]["lambda"] == 32.0  # still 4 x 8
+        assert cfg["labeling_2"]["lambda"] == 16.0  # still 2 x 8
         with pytest.raises(ValueError, match="lambda"):
             classifier2_config(cfg)
 
-    def test_lambda_exactly_four_times_feature_count_accepted(self):
+    def test_lambda_exactly_two_times_feature_count_accepted(self):
         cfg = _cfg(features=["a", "b", "c"], sort_column="a")
-        assert classifier2_config(cfg)["lam"] == 12.0
+        assert classifier2_config(cfg)["lam"] == 6.0  # 2 x 3
 
     def test_sort_column_absent_from_feature_list_raises(self):
         cfg = _cfg()
@@ -126,7 +126,7 @@ class TestClassifier2Config:
         KeyError, per the additive-config convention."""
         resolved = classifier2_config({})
         assert resolved["features"] == list(CLASSIFIER2_CANDIDATE_COLUMNS)
-        assert resolved["lam"] == 4.0 * len(CLASSIFIER2_CANDIDATE_COLUMNS)
+        assert resolved["lam"] == 2.0 * len(CLASSIFIER2_CANDIDATE_COLUMNS)
 
 
 # ── freeze_classifier2_columns: D-11's freeze rule, reused not reimplemented ─
@@ -174,7 +174,7 @@ class TestFreezeClassifier2Columns:
 
     def test_shorter_than_K_raises_naming_the_count_and_K(self):
         df = _candidate_frame()[["rs_equities_bonds", "rs_oil_equities"]]
-        with pytest.raises(ValueError, match="fewer than K=3"):
+        with pytest.raises(ValueError, match="fewer than K=5"):
             freeze_classifier2_columns(df, _cfg(), df.index[24])
 
     def test_all_candidates_nan_after_the_decision_date_raises(self):
@@ -194,20 +194,21 @@ class TestLabelLeadershipRegimes:
             df, _cfg(), checkpoint_dir=tmp_path, first_decision=df.index[24]
         )
         occupancy = result["occupancy"]
-        assert len(occupancy) == 3
+        assert len(occupancy) == 5
         assert abs(sum(occupancy.values()) - 1.0) < 1e-12
 
     def test_never_occupied_state_is_a_zero_entry_not_a_missing_key(self, tmp_path):
-        """A huge jump penalty collapses the fit to one state; K=3 must still
-        report three entries, two of them 0.0 — passing n_states=K explicitly is
-        what makes a never-occupied state surface instead of vanishing."""
+        """Degenerate (constant) data collapses the fit to one state; K=5 must
+        still report FIVE entries, four of them 0.0 — passing n_states=K
+        explicitly is what makes a never-occupied state surface instead of
+        vanishing from the occupancy vector entirely."""
         df = _degenerate_frame()
         result = label_leadership_regimes(
             df, _cfg(), checkpoint_dir=tmp_path, first_decision=df.index[24]
         )
         occupancy = result["occupancy"]
-        assert len(occupancy) == 3
-        assert sorted(occupancy.values()) == pytest.approx([0.0, 0.0, 1.0])
+        assert len(occupancy) == 5
+        assert sorted(occupancy.values()) == pytest.approx([0.0, 0.0, 0.0, 0.0, 1.0])
         assert abs(sum(occupancy.values()) - 1.0) < 1e-12
 
     def test_below_floor_state_warns_naming_that_state_and_still_returns(self, tmp_path, caplog):
@@ -250,7 +251,7 @@ class TestLabelLeadershipRegimes:
             {"decoy": -ramp, "rs_equities_bonds": ramp, "third": np.zeros(n)}, index=idx
         )
         cfg = _cfg(features=["decoy", "rs_equities_bonds", "third"], K=2)
-        cfg["labeling_2"]["lambda"] = 12.0
+        cfg["labeling_2"]["lambda"] = 6.0  # 2 x 3 features
         result = label_leadership_regimes(
             df, cfg, checkpoint_dir=tmp_path, first_decision=idx[10]
         )
@@ -276,7 +277,7 @@ class TestLabelLeadershipRegimes:
         )
         assert result["frozen_columns"] == list(CLASSIFIER2_CANDIDATE_COLUMNS)
         assert len(result["states"]) == len(result["index"]) == 150
-        assert result["confidences"].shape == (150, 3)
+        assert result["confidences"].shape == (150, 5)
         row_sums = result["confidences"].sum(axis=1)
         assert np.allclose(row_sums, 1.0, atol=1e-12)
 
@@ -355,19 +356,13 @@ class TestClassifier2LiveOccupancyAgainstDesign44:
             "xfail for the wrong reason and read as expected"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "classifier #2 (K=3, lambda=32) breaches design §4.4 criterion 1: "
-            "states 1 and 2 occupy 46.12% and 38.51% against a ~35% cap. "
-            "K=3 is near-infeasible against the 8-35% band at all — three states "
-            "summing to 100% under a 35% cap must each sit in [30%, 35%], which "
-            "is forced balance, the thing §4.3 set out to replace. Pending the "
-            "K/lambda re-pin; design §4.3 licenses tuning both until §4.4 passes. "
-            "strict=True: an xpass FAILS, so this marker cannot outlive the fix."
-        ),
-    )
     def test_live_occupancy_within_design_44_band(self):
+        """Design §4.4 criterion 1 on the live fit. PASSES as of the
+        2026-09-18 re-pin (K=5, lambda=16=2n): all five states land at
+        14.37-23.85%. Before the re-pin (K=3, lambda=32) states 1 and 2 sat at
+        46.12% and 38.51%, breaching the ~35% cap, and this test carried a
+        strict xfail recording that.
+        """
         states = pd.read_parquet(_LIVE_LABELS_PARQUET)["state"]
         occupancy = states.value_counts(normalize=True).sort_index()
         breaches = {

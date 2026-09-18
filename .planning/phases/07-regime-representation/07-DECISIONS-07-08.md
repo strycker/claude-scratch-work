@@ -147,3 +147,30 @@ exactly, the blend is adding nothing and the weight was never the binding constr
 > rows, so selection either drops it (collapsing toward the marginals, ≈ the blend)
 > or retains it and overfits. At ~590 decision months and K₁×K₂ = 15 the expectation
 > is mostly collapse — a prior to be tested, not a measured result.
+
+---
+
+## RE-PIN 2026-09-18 — (b) and (c) superseded
+
+Items (a), (d), (e) and (f) stand exactly as recorded above. (b) and (c) are superseded:
+
+- **(b) K: 3 → 5.** K = 3 breached §4.4 criterion 1 on two of three states and was
+  near-infeasible against the band by arithmetic (three states under a ~35% cap must each
+  sit in [30%, 35%]). My three-asset-sleeve rationale was never scored against the
+  acceptance criteria — my error, recorded in the CORRECTION under (b).
+- **(c) lambda: 32.0 (4n) → 16.0 (2n).** At 4n with K = 5 the fit produced five contiguous
+  never-recurring blocks — a segmentation, not a regime model. The measured acceptance
+  window at K = 5 is lambda ∈ [8, 24]; 16 is mid-window and on a plateau.
+
+All five states now sit at 14.37–23.85% with 12 transitions and genuine recurrence.
+Full evidence, the by-rule justification, the eleven-fit search extent and two named
+limitations: `platform_design/adr/0002-l1-second-classifier.md` § RE-PIN 2026-09-18.
+
+**One further correction to my own reasoning.** When I first reported this I wrote that
+lambda was "badly over-penalized" because "§4.4 criterion 6 expects 15–30 transitions."
+That misread criterion 6, which says *"post-war US ≈ 15–30 independent regime transitions.
+Any structure requiring more parameters than that supports must be constrained"* — a bound
+on model complexity relative to available data, **not a floor on transition count**. The
+concern was real but the criterion I cited was the wrong one; it belongs to criterion 3
+(stability / episode-vs-regime) and criterion 5 (decision-relevance). Having just corrected
+the project for misquoting §4.4, I am not leaving my own misquote in the record.
