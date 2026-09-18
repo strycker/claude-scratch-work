@@ -517,3 +517,43 @@ before any joint-lift number is assessed, and three of four decided is not decid
 *`07-09-SUMMARY.md`, `src/trading_crab_lib/platform/evaluation/kpis.py`,*
 *`evaluation/report.py`, `evaluation/sojourn_lag.py`, and a live read of*
 *`data/checkpoints/platform/regime_labels{,_2}.parquet` on 2026-09-18.*
+
+---
+
+## 8. DECISIONS — Glenn, 2026-09-18 (plan 07-10 Task 3, human-verify gate)
+
+Recorded before any joint-lift number exists, as the gate requires.
+
+| # | Band | Disposition |
+|---|---|---|
+| 1 | `abs(wealth_delta) < 5` | **CONFIRM** as the *domain* tier. Not tightened toward the observed 0.38 — that would convert a plausibility band into a quality band, which D-07 and ADR-0001's Selection criterion refuse. |
+| 2 | `dd_delta` universal `[-2, 2]` | **REVISE to `[-1, 1]`.** The old bound was wider than the quantity's own arithmetic range (`max_drawdown ∈ [-1, 0]` per leg ⇒ difference ∈ `[-1, 1]`) and therefore **could only confirm**. The revised bound is definitional: a breach proves a leg's `max_drawdown` is not a fraction in `[-1, 0]`, i.e. the KPI is broken. Domain band `abs(dd_delta) < 0.5` **CONFIRMED** unchanged. |
+| 3 | `n_transitions > 30` | **REVISE and SPLIT by quantity.** (a) `sojourn_lag` within-window count → definitional `n_resolved ≤ n_transitions ≤ n_label_transitions`; a breach is a counting bug, never a strategy outcome. (b) full-sample labeling → **rate** band, implausible above `0.10 × n_months`. A fixed count is length-dependent; a rate is not, and the original's calibration point (K=5, λ=52) no longer exists. |
+| 4 | `pct_disagree < 0.02` | **CONFIRM 0.02 unrevised; REVISE the statement to carry its denominator.** Now suspicious if `pct_disagree < 0.02` **OR** `n_compared == 0` **OR** `n_compared` materially below expectation without a *recorded* reason. No number was invented for the threshold — nothing measured in this project bears on where between 0 and 0.80899 it belongs. |
+
+### Governance — which tier decides criterion 7
+
+| Tier | Job | A breach means | Governs the verdict? |
+|---|---|---|---|
+| Universal / arithmetic | Is this number physically possible for this quantity? | The **measurement is broken** — halt, do not report a lift. | **YES** |
+| Domain / advisory | Is it within what this stack has produced? | **Record a note** with the value and window; criterion 7 still reports. | No |
+
+| Quantity | Governing value | Advisory trigger |
+|---|---|---|
+| `wealth_delta` | `abs(x) < 15` | `abs(x) ≥ 5` → note |
+| `dd_delta` | `x ∈ [-1, 1]` (revised) | `abs(x) ≥ 0.5` → note |
+
+**A11 stays open and conscious.** The governing tier can only fail on a broken measurement, never
+on a bad-but-working model. Glenn declined to promote the domain tier to a gate, which would have
+closed A11 by gating on `[ASSUMED]` numbers.
+
+### Implemented in code by this decision
+
+Band 4's denominator clauses are live in `platform/evaluation/disagreement.py`, not left as prose.
+The defect they fix was real: `n_compared == 0` previously **logged** a warning but set
+`suspicious = False`, so a caller reading the flag rather than the log saw "not suspicious" on the
+one case the band exists to catch. Five tests pin it, including that a *recorded* reason suppresses
+the coverage clause while an unexplained shortfall does not.
+
+Bands 1–3 are contracts for plan 07-11 to implement at the point criterion 7 is measured; no code
+computes `wealth_delta` or `dd_delta` bounds yet.
