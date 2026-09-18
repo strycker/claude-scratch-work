@@ -121,7 +121,7 @@ class TestOutputContract:
         assert result["weights"].get("SPY", 0.0) == 0.0
 
     def test_scale_never_exceeds_one(self):
-        result = _blend({0: 1.0}, {0: 1.0}, weight_1=0.5, )
+        result = _blend({0: 1.0}, {0: 1.0}, weight_1=0.5)
 
         assert result["scale"] <= 1.0
 
@@ -329,7 +329,8 @@ class TestLowNFlagging:
 
         assert "low-n" in caplog.text.lower()
         assert "4.4" in caplog.text
-        assert "0.0575" in caplog.text or "5.75" in caplog.text
+        assert f"{40 / 695:.4f}" in caplog.text
+        assert f"{(40 / 695) / OCCUPANCY_FLOOR:.4f}" in caplog.text
 
     def test_credibility_is_the_occupancy_share_of_the_floor_capped_at_one(self):
         flags = low_n_regime_flags(_crisis_table()).set_index("regime")
@@ -353,14 +354,18 @@ class TestPartialPooling:
         n = 400
         idx = pd.date_range("1980-01-31", periods=n, freq="ME")
         returns = pd.DataFrame(
-            {"SPY": rng.normal(0.01, 0.04, n), "TLT": rng.normal(0.002, 0.02, n)},
+            {"SPY": rng.normal(0.01, 0.04, n), "TLT": rng.normal(0.0005, 0.02, n)},
             index=idx,
         )
         states = pd.Series(1, index=idx, name="state")
-        # 20 crisis months (5% — below the ~8% floor), in four separated episodes.
+        # 20 thin-state months (5% — below the ~8% floor), four separated episodes.
         for start in (30, 130, 250, 340):
             states.iloc[start:start + 5] = 0
-        returns.loc[states == 0, "SPY"] -= 0.12
+        # A thin-sample reversal: inside the sub-floor state the asset with the
+        # strong all-history record goes flat and the weak one looks
+        # spectacular — exactly the 20-month fluke condition (iv) exists for.
+        returns.loc[states == 0, "SPY"] -= 0.002
+        returns.loc[states == 0, "TLT"] += 0.030
         return returns, states
 
     def test_pooled_target_equals_the_actual_all_history_sharpe(self):
@@ -432,6 +437,10 @@ class TestPartialPooling:
             shrunk["weights"].reindex(unshrunk["weights"].index).to_numpy(),
             unshrunk["weights"].to_numpy(),
         )
+        # Direction, not merely difference: SPY holds the strong all-history
+        # record that the 20-month state contradicts, so pooling must move
+        # weight back toward it.
+        assert shrunk["weights"]["SPY"] > unshrunk["weights"]["SPY"]
 
     def test_a_compliant_labeling_leaves_the_single_path_identical(self):
         """No regime below the floor -> credibility 1.0 everywhere -> pooling
