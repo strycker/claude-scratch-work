@@ -353,3 +353,85 @@ class TestFormatDependenceReport:
         assert "n_compared" in text
         assert "nan" in text
         assert "failure to add an axis" not in text
+
+
+# ── block_permutation_null: the pre-registered control ──────────────────────
+#
+# Oracles that fail in BOTH directions. A control that only ever says "inside
+# the null" would rubber-stamp verdict (b); one that only ever says "above"
+# would rubber-stamp (a). Both cases are pinned.
+
+
+class TestBlockPermutationNull:
+    @staticmethod
+    def _blocky(pattern: list[tuple[int, int]]) -> pd.Series:
+        vals = np.concatenate([np.full(n, s) for s, n in pattern])
+        idx = pd.date_range("1963-01-31", periods=len(vals), freq="ME")
+        return pd.Series(vals, index=idx, name="state")
+
+    def test_shuffling_preserves_occupancy_exactly(self):
+        from trading_crab_lib.platform.evaluation.dependence import _blocks, _shuffle_blocks
+
+        s = self._blocky([(0, 30), (1, 50), (0, 20), (2, 40)]).to_numpy()
+        rng = np.random.default_rng(1)
+        for _ in range(25):
+            out = _shuffle_blocks(s, rng)
+            assert len(out) == len(s)
+            assert sorted(pd.Series(out).value_counts().items()) == sorted(pd.Series(s).value_counts().items())
+
+    def test_shuffling_never_increases_the_block_count(self):
+        """Blocks may MERGE when the shuffle puts two same-state blocks
+        adjacent, so the count can fall but must never rise — a rise would mean
+        the shuffle invented structure. The merge bias is documented in
+        _shuffle_blocks: it shifts the null UP, which can only push toward (b)."""
+        from trading_crab_lib.platform.evaluation.dependence import _blocks, _shuffle_blocks
+
+        s = self._blocky([(0, 30), (1, 50), (0, 20), (2, 40)]).to_numpy()
+        rng = np.random.default_rng(2)
+        n_orig = len(_blocks(s))
+        for _ in range(25):
+            assert len(_blocks(_shuffle_blocks(s, rng))) <= n_orig
+
+    def test_identical_labelings_sit_far_ABOVE_the_null(self):
+        """Direction 1. Two identical blocky labelings have observed NMI = 1.0,
+        which block-shuffling cannot reproduce — the control MUST place it above
+        the 99th percentile. A control that failed this could never return (a)."""
+        from trading_crab_lib.platform.evaluation.dependence import block_permutation_null
+
+        s = self._blocky([(0, 40), (1, 60), (2, 50), (0, 30), (1, 45)])
+        res = block_permutation_null(s, s.copy(), n_resamples=300, random_state=7)
+        assert res["observed"]["nmi"] == pytest.approx(1.0)
+        assert res["observed"]["nmi"] > res["null"]["nmi"]["p99"]
+
+    def test_independent_blocky_labelings_sit_INSIDE_the_null(self):
+        """Direction 2. Two labelings whose block structure is real but whose
+        alignment is arbitrary must NOT clear the 95th percentile. A control
+        that failed this could never return (b)."""
+        from trading_crab_lib.platform.evaluation.dependence import block_permutation_null
+
+        rng = np.random.default_rng(11)
+        a = self._blocky([(int(rng.integers(0, 3)), int(rng.integers(20, 60))) for _ in range(9)])
+        b = self._blocky([(int(rng.integers(0, 3)), int(rng.integers(20, 60))) for _ in range(9)])
+        n = min(len(a), len(b))
+        a, b = a.iloc[:n], b.iloc[:n]
+        res = block_permutation_null(a, b, n_resamples=300, random_state=8)
+        assert res["observed"]["nmi"] <= res["null"]["nmi"]["p99"]
+
+    def test_is_deterministic_under_a_fixed_seed(self):
+        from trading_crab_lib.platform.evaluation.dependence import block_permutation_null
+
+        a = self._blocky([(0, 30), (1, 40), (2, 35)])
+        b = self._blocky([(1, 25), (0, 45), (2, 35)])
+        r1 = block_permutation_null(a, b, n_resamples=120, random_state=99)
+        r2 = block_permutation_null(a, b, n_resamples=120, random_state=99)
+        assert r1["null"]["nmi"]["p95"] == r2["null"]["nmi"]["p95"]
+
+    def test_reports_block_counts_it_actually_used(self):
+        from trading_crab_lib.platform.evaluation.dependence import block_permutation_null
+
+        a = self._blocky([(0, 30), (1, 40), (2, 35)])       # 3 blocks
+        b = self._blocky([(1, 25), (0, 45), (2, 20), (1, 15)])  # 4 blocks
+        n = min(len(a), len(b))
+        res = block_permutation_null(a.iloc[:n], b.iloc[:n], n_resamples=50, random_state=5)
+        assert res["n_blocks_1"] >= 3
+        assert res["n_blocks_2"] >= 3

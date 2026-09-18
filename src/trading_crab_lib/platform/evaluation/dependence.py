@@ -359,3 +359,111 @@ if __name__ == "__main__":
     demo_2 = pd.Series([0, 0, 1, 2, 1, 2], index=demo_index, name="state")
 
     print(format_dependence_report(measure_labeling_dependence(demo_1, demo_2)))  # noqa: T201
+
+
+# ── Block-permutation null (pre-registered control, 07-09 Task 3) ────────────
+#
+# ARI / NMI / Cramer's V assume exchangeable observations. Regime labelings are
+# step functions on a shared time axis: classifier #1 has 7 contiguous blocks
+# over 695 months, #2 has 13. Two block partitions of one timeline are
+# associated BEFORE any shared economics, purely from temporal contiguity, so
+# the raw statistics cannot separate "both see the same market structure" from
+# "both are slow".
+#
+# This null holds each labeling's block-length multiset and occupancy EXACTLY
+# and randomises only the ARRANGEMENT of blocks, which destroys alignment
+# between the two labelings while preserving everything else. The observed
+# statistic is then read against that distribution.
+#
+# The decision rule is PRE-REGISTERED in 07-DEPENDENCE.md and committed before
+# this code existed. Nothing here branches on the outcome.
+
+
+def _blocks(states: np.ndarray) -> list[tuple[int, int]]:
+    """Decompose a label sequence into (state, run_length) contiguous blocks."""
+    out: list[tuple[int, int]] = []
+    cur = states[0]
+    n = 0
+    for v in states:
+        if v != cur:
+            out.append((int(cur), n))
+            cur = v
+            n = 1
+        else:
+            n += 1
+    out.append((int(cur), n))
+    return out
+
+
+def _shuffle_blocks(states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Randomly re-order a sequence's own blocks. Occupancy is preserved EXACTLY.
+
+    Known and deliberate imprecision: when the shuffle places two blocks of the
+    same state adjacent, they merge, so the shuffled series can carry fewer and
+    longer runs than the original. That makes each resample BLOCKIER than the
+    input, which raises association by chance and shifts the null UP. The bias
+    is therefore conservative in a specific direction: it makes clearing the
+    null harder, so it can only push a verdict toward (b) "failure to add an
+    axis" and never manufacture an (a). Recorded rather than corrected, because
+    correcting it (rejection-sampling arrangements with no same-state
+    adjacency) would bias the arrangement distribution itself.
+    """
+    blocks = _blocks(states)
+    order = rng.permutation(len(blocks))
+    return np.concatenate([np.full(blocks[i][1], blocks[i][0]) for i in order])
+
+
+def block_permutation_null(
+    states_1: pd.Series,
+    states_2: pd.Series,
+    *,
+    n_resamples: int = 2000,
+    random_state: int = 20260918,
+) -> dict[str, Any]:
+    """Null distribution of the three dependence statistics under block shuffling.
+
+    Both labelings are block-shuffled independently each resample. Returns the
+    observed values, the null percentiles used by the pre-registered rule, and
+    the raw null arrays for plotting.
+
+    This function makes NO verdict. It reports a distribution; the rule that
+    reads it lives in 07-DEPENDENCE.md and predates this code.
+    """
+    observed = measure_labeling_dependence(states_1, states_2)
+    common = states_1.index.intersection(states_2.index)
+    a = states_1.loc[common].to_numpy()
+    b = states_2.loc[common].to_numpy()
+
+    rng = np.random.default_rng(random_state)
+    null = {
+        "adjusted_rand": np.empty(n_resamples),
+        "nmi": np.empty(n_resamples),
+        "cramers_v": np.empty(n_resamples),
+    }
+    for i in range(n_resamples):
+        sa = _shuffle_blocks(a, rng)
+        sb = _shuffle_blocks(b, rng)
+        null["adjusted_rand"][i] = adjusted_rand_score(sa, sb)
+        null["nmi"][i] = normalized_mutual_info_score(sa, sb)
+        null["cramers_v"][i] = _cramers_v(sa, sb)
+
+    pct = {
+        k: {
+            "p50": float(np.percentile(v, 50)),
+            "p95": float(np.percentile(v, 95)),
+            "p99": float(np.percentile(v, 99)),
+            "max": float(v.max()),
+            "observed_percentile": float((v < observed[k]).mean() * 100.0),
+        }
+        for k, v in null.items()
+    }
+    return {
+        "observed": {k: observed[k] for k in ("adjusted_rand", "nmi", "cramers_v")},
+        "n_compared": observed["n_compared"],
+        "n_resamples": n_resamples,
+        "random_state": random_state,
+        "n_blocks_1": len(_blocks(a)),
+        "n_blocks_2": len(_blocks(b)),
+        "null": pct,
+        "_raw": null,
+    }

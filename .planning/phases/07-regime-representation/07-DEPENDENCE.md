@@ -349,3 +349,71 @@ every one of classifier #1's labels, so the observed numbers above become void a
 measurement is re-run against the new labeling. **The rule above survives that re-run unchanged.**
 It is a rule about how to read a control, not about these particular numbers, and re-stating it
 after seeing new numbers would defeat its purpose.
+
+---
+
+## RESULT 2026-09-18 — re-measured after both re-pins; the rule returns INCONCLUSIVE
+
+Both classifiers were re-pinned before this measurement, so the numbers in §3 and in the
+PRE-REGISTRATION's "observed" table are **void** and are superseded here.
+
+- classifier #1: K 5 → **6**, λ 52.0 → **10.0** (ADR-0001 § RE-PIN), under design §4.4's amended
+  criterion 1 with the recurrence exemption.
+- classifier #2: K 3 → **5**, λ 32.0 → **16.0** (ADR-0002 § RE-PIN).
+
+### Re-measured dependence
+
+n_compared = 695 (1963-02-28 → 2020-12-31), `suspicious = False`.
+
+| statistic | previous (void) | **re-measured** |
+|---|---|---|
+| Adjusted Rand | 0.4686 | **0.354841** |
+| Normalized mutual information | 0.6023 | **0.464088** |
+| Cramér's V | 0.6558 | **0.589748** |
+
+Every statistic fell. NMI no longer exceeds its 0.5 prose flag; Cramér's V still does.
+
+### The control
+
+2000 resamples, seed 20260918. Block counts actually used: classifier #1 **26**, classifier #2
+**13**. Note #1's block count rose from 7 to 26 under the re-pin — the earlier measurement was
+taken against a far blockier, near-degenerate labeling.
+
+| statistic | observed | null p50 | p95 | p99 | max | observed percentile |
+|---|---|---|---|---|---|---|
+| Adjusted Rand | 0.354841 | 0.2164 | 0.3332 | 0.4086 | 0.4602 | 96.75 |
+| NMI | 0.464088 | 0.3406 | 0.4492 | 0.5012 | 0.5532 | **96.60** |
+| Cramér's V | 0.589748 | 0.5214 | 0.6178 | 0.6584 | 0.7261 | 87.70 |
+
+**The null median NMI is 0.3406.** A substantial share of the raw association is temporal
+blockiness, which is what the control was built to expose. Cramér's V — the statistic whose flag
+the raw number exceeded — sits at the 87.70th percentile, comfortably inside the null, and on its
+own evidences nothing.
+
+### Verdict, by the rule committed at `298b1bc` before this code existed
+
+> p95 0.449202 < observed NMI 0.464088 ≤ p99 0.501195 → **INCONCLUSIVE**
+
+Recorded as **inconclusive**, in exactly those terms. Per the pre-registration: no tie-break, and
+no further statistic is computed to resolve it. The association is elevated above what blockiness
+alone explains, but not by enough to call, and the honest summary is that **this measurement
+cannot decide whether classifier #2 added an axis.**
+
+### What this does and does not license
+
+- It does **not** license reading criterion 6 as satisfied. It is not satisfied; it is unresolved.
+- It does **not** license a fourth dependence statistic, a different null, or a re-run at another
+  seed. All three would be the garden of forking paths the pre-registration closed.
+- It does **not** invalidate criterion 7. Joint allocation lift is a *separate* criterion with its
+  own pre-planned measurement, asking a different and more decision-relevant question: does the
+  blend beat classifier #1 alone? That is not a tie-break on dependence — it is the test the phase
+  already intended to run, and its answer stands on its own footing whatever criterion 6 says.
+
+### Known bias in the null, stated
+
+`_shuffle_blocks` merges same-state blocks that land adjacent, so each resample is slightly
+blockier than its input. That raises association by chance and shifts the null **up**, making it
+harder for the observed value to clear. The bias is therefore one-directional and conservative:
+it can only push a verdict toward (b), never manufacture an (a). An inconclusive result under a
+null biased toward (b) is, if anything, mildly favourable to classifier #2 — which is stated here
+rather than left for a reader to work out.
