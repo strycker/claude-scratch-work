@@ -321,8 +321,12 @@ class TestLabelingConfig:
     def test_config_exposes_labeling_defaults_via_get(self):
         cfg = load_platform_config()
         labeling_cfg = cfg.get("labeling", {})
-        assert labeling_cfg.get("K", 5) == 5
-        assert labeling_cfg.get("lambda", 52.0) == 52.0
+        # RE-PINNED 2026-09-18 under design §4.4's AMENDMENT: K 5 -> 6,
+        # lambda 52.0 -> 10.0. lambda is now a formula of the FITTED column
+        # count (1 x 10 frozen columns); 52.0 was 4 x 13 on the LEAN set, a
+        # penalty scaled to a set the fit never reads. See ADR-0001 § RE-PIN.
+        assert labeling_cfg.get("K", 6) == 6
+        assert labeling_cfg.get("lambda", 10.0) == 10.0
         assert labeling_cfg.get("n_restarts", 10) == 10
         assert labeling_cfg.get("embargo_months", 12) == 12
 

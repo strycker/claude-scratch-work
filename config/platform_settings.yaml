@@ -321,8 +321,25 @@ cv:
 # feature set's column count changes (currently 13: fast + slow taxonomy tiers).
 # Not added to _REQUIRED_PLATFORM_SECTIONS — read defensively via cfg.get().
 labeling:
-  K: 5
-  lambda: 52.0
+  # RE-PINNED 2026-09-18 under design §4.4's AMENDMENT of that date. Was K: 5,
+  # lambda: 52.0.
+  #
+  # lambda 52.0 was 4 x 13 (the LEAN set) while the fit actually sees the 10
+  # FROZEN columns -- the penalty was scaled to a set it never reads. lambda is
+  # now a formula of the FITTED column count: 10.0 = 1 x n(frozen) = 10.
+  #
+  # K: 5 could satisfy neither end of criterion 1 at ANY lambda -- the binding
+  # state sat at 1.2-5.8% throughout and some state always exceeded the ~35%
+  # cap. K: 6 satisfies the cap for lambda in [6, 12]; 10 is mid-window and
+  # maximises the minimum occupancy (5.76%).
+  #
+  # The sub-floor state invokes §4.4's recurrence exemption: 40 months across
+  # NINE separate episodes -- 1970 recession, 1973-74 oil shock, Volcker 1981,
+  # Black Monday 1987, Gulf War 1990, dotcom trough 2002, GFC 2008-09,
+  # European debt crisis 2011, COVID 2020. Drop any one and the state stands.
+  # Conditions (i)-(v) are recorded in ADR-0001.
+  K: 6
+  lambda: 10.0
   n_restarts: 10
   embargo_months: 12
 
