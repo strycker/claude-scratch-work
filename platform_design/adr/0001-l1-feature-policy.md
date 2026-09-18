@@ -426,3 +426,48 @@ test could confirm and never fail — the same evidence-shape failure class as c
 `grep -v platform` exit check. `diagnostics.py` now implements both bounds (report-only per
 D-02), and `tests/unit/test_platform_labeling_classifier2.py` carries a `strict=True` xfail
 recording classifier #2's breach, which fails the suite the moment the breach is fixed.
+
+### AMENDMENT ADDENDUM 2026-09-18 — the occupancy table above used non-reproducible figures
+
+The 2026-09-17 amendment scored both variants against the corrected two-sided criterion using the
+occupancy recorded in `07-MEASUREMENTS.md`, and concluded the frozen variant passed the floor on
+all states with state 2 "marginal" at 35.54%. **Those figures do not reproduce.** Measured live on
+2026-09-18 by refitting classifier #1 through `labeling/diagnostics.py::label_regimes` on the
+frozen columns at `first_decision = 1972-01-31`:
+
+| state | recorded 2026-09-14 | measured 2026-09-18 (10 cols, with `oil`) | measured without `oil` (9 cols) |
+|---|---|---|---|
+| 0 | 11.51% | **1.5827%** (11 months) | **1.5827%** |
+| 1 | 9.06% | 13.9568% | 13.9568% |
+| 2 | 35.54% | 33.2374% | 31.9424% |
+| 3 | 31.51% | **39.2806%** | **40.5755%** |
+| 4 | 12.37% | 11.9424% | 11.9424% |
+
+**So classifier #1 breaches §4.4 criterion 1 at BOTH ends on real data** — state 0 at 1.58%,
+far below the ~8% floor, and state 3 at 39.28%, above the ~35% cap. `label_regimes` emits both
+WARNINGs. The "all pass / state 2 marginal" reading in the amendment above is **withdrawn**.
+
+**This was not caused by the `oil` re-splice.** State 0 sits at 1.5827% with and without `oil`, to
+four decimals — verified by refitting on the nine non-`oil` frozen columns. The 2026-09-14 figures
+originate in the same faulty wave-1 recompute that produced D-02-A and the A13 change-point
+re-pin: a features frame rebuilt from a stale `monthly_raw["oil"]` column that no clean rebuild
+reproduces. See `tests/unit/test_platform_monthly_spine_consistency.py` for the mechanism and the
+guard that now prevents it.
+
+**What still stands.** This ADR's decision is unaffected, for the third time and for the same
+reason: it rested on the imputation being non-causal by construction, explicitly *not* on
+occupancy. What is withdrawn is only the corroborating occupancy evidence — and note that the
+rejected variant's 1.29% and the accepted variant's 1.58% are now barely distinguishable, so
+occupancy never separated the two variants at all and should not be cited as though it did.
+
+**What this opens.** Classifier #1's §4.4 criterion-1 compliance is an open defect, not a settled
+fact, and it is out of scope for plan 07-09 which merely surfaced it. It needs the same treatment
+classifier #2 received on 2026-09-18 — a K/λ re-pin against the real criterion, which §4.3
+licenses. Until then, no document should describe classifier #1 as satisfying §4.4 criterion 1.
+
+**Pattern worth naming.** This is the third recorded "verified" number in Phase 7 found to be
+pinned to an artifact no clean rebuild reproduces (criterion 8's grep, D-02-A plus the A13 re-pin,
+and now these occupancy figures). The common shape is a measurement recorded once, by hand, from
+a derived artifact, with nothing asserting it can be reproduced. The consistency test added on
+2026-09-18 closes that hole for the raw/features pair; the occupancy figures had no equivalent
+guard, which is why this survived a week.
