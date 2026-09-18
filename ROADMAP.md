@@ -64,6 +64,54 @@ GARCH(1,1)/EWMA per asset; **vol targeting** overlay (size ∝ 1/σ̂); regime-c
 ### T0.8  Wire in `feature_gating.py` (causal-feature guard)  `S`  (R5, §8.2, salvaged)
 Enforce `features_supervised.parquet` (causal) for L2 training; `--allow-noncausal-features` opt-in falls back with a loud warning. Cheap, and it locks in the L1-may-see-future / L2-may-not invariant the whole design rests on. Do early alongside T0.1.
 
+### T0.9  Registered nested selection inside the walk-forward loop  `XL`  (R7/R14, §8.4, §22)
+**Raised by Glenn at the Phase 7 wave-2 decision checkpoint (2026-09-17), deferred to keep that
+phase's trial budget honest.** Today every feature set and hyperparameter that a model needs
+(classifier #1's lean 13 and λ=52; classifier #2's frozen list, K and λ; any future blend weight)
+is **pinned by construction before fitting**, because D-13 forbids spending selection trials on
+them and the apparatus to select honestly does not exist. That is a workaround, not a design:
+dimensionality reduction, feature selection and hyperparameter search are things an ML system
+should do.
+
+The blocker is not the selection — it is doing it *without leaking and without lying about the
+denominator*. Concretely this item needs:
+- selection refit **inside each walk-forward step** on data ≤ t only (a single global selection
+  pass over the full history is look-ahead bias, P1/P4, no matter how clean the CV looks);
+- purged/embargoed inner folds (T0.5) so the inner selection loop does not leak through
+  overlapping h-month labels;
+- an accounting rule for the trial registry — an inner selection loop evaluates hundreds of
+  configurations, and D-16's deflated-Sharpe denominator currently counts one row per run. Either
+  the inner search is registered in aggregate with a defensible effective-trial count, or the
+  deflated Sharpe silently understates how much searching produced the headline number.
+
+Until then, constants stay pinned in ADRs. **Blocked on:** T0.5.
+
+### T0.10  Learned regime-conditional allocation (interaction-aware L3/L4)  `XL`  (R9, §6.2, §7)
+**Raised by Glenn at the same checkpoint (2026-09-17).** Proposal: rather than combining two
+regime labelings by a fixed weight, one-hot encode the (regime₁, regime₂) combinations as
+features and let feature selection determine which interaction cells carry signal — dropping
+regime₂ entirely if it is unpredictive, keeping only the cells that are.
+
+This cannot be expressed in the current stack, and the reason is worth recording: **there is no
+learner at L3 or L4.** `assets/returns.py::returns_by_regime_stats` is descriptive statistics
+(mean/std/Sharpe/hit-rate/maxDD/n_obs per regime × asset) — its docstring states it is "NOT an
+evaluated model configuration or a supervised-learning target" and is deliberately exempt from
+the trial registry and purged CV. `allocation/tilt.py::regime_tilt_weights` then takes a
+probability-weighted average of that table. No coefficients, no design matrix. A one-hot feature
+scheme presupposes a supervised learner that would have to be built, which makes this an L3/L4
+replacement rather than a parameter change — hence its own item.
+
+Two constraints for whoever picks this up:
+- **Cell thinness does not go away under one-hot.** A (regime₁, regime₂) cell holding 8 months
+  produces a column with 8 nonzero rows. Selection will either drop it — collapsing back toward
+  the marginals, i.e. approximately the fixed blend — or retain it on 8 observations and overfit.
+  At ~590 decision months and K₁×K₂ = 15, the expectation is mostly collapse. That is a prior to
+  be tested, not a measured result.
+- Reversing D-14 changes the allocation input contract and invalidates any lift-vs-#1-alone
+  comparison measured under the blend, so prior criterion-7 numbers do not carry over.
+
+**Blocked on:** T0.7 (covariance layer), T0.9 (honest selection).
+
 ---
 
 ## Phase Progress

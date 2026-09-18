@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 7
 current_phase_name: Regime Representation
-status: executed
-stopped_at: Phase 7 phase-wave 1 executed (4/4 plans); wave 2 needs its own /gsd-plan-phase 7 pass
-last_updated: "2026-09-15T01:00:00.000Z"
-last_activity: 2026-09-15
-last_activity_desc: Phase 7 phase-wave 1 executed end to end — A13/A15 resolved, D-02-A recompute landed, ADR-0001 written, suite 1705 → 1735
+status: in-progress
+stopped_at: "Completed 07-08-PLAN.md (ADR-0002 Proposed, classifier #2 fit)"
+last_updated: "2026-09-17T20:22:34.389Z"
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 39
-  completed_plans: 39
+  total_plans: 47
+  completed_plans: 43
+current_phase: 7
+last_activity: 2026-09-17
+last_activity_desc: "Phase 7 plan 07-08 executed — ADR-0002 at Proposed before the fit, classifier #2 fit on the disjoint Lean 8 (occupancy 15.37/46.12/38.51%, 1963-01 → 2020-12), suite 1844 → 1873"
 ---
 
 # Project State
@@ -29,7 +29,30 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **7 — Regime Representation**
-Status: **PHASE-WAVE 1 CLOSED.** Executed 4/4, verified 4/4 criteria by live re-derivation
+Status: **WAVE 1 CLOSED · WAVE 2 PLANNED (8 plans, `07-05`…`07-12`, checker PASS 2026-09-15).**
+
+| Plan | Wave | Depends | Auto | Delivers |
+|---|---|---|---|---|
+| 07-05 | 1 | — | yes | **tracer** — `sort_column` fix (raises), relative-features port, M2SL/TOTALSL config |
+| 07-06 | 1 | — | yes | deflated Sharpe from scratch + `total_trial_count` reading the header |
+| 07-07 | 2 | 05 | yes | INV-01 screen — PCA discovery-only, era stability, named survivors |
+| 07-08 | 3 | 05,07 | **no** | `checkpoint:decision` pinning 6 constants · ADR-0002 Proposed · classifier #2 fit |
+| 07-09 | 4 | 08 | **no** | criterion 6 — ARI/NMI/Cramér's V, no gate · human-verify |
+| 07-10 | 4 | 08 | **no** | `blend_regime_tilts` · human-verify confirming the four `[ASSUMED]` bands |
+| 07-11 | 5 | 06,09,10 | yes | criterion 7 — joint lift + DSR, window inline |
+| 07-12 | 6 | 07,09,11 | yes | ADR-0002 Accepted · 8 probe edges · REG-01 + INV-01 claimed |
+
+**Both requirements are now CLAIMED** — wave 1's plans carried `deferred_requirements: [INV-01]`;
+that deferral ends here. **Three blocking checkpoints**: 07-08 decision, 07-09 and 07-10 human-verify.
+
+**The sequencing that matters** (verified, not asserted): the `canonicalize_states` `sort_column`
+fix is wave **1**; the first classifier-#2 fit is wave **3**. The band-confirmation checkpoint is
+wave **4**; the first joint-lift number is wave **5**. Both gaps are structural, not conventional.
+
+---
+
+### Previously: **PHASE-WAVE 1 CLOSED.** Executed 4/4, verified 4/4 criteria by live re-derivation
+
 (`07-VERIFICATION.md`), validated `nyquist_compliant: true` (`07-VALIDATION.md`), UAT signed
 **accept-with-caveats** 2026-09-15 (`07-UAT.md`, 3/3 items closed). Suite **1752 passed, 0 skipped**. Wave 2 remains deliberately unplanned per D-09
 and needs its own `/gsd-plan-phase 7` pass. Suite 1705 → **1735 passed, 0 skipped**.
@@ -97,12 +120,16 @@ explicit note that **D-16's project total = 38 + rows appended after the header*
 post-reset row count must not be read as the project total.
 
 Three structural fixes so it cannot recur:
+
 - `append_trial` **refuses** to persist a row without a non-empty `trial_tag` (blank and
   whitespace rejected; a refused write leaves no file).
+
 - New `NO_REGISTRY` sentinel: smoke runs build the row, log the skip, return `written=False`,
   write nothing — and are exempt from the tag requirement, because a smoke run is not a trial.
+
 - The report CLI now **requires** `--trial-tag` or `--smoke` (mutually exclusive). The exact
   invocation that caused this can no longer be typed; bare `python -m ...report` exits non-zero.
+
 - `run_backtest` / `fit_nowcaster` / `run_walkforward` default to naming their own call site, so
   every persisted row is attributable without breaking callers.
 
@@ -121,7 +148,7 @@ again to plan wave 2 with real numbers in hand (D-09).
 `deferred_requirements: [INV-01]` (entirely wave 2, D-09 cited). Recorded as a decision, not
 an omission.
 
-**Resume file:** `.planning/phases/07-regime-representation/07-01-PLAN.md`
+**Resume file:** None
 
 ### ⚠ Carried into execution — three things that are not settled
 
@@ -309,7 +336,7 @@ scoring now uses it — **required, not cosmetic**: it scores
 2020 as "today" every week. Three tests pin the wiring specifically and fail
 against the unwired code.
 
-Progress: [███████▌░░] 75% (6 of 8 phases)
+Progress: [███████▌░░] 75% (6 of 8 phases; phase 7 in flight, 8 of its 12 plans done)
 
 ### Roadmap restructure (2026-08-04)
 
@@ -332,6 +359,7 @@ quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analy
 
 - Total plans completed: **35 of 35** written (7 + 5 + 4 + 5 + 7 + 7 across Phases 1–6);
   Phase 7 plans are TBD.
+
 - Full test suite: **1705 collected, 0 skipped** (re-verified 2026-09-14 on `main` @ `c6605a4`;
   unchanged since Phase 6 closure).
 
@@ -362,6 +390,7 @@ numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
 | Phase 05 P05 | 22min | 3 tasks | 2 files |
 | Phase 05 P06 | 7min | 3 tasks | 2 files |
 | Phase 06 P01 | 55min | 3 tasks | 11 files |
+| Phase 7 P08 | 1 session | 3 tasks | 6 files |
 
 *Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
 *Updated after each plan completion.*
@@ -398,11 +427,14 @@ Recent decisions affecting current work:
 - [Phase 05-06]: run_full_backtest_evaluation computes the smoothed-vs-filtered gap via a hindsight-oracle vol_targeted_tilt driven by the full-sample smoothed states at each real walk-forward decision date (never inventing new allocation math) rather than a simpler point-estimate proxy — matches the design's non-causal batch-labeling doctrine and keeps the gap input genuinely distinct from the filtered strategy performance (Pitfall 1).
 - [Phase 05-06]: The investable asset_returns universe fed to run_backtest excludes the 'cash' splice class (FZFXX) — cash is never tilted into as a risk position; it is the vol-target residual that earns cash_ret directly via run_backtest's cash_returns parameter (review F4).
 - [Phase ?]: 06-01: D-01 fresh-package boundary verified via static AST import-graph closure (not sys.modules) to survive test-order pollution
+- [Phase ?]: 07-08: classifier #2 pinned before the fit (Lean 8, K=3, lambda=32.0=4n, sort_column=rs_equities_bonds, blend_weight_1=0.50) and recorded in ADR-0002 at Proposed
+- [Phase ?]: 07-08: criterion-7 routing is L1 decision-bearing / L2 observational via NO_REGISTRY, firewalled from D-16/D-17/DSR — a fourth option, not one of the plan's three
 
 ### Pending Todos
 
 - **Release-engineering tech debt, recorded as `ROADMAP.md` Tier 0.5 (R1–R4), deferred
   deliberately 2026-09-11/14 — none block Phase 7, but R1 touches it directly.**
+
   - **R1 (HIGH)** — partial ingestion silently degrades `monthly_features` while the
     checkpoint merge repairs `monthly_raw` from disk, concealing it. Observed 2026-09-11:
     a lost `fred_aaa` meant `credit_spread_baa_aaa` was never derived; features went
@@ -410,10 +442,13 @@ Recent decisions affecting current work:
     features in the frozen common-support set Phase 7 D-02 locks** — a silent loss changes
     the frozen set from 9 to 8. Caught only because a real-data test is pinned to the
     seven A13 change points.
+
   - **R2 (MED)** — `build-pkg` CI builds both packages but never installs them, so an
     empty wheel can reach `main` and stay invisible until release.
+
   - **R3 (LOW)** — legacy `trading_crab_lib.plotting` raises a bare `ModuleNotFoundError`
     instead of the guarded `ImportError` naming the extra.
+
   - **R4 (MED, Phase 7 relevant)** — the enumerated `[tool.setuptools] packages` list is
     unguarded by any test, and the publish smoke test imports only the top-level package.
     A new Phase 7 subpackage omitted from that list would ship missing with every gate
@@ -501,8 +536,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-14/15 — status reconciliation, Phase 7 wave-1 planning, then full execution
-Stopped at: Phase 7 phase-wave 1 executed 4/4 — wave 2 needs `/gsd-plan-phase 7`
+Last session: 2026-09-17T20:22:26.885Z
+Stopped at: Completed 07-08-PLAN.md (ADR-0002 Proposed, classifier #2 fit)
 Resume file: .planning/phases/07-regime-representation/07-04-SUMMARY.md (then ADR-0001's
 "Deferrals and open items" for wave 2's starting point)
 

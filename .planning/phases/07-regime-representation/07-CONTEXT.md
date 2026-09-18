@@ -1,7 +1,71 @@
 # Phase 7: Regime Representation - Context
 
 **Gathered:** 2026-09-10
-**Status:** Ready for planning — **WAVE 1 ONLY** (see D-09)
+**Status:** wave 1 CLOSED (verified 4/4, validated, UAT accept-with-caveats 2026-09-15).
+**Now open for WAVE 2 planning** — see the WAVE-2 OPENING AMENDMENT below.
+
+> D-09 said wave 2 gets a second planning pass "with the actual numbers in hand." Those numbers
+> are now in hand, and four of wave 2's recorded premises moved. Read the amendment before
+> treating D-10…D-17 as settled.
+
+---
+
+## WAVE-2 OPENING AMENDMENT (2026-09-15)
+
+Wave 1's execution changed four premises that D-10…D-17 were written against. None of the
+decisions is withdrawn; each needs re-reading against the corrected facts.
+
+**1. Criterion 8 is FALSE — `platform/` DOES import from the legacy library.**
+ROADMAP's "(Verified 2026-09-10: platform is currently fully decoupled)" rested on
+`MIGRATION-PLAN.md`'s exit grep, which ends in `| grep -v platform`; every match line begins
+with a path containing `platform`, so it discarded every violation and **could not fail**. An
+AST scan finds **31 real legacy import sites** (bare `trading_crab_lib` ×16, `.checkpoints` ×7,
+`.ingestion.*` ×7, `.email` ×1). All predate Phase 7; wave 1 added none.
+**Effect on wave 2:** D-10/D-11's "port the relative-strength algorithms, don't import them"
+**still stands** — but because the coupling must not be *widened*, not because `platform/` is
+already clean. Now enforced by `tests/unit/test_platform_legacy_import_ratchet.py`, a ratchet
+pinned at 31 that may only decrease. **Wave 2 must not raise it.**
+
+**2. D-16's registry premise moved — the ledger was reset.**
+Wave 1 appended 4 untagged rows from wiring-verification runs; because D-16 deflates Sharpe over
+the whole registry, they inflated the trial count. The ledger was archived intact to
+`registry/archive/trials-pre-P7W1-reset.jsonl` (42 rows) and restarted with a **provenance
+header** carrying `prior_genuine_trials=38`, `discarded_smoke_rows=4`.
+**Effect on wave 2:** D-16's "whole registry since project start" now means
+**38 + rows appended after the header** — NOT the raw post-reset row count. Criterion 7's
+deflated-Sharpe denominator must read the header. `append_trial` now **refuses** untagged rows;
+`NO_REGISTRY` exempts smoke runs; the report CLI requires `--trial-tag` or `--smoke`.
+
+**3. `canonicalize_states` conflicts with D-10 — a blocking landmine, flagged pre-wave-1.**
+Its default sort key is `trailing_return_1m`, which is one of classifier #1's 13 columns. D-10
+asserts disjointness on those 13, so classifier #2 **always** hits the "fallback to centroid
+column 0" warning path. **Wave 2 must decide #2's own sort convention BEFORE #2 is fit** —
+otherwise state IDs are assigned by a degenerate fallback and every occupancy/dependence number
+downstream is computed against arbitrary labels.
+
+**4. L2 degradation narrowed the comparison window, and wave 2 inherits it.**
+The frozen policy degraded **232/588** L2 steps (vs 118 pre-fix), so wave-1 measurements rest on
+356 steps ending **2017-05** against a 470-step baseline ending 2020-12. Cause: L2 degrades when
+any class in a training window has fewer than `n_splits` examples (`driver.py:161-163`), and
+freezing L1 changed the label sequence. Verified **not** a wiring defect —
+`frozen_l1_features` reaches only `_refit_l1` (`:461`, `:473`); `_refit_l2` (`:266-271`) takes no
+such parameter.
+**Effect on wave 2:** criterion 7's joint-lift comparison inherits the same narrowed window.
+Resolving it is a **design decision needing its own ADR** — either make L2's CV robust to rare
+classes, or move §5.4 off L2's `proba` onto L1's own filtered labels (which changes what §5.4
+measures, the thing D-01 was chosen to protect). **Decide this explicitly; do not let wave 2
+quietly measure joint lift on a window it never acknowledges.**
+
+**5. Four `[ASSUMED]` plausibility bands are now load-bearing.**
+`abs(wealth_delta) < 5`, `dd_delta ∈ [-0.5, 0.5]`, `n_transitions > 30` implausible,
+`pct_disagree < 0.02` suspicious. D-07 kept them advisory through wave 1, so nothing turned on
+their values. **Criterion 7 judges against them — confirm or revise all four before then.**
+
+**Wave-1 reference numbers wave 2 compares against** (all re-derived live, `07-MEASUREMENTS.md`):
+frozen set **10** columns; §5.4 ratio **0.60145 (7/7 resolved)**; `pct_disagree` **0.80899
+(288/356)**; `wealth_delta` **+0.377847**; `dd_delta` **−0.066124**; strategy terminal log wealth
+**4.025085**, max DD **−26.42%**; occupancy 11.51/9.06/35.54/31.51/12.37%. Strategy is still
+**last of five legs**; Faber 6.3726 / −18.94% beats it on both §23.1 axes.
 
 <domain>
 ## Phase Boundary
@@ -215,7 +279,7 @@ and absorbs **INV-01**.
   hysteresis gates nothing; weights come from `vol_targeted_tilt(regime_probs, …)` in both
   the backtest driver and the weekly report. A product space would also thin badly (K₁ × K₂
   cells over ~590 decision months, with occupancy never uniform, so rare cells fall below
-  the §4.4 5% floor). Keeping two inputs makes the lift-vs-#1-alone comparison a clean
+  §4.4's ~8% floor (§4.4 crit. 1 is ~8%–~35%; see ADR-0001 § AMENDMENT 2026-09-17)). Keeping two inputs makes the lift-vs-#1-alone comparison a clean
   single-change ablation. — **Reversibility:** costly — switching to a product space later
   changes the allocation input contract and invalidates the lift comparison.
 

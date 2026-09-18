@@ -1,440 +1,472 @@
-# Phase 7 (Wave 1 only): Regime Representation - Pattern Map
+# Phase 7 (Wave 2): Regime Representation - Pattern Map
 
-**Mapped:** 2026-09-14
-**Scope:** Wave 1 deliverables only (feature-policy unification, criteria 1-4, ADR). Wave 2
-(leadership classifier, relative-strength features, INV-01) is out of scope for this pass —
-see the "Wave 2 — not this pass" appendix at the end for the few observations worth carrying
-forward, per the orchestrator's instruction to keep that section minimal.
+**Mapped:** 2026-09-15
+**Scope:** WAVE 2 ONLY — criteria 5, 6, 7 + INV-01. Criteria 1–4 (wave 1) are closed; this
+file **overwrites** wave 1's pattern map. Wave 1's patterns are preserved in its SUMMARYs and
+`platform_design/adr/0001-l1-feature-policy.md` — not repeated here.
 
-**Files analyzed:** 9 (5 modified library files, 1 new script, 3 test files touched/extended)
-**Analogs found:** all in-repo — this phase is a restructuring of existing correct functions,
-not new algorithm work, so every "analog" is the function being modified itself or its
-immediate sibling in the same module.
+**Files analyzed:** 7 new/modified files (+ config additions)
+**Analogs found:** 5 / 7 direct analogs; 1 partial (no analog — new convention needed); 1 "no
+code exists yet" (deflated Sharpe)
 
 ---
 
 ## File Classification
 
-| File | Role | Data Flow | Closest Analog | Match Quality |
+| New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |---|---|---|---|---|
-| `platform/backtest/driver.py::_refit_l1` | labeling (L1 fit, per-step) | batch/CRUD-like (fit-predict) | `evaluation/report.py::_reference_label_columns` (the function it must now call) | exact — same policy, different caller |
-| `platform/evaluation/report.py::run_full_backtest_evaluation` | orchestration (evaluation) | batch | itself (reordering only — `first_decision` computed earlier) | exact — self-analog |
-| `platform/evaluation/sojourn_lag.py` | evaluation metric | transform | unchanged — pattern source for "already does the right thing" | n/a (no changes needed) |
-| `platform/plotting/core.py::A13_CAVEAT` | reporting/plotting constant | transform | itself (string content edit only) | exact |
-| new: `scripts/recompute_monthly_features.py` (or similarly named) | script / one-off CLI | batch, offline recompute | `scripts/build_platform_data.py` (structure/CLI shape) + `honesty/holdout.py::write_monthly_features_split` (the actual write call) | role-match — `build_platform_data.py` is the sibling script but does full ingest, NOT what this needs |
-| `tests/unit/test_platform_backtest_driver.py` (new equivalence test) | test (unit, equivalence) | request-response (assert-only) | `tests/unit/test_platform_evaluation_report.py::TestReferenceLabelColumns` (lines 334-366) | exact — same function under test, extend to compare against driver output |
-| `tests/unit/test_platform_evaluation_report.py` | test (unit) | request-response | itself — `TestReferenceLabelColumns`, `TestSmoothedHindsightUniverse` | exact |
-| `tests/unit/test_platform_evaluation_sojourn_lag.py` | test (unit) | request-response | itself — extend for `n_resolved`/`n_transitions` assertions already present in the source | exact |
-| `tests/unit/test_platform_plotting_regime.py:206` (`test_real_dev_features_reproduce_the_seven_a13_change_points`) | test (golden/pinned regression) | request-response | itself — re-pin `EXPECTED_CHANGE_POINTS` (lines 36-43) | exact — no OTHER re-pinning precedent exists in the repo (see finding #3 below) |
-| ADR document (new) | documentation | n/a | **no analog found** — see finding #5 | n/a |
+| `platform/labeling/jump_model.py` (edit: `canonicalize_states`) | utility (labeling) | transform | itself, pre-edit (4 existing call sites) | exact — additive signature change |
+| `platform/features/relative.py` (new) | utility (feature engineering) | transform / batch | `src/trading_crab_lib/momentum.py` (legacy, **pattern-only, do not import**) | role-match, cadence differs (quarterly→monthly) |
+| `platform/evaluation/dependence.py` (new, or extend `disagreement.py`) | service (evaluation) | transform | `platform/evaluation/disagreement.py::measure_label_disagreement` | exact |
+| `platform/evaluation/deflated_sharpe.py` (new) | utility (statistics) | transform | none in-repo — Bailey–López de Prado (2014) formula, hand-implemented | **no analog found** |
+| `platform/allocation/joint_tilt.py` (new) | service (allocation) | transform | `platform/allocation/tilt.py::regime_tilt_weights` / `vol_targeted_tilt` (composed, not extended) | partial — composition of two existing pure functions, blend step itself is new |
+| `platform/honesty/registry.py` (edit or new helper `total_trial_count`) | utility (honesty) | CRUD (read) | `read_trials()` (same file, extend) | exact |
+| `config/platform_settings.yaml` (edit: `fred_monthly.series` + M2SL/TOTALSL) | config | batch (ingestion) | `config/platform_settings.yaml:21-48` (existing `fred_monthly.series` block, e.g. `WTISPLC`) | exact |
+| `tests/unit/test_platform_labeling.py` (extend) | test | request-response | existing `TestCanonicalizeStates` class in same file | exact |
+| `tests/unit/test_platform_features_relative.py` (new) | test | transform | `tests/unit/test_platform_ingestion_macro_monthly.py` (fixture/mocking shape) | role-match |
+| `tests/unit/test_platform_evaluation_dependence.py` (new) | test | transform | `tests/unit/test_platform_evaluation_disagreement.py` (if exists) or `test_platform_labeling.py`'s oracle-test shape | role-match |
+| `tests/unit/test_platform_evaluation_deflated_sharpe.py` (new) | test | transform | Phase 3's DP-decode oracle test (brute-force-vs-formula pattern, cited in RESEARCH) | pattern-only |
+| `tests/unit/test_platform_allocation_joint_tilt.py` (new) | test | transform | `tests/unit/test_platform_allocation_tilt.py` (if exists — same module family) | role-match |
 
 ---
 
 ## Pattern Assignments
 
-### 1. The equivalence test (criterion 1) — closest cousin found, quoted
+### 1. `canonicalize_states` — add `sort_column` keyword-only parameter
 
-**No prior "two computations must produce the same list" test exists in this repo.** The
-closest and *intended* cousin — per RESEARCH.md's own "Don't Hand-Roll" table and Code
-Examples section — is `TestReferenceLabelColumns` in
-`tests/unit/test_platform_evaluation_report.py:334-366`, which tests
-`_reference_label_columns` **in isolation** today. It is not yet an equivalence test; it is
-the *foundation* the new equivalence test extends, because the shared-call-site design (D-01/
-Pattern 1) means the driver's `_refit_l1` should stop having its own logic and instead consume
-this same function's output.
+**Analog:** the function itself, pre-edit — `src/trading_crab_lib/platform/labeling/jump_model.py:214-221` (verified this session per RESEARCH Code Examples).
 
-Quoted verbatim (`tests/unit/test_platform_evaluation_report.py:334-353`):
-
+**Current (the landmine):**
 ```python
-class TestReferenceLabelColumns:
-    """The full-sample smoothed reference must span EVERY decision date (the
-    walk-forward now labels pre-1990 under approach ii), so it keeps long-history
-    columns and drops structural late-starts."""
-
-    def test_drops_late_start_keeps_warmup_and_complete(self):
-        idx = pd.date_range("1962-01-31", periods=240, freq="ME")
-        first_decision = idx[120]  # ~1972, like min_train=120
-        df = pd.DataFrame(index=idx)
-        df["complete"] = np.arange(240, dtype=float)
-        df["warmup_only"] = np.arange(240, dtype=float)
-        df.iloc[:3, df.columns.get_loc("warmup_only")] = np.nan       # NaN only pre-1962Q1 (< first_decision)
-        df["late_start"] = np.arange(240, dtype=float)
-        df.iloc[:180, df.columns.get_loc("late_start")] = np.nan       # NaN through ~1977 (> first_decision)
-
-        ref = report._reference_label_columns(df, list(df.columns), first_decision)
-
-        assert "complete" in ref        # present across decision range
-        assert "warmup_only" in ref     # NaN only before the first decision → kept
-        assert "late_start" not in ref  # NaN within the decision range → dropped
+# jump_model.py:214-221
+if "trailing_return_1m" in feature_names:
+    sort_col = feature_names.index("trailing_return_1m")
+else:
+    sort_col = 0
+    log.warning(
+        "trailing_return_1m not in feature_names — falling back to centroid "
+        "column 0 for canonicalization sort order"
+    )
 ```
 
-**How the new equivalence test should be shaped to match house style:**
-
-- **Location:** `tests/unit/test_platform_backtest_driver.py` (per VALIDATION.md's own
-  automated command: `pytest tests/unit/test_platform_backtest_driver.py -k equivalence -x`).
-- **Form — sample a few decision dates, not parametrize over all 588.** House style for
-  "spans a walk-forward" assertions in this codebase samples rather than exhaustively
-  parametrizes when the check is O(1) per date and the underlying property is structural (see
-  `test_platform_plotting_regime.py`'s own `active_feature_count_timeline` tests, which check
-  a handful of specific index positions — `idx[29]`, `idx[30]` — not every row). Sample the
-  first decision date, a mid-range date, and the last dev-window date.
-- **Real-checkpoint-dependent variant: skip via `pytest.mark.skipif` exactly like
-  `REAL_MONTHLY_FEATURES`.** Quoted pattern from `tests/unit/test_platform_plotting_regime.py:29-32,202-206`:
-
+**Target shape (RESEARCH Pattern 1, quoted verbatim as the recommended fix):**
 ```python
-REAL_MONTHLY_FEATURES = Path("data/checkpoints/platform/monthly_features.parquet")
-...
-@pytest.mark.skipif(
-    not REAL_MONTHLY_FEATURES.exists(),
-    reason="real platform monthly_features checkpoint not present",
-)
-def test_real_dev_features_reproduce_the_seven_a13_change_points(self):
-    ...
+def canonicalize_states(
+    states: np.ndarray,
+    centroids: np.ndarray,
+    feature_names: list[str],
+    *,
+    sort_column: str = "trailing_return_1m",
+) -> tuple[np.ndarray, np.ndarray]:
+    if sort_column not in feature_names:
+        raise ValueError(
+            f"sort_column={sort_column!r} not in feature_names — a canonicalization "
+            "sort column must be present in the fitted feature set. Pass the caller's "
+            "own defining column explicitly (never rely on a silent fallback)."
+        )
+    sort_col = feature_names.index(sort_column)
+    order = np.argsort(centroids[:, sort_col])
+    remap = {old: new for new, old in enumerate(order)}
+    new_states = np.array([remap[s] for s in states])
+    return new_states, centroids[order]
 ```
-  The criterion-1 equivalence test should have **two variants**: (a) a synthetic-DataFrame unit
-  test (no skip, always runs, mirrors `TestReferenceLabelColumns`'s synthetic-index style) that
-  proves the driver's `_refit_l1(frozen_features=...)` uses EXACTLY the list passed in, filtered
-  only for column presence; and (b) an integration-shaped test against the real checkpoint,
-  gated by the SAME `REAL_MONTHLY_FEATURES.exists()` skip idiom, asserting
-  `_reference_label_columns(...)` and the driver's active-column list are byte-identical at the
-  sampled dates. **This mirrors the existing two-tier pattern already in the repo** (synthetic
-  unit test + skippable real-checkpoint test) rather than inventing a third shape.
-- **What the test must assert is NOT true before the fix:** a companion `xfail`/inverse
-  assertion is not needed — the fix removes the second computation entirely, so there is
-  nothing left to diverge; the test simply must fail today (before the fix) because
-  `_refit_l1` currently has no `frozen_features` parameter at all.
+
+**Transfers cleanly — confirmed:**
+- Keyword-only, defaulted parameter matches this codebase's established shape for additive,
+  backward-compatible signature changes: `backtest/driver.py`'s `frozen_l1_features` and
+  `trial_tag` parameters, and `run_backtest`'s `min_train: int | None = None` (both cited by
+  the orchestrator as the precedent to match). This edit follows that shape exactly —
+  keyword-only via `*`, defaulted to reproduce current behavior byte-for-byte.
+- All 4 existing call sites (`driver.py::_refit_l1` line 262, `evaluation/report.py` line 924,
+  `labeling/diagnostics.py::label_regimes` line 286, and one more — RESEARCH says "4 existing
+  call sites" but names 3; verify the 4th at implementation time) never pass `sort_column`
+  today, so the default reproduces current behavior. Classifier #1 always has
+  `trailing_return_1m` in its frozen 10-column set (D-02-A), so it can never hit the new
+  `ValueError`.
+- **No existing test pins the old warning-and-fallback behavior** — confirmed by RESEARCH via
+  grep across `tests/unit/test_platform_labeling.py`: the file's only `caplog`-based WARNING
+  test (`TestReportDiagnosticsReportOnly::test_violation_warns_but_does_not_raise`) covers a
+  *different* warning (the §4.4 occupancy floor), not this fallback. **No re-pin is needed**
+  for this specific change (contrast with the change-point re-pin wave 1 required — that one
+  DID have a pinned regression test; this one does not).
+
+**Test analog:** extend the existing `TestCanonicalizeStates` class in
+`tests/unit/test_platform_labeling.py` with two new cases (RESEARCH Code Examples, quoted):
+one asserting no fallback warning fires when `sort_column` is present, one asserting
+`pytest.raises(ValueError, match="sort_column")` when absent.
 
 ---
 
-### 2. Threading a frozen column list through the walk-forward loop — is there prior art?
+### 2. Window-constant re-derivation for monthly cadence (relative-strength port)
 
-**No prior art for a `frozen_features`-shaped parameter exists anywhere in `platform/`.** This
-is genuinely new, but the *shape* of the addition matches an already-established convention:
-**an explicit, keyword-only `X | None = None` parameter with a documented fallback**, exactly
-like `run_backtest`'s own `min_train: int | None = None` (`driver.py:274`) and
-`registry_path: Any = None` (`driver.py:277`). Quote from the existing signature
-(`driver.py:269-278`):
+**Analog (platform-native, for module shape/conventions):**
+`src/trading_crab_lib/platform/ingestion/macro_monthly.py:1-30` (docstring) — this is the
+established in-repo precedent for "the legacy version of this exists at quarterly cadence;
+this is its monthly analog, ported not imported, with the resample rule and every numeric
+constant re-derived, not copied":
 
 ```python
-def run_backtest(
-    monthly_features: pd.DataFrame,
+# platform/ingestion/macro_monthly.py:1-13 (docstring, verbatim)
+"""
+Monthly macro/long-history raw ingestion (DATA-01).
+
+The incumbent quarterly pipeline's fetchers (``ingestion/fred.py``,
+``ingestion/multpl.py``, ``ingestion/macrotrends.py``) all hardcode a
+period-end quarterly resample rule internally — reusing them verbatim would
+silently keep quarterly cadence and defeat this phase's entire purpose
+(RESEARCH Pitfall 1).
+This module writes thin monthly analogs that reuse the same client
+construction / parallel-fetch / scrape-and-parse patterns but target
+``"ME"`` (month-end) instead, without editing any frozen incumbent file
+(D-01).
+"""
+```
+
+This is **exactly** the shape `platform/features/relative.py` must follow: same
+client-construction/algorithm pattern as the legacy source, resample/window unit re-derived
+for monthly, ported not imported, header comment naming the source module and the reason.
+
+**Legacy source (pattern only — port the algorithm, never import):**
+`src/trading_crab_lib/momentum.py` — verified this session to have **zero**
+`trading_crab_lib`-internal imports (only `numpy`, `pandas`, `logging`, `typing`), so the
+port itself cannot widen the legacy-import ratchet as long as the import statement (not the
+function body) is not copied.
+
+| Function | Legacy default (quarterly) | Re-derived default (monthly) | Source lines |
+|---|---|---|---|
+| `compute_relative_strength` pairs | n/a (ratio math, unit-agnostic) | unchanged — pure ratio | `momentum.py:77-110` |
+| `compute_rolling_cross_correlation` window | `window=8` "quarters" (≈24 months) | **24** months | `momentum.py:123-157` |
+| `compute_trailing_momentum` windows | `windows=[2, 4, 8]` (quarters ≈ 6/12/24mo) | **[6, 12, 24]** months | (same module, per RESEARCH Pitfall 5) |
+| `compute_inflation_acceleration` | period-agnostic (2nd derivative) | unchanged — no window constant | `momentum.py:162-180` |
+
+**Concrete port instruction:** copy function **bodies** (not `from momentum import ...`) into
+`platform/features/relative.py`, with an attribution comment naming source file + line range
+(mirrors the pattern used elsewhere in this repo for "ported, never imported" seams — contrast
+`platform_settings.yaml`'s macrotrends comment, `config/platform_settings.yaml:103-104`,
+`"Reused verbatim from trading_crab_lib.ingestion.macrotrends (D-01: import, never edit)"` —
+that is the OPPOSITE convention, for a seam that IS imported; do not confuse the two).
+Rename every docstring "quarterly" reference to "monthly." **Do not port** `compute_rrg` /
+`rolling_zscore` / `percentile_rank` / `normalize_100` from legacy `diagnostics.py` — those are
+tactical/asset-rotation concepts, not regime-labeling inputs, and no D-10/D-11/D-12 candidate
+references them.
+
+**Ratchet guard (must not regress):** `tests/unit/test_platform_legacy_import_ratchet.py`
+performs a whole-tree AST scan (not a diff of new files) pinned at **31**. Adding even one
+`from trading_crab_lib.momentum import ...` anywhere under `platform/` — including inside the
+new module — fails it immediately. Verify with
+`pytest tests/unit/test_platform_legacy_import_ratchet.py -v` after the port lands.
+
+---
+
+### 3. `blend_regime_tilts()` — genuinely new; closest analog and contract to preserve
+
+**Confirmed (per orchestrator + RESEARCH, both independently verified this session):**
+`platform/allocation/tilt.py::vol_targeted_tilt` and `regime_tilt_weights` each accept
+exactly **one** `regime_or_probs` argument — no analog exists for "two probability inputs,
+blended." **This is new code; say so plainly, per the task's own instruction.**
+
+**Closest analog (for call shape/composition, not for the blend logic itself):**
+`platform/allocation/tilt.py` (full file read by RESEARCH this session) — the composable
+three-function pipeline `regime_tilt_weights(...)` → `portfolio_vol(...)` →
+`vol_target_scale(...)`. The new `blend_regime_tilts` must **reuse `portfolio_vol` and
+`vol_target_scale` unmodified**, inserting only a new pre-scaling weight-blend step:
+
+```python
+# NEW — platform/allocation/joint_tilt.py (RESEARCH Pattern 4, quoted)
+def blend_regime_tilts(
+    probs_1: pd.Series, returns_by_regime_1: pd.DataFrame,
+    probs_2: pd.Series, returns_by_regime_2: pd.DataFrame,
     asset_returns: pd.DataFrame,
-    cfg: dict[str, Any],
     *,
-    min_train: int | None = None,
-    cash_returns: pd.Series | None = None,
-    use_regime_tilt: bool = True,
-    registry_path: Any = None,
-) -> tuple[pd.DataFrame, dict[str, list]]:
+    weight_1: float = 0.5,     # fixed, pre-declared — NOT swept (D-13's spirit extended)
+    target_vol_annual: float, halflife: float, min_obs: int,
+) -> dict:
+    """D-14: two SEPARATE probability-weighted tilts, blended at the WEIGHT
+    level, never a product (state_1, state_2) cell."""
+    from trading_crab_lib.platform.allocation.tilt import (
+        regime_tilt_weights, portfolio_vol, vol_target_scale,
+    )
+    tilt_1 = regime_tilt_weights(probs_1.idxmax(), returns_by_regime_1, probs_1)
+    tilt_2 = regime_tilt_weights(probs_2.idxmax(), returns_by_regime_2, probs_2)
+    blended = (weight_1 * tilt_1).add((1 - weight_1) * tilt_2, fill_value=0.0)
+    total = blended.sum()
+    base_weights = blended if total <= 0 else blended / total
+    if base_weights.empty or base_weights.sum() <= 0:
+        return {"weights": pd.Series(dtype=float), "cash": 1.0, "scale": 0.0}
+    port_vol = portfolio_vol(base_weights, asset_returns, halflife=halflife, min_obs=min_obs)
+    scale = vol_target_scale(target_vol_annual, port_vol)
+    return {"weights": base_weights * scale, "cash": 1.0 - scale, "scale": scale}
 ```
 
-RESEARCH.md's own Pattern 1 sketch (which this file independently confirms is grounded in the
-real code, not invented) proposes exactly this shape for `_refit_l1` and `run_backtest`:
+**Output contract to preserve (from `vol_targeted_tilt`, verified this session):** weights
+sum to `scale` (`scale ≤ 1`, `cash = 1 - scale`), long-only clipping upstream in
+`regime_tilt_weights` — the blend function's return dict shape (`{"weights", "cash",
+"scale"}`) mirrors `vol_targeted_tilt`'s own return shape so downstream consumers (backtest
+driver, reporting) need no special-casing for "joint" vs "single" tilts.
+
+**Blend weight must be fixed and declared in the ADR before either classifier's
+walk-forward runs** (0.5 here is illustrative, not prescriptive) — sweeping it is an
+unregistered selection dimension the trial ceiling (D-17/Pitfall 8) does not budget for.
+
+**Wiring choice for the planner (RESEARCH's explicit recommendation):** two independent
+`run_backtest()` calls (one per classifier), combined post-hoc via `blend_regime_tilts` at
+each shared decision date — **not** an invasive extension of `driver.py`'s per-step loop.
+Reasoning: `run_backtest` is heavily tested load-bearing code; composition over two calls to
+already-tested code keeps per-classifier attribution trivial (mirrors D-04's own reasoning
+for wave 1's frozen-cols threading).
+
+**Test analog:** no `test_platform_allocation_joint_tilt.py` file exists yet (Wave 0 gap per
+VALIDATION.md) — model it on whatever existing `tests/unit/test_platform_allocation_*.py`
+covers `vol_targeted_tilt`/`regime_tilt_weights` today (same fixture shape: synthetic
+`returns_by_regime` + `asset_returns` DataFrames), adding degenerate-input cases (empty
+probs, single classifier weight_1=1.0 reduces to `vol_targeted_tilt` exactly).
+
+---
+
+### 4. `measure_labeling_dependence()` — dependence module
+
+**Analog (platform, imitate directly):** `platform/evaluation/disagreement.py` — the closest
+sibling, built in wave 1. It returns a crosstab and carries `suspicious`/`suspicious_reason`
+fields. Confirmed shape via `label_disagreement` (in `platform/plotting/regime.py`, called by
+`disagreement.py`): aligns two label Series on common index, returns `per_state_confusion`
+(a `pd.crosstab`) plus `n_compared`, and defensively coerces `state_N`-string columns while
+guarding the silent-zero-`n_compared` trap.
+
+**Template to extend (RESEARCH Pattern 3, quoted — reuses the crosstab, does not
+reimplement alignment):**
+```python
+# NEW — platform/evaluation/dependence.py (or extend disagreement.py)
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+from scipy.stats.contingency import association
+
+def measure_labeling_dependence(states_1: pd.Series, states_2: pd.Series) -> dict:
+    """D-15: several statistics, no pre-declared threshold. Reuses
+    label_disagreement's alignment/crosstab exactly — never a second
+    alignment implementation."""
+    from trading_crab_lib.platform.plotting.regime import label_disagreement
+    base = label_disagreement(states_1, states_2)   # reuses the SAME crosstab machinery
+    if base["n_compared"] == 0:
+        return {**base, "adjusted_rand": float("nan"), "nmi": float("nan"), "cramers_v": float("nan")}
+    common = states_1.index.intersection(states_2.index)
+    a = states_1.loc[common].to_numpy()
+    b = states_2.loc[common].to_numpy()
+    return {
+        **base,
+        "adjusted_rand": adjusted_rand_score(a, b),
+        "nmi": normalized_mutual_info_score(a, b),
+        "cramers_v": float(association(pd.crosstab(a, b).to_numpy(), method="cramer")),
+    }
+```
+
+All three statistics (`adjusted_rand_score`, `normalized_mutual_info_score`,
+`association(..., method="cramer")`) were live-verified this session against a synthetic
+6-element example (ARI=0.1667, NMI=0.5794, Cramér's V=0.5 for a 2×2 table) — all run
+correctly in this environment; no new dependency required (`sklearn` 1.9.1, `scipy` 1.17.1
+already installed and already used elsewhere in `platform/`).
+
+**No pre-declared threshold (D-15) — report all three side by side.** ARI (pairwise
+clustering-agreement, chance-corrected), NMI (information-theoretic, robust to different K),
+Cramér's V (classical-statistics effect size, single unit-interval number for "at a glance").
+A directional statistic (Theil's U) is explicitly **not** recommended as a fourth addition.
+
+**"Suspiciously clean" check (from VALIDATION.md, mirrors `disagreement.py`'s own
+`suspicious`/`suspicious_reason` posture):** ARI or NMI exactly 1.0 → same underlying labels,
+a wiring bug. All three exactly 0.0 simultaneously → alignment-bug suspicion. Neither is a
+pass/fail gate; both are a "confirm this isn't a bug" prompt.
+
+---
+
+### 5. Deflated Sharpe — no analog exists; new module, sketch provided
+
+**Confirmed: nothing exists.** Grep-verified this session: five `deflat*` hits in `src/`, all
+comments/docstrings, zero function definitions.
+
+**Location recommendation:** `platform/evaluation/deflated_sharpe.py`, alongside
+`platform/evaluation/kpis.py` (sibling evaluation-statistics module) — follows the existing
+one-concept-per-file convention already used by `disagreement.py` and (new) `dependence.py`.
+
+**House pattern for a pure statistical helper with a hand-worked-oracle test:** the strongest
+verification precedent in this project is Phase 3's DP-decode oracle test (brute-force
+enumeration proven identical to the formula across 7 cases) — reach for the same shape here:
+`test_platform_evaluation_deflated_sharpe.py` should assert the DSR formula against a
+hand-computed small-N example (N=1 trial → reduces toward raw significance; N→∞ → DSR→toward
+the null), not merely a shape/existence check (VALIDATION.md's "Evidence-Shape Requirement"
+explicitly names this project's two prior burns from existence/shape-only checks).
+
+**Sketch (RESEARCH Code Examples, quoted — a starting point, not a final implementation; the
+exact `sharpe_variance` estimator is an open ADR decision, not pinned by this sketch):**
+```python
+# NEW — platform/evaluation/deflated_sharpe.py
+# formula per Bailey & López de Prado (2014), "The Deflated Sharpe Ratio"
+import numpy as np
+from scipy.stats import norm
+
+def expected_max_sharpe(n_trials: int, sharpe_variance: float) -> float:
+    euler_mascheroni = 0.5772156649
+    if n_trials <= 1:
+        return 0.0
+    return np.sqrt(sharpe_variance) * (
+        (1 - euler_mascheroni) * norm.ppf(1 - 1.0 / n_trials)
+        + euler_mascheroni * norm.ppf(1 - 1.0 / (n_trials * np.e))
+    )
+
+def deflated_sharpe_ratio(
+    observed_sharpe: float, n_trials: int, sharpe_variance: float,
+    skew: float, kurtosis: float, n_obs: int,
+) -> float:
+    sr0 = expected_max_sharpe(n_trials, sharpe_variance)
+    denom = np.sqrt(1 - skew * observed_sharpe + ((kurtosis - 1) / 4) * observed_sharpe**2)
+    z = (observed_sharpe - sr0) * np.sqrt(n_obs - 1) / denom
+    return float(norm.cdf(z))
+```
+Style must still follow house conventions not shown in the sketch: `from __future__ import
+annotations`, `log = logging.getLogger(__name__)`, type hints on all public functions,
+`# ── Section ──` dividers if the file grows multiple logical blocks, docstring citing the
+paper (Bailey & López de Prado 2014, SSRN 2460551).
+
+**`total_trial_count()` — the provenance-header reader it must call:**
+
+Template/analog: `platform/honesty/registry.py::read_trials` — quoted in full below (its
+"actual shape," per the task instruction) — a bare, header-unaware reader that the new
+function must wrap, not modify:
 
 ```python
-# driver.py::_refit_l1, new signature (RESEARCH.md Pattern 1, confirmed against real code):
-def _refit_l1(train_features, cfg, *, frozen_features: list[str] | None = None) -> pd.Series:
+# registry.py — read_trials is a bare pd.read_json(..., lines=True), no header-awareness
+# (verified this session by reading registry.py in full)
+```
+
+**The live ledger's header row's actual shape** (verified this session, `wc -l
+registry/trials.jsonl` = **1**):
+```json
+{"config_hash": "RESET", "config": {"trial_tag": "REGISTRY-RESET-P7W1", "record_type": "provenance_header", "reset_reason": "...", "archived_to": "registry/archive/trials-pre-P7W1-reset.jsonl", "archived_row_count": 42, "prior_genuine_trials": 38, "discarded_smoke_rows": 4, "deflation_note": "..."}, "features": [], "metrics": {"prior_genuine_trials": 38, "discarded_smoke_rows": 4}, "git_sha": null, "timestamp": "2026-09-15T14:43:46.377815+00:00"}
+```
+`config.record_type == "provenance_header"` is the load-bearing discriminator.
+`config.prior_genuine_trials == 38` is the count to add to post-header rows.
+
+**Correct reader (RESEARCH Pitfall 4, quoted — write as its own tested function, do not
+inline into the DSR module):**
+```python
+def total_trial_count(path=None) -> int:
+    df = registry.read_trials(path)
+    if df.empty:
+        return 0
+    is_header = df["config"].apply(lambda c: isinstance(c, dict) and c.get("record_type") == "provenance_header")
+    prior = int(df.loc[is_header, "config"].apply(lambda c: c["prior_genuine_trials"]).sum()) if is_header.any() else 0
+    return prior + int((~is_header).sum())
+```
+**Warning sign to avoid:** `len(registry.read_trials())` directly, or hardcoding `38`/`42` as
+a literal offset — both repeat the "34, then 38, then 42 — all stale the moment you write them
+down" failure wave 1's own ADR documents.
+
+---
+
+### 6. INV-01 ingestion — M2SL and TOTALSL
+
+**Analog (platform, imitate directly):** `config/platform_settings.yaml:21-48`, the existing
+`fred_monthly.series` block — same shape used for e.g. `WTISPLC`:
+
+```yaml
+# config/platform_settings.yaml:21-48 (existing block, pattern to copy)
+fred_monthly:
+  series:
+    GS10:
+      name:  "fred_gs10"
+      shift: false
     ...
-    if frozen_features is not None:
-        active = [c for c in frozen_features if c in train_features.columns]
-    else:
-        active = _window_active_features(train_features, lean_cols, min_history=min_history)
-    ...
+    WTISPLC:
+      name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
+      shift: false
 ```
 
-This is **not config-threading** (no new `cfg["backtest"]["frozen_features"]` key is
-appropriate — the frozen list is a *derived, run-specific* value, not a tunable setting) and
-**not a `cfg` sub-dict** — it is a plain keyword argument, matching every other per-run
-derived value `run_backtest` already accepts (`cash_returns`, `min_train`). The planner should
-NOT invent a config key for this; the existing convention is "pass it as an explicit kwarg with
-a `None` default meaning 'compute it the old way,'" already used three times in this exact
-function signature.
-
-**Call-chain consequence to plan explicitly:** `run_backtest` itself needs a new keyword
-(RESEARCH.md's sketch names it `frozen_l1_features`) that it threads into every `_refit_l1`
-call inside the per-step loop (`driver.py:398` and, per F5's ablation-path debug branch,
-`driver.py:386`) — both call sites must receive the same parameter, or the ablation leg's
-(discarded) L1 fit would silently diverge from the strategy leg's.
-
----
-
-### 3. Re-pinning a deliberately falsified regression test — no precedent found
-
-**No precedent exists in this repo for re-pinning a golden/expected-value constant with a
-comment naming the decision that changed it.** Searched `.planning/` and `tests/` broadly;
-the only prior "these numbers moved and are recorded" mechanism found is `07-CONTEXT.md`'s own
-**D-05 pre/post table** convention (a NEW artifact this same phase introduces, not a pattern
-that predates it) and the legacy `CLAUDE.md`'s numbered "Development Decisions Log" (D1-D50),
-which documents *why* something changed but does not re-pin a Python test constant.
-
-**The planner must establish the convention, not match one.** Recommended shape, grounded in
-this repo's existing commenting style (`# ── Section ──` dividers, docstrings explaining *why*
-a non-obvious choice was made — per `.claude/CLAUDE.md` "Comments" conventions):
-
-```python
-# Re-pinned 2026-09-14 (D-02-A amendment, 07-CONTEXT.md): monthly_features was
-# recomputed from the current monthly_raw checkpoint after discovering `oil`'s
-# 1985-02 start in features was a staleness artifact (monthly_raw has full
-# 1962-2020 coverage). The sequence below reflects the TEN-column frozen set,
-# not the superseded nine-column set — see the ADR for the full history.
-EXPECTED_CHANGE_POINTS = [
-    ("1972-01-31", 5),
-    ("1972-02-29", 7),
-    ...
-]
+**New entries to add (same block, same shape):**
+```yaml
+    M2SL:
+      name:  "fred_m2sl"
+      shift: false
+    TOTALSL:
+      name:  "fred_totalsl"
+      shift: false
 ```
 
-The exact current constant to replace (`tests/unit/test_platform_plotting_regime.py:36-43`,
-read this session):
+**Fetch code path (analog, platform-native, imitate directly):**
+`platform/ingestion/macro_monthly.py::fetch_fred_monthly` / `_fetch_fred_monthly` — already
+generic over `cfg["fred_monthly"]["series"]`; adding the two new keys to the YAML is
+sufficient, **no new Python code required** for the fetch itself (verified: the function
+iterates the config dict, no per-series special-casing beyond `shift`).
 
-```python
-EXPECTED_CHANGE_POINTS = [
-    ("1972-01-31", 4),
-    ("1972-02-29", 6),
-    ("1972-04-30", 8),
-    # ... (4 more lines not shown in this excerpt — file has 7 total entries)
-]
-```
-This must become the `5→7→9→10→11→12→13` sequence per D-02-A, in the **same commit** that
-recomputes the checkpoint (CONTEXT.md's explicit instruction) — not loosened to an inequality.
+**Alignment/interpolation — none needed, contrary to `BCNSDODNS`:** live-verified this
+session via `fredapi.Fred.get_series()`:
 
----
+| Series | First valid | n (non-null) | Native frequency |
+|---|---|---|---|
+| `M2SL` | 1959-01-01 | 811 | Monthly — matches spine natively |
+| `TOTALSL` | 1943-01-01 | 1003 | Monthly — matches spine natively |
+| `BCNSDODNS` (considered, rejected) | 1945-10-01 | 305 | **Quarterly** (would need `fred_gdp`-style forward-fill) |
+| `TOTBKCR` (considered, rejected) | 1973-01-03 | 2801 | Starts too late (1973, not 1962) |
 
-### 4. Offline checkpoint recompute — exact call sequence, and no existing entry point
+Both `M2SL` and `TOTALSL` are natively monthly and require **no** interpolation or
+alignment treatment — no `fred_gdp`-style quarterly-repeat-across-months handling is needed,
+unlike the rejected `BCNSDODNS` candidate (which would need the same forward-fill
+`monthly_raw["fred_gdp"]` already gets, e.g. 3758.147 repeated across 1962-02/03/04).
+**Document `BCNSDODNS` as considered-and-rejected in the ADR** (frequency mismatch),
+consistent with wave 1 ADR's D-03 imputation-trial treatment (state what a rejected option
+would have cost, don't silently drop it).
 
-**`scripts/build_platform_data.py` does NOT do this** — confirmed by reading its module
-docstring and `main()` (read this session): it always calls `build_monthly_spine()`, which
-re-fetches from FRED, multpl-equivalent scraping, macrotrends, and yfinance
-(`transforms_monthly.py::build_monthly_spine`, line ~303-330). There is no `--recompute`-only
-flag; RESEARCH.md's Pitfall 1 independently confirms this ("the platform has no
-`--recompute`-only mode ... confirmed by reading its `main()` — no argparse flags for selective
-steps"). **A new entry point is needed.**
-
-**Exact call sequence a recompute-only script must use** (every function verified to exist at
-the cited location this session):
-
-```python
-from __future__ import annotations
-
-import logging
-
-from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
-from trading_crab_lib.platform.config import load_platform_config
-from trading_crab_lib.platform.honesty.holdout import (
-    DEFAULT_HOLDOUT_CUTOFF,
-    write_monthly_features_split,
-)
-from trading_crab_lib.platform.transforms_monthly import compute_lean_features
-
-log = logging.getLogger(__name__)
-
-
-def main() -> int:
-    logging.basicConfig(level=logging.INFO)
-    cfg = load_platform_config()
-    cm = get_platform_checkpoint_manager()
-
-    monthly_raw = cm.load("monthly_raw")          # cached — no network
-    features = compute_lean_features(monthly_raw, cfg)   # pure function (transforms_monthly.py:227)
-
-    # Re-carve at the holdout boundary and write BOTH dev + holdout sides,
-    # exactly as write_monthly_features_split already does (honesty/holdout.py:57-72):
-    write_monthly_features_split(features, name="monthly_features", cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-```
-
-Notes grounding each call:
-- `get_platform_checkpoint_manager()` — `platform/checkpoints.py:26-28`, returns a
-  `CheckpointManager` scoped to `data/checkpoints/platform/`; `.load("monthly_raw")` and
-  `.save(...)` (via `write_monthly_features_split`) are the incumbent
-  `trading_crab_lib.checkpoints.CheckpointManager` methods, reused verbatim per that module's
-  own docstring ("D-01: never subclass or reimplement save/load/is_fresh").
-- `compute_lean_features(monthly_raw, cfg)` — `transforms_monthly.py:227-282`, confirmed a pure
-  function with no I/O side effects (builds a `dict[str, pd.Series]` and
-  `pd.concat(features, axis=1)`).
-- `write_monthly_features_split(df, name, cutoff)` — `honesty/holdout.py:57-72` (read this
-  session), does exactly: `split_by_holdout_boundary` then
-  `get_platform_checkpoint_manager().save(dev_df, name)` +
-  `get_holdout_checkpoint_manager().save(holdout_df, name)`. This is the SAME function
-  `build_monthly_spine()` itself presumably calls at the end of a full rebuild (not verified
-  this session past line 330 of `transforms_monthly.py` — the planner should confirm the tail
-  of `build_monthly_spine()` calls this same function, to be sure the recompute script produces
-  a checkpoint indistinguishable in shape from a full rebuild's output).
-- After writing, `assert_dev_checkpoint_within_boundary("monthly_features")`
-  (`honesty/holdout.py:108-128`) is available as a self-check the script should call before
-  exiting — it raises `RuntimeError` if any dev-side row leaked past the cutoff.
-
-**No existing script does this without the ingestion step.** This is a new, small entry point
-(e.g. `scripts/recompute_monthly_features.py`), not an extension of
-`scripts/build_platform_data.py` (which is designed around full re-ingestion and should stay
-that way — conflating the two would reintroduce Pitfall 6's confusion between "cheap re-run"
-and "network-dependent rebuild").
-
----
-
-### 5. ADR placement and format — no adr/ directory exists; planner must establish location
-
-**`platform_design/adr/` does not exist.** Confirmed by directory listing this session:
-`platform_design/` contains only `full_claude_fable_discussion_20260709_001.txt` and
-`platform_design.md`. **`.planning/` has no ADR-specific subdirectory or file naming
-convention either** — the closest things are `.planning/UAT-AUDIT-2026-09-09.md` (an audit
-log, not an ADR) and `.planning/BASELINE-v1-tracer-bullet.md` (a numbers baseline, not an
-ADR). `07-CONTEXT.md` explicitly lists ADR location as "Claude's Discretion."
-
-**The only numbered-ADR convention that DOES exist in this repo is the legacy `CLAUDE.md`'s
-embedded "Architecture Decision Records" section (ADR #1 through #12)** — but that convention
-is explicitly scoped to the legacy quarterly pipeline (root `CLAUDE.md`, "documents the
-separate, frozen legacy quarterly pipeline and its own ADRs — not touched by this phase").
-Copying that exact numbering scheme into `platform/` territory would blur a boundary the
-project's own two-CLAUDE.md split works hard to keep clear (per RESEARCH.md's "Project
-Constraints" section, confirmed this session: "The root CLAUDE.md documents the separate,
-frozen legacy quarterly pipeline and its own ADRs ... its conventions ... do not apply here").
-
-**There is also an unrelated `.claude/gsd-core/bin/lib/adr-parser.cjs`** — a GSD tooling
-component (part of the GSD command infrastructure itself, not a project-content location) that
-parses ADR markdown files with canonical section headers (`status`, `context/goal`,
-`decisions`, `considered_options`, etc.) for the `/gsd-adr` family of commands, if any exist.
-This is infrastructure, not a place to write phase-specific ADRs, but its header vocabulary
-(`## Status`, `## Context`, `## Decision`, `## Considered Options`) is a reasonable, tool-
-recognized format to imitate if this project's GSD tooling has an ADR listing/rendering command
-that expects it.
-
-**Recommendation for the planner:** create a NEW `platform_design/adr/` directory (parallel to
-`platform_design.md`, the authoritative platform design doc this phase's canonical_refs already
-cite), with one file per ADR (e.g. `platform_design/adr/0001-l1-feature-policy.md`), using the
-GSD-tool-recognized section headers (`## Status`, `## Context`, `## Decision`,
-`## Considered Options`, `## Consequences`) so it is at minimum consistent with the parser
-infrastructure already in the repo, even though no prior ADR file exists to imitate directly.
-This keeps ADRs colocated with the design document they amend, distinct from `.planning/`
-(which is phase-tracking/process, not architecture record) and distinct from the legacy
-`CLAUDE.md`'s ADR log (which is explicitly the OTHER pipeline's).
-
----
-
-### 6. Trial registry append — exact call sites, for the ADR's trial-ceiling formula
-
-**`registry.append_trial` signature** (`honesty/registry.py:61-67`, read this session):
-
-```python
-def append_trial(
-    *,
-    config: dict[str, Any],
-    features: list[str],
-    metrics: dict[str, Any],
-    path: Path | str | None = None,
-) -> dict[str, Any]:
-```
-
-**Two independent call sites, confirmed this session, each firing once per `run_backtest`
-invocation:**
-
-1. `driver.py:476-481` — inside `run_backtest` itself, called ONCE at the end of the function
-   (after the full walk-forward loop), regardless of `use_regime_tilt`:
-   ```python
-   registry.append_trial(
-       config=trial_config,
-       features=list(monthly_features.columns),
-       metrics={"n_steps": int(len(equity_curve)), "terminal_log_wealth": terminal_log_wealth},
-       path=registry_path,
-   )
-   ```
-2. `no_regime_ablation` (`backtest/baselines.py`) — per RESEARCH.md's traced call chain
-   (confirmed against `report.py:573-576`, which calls `no_regime_ablation(...)` as a SEPARATE
-   call from the strategy's `run_backtest(...)` at `report.py:569-571`) — `no_regime_ablation`
-   delegates to `run_backtest(use_regime_tilt=False)` internally, which hits the SAME
-   `driver.py:476-481` call site again, appending a SECOND row.
-
-**Consequence for the ADR's trial-ceiling formula:** every single
-`run_full_backtest_evaluation()` call therefore appends **exactly 2 rows** — one from the
-`run_backtest(...)` call at `report.py:569-571` (strategy leg), one from the
-`no_regime_ablation(...)` call at `report.py:573-576` (ablation leg, itself calling
-`run_backtest` a second time). The formula the ADR should state:
-
-```
-registry_rows_added = 2 × N_full_evaluation_runs
-```
-
-For wave 1: D-03 requires the 13-feature+imputation variant to run once as a logged trial, and
-D-02-A's own decision requires re-running the evaluation under the (now 10-column, not 9)
-frozen policy — that is a minimum of **2 full-evaluation runs = 4 rows**, not the "~5
-trials / ~2 rows" language in `07-CONTEXT.md` D-17, which RESEARCH.md's Pitfall 3 already
-flags as an undercount. **The planner should call `registry.read_trials(path=...)`
-(`honesty/registry.py:88-96`) immediately before and after wave 1's runs and record the actual
-before/after counts in the ADR, rather than trusting any previously-recorded static number**
-(30, 34, or any other figure quoted in a planning document) — confirmed this session that the
-count has already changed once (30 → 34) between context-gathering and research, purely from
-unrelated activity.
+**Test analog:** extend `tests/unit/test_platform_ingestion_macro_monthly.py` (existing file,
+per VALIDATION.md's requirements map) with new cases for `M2SL`/`TOTALSL`, mirroring whatever
+per-series mocked-fetch test pattern already covers `GS10`/`WTISPLC` in that file, plus one
+live smoke fetch (VALIDATION.md: "new cases ... + one live fetch").
 
 ---
 
 ## Shared Patterns
 
-### Compute-once-thread-through (Pattern 1, RESEARCH.md, confirmed against real code)
+### Legacy-import ratchet (applies to every new `platform/` file)
+**Source:** `tests/unit/test_platform_legacy_import_ratchet.py` — whole-tree AST scan pinned
+at **31**, may only decrease. **Apply to:** every new file under `platform/`, especially
+`features/relative.py` (the porting temptation). Never `from trading_crab_lib.momentum import
+...` or `.diagnostics import ...` anywhere under `platform/` — copy function bodies with
+attribution comments instead.
 
-**Source:** `evaluation/report.py::run_full_backtest_evaluation`, restructured so
-`_reference_label_columns(...)` and `first_decision = dev_features.index[min_train]` are
-computed BEFORE `run_backtest(...)` is called, not after (current code computes
-`first_decision` from `per_step_metrics["dates"].min()` at `report.py:598`, which is available
-only after the loop runs — but is provably equal to `dev_features.index[min_train]` per
-`honesty/walkforward.py::expanding_steps`, lines 48-49: `for i in range(min_train, len(index),
-step): yield index[i], ...` — the first yielded `i` is always `min_train`).
+### Report-only, never-gate posture (D-02/D-07/D-15)
+**Source:** `platform/labeling/diagnostics.py::occupancy_and_sojourns` /
+`report_labeling_diagnostics` (unmodified, reused for classifier #2's own occupancy). **Apply
+to:** `measure_labeling_dependence` (D-15: no pass/fail gate) and the deflated-Sharpe report
+(D-07 lineage: bands are plausibility checks, never a quality gate).
 
-**Apply to:** `driver.py::run_backtest` (new `frozen_l1_features` kwarg, threaded to every
-`_refit_l1` call site) and `report.py::run_full_backtest_evaluation` (compute once, pass to
-`run_backtest`, reuse the SAME variable at step (d)'s full-sample fit instead of recomputing).
+### `from __future__ import annotations`, type hints, `log = logging.getLogger(__name__)`,
+no bare `except:`, `pathlib.Path`, ruff 127-col, `# ── Section ──` dividers
+**Source:** house convention, visible in every file read this session
+(`macro_monthly.py`, `tilt.py`, `jump_model.py`, `registry.py`). **Apply to:** all 5 new
+files (`relative.py`, `dependence.py`, `deflated_sharpe.py`, `joint_tilt.py`, any
+`registry.py` extension).
 
-### Keyword-only optional parameter with `None`-means-old-behavior fallback
-
-**Source:** `driver.py::run_backtest`'s existing `min_train: int | None = None`,
-`registry_path: Any = None` (`driver.py:274,277`).
-
-**Apply to:** the new `frozen_l1_features: list[str] | None = None` parameter on both
-`run_backtest` and `_refit_l1` — matches house convention exactly, requires no new config
-section.
-
-### Skip-real-checkpoint-dependent-test idiom
-
-**Source:** `tests/unit/test_platform_plotting_regime.py:29-32,202-206` —
-`REAL_MONTHLY_FEATURES = Path(...)` + `@pytest.mark.skipif(not REAL_MONTHLY_FEATURES.exists(), ...)`.
-
-**Apply to:** the criterion-1 equivalence test's real-checkpoint-dependent variant, and any new
-test in `test_platform_backtest_driver.py` that needs the real `monthly_features` checkpoint.
-
-### Registry-count-at-execution-time, never a static number
-
-**Source:** RESEARCH.md's own "Don't Hand-Roll" table entry for the deflated-Sharpe trial
-count — `registry.read_trials(path=...)` re-read live, never trusted from a planning document.
-
-**Apply to:** the ADR's trial-ceiling section (finding #6 above).
+### Config additions read defensively via `cfg.get()`, never added to required-sections list
+**Source:** Phase 2/4 pattern, cited by RESEARCH's Established Patterns. **Apply to:** the new
+`fred_monthly.series` entries (M2SL/TOTALSL) and any new `labeling_2`/`allocation.blend`
+config section for classifier #2's K/λ and the blend weight.
 
 ---
 
 ## No Analog Found
 
-| File/Artifact | Role | Data Flow | Reason |
+| File | Role | Data Flow | Reason |
 |---|---|---|---|
-| `platform_design/adr/*.md` (new ADR) | documentation | n/a | No ADR file or directory precedent exists anywhere in this repo outside the legacy `CLAUDE.md`'s embedded, explicitly-out-of-scope numbered log. Planner must establish format (recommendation: finding #5 above). |
-| Golden-constant re-pin comment convention | test (regression) | n/a | No precedent found for re-pinning an `EXPECTED_*` constant with a dated, decision-naming comment. Planner must establish (recommendation: finding #3 above). |
-| `scripts/recompute_monthly_features.py` (new) | script | batch, offline | `scripts/build_platform_data.py` is the only sibling script and does the OPPOSITE (full network rebuild) — a new, narrowly-scoped entry point is needed (finding #4 above), not an extension. |
+| `platform/allocation/joint_tilt.py::blend_regime_tilts` | service (allocation) | transform | Confirmed by both orchestrator and RESEARCH: nothing in `allocation/tilt.py` accepts two probability inputs today. The planner establishes this convention; `vol_targeted_tilt`'s output contract (weights sum to scale, long-only) is the constraint to preserve, not a template to extend. |
+| `platform/evaluation/deflated_sharpe.py` | utility (statistics) | transform | Grep-confirmed: zero function definitions anywhere in `src/` (5 hits, all comments/docstrings). New code from a paper formula, not an in-repo pattern. |
 
 ---
 
-## Wave 2 — not this pass (minimal appendix, per orchestrator instruction)
+## Metadata
 
-Flagged only because it surfaced incidentally while reading files in scope:
-
-- `labeling/jump_model.py::canonicalize_states`'s default sort key (`trailing_return_1m`) is one
-  of classifier #1's 13 raw columns, which D-10 (wave 2) excludes from classifier #2's feature
-  set by construction — every classifier #2 fit will hit the function's "centroid column 0"
-  fallback path (RESEARCH.md Pitfall 4, independently confirmed by reading
-  `jump_model.py:214-221` this session: the fallback fires with a WARNING log when
-  `trailing_return_1m` is absent from the fit's feature set). Not actionable in wave 1; noted
-  here only so wave 2's planning pass does not need to rediscover it from scratch. No pattern
-  work done for it in this pass.
-- `src/trading_crab_lib/momentum.py` / `divergence.py` — confirmed (RESEARCH.md, this session)
-  to be **pattern source only, must be ported not imported** into `platform/` for wave 2's
-  relative-strength features (criterion 8's constraint). Not touched by this pass.
+**Analog search scope:** `src/trading_crab_lib/platform/{labeling,evaluation,allocation,
+honesty,ingestion}/`, `config/platform_settings.yaml`, `src/trading_crab_lib/momentum.py`
+(legacy, pattern-source only), `tests/unit/test_platform_*.py`, `platform_design/adr/`.
+**Files scanned (read in full or targeted this session, per RESEARCH's own verification
+log):** `jump_model.py`, `disagreement.py`, `tilt.py`, `registry.py`, `macro_monthly.py`,
+`platform_settings.yaml`, `momentum.py`, `diagnostics.py` (legacy), `driver.py` (relevant
+sections), `test_platform_legacy_import_ratchet.py`.
+**Pattern extraction date:** 2026-09-15.
+**Everything in this file is grounded with `path:line` citations reproduced from
+`07-RESEARCH.md`'s own live-verified session claims; no analog is asserted without either a
+quoted excerpt or an explicit "no analog found."**

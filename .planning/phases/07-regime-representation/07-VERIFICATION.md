@@ -46,7 +46,7 @@ Confirmed no wave-2 code exists (`grep` for classifier-#2/relative-feature modul
 >
 > 5. Classifier #2 exists, is fit **unsupervised** on a feature set disjoint from classifier
 >    #1's 13 (a test asserts disjointness), with occupancy summing to 1.0 and no state below
->    the §4.4 5% floor left unmarked. — **WAVE 2, correctly absent.**
+>    §4.4's ~8% floor (§4.4 crit. 1 is ~8%–~35%; see ADR-0001 § AMENDMENT 2026-09-17) left unmarked. — **WAVE 2, correctly absent.**
 >
 > 6. Statistical dependence between the two labelings is measured and reported. High
 >    dependence is a **failure to add an axis** and is recorded as such. — **WAVE 2, correctly

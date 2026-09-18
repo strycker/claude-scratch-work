@@ -188,37 +188,63 @@ def fit_jump_model(
 
 
 def canonicalize_states(
-    states: np.ndarray, centroids: np.ndarray, feature_names: list[str]
+    states: np.ndarray,
+    centroids: np.ndarray,
+    feature_names: list[str],
+    *,
+    sort_column: str = "trailing_return_1m",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Relabel state indices into a fixed, economically meaningful order.
 
-    Sorts states by ascending centroid coordinate of trailing_return_1m (bear
-    -> bull) so state numbering is stable across restarts and refreshes —
-    otherwise the label-churn metric (L1-03) and D-04 auto profiles are
-    meaningless, since k-means/jump-model cluster indices are arbitrary
-    permutations by construction. Applying this twice is idempotent (the
-    second call is already sorted, so order == identity).
+    Sorts states by ascending centroid coordinate of ``sort_column`` so state
+    numbering is stable across restarts and refreshes — otherwise the
+    label-churn metric (L1-03) and D-04 auto profiles are meaningless, since
+    k-means/jump-model cluster indices are arbitrary permutations by
+    construction. Applying this twice is idempotent (the second call is
+    already sorted, so order == identity).
 
-    Falls back to centroid column 0 with a WARNING if trailing_return_1m is
-    absent from feature_names (e.g. a caller running on a reduced feature set).
+    ``sort_column`` defaults to ``trailing_return_1m`` — classifier #1's own
+    defining bear/bull axis (07-regime-representation D-02-A's frozen
+    ten-column set always contains it, so classifier #1's three production
+    call sites, which never pass this keyword, are byte-identical to their
+    pre-existing behavior). A second labeler fit on a feature set disjoint
+    from classifier #1's (07-regime-representation D-10) has no
+    ``trailing_return_1m`` column and no equivalent bear/bull polarity — it
+    must pass its OWN defining column explicitly (e.g. an equity/bond
+    relative-strength ratio, ordering bonds-leading -> equities-leading).
+
+    Raises ``ValueError`` if ``sort_column`` is absent from ``feature_names``
+    — there is no fallback. This replaces a prior "warn and silently order on
+    centroid column 0" behavior (audit item A14): with a feature set disjoint
+    from classifier #1's 13 raw columns, that fallback would ALWAYS trigger,
+    assigning arbitrary state IDs while every downstream occupancy,
+    dependence and joint-lift number kept appearing to pass. Silent,
+    plausible-looking corruption is strictly worse than a loud failure here.
 
     Args:
         states: length-T int array of raw (pre-canonicalization) state labels.
         centroids: (K, d) array in the same raw state-index order as states.
         feature_names: column names matching centroids' second axis, in order.
+        sort_column: keyword-only. The feature whose ascending centroid order
+            defines the canonical state numbering. Defaults to classifier
+            #1's ordering key; a second classifier fit on a disjoint feature
+            set must pass its own.
 
     Returns:
         (new_states, new_centroids) — states relabeled 0..K-1 by ascending
-        sort_col, centroids reordered to match.
+        sort_column, centroids reordered to match.
+
+    Raises:
+        ValueError: if ``sort_column`` is not present in ``feature_names``.
     """
-    if "trailing_return_1m" in feature_names:
-        sort_col = feature_names.index("trailing_return_1m")
-    else:
-        sort_col = 0
-        log.warning(
-            "trailing_return_1m not in feature_names — falling back to centroid "
-            "column 0 for canonicalization sort order"
+    if sort_column not in feature_names:
+        raise ValueError(
+            f"sort_column={sort_column!r} not in feature_names — a "
+            "canonicalization sort column must be present in the fitted "
+            "feature set. Pass the caller's own defining column explicitly "
+            "(never rely on a silent fallback to centroid column 0)."
         )
+    sort_col = feature_names.index(sort_column)
     order = np.argsort(centroids[:, sort_col])
     remap = {old: new for new, old in enumerate(order)}
     new_states = np.array([remap[s] for s in states])

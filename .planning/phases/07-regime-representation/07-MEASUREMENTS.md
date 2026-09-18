@@ -51,7 +51,7 @@ high.** The same caveat applies to the ratio's `n_resolved`/`n_transitions` deno
 | `wealth_delta` | +0.379267 | **+0.3778473581475139** | `abs(x) < 15` (arithmetic) — passed | `abs(x) < 5` **[ASSUMED]** | in-band on both bounds |
 | `dd_delta` | −0.014364 | **−0.0661242048614149** | `x ∈ [-2, 2]` — passed | `abs(x) < 0.5` **[ASSUMED]** | in-band on both bounds |
 | Multiclass Brier | 0.2087 (n_steps not recorded in the source doc) | **0.20717126722358387** (n_steps=356) | `x ∈ [0, 1]` — passed | no-skill floor `0.16` [CITED] | in-band; **expected to move — see §4, labels changed, not the nowcaster** |
-| Regime occupancy (smoothed reference, states 0–4) | 1.6% / 14.0% / 31.9% / 40.6% / 11.9% | **11.51% / 9.06% / 35.54% / 31.51% / 12.37%** (states 0/1/2/3/4) | each `∈ [0,1]`, `Σ=1.0` — passed (Σ=1.0 to 1e-9) | soft warning `< 0.05` [CITED] | in-band; **no state below the 5% floor** in the frozen variant |
+| Regime occupancy (smoothed reference, states 0–4) | 1.6% / 14.0% / 31.9% / 40.6% / 11.9% | **11.51% / 9.06% / 35.54% / 31.51% / 12.37%** (states 0/1/2/3/4) | each `∈ [0,1]`, `Σ=1.0` — passed (Σ=1.0 to 1e-9) | soft warning `< 0.08`, `> 0.35` (§4.4 crit. 1; **corrected 2026-09-17** from a fabricated `0.05` floor) | floor: all pass. cap: **state 2 at 35.54% is a 0.54pp overshoot of the ~35% cap — marginal, within tolerance of an approximate bound**. Pre-fix variant failed BOTH ends (1.6%, 40.6%) |
 | Mean monthly turnover | 0.0734 | **0.052170468675799005** | — | — | recorded |
 | CVaR(5%) | −0.0463 | **−0.04356810003646968** | — | — | recorded |
 | Registry rows, this evaluation | n/a (predates `trial_tag`) | **+2** (34 → 36) | exactly `2` — passed | — | in-band |
@@ -74,7 +74,7 @@ Run once, logged once, isolated from the published artifacts by construction
 | `dd_delta` | −0.0661242048614149 | +0.01898849550676429 | recorded |
 | §5.4 ratio (`n_resolved` of `n_transitions`) | 0.6014 (7 of 7) | 1.2686567164179106 (3 of 6) | recorded — the impute variant's ratio rests on **3** resolved transitions, indicative only |
 | `pct_disagree` (`n_compared`) | 0.8089887640449438 (n=356) | 0.8319148936170213 (n=470) | recorded |
-| Regime occupancy | no state below 5% | **state 0 at 1.29%** — below the §4.4 5% floor | **flagged** — noted here, not gated (D-07) |
+| Regime occupancy | every state within §4.4 crit. 1's ~8%–~35% band | **state 0 at 1.29%** — below §4.4's real ~8% floor (**corrected 2026-09-17**: cited as a 5% floor, a threshold absent from §4.4; 1.29% fails either way) | **flagged** — noted here, not gated (D-07) |
 | Registry rows, this evaluation | +2 (34 → 36) | +2 (36 → 38) | in-band |
 | Published artifacts touched? | **yes** (`outputs/reports/platform/*`) | **no** — confirmed: `outputs/reports/platform/backtest_kpi_table.parquet`'s `strategy` row reads `4.025085` (frozen's value), not `4.048185` (impute's value) | **variant isolation confirmed** |
 

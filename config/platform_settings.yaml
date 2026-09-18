@@ -46,6 +46,28 @@ fred_monthly:
     WTISPLC:
       name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
       shift: false
+    # D-12/INV-01 (07-regime-representation wave 2): M2SL and TOTALSL feed
+    # classifier #2's named invariant ratios (m2_gdp, credit_gdp —
+    # platform/features/relative.py::compute_invariant_ratios). Both are
+    # natively monthly (live-verified: M2SL first valid 1959-01, 811 obs;
+    # TOTALSL first valid 1943-01, 1003 obs), so — like every other series in
+    # this block — neither needs the quarterly-repeat forward-fill fred_gdp
+    # receives via align_agency_monthly, and neither needs a new ingestion
+    # code path: fetch_fred_monthly already iterates this dict generically.
+    # Considered and REJECTED: BCNSDODNS (quarterly-native, 305 obs from
+    # 1945-10 — would require exactly the forward-fill treatment these two
+    # avoid) and TOTBKCR (starts 1973-01, after the 1962 spine start).
+    # Market-cap/GDP stays out of INV-01 for its already-documented reason —
+    # see the `buffett_indicator` comment in the `taxonomy` block below; that
+    # reason is restated here, not worked around. These two series are NOT
+    # added to `taxonomy.fast`/`.slow` — classifier #1's lean set must stay
+    # at exactly 13 raw columns (D-10's disjointness denominator).
+    M2SL:
+      name:  "fred_m2sl"
+      shift: false
+    TOTALSL:
+      name:  "fred_totalsl"
+      shift: false
 
 # ── FRED daily-frequency credit series (L4-04, Phase 4 Pitfall 2) ─────────────
 # BAA/AAA above are monthly-only on FRED; the tripwire's credit-spread-velocity
@@ -293,6 +315,43 @@ labeling:
   n_restarts: 10
   embargo_months: 12
 
+# ── Classifier #2 — the leadership/relative axis (ADR-0002, REG-01) ─────────────
+# A SECOND, independent L1 labeler, fit unsupervised on a feature set DISJOINT
+# from classifier #1's 13 lean columns (D-10) and frozen under the same rule at
+# the same 1972+ decision window (D-11). Every value below was pinned by a human
+# at a blocking decision checkpoint on 2026-09-17, BEFORE the first fit, with
+# ZERO selection trials spent (D-13) — see
+# .planning/phases/07-regime-representation/07-DECISIONS-07-08.md and
+# platform_design/adr/0002-l1-second-classifier.md.
+#
+#   K = 3            three asset sleeves in the candidate set (equities, long
+#                    duration, oil) -> three leadership states. By construction.
+#   lambda = 32.0    = 4 x len(features) = 4 x 8, the same feature-count formula
+#                    classifier #1 instantiates (13 -> 52.0). NOT a free knob:
+#                    classifier2_config() RAISES if these two ever drift apart.
+#   sort_column      canonical state ordering (bond-leading -> equity-leading).
+#                    Passed explicitly into canonicalize_states; there is no
+#                    fallback since plan 07-05 deleted it.
+#
+# Changing `features` without recomputing `lambda` is a loud failure, not a
+# silent drift. Changing either after the first fit is an ADR-0002 amendment,
+# not a config edit — the first fit would otherwise become an unlogged trial.
+# Not added to _REQUIRED_PLATFORM_SECTIONS — read defensively via cfg.get().
+labeling_2:
+  K: 3
+  lambda: 32.0
+  n_restarts: 10
+  sort_column: rs_equities_bonds
+  features:
+    - rs_equities_bonds
+    - rs_oil_equities
+    - equities_tr_mom_12m
+    - long_duration_tr_mom_12m
+    - oil_mom_12m
+    - corr_equities_tr_long_duration_tr_24m
+    - cpi_acceleration
+    - m2_gdp
+
 # ── Paid-provider adapter seams (DATA-06) — documentation-only placeholders ───
 # No runtime code in v1. stockcharts.com/finviz.com (Glenn has subscriptions)
 # are candidate FEATURE sources for a later milestone, not price-history
@@ -340,6 +399,14 @@ allocation:
   portfolio_vol_min_obs: 12  # min overlapping non-NaN months before trusting the blended
                               # portfolio-return EWMA vol; below this, fall back to the
                               # conservative linear-sum-of-vols estimate (RESEARCH Pattern 5)
+  # Blend weight on CLASSIFIER #1's probability vector when the two labelings'
+  # tilts are combined (D-14, ADR-0002 decision (f)); classifier #2 carries
+  # 1 - blend_weight_1. 0.50 is the equal-weight no-information prior: nothing
+  # known before the runs favours either classifier, and any other value would
+  # need an empirical justification, which is a selection trial D-13 forbids.
+  # Sweeping this is an unregistered selection dimension — it becomes tunable
+  # only at design freeze, at which point the blend earns its own ADR.
+  blend_weight_1:      0.50
   hysteresis:
     act_threshold:     0.70  # design §5.3: act when a regime's own P crosses ~0.7
     unwind_threshold:  0.40  # design §5.3: unwind the active regime once its own P < 0.4
