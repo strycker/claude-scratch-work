@@ -155,7 +155,7 @@ concentrates into one or two classifier-#2 states:
 - #1 state 4 (83 mo) → 51.8 % / 27.7 % / 20.5 % across #2 states 2, 0, 1 — the only genuinely
   diffuse row
 
-Fifteen of the twenty-five cells are exactly zero. Read the other way, every classifier-#2
+Fourteen of the twenty-five cells are exactly zero. Read the other way, every classifier-#2
 column is dominated by one classifier-#1 row: 80.2 %, 86.6 %, 60.9 %, 93.4 % and **100 %** for
 columns 0–4 respectively. That concentration is what drives NMI and Cramér's V above their flag
 levels.
@@ -165,7 +165,7 @@ levels.
 ## 3. Verdict, in criterion 6's own terms
 
 Two of the three statistics exceed their flag levels — NMI at 0.6023 against 0.5, and Cramér's V
-at 0.6558 against 0.5 — and the cross-tabulation is a strong near-permutation with fifteen empty
+at 0.6558 against 0.5 — and the cross-tabulation is a strong near-permutation with fourteen empty
 cells.
 
 **Classifier #2 represents a failure to add an axis.**
