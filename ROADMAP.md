@@ -64,6 +64,50 @@ GARCH(1,1)/EWMA per asset; **vol targeting** overlay (size ∝ 1/σ̂); regime-c
 ### T0.8  Wire in `feature_gating.py` (causal-feature guard)  `S`  (R5, §8.2, salvaged)
 Enforce `features_supervised.parquet` (causal) for L2 training; `--allow-noncausal-features` opt-in falls back with a loud warning. Cheap, and it locks in the L1-may-see-future / L2-may-not invariant the whole design rests on. Do early alongside T0.1.
 
+### T0.11  Filtered-labeling churn — BLOCKING Phase 8  `M`  (R8, §5.3, §5.4)
+**Raised by the Phase 7 wave-2 UAT (2026-09-21) and marked BLOCKING by Glenn: Phase 8 does not
+start until this is addressed.**
+
+Classifier #1's **filtered** labeling changes state in **246 of 588 decision months (41.84%)**
+against a full-sample transition rate of **3.60%** — a ~12× gap. The filtered series is what a
+weekly report actually consumes; the full-sample rate is the smoothed hindsight view and is not
+what anyone would trade on. A labeler that re-labels its own most recent month two months in five
+feeds that instability directly into the allocation tilt, and therefore into criterion 7's
+measured lift.
+
+Design §5.4 names this quantity precisely: the smoothed-versus-filtered gap **is** "the measured
+hindsight content of the strategy". Here it is large and was never budgeted for.
+
+**No band governs it.** `07-BANDS.md` band 3b is a full-sample band and never sees the filtered
+series. The churn value is now *pinned* by
+`tests/unit/test_platform_joint_diagnostics_record.py` (re-derived from the persisted per-step
+columns, with a non-degeneracy guard so a 0% reading cannot be an artefact) — but pinning a number
+is not governing it. A regression would be caught; the current value is still unacceptable.
+
+Candidate directions, none yet chosen: design §5.3's hysteresis bands (act above ~0.7, unwind
+below ~0.4), the recursive prior-state feature §5.1 requires and which may be missing or
+underweighted, or a churn band with a declared threshold. **Do not** address it by smoothing the
+reported number — that would hide the quantity §5.4 says to report prominently.
+
+**Blocked on:** nothing. This is next.
+
+### T0.12  `compute_sojourn_lag_headline` returns a silent zero on the wrong column shape  `S`  (R7)
+**Found in the Phase 7 wave-2 validation audit (2026-09-21) and reproduced independently.**
+
+Passing `state_{k}` probability columns where integer state labels are expected returns
+`n_resolved = 0`, `median_lag = NaN`, `ratio = NaN` — **with no exception and no warning**. It
+reads as "detection never happened", a substantive finding, when the real cause is a wrong matrix
+shape.
+
+This is the fifth recorded instance of this project's signature defect class, and **it is still
+live**: plan 07-11 fixed its own call site after its first draft reported 0 of 25 transitions
+resolved, and the validation audit pinned the behaviour with a demonstration test — but the
+function itself is unchanged, so the trap is armed for the next caller.
+
+Fix: raise, or return an explicit sentinel plus a loud WARNING, on a column shape the function
+cannot interpret. A function that cannot distinguish "no detections" from "you passed the wrong
+thing" must not report the first.
+
 ### T0.9  Registered nested selection inside the walk-forward loop  `XL`  (R7/R14, §8.4, §22)
 **Raised by Glenn at the Phase 7 wave-2 decision checkpoint (2026-09-17), deferred to keep that
 phase's trial budget honest.** Today every feature set and hyperparameter that a model needs
