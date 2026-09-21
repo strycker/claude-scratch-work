@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Asset Prediction & Allocation** - Returns-by-regime tables, EWMA vol, naive vol-targeted allocation, weekly report, and a minimal daily tripwire (completed 2026-07-23)
 - [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
 - [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation (completed 2026-09-10)
-- [ ] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01)
+- [x] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01). **Closed 2026-09-21: INV-01 delivered in full; REG-01 delivered PARTIALLY — criterion 6's dependence verdict is UNRESOLVED and no independent second axis is established**
 - [ ] **Phase 8: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -332,11 +332,66 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
      #1's 13 (a test asserts disjointness), with occupancy summing to 1.0 and no state below
      the §4.4 5% floor left unmarked.
 
+     > ✅ **MET 2026-09-21.** Evidence: `platform_design/adr/0002-l1-second-classifier.md`
+     > § RE-PIN 2026-09-18 and § ACCEPTANCE 2026-09-21. Classifier #2 (K = 5, λ = 16.0)
+     > occupancy **16.6667 / 22.7011 / 22.4138 / 23.8506 / 14.3678 %** over **696 months,
+     > 1963-01-31 → 2020-12-31**, **sum error exactly 0.0**, every state inside §4.4
+     > criterion 1's band. Disjointness from classifier #1's lean 13 asserted on the
+     > **resolved** frozen eight by
+     > `tests/unit/test_platform_features_relative.py::test_resolved_frozen_list_is_disjoint_from_the_lean_set`.
+     >
+     > ⚠ **The "§4.4 5% floor" in this criterion's wording does not exist and never did.**
+     > §4.4 criterion 1 reads "every state ≥ ~8% and ≤ ~35% of months" — a **two-sided** band.
+     > The 5% figure was a project-wide misquote corrected 2026-09-17
+     > (ADR-0001 § AMENDMENT 2026-09-17); the implementation had no cap check at all, so the
+     > occupancy test **could confirm and never fail** — the same evidence shape as criterion
+     > 8's `grep -v platform` below. The criterion text is left as written for the record;
+     > **it was scored against the real two-sided band, which is stricter in both directions.**
+     > Design §4.4 criterion 1 was additionally **AMENDED 2026-09-18** to carry a *recurrence
+     > exemption* (at most one state below the ~8% floor, if it recurs in ≥3 named, temporally
+     > separated episodes with a coherent profile and low-n discipline, and the ~35% cap is not
+     > relaxed). **Classifier #2 does not invoke it.** Classifier #1 does — its crisis state at
+     > **5.7554%** over 40 months across nine named episodes, 1970 through 2020 (ADR-0001
+     > § RE-PIN 2026-09-18).
+
   6. Statistical dependence between the two labelings is measured and reported. High
      dependence is a **failure to add an axis** and is recorded as such.
 
+     > ⚠ **MEASURED AND REPORTED; the verdict is UNRESOLVED — the criterion is NOT satisfied.**
+     > Evidence: `.planning/phases/07-regime-representation/07-DEPENDENCE.md` § RESULT
+     > 2026-09-18. Re-measured after **both** classifiers were re-pinned: ARI **0.354841**,
+     > NMI **0.464088**, Cramér's V **0.589748**, `n_compared` = **695 months, 1963-02-28 →
+     > 2020-12-31**, K₁ = 6 vs K₂ = 5. Read against a block-permutation control (2000 resamples,
+     > seed 20260918), the pre-registered rule committed at `298b1bc` **before the control code
+     > existed** returns **INCONCLUSIVE**: observed NMI 0.464088 sits at the **96.60th
+     > percentile**, above p95 **0.449202** but not above p99 **0.501195**.
+     >
+     > **This measurement cannot decide whether classifier #2 added an axis, and nothing else
+     > in this phase decides it.** It is neither the "high dependence" failure this criterion
+     > anticipated nor a demonstration of an added axis. **No tie-break was run and none may
+     > be** — the pre-registration forbids a fourth statistic, a different null and a re-run at
+     > another seed. **Criterion 7 is not a tie-break on this.** REG-01 is therefore claimed
+     > **PARTIALLY**, with this as the named open item.
+
   7. Joint (#1 × #2) allocation lift is measured walk-forward against #1 alone, every
      configuration logged to the trial registry, deflated-Sharpe applied for the full count.
+
+     > ✅ **MET 2026-09-21 as a measurement. The wealth sign is negative and is stated as
+     > measured.** Evidence: `.planning/phases/07-regime-representation/07-JOINT-LIFT.md`.
+     > `wealth_delta` = **−0.123438 nats** and `dd_delta` = **+0.024084**, both over **588
+     > steps, 1972-01-31 → 2020-12-31**, 0 degraded steps on both legs, routing
+     > `L1_ONLY_LAST_FILTERED_STATE`. In the units the numbers are actually in: the joint leg
+     > ended at ≈ **0.8839×** the #1-alone leg's terminal wealth — an **11.61% shortfall** —
+     > while making the worst drawdown **2.41 percentage points shallower** (−25.74% vs
+     > −28.14%) and 7 months shorter. **The drawdown improvement does not offset the wealth
+     > loss and is not recorded as doing so**; it is further qualified by ADR-0002's named
+     > limitation, since this labeling identifies crises *ex post*.
+     >
+     > Both configurations logged: tags `07-11-c1-alone-L1only` and `07-11-joint-c1xc2-L1only`;
+     > `total_trial_count()` 40 → 42, ceiling 44. Deflated Sharpe applied at the full live-read
+     > count of **42** for both legs (2.28151 × 10⁻¹² and 1.46904 × 10⁻¹¹): **neither leg
+     > clears the multiple-testing hurdle.** D-06 makes measurement the gate, not the sign —
+     > which is why this criterion is met and why the number is quoted rather than framed.
 
   8. `platform/` still imports nothing from the legacy library — the import-guard test is
      extended to the new modules.
@@ -354,10 +409,18 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
      > coupling must not be *widened*, not because `platform/` is already clean. Now guarded by
      > `tests/unit/test_platform_legacy_import_ratchet.py`, a ratchet that may only decrease.
 
-**Plans**: 12 plans, 11 executed — 4 in phase-wave 1 (criteria 1-4 + ADR-0001, **complete**,
+**Ratchet re-measured at phase close (2026-09-21, plan 07-12), recorded here so criterion 8's
+correction block above stays byte-identical:** the AST scan counts **31** legacy import sites —
+`trading_crab_lib` ×16, `.checkpoints` ×7, `.ingestion.http` ×3, `.ingestion.browser` ×2,
+`.ingestion` ×1, `.ingestion.assets` ×1, `.email` ×1. **Unchanged from the 2026-09-15
+measurement; wave 2 added none and removed none.** `MAX_LEGACY_IMPORT_SITES` is therefore left
+at **31** and was not edited — the constant may only decrease, and there was no decrease to
+record.
+
+**Plans**: 12 plans, **12 executed** — 4 in phase-wave 1 (criteria 1-4 + ADR-0001, **complete**,
 UAT-signed accept-with-caveats 2026-09-15) and 8 in phase-wave 2 (criteria 5-7 + INV-01 +
 ADR-0002, planned 2026-09-15 in the second planning pass D-09 called for; 07-05..07-08
-executed, 07-09..07-11 executed 2026-09-18..2026-09-21, 07-12 outstanding)
+executed, 07-09..07-11 executed 2026-09-18..2026-09-21, 07-12 executed 2026-09-21)
 
 > ⚠ **Two senses of "wave" collide in this phase — read carefully.** The phase gates on
 > **phase-wave 1 → phase-wave 2** (resolve A13/A15, then the leadership classifier). All four
@@ -380,7 +443,7 @@ Plans (all phase-wave 2 — the leadership classifier; criteria 5, 6, 7 + INV-01
 - [x] 07-09-PLAN.md — Criterion 6: ARI + NMI + Cramér's V + crosstab with no threshold (D-15), tests that fail on a perfect statistic as well as a wrong one, and a human judgement on whether an axis was added *(exec-wave 4)*
 - [x] 07-10-PLAN.md — `blend_regime_tilts` (new code — `tilt.py` takes one probability input today), and the blocking confirmation of the four now-load-bearing `[ASSUMED]` bands *before* any lift number exists *(exec-wave 4)*
 - [x] 07-11-PLAN.md — Criterion 7: one harness produces both the joint leg and the #1-alone baseline over an identical step sequence; lift reported with its window inline; deflated Sharpe applied for the full live-read count *(exec-wave 5)*
-- [ ] 07-12-PLAN.md — ADR-0002 → Accepted with the measured results including the unfavourable ones; all eight probe edges resolved; REG-01 and INV-01 claimed; ratchet re-measured *(exec-wave 6)*
+- [x] 07-12-PLAN.md — ADR-0002 → Accepted with the measured results including the unfavourable ones; all eight probe edges resolved; REG-01 claimed **partially** (criterion 6 unresolved) and INV-01 in full; ratchet re-measured at 31, unchanged *(exec-wave 6)*
 
 **Explicit non-goals**: no fitting to forward returns; no raising K on classifier #1; no
 2021+ holdout use for any selection decision; no migration work.
@@ -388,12 +451,39 @@ Plans (all phase-wave 2 — the leadership classifier; criteria 5, 6, 7 + INV-01
 **Requirement coverage**: phase-wave 1 (plans 07-01…07-04) delivered REG-01 **in part** — the
 driver/reference feature policy, §5.4 interpretability, and the ablation re-measurement
 clauses — and deferred INV-01 in full by `07-CONTEXT.md` D-09, recorded as a decision in
-ADR-0001. Phase-wave 2 (plans 07-05…07-12) **claims both in full**: REG-01's second-classifier,
-disjointness, orthogonality and joint-lift clauses, and **INV-01 entire** — candidates
-constructed and screened with dimensional reduction as a discovery tool, loading stability
-tested across eras, every candidate registry-logged and walk-forward assessed, survivors
-admitted as named features and never anonymous principal components (design decision R4).
-Recorded in ADR-0002.
+ADR-0001. Phase-wave 2 (plans 07-05…07-12) claims **INV-01 in full** and **REG-01 only in
+part**:
+
+- **INV-01 — IN FULL.** Candidates constructed and screened with dimensional reduction as a
+  discovery tool (`pca.transform()` never called), loading stability tested across 10 eras
+  ending 1972-01-31 → 2017-01-31 at tolerance `LOADING_STABILITY_TOLERANCE = 0.15`, every
+  candidate registry-logged (2 rows, `total_trial_count()` 38 → 40) and walk-forward assessed,
+  survivors `m2_gdp` and `credit_gdp` admitted as **named** features and never anonymous
+  principal components (design decision R4).
+- **REG-01 — PARTIALLY.** The second-classifier, disjointness and joint-lift clauses are
+  satisfied. **The orthogonality clause was measured but its verdict is UNRESOLVED** — the
+  pre-registered control returned INCONCLUSIVE (criterion 6 above), and no tie-break is
+  permitted. **No independent second axis is established by this phase**, and this closure
+  does not claim one. Closing REG-01 needs more data or a different instrument, in a phase
+  that pre-registers its rule the way this one did.
+
+Both recorded in ADR-0002 § Requirement coverage.
+
+**Open items this phase carries forward rather than closes** (full list in ADR-0002 § Deferrals
+and open items at acceptance): criterion 6 unresolved with no tie-break permitted; §4.4
+criterion 3's Hungarian subsample-stability test **never run for either classifier**; ADR-0001
+condition (iv)'s **covariance clause unimplemented** (no per-regime covariance exists at L4-01 —
+it falls to L3, design §6.2), with `vol_targeted_tilt` and `driver.py:497` still
+(iv)-non-compliant for consumers other than the joint harness; classifier #1's **filtered**
+labeling changing state in **246 of 588 decision months (41.84%)** against a 3.60% full-sample
+rate, governed by no band and feeding the tilt directly; classifier #2's §5.4 ratio of **1.074**
+(median sojourn 29.0 months against a 27.0-month median detection lag, only 5 of 12 transitions
+resolved); the crisis state's **3.0-month** median sojourn sitting exactly on criterion 2's
+boundary against a 1–3 month detection lag, so criterion 7's `dd_delta` is **not** evidence
+crises are nowcastable in time to act; `DEGENERATE_SHARPE_VARIANCE = 1.0` still a declared
+assumption governing every DSR until 20 independent Sharpe-bearing trials exist; the L2
+CV-robustness question routed around rather than resolved; and **audit item A11 open by
+deliberate choice**.
 
 **Absorbs INV-01** (formerly Phase 8): named invariant candidates (M2/GDP, market-cap/GDP,
 credit/GDP) are wave 2's feature-discovery work, and INV-01's constraint that survivors be

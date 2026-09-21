@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Representation
 status: in-progress
-stopped_at: Completed 07-11-PLAN.md
-last_updated: "2026-09-21T14:55:21.305Z"
+stopped_at: Completed 07-12-PLAN.md — Phase 7 closed
+last_updated: "2026-09-21T16:05:00.000Z"
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 47
-  completed_plans: 46
+  completed_plans: 47
 current_phase: 7
 last_activity: 2026-09-21
-last_activity_desc: "Phase 7 plan 07-11 executed — criterion 7 measured: wealth_delta -0.123438, dd_delta +0.024084, both over 588 steps 1972-01-31 → 2020-12-31 (L1-only routing); neither leg's DSR clears the hurdle at 42 trials; suite 1949 → 1977"
+last_activity_desc: "Phase 7 CLOSED — ADR-0002 Accepted 2026-09-21. INV-01 delivered in full; REG-01 delivered PARTIALLY, criterion 6's dependence verdict UNRESOLVED (NMI 0.464088 at the 96.60th percentile, p95 0.449202, p99 0.501195) with no tie-break permitted. Criterion 5 MET; criterion 7 MET as a measurement with wealth_delta -0.123438 (an 11.61% terminal-wealth shortfall) and dd_delta +0.024084, both over 588 steps 1972-01-31 → 2020-12-31. Ratchet re-measured at 31, unchanged. Suite 1983 passed, 0 skipped"
 ---
 
 # Project State
@@ -28,8 +28,54 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: **7 — Regime Representation**
-Status: **WAVE 1 CLOSED · WAVE 2 PLANNED (8 plans, `07-05`…`07-12`, checker PASS 2026-09-15).**
+Phase: **7 — Regime Representation — CLOSED 2026-09-21**
+Status: **PHASE CLOSED.** 12 of 12 plans executed. ADR-0002 **Accepted 2026-09-21**; all eight
+probe edges resolved with a named test each; legacy-import ratchet re-measured at **31**
+(unchanged, constant untouched); full suite **1983 passed, 0 skipped, 0 xfailed**.
+
+**Requirements, claimed at exactly the width of the evidence:**
+
+- **INV-01 — DELIVERED IN FULL.** All four clauses closed by artifact (see ADR-0002
+  § Requirement coverage). Claimed at the strength of the evidence and no further: the era
+  screen was *survived*; a PC1 loading of exactly 1/√2 on two standardized candidates is an
+  arithmetic identity, not by itself evidence of five-decade economic stability.
+- **REG-01 — DELIVERED PARTIALLY.** The open item is **named, not folded in: criterion 6's
+  dependence verdict is UNRESOLVED.** The pre-registered block-permutation control returned
+  **INCONCLUSIVE** — NMI **0.464088** at the **96.60th percentile** against p95 **0.449202** and
+  p99 **0.501195**, `n_compared` = **695 months, 1963-02-28 → 2020-12-31**. The pre-registration
+  at `298b1bc` forbids a tie-break; **no further dependence statistic may be computed.**
+  **No independent second axis is established by this phase.**
+
+**The three criteria, as measured:**
+
+| # | Verdict | The number, with its window |
+|---|---|---|
+| 5 — occupancy & disjointness | **MET** | Classifier #2 occupancy **16.6667 / 22.7011 / 22.4138 / 23.8506 / 14.3678 %** over **696 months, 1963-01-31 → 2020-12-31**, sum error **0.0**, all inside §4.4's real two-sided **~8–35%** band (there is **no** five-percent floor — misquote corrected 2026-09-17). Disjointness from the lean 13 asserted on the *resolved* frozen eight |
+| 6 — dependence | **UNRESOLVED** | ARI 0.354841 / **NMI 0.464088** / Cramér's V 0.589748, `n_compared` = 695, 1963-02-28 → 2020-12-31; control 2000 resamples, seed 20260918 → **INCONCLUSIVE** |
+| 7 — joint lift | **MET as a measurement; negative on wealth** | `wealth_delta` **−0.123438 nats** (≈ **0.8839×**, an **11.61% terminal-wealth shortfall**) and `dd_delta` **+0.024084** (**2.41pp shallower**, 40 vs 47 months underwater), both over **588 steps, 1972-01-31 → 2020-12-31**, 0 degraded steps. **Neither leg's DSR clears the multiple-testing hurdle** at 42 trials |
+
+**The drawdown improvement does not offset the wealth loss and is not recorded as doing so.**
+D-06 makes honest measurement the gate, not the sign — which is why criterion 7 is met and why
+the number is quoted rather than framed.
+
+**Open items carried into the record** (full list in ADR-0002 § Deferrals and open items at
+acceptance): criterion 6 unresolved, no tie-break permitted; §4.4 criterion 3's Hungarian
+subsample-stability test **never run for either classifier**; ADR-0001 condition (iv)'s
+**covariance clause unimplemented** — no per-regime covariance exists at L4-01, it falls to L3
+(design §6.2) — with `vol_targeted_tilt` and `driver.py:497` still (iv)-non-compliant for
+consumers other than the joint harness; classifier #1's **filtered** labeling changing state in
+**246 of 588 decision months (41.84%)** against a 3.60% full-sample rate, governed by **no
+band**, feeding the tilt directly; classifier #2's §5.4 ratio **1.074** (median sojourn 29.0 mo,
+median detection lag 27.0 mo, only **5 of 12** transitions resolved); the crisis state's **3.0
+month** median sojourn exactly on criterion 2's boundary against a 1–3 month detection lag, so
+criterion 7's `dd_delta` is **not** evidence crises are nowcastable in time to act;
+`DEGENERATE_SHARPE_VARIANCE = 1.0` still a declared assumption governing every DSR until 20
+independent Sharpe-bearing trials exist; the L2 CV-robustness question routed around, not
+resolved; and **audit item A11 open by deliberate choice.**
+
+---
+
+### Previously: wave 2's plan table (8 plans, `07-05`…`07-12`, checker PASS 2026-09-15) — all executed
 
 | Plan | Wave | Depends | Auto | Delivers |
 |---|---|---|---|---|
@@ -42,8 +88,11 @@ Status: **WAVE 1 CLOSED · WAVE 2 PLANNED (8 plans, `07-05`…`07-12`, checker P
 | 07-11 | 5 | 06,09,10 | yes | criterion 7 — joint lift + DSR, window inline |
 | 07-12 | 6 | 07,09,11 | yes | ADR-0002 Accepted · 8 probe edges · REG-01 + INV-01 claimed |
 
-**Both requirements are now CLAIMED** — wave 1's plans carried `deferred_requirements: [INV-01]`;
-that deferral ends here. **Three blocking checkpoints**: 07-08 decision, 07-09 and 07-10 human-verify.
+**Both requirements are now CLAIMED — but at different widths, which the plan table above could
+not anticipate.** Wave 1's plans carried `deferred_requirements: [INV-01]`; that deferral ended
+here. **INV-01 is claimed in full; REG-01 is claimed PARTIALLY** because criterion 6's verdict
+came back inconclusive under its own pre-registered rule. **Three blocking checkpoints** were
+taken as planned: 07-08 decision, 07-09 and 07-10 human-verify.
 
 **The sequencing that matters** (verified, not asserted): the `canonicalize_states` `sort_column`
 fix is wave **1**; the first classifier-#2 fit is wave **3**. The band-confirmation checkpoint is
@@ -357,11 +406,12 @@ quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analy
 
 **Velocity:**
 
-- Total plans completed: **35 of 35** written (7 + 5 + 4 + 5 + 7 + 7 across Phases 1–6);
-  Phase 7 plans are TBD.
+- Total plans completed: **47 of 47** written (7 + 5 + 4 + 5 + 7 + 7 across Phases 1–6, plus
+  **12 of 12** in Phase 7).
 
-- Full test suite: **1705 collected, 0 skipped** (re-verified 2026-09-14 on `main` @ `c6605a4`;
-  unchanged since Phase 6 closure).
+- Full test suite: **1983 passed, 0 skipped, 0 xfailed** (measured 2026-09-21 at Phase 7
+  closure, branch `claude/keen-galileo-zqcml6-w4`). Previously: 1705 collected, 0 skipped
+  (2026-09-14 on `main` @ `c6605a4`).
 
 **By Phase:**
 
@@ -373,7 +423,7 @@ quarterly pipeline. Notebooks are a prerequisite, not a nice-to-have. Full analy
 | 4 — Asset Prediction & Allocation | 5/5 | Complete 2026-07-23 |
 | 5 — Honest Backtest & Evaluation | 7/7 | Complete 2026-07-27, closed 2026-08-04 |
 | 6 — Platform Notebook Suite | 7/7 | Verified 5/5 + UAT closed 2026-09-10 |
-| 7 — Regime Representation | 0/TBD | Context gathered; not planned |
+| 7 — Regime Representation | 12/12 | **CLOSED 2026-09-21** — INV-01 in full; **REG-01 PARTIAL** (criterion 6 UNRESOLVED) |
 | 8 — Migration to Public Repo | 0/TBD | Not started |
 
 ⚠ Phases 1 and 5 carry the UAT-audit caveat below: criteria satisfied as phrased, recorded
@@ -392,6 +442,7 @@ numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
 | Phase 06 P01 | 55min | 3 tasks | 11 files |
 | Phase 7 P08 | 1 session | 3 tasks | 6 files |
 | Phase 07 P11 | 1h05m | 3 tasks | 6 files |
+| Phase 07 P12 | 35min | 2 tasks | 4 files |
 
 *Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
 *Updated after each plan completion.*
@@ -433,6 +484,10 @@ Recent decisions affecting current work:
 - [Phase 07-11]: Criterion 7 measured: wealth_delta -0.123438, dd_delta +0.024084, both over 588 steps 1972-01-31 to 2020-12-31 (joint bw1=0.50 minus classifier-#1-alone bw1=1.00, L1-only routing). Both governing bands held; neither leg's DSR clears the multiple-testing hurdle at 42 trials.
 - [Phase 07-11]: Joint harness degrades a step if EITHER classifier fails, so the two legs share a degraded-step SET rather than merely an index — the strongest available guarantee that the comparison is a one-parameter ablation.
 - [Phase 07-11]: No sharpe key written into the trial registry: two near-identical legs would collapse registry_sharpe_variance from its 1.0 placeholder to ~1e-6, silently disabling the multiple-testing correction project-wide. Left open as an ADR-0002 amendment question.
+- [Phase 07-12]: ADR-0002 accepted at a SCOPED width: what is accepted is the decision (classifier #2 was built on a disjoint set, pinned by rule, fit and measured), NOT a finding that an independent axis was added. Criterion 6 is unresolved and the ADR says so without a mitigating clause.
+- [Phase 07-12]: REG-01 claimed PARTIALLY rather than in full, by Glenn's explicit decision of 2026-09-18, with criterion 6 named as the open item rather than folded in. The plan as written assumed both requirements could be claimed outright; that assumption did not survive the INCONCLUSIVE dependence verdict.
+- [Phase 07-12]: The ADR's pre-declared sections were not edited in place. The Status section's original text is preserved verbatim under a subsection, and the probe-edge table's five extended rows carry a labelled AMENDMENT 2026-09-21 note — D-17's before-the-run guarantee is worthless if a pre-declaration can be silently rewritten afterward.
+- [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
 
 ### Pending Todos
 
@@ -540,10 +595,12 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T14:55:09.288Z
-Stopped at: Completed 07-11-PLAN.md
-Resume file: .planning/phases/07-regime-representation/07-04-SUMMARY.md (then ADR-0001's
-"Deferrals and open items" for wave 2's starting point)
+Last session: 2026-09-21T16:05:00.000Z
+Stopped at: Completed 07-12-PLAN.md — **Phase 7 CLOSED**
+Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
+acceptance — the thirteen items Phase 7 carries forward, and the starting point for Phase 8.
+**Read § ACCEPTANCE 2026-09-21 first: criterion 6 is unresolved and REG-01 is only partially
+delivered. Nothing in Phase 7 establishes that classifier #2 adds an independent axis.**
 
 Between the 2026-09-10 context session and this one, the release-engineering work
 (quick tasks 260910-vyi, 260911-kkj, 260911-la3, 260911-nt7) was carried out **partly
