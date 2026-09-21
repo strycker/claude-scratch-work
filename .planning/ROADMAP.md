@@ -27,7 +27,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
 - [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation (completed 2026-09-10)
 - [x] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01). **Closed 2026-09-21: INV-01 delivered in full; REG-01 delivered PARTIALLY — criterion 6's dependence verdict is UNRESOLVED and no independent second axis is established**
-- [ ] **Phase 8: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
+- [ ] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run
+- [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
 
@@ -490,7 +491,72 @@ credit/GDP) are wave 2's feature-discovery work, and INV-01's constraint that su
 admitted as **named** features — never anonymous principal components, preserving design
 decision R4 — is exactly the interpretability requirement a leadership classifier needs.
 
-### Phase 8: Migration to Public Repo
+### Phase 8: Regime Persistence & Stability
+
+**Goal**: The real-time (filtered) regime labeling stops flickering, allocation responds through
+the anti-flicker machinery the design already specifies, and the one §4.4 acceptance criterion
+that has never been run is run.
+
+**Depends on**: Phase 7
+**Blocks**: Phase 9 (Migration) — per the Phase 7 wave-2 UAT ruling, 2026-09-21
+**Requirements**: (to be assigned at planning)
+
+**Why this phase exists.** Phase 7's UAT measured classifier #1's *filtered* labeling changing
+state in **246 of 588 decision months (41.84%)** against a **3.74%** full-sample rate. Median
+filtered run length is **1.0 month**; 136 of 247 runs are a single month; **74.8%** of changes
+fall more than three months from any real transition, and quiet-period churn (39.8%) is nearly as
+high as boundary churn (49.2%). The labeling is effectively memoryless. Design §5.4 calls the
+smoothed-vs-filtered gap "the measured hindsight content of the strategy" — here it is ~11× and
+was never budgeted. That churn feeds the allocation tilt directly, and therefore criterion 7's
+measured lift.
+
+**Success Criteria** (what must be TRUE):
+
+  1. **§5.1's recursive prior-state feature exists and is honest.** The nowcaster's feature set
+     includes the prior **predicted (filtered)** state distribution, produced recursively within
+     each walk-forward step. A guard test **fails** if the prior **smoothed** label is ever
+     substituted — that label is built from future data, and substituting it would make CV
+     accuracy look excellent while production flickered unchanged (P1, this project's documented
+     first sin, in its easiest form).
+
+  2. **The churn is measurably lower, on the same window.** Filtered state-change rate re-measured
+     over the same 588 steps, 1972-01-31 → 2020-12-31, reported before and after. A target is not
+     pre-declared here; the number is reported with its window either way.
+
+  3. **§5.3's hysteresis gates allocation, closing audit item A7.** `update_active_regime` is
+     already imported by both drivers and today gates nothing — A7 (rated High, open since
+     2026-09-09): *"the thresholds stabilize a label, not a portfolio."* Either allocation acts on
+     it, or the criterion is reworded; silently leaving it inert is not an option.
+
+  4. **§4.4 criterion 3 is RUN, for both classifiers.** Subsample re-estimation (drop first
+     decade / drop last decade / block bootstrap) with Hungarian matching on distribution
+     distances to defeat label switching. There is currently **no implementation anywhere** in
+     `src/` or `tests/`. This is the criterion that decides whether classifier #1's crisis state
+     is a regime or an *episode* — the §4.4 amendment of 2026-09-18 admitted it on a
+     nine-episode recurrence argument, which is evidence *for* the exemption but is not this
+     test. The result is recorded whichever way it falls.
+
+  5. **Criterion 7 is re-measured** under the changed labeling, so the phase's effect on the
+     headline is visible rather than inferred. Both legs, one harness, window stated inline.
+
+  6. **A11 is revisited.** Glenn deliberately left it open on 2026-09-18 when the band tiers were
+     decided (universal gates, domain advises) and on 2026-09-21 chose to reopen it. The question
+     — should any gate fail on a bad-but-working model, rather than only on a broken measurement?
+     — is answered and recorded as a decision, in either direction. This is a reversal of a prior
+     choice and must be written as one.
+
+  7. **The (iv)-non-compliance gap is pinned.** A test asserts that non-joint consumers of
+     `vol_targeted_tilt` (notably `driver.py:497`) receive the **unpooled** per-regime estimate,
+     so validation gap G6 is guarded rather than living in prose. The wave-2 audit could not
+     write it — that file was outside its scope.
+
+  8. **Recorded counts match reality.** `CLAUDE.md` (two places) and `README.md`'s badge claim
+     **1705** tests; the suite is at **2018**. Trivial to fix, and exactly the shape of recorded
+     number that has already misled this project three times.
+
+---
+
+### Phase 9: Migration to Public Repo
 
 **Goal**: The validated platform lives in `strycker/trading-crab`, the public/PyPI
 two-package repo, ready for continued development outside the heavy-dev workbench.

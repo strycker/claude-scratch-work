@@ -16,7 +16,8 @@
 > pipeline** — ingest → features → clustering → regime → predict → assets → diagnostics
 > → tactics → CLI. It was written in April 2026, before the platform existed.
 >
-> That is **not** what we are migrating. `.planning/ROADMAP.md` Phase 8 targets the
+> That is **not** what we are migrating. `.planning/ROADMAP.md` Phase 9 (renumbered from 8 on 2026-09-21 when Phase 8
+> Regime Persistence & Stability was inserted ahead of it) targets the
 > **L0–L4 platform** built and verified across GSD Phases 1–5. Following the old plan
 > would port 10,935 lines of superseded quarterly code and none of the 6,977 lines that
 > five phases of verification actually cover.

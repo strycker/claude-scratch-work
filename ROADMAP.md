@@ -64,9 +64,10 @@ GARCH(1,1)/EWMA per asset; **vol targeting** overlay (size ∝ 1/σ̂); regime-c
 ### T0.8  Wire in `feature_gating.py` (causal-feature guard)  `S`  (R5, §8.2, salvaged)
 Enforce `features_supervised.parquet` (causal) for L2 training; `--allow-noncausal-features` opt-in falls back with a loud warning. Cheap, and it locks in the L1-may-see-future / L2-may-not invariant the whole design rests on. Do early alongside T0.1.
 
-### T0.11  Filtered-labeling churn — BLOCKING Phase 8  `M`  (R8, §5.3, §5.4)
-**Raised by the Phase 7 wave-2 UAT (2026-09-21) and marked BLOCKING by Glenn: Phase 8 does not
-start until this is addressed.**
+### T0.11  Filtered-labeling churn — **now GSD Phase 8**  `M`  (R8, §5.1, §5.3, §5.4)
+**Raised by the Phase 7 wave-2 UAT (2026-09-21) and marked BLOCKING by Glenn.** It is now the
+substance of **GSD Phase 8 (Regime Persistence & Stability)**, inserted ahead of Migration, which
+renumbered from Phase 8 to **Phase 9**.
 
 Classifier #1's **filtered** labeling changes state in **246 of 588 decision months (41.84%)**
 against a full-sample transition rate of **3.60%** — a ~12× gap. The filtered series is what a

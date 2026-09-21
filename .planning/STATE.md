@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase_name: Regime Representation
-status: in-progress
-stopped_at: Completed 07-12-PLAN.md — Phase 7 closed
-last_updated: "2026-09-21T16:05:00.000Z"
+current_phase_name: Regime Persistence & Stability
+status: planning
+stopped_at: Phase 7 closed and merged; Phase 8 (Regime Persistence & Stability) created, awaiting planning
+last_updated: "2026-09-21T18:40:00.000Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 7
   total_plans: 47
   completed_plans: 47
-current_phase: 7
+current_phase: 8
 last_activity: 2026-09-21
-last_activity_desc: "Phase 7 CLOSED — ADR-0002 Accepted 2026-09-21. INV-01 delivered in full; REG-01 delivered PARTIALLY, criterion 6's dependence verdict UNRESOLVED (NMI 0.464088 at the 96.60th percentile, p95 0.449202, p99 0.501195) with no tie-break permitted. Criterion 5 MET; criterion 7 MET as a measurement with wealth_delta -0.123438 (an 11.61% terminal-wealth shortfall) and dd_delta +0.024084, both over 588 steps 1972-01-31 → 2020-12-31. Ratchet re-measured at 31, unchanged. Suite 1983 passed, 0 skipped"
+last_activity_desc: "Phase 7 CLOSED — ADR-0002 Accepted 2026-09-21. INV-01 delivered in full; REG-01 delivered PARTIALLY, criterion 6's dependence verdict UNRESOLVED (NMI 0.464088 at the 96.60th percentile, p95 0.449202, p99 0.501195) with no tie-break permitted. Criterion 5 MET; criterion 7 MET as a measurement with wealth_delta -0.123438 (an 11.61% terminal-wealth shortfall) and dd_delta +0.024084, both over 588 steps 1972-01-31 → 2020-12-31. Ratchet re-measured at 31, unchanged. Suite 2018 passed, 0 skipped (1983 at close; +30 from the wave-2 Nyquist audit, +5 from T0.12's fix)"
 ---
 
 # Project State
