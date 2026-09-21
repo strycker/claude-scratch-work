@@ -253,3 +253,72 @@ class TestBuildFilteredProbsMatrix:
         assert row0[2] == pytest.approx(0.3)
         assert row0[3] == pytest.approx(0.15)
         assert row0[4] == pytest.approx(0.25)
+
+
+# ── T0.12: the silent zero on a wrong column shape ──────────────────────────
+#
+# compute_sojourn_lag_headline returned n_resolved=0, median_lag=NaN, ratio=NaN
+# with NO exception and NO warning when filtered_probs_matrix carried
+# "state_{k}" STRING columns. target_state is an int, so `0 not in
+# ["state_0", ...]` was True for every state and every transition fell into the
+# no-column branch. It read as the substantive finding "real-time detection
+# never happened" when the cause was a wrong matrix shape. Plan 07-11's first
+# draft reported 0 of 25 transitions resolved for exactly this reason.
+#
+# The discriminator is column TYPE, not overlap: a genuinely absent state is a
+# real unresolved transition and must still be allowed.
+
+
+class TestT012WrongColumnShapeRaises:
+    @staticmethod
+    def _ref():
+        idx = pd.date_range("1972-01-31", periods=60, freq="ME")
+        return pd.Series([0] * 30 + [1] * 30, index=idx, name="state"), idx
+
+    def test_state_k_string_columns_raise_instead_of_reporting_zero(self):
+        """The defect itself. Deleting the guard makes this return n_resolved=0."""
+        ref, idx = self._ref()
+        probs = pd.DataFrame(
+            {f"state_{i}": [0.0] * 32 + [1.0] * 28 for i in range(2)}, index=idx
+        )
+        with pytest.raises(ValueError, match="CANONICAL INTEGER state labels"):
+            compute_sojourn_lag_headline(ref, probs)
+
+    def test_the_message_names_the_offending_columns(self):
+        """A shape error that does not say which columns are wrong sends the
+        caller back to guessing — the same cost as the silent zero."""
+        ref, idx = self._ref()
+        probs = pd.DataFrame({"state_0": [1.0] * 60, "state_1": [0.0] * 60}, index=idx)
+        with pytest.raises(ValueError) as exc:
+            compute_sojourn_lag_headline(ref, probs)
+        assert "state_0" in str(exc.value)
+
+    def test_integer_columns_still_compute_a_real_headline(self):
+        """The guard must not be a one-way refusal — otherwise it could only
+        confirm. Probability for state 1 crosses 0.70 two months late."""
+        ref, idx = self._ref()
+        p1 = [0.0] * 32 + [1.0] * 28
+        probs = pd.DataFrame({0: [1.0 - x for x in p1], 1: p1}, index=idx)
+        out = compute_sojourn_lag_headline(ref, probs)
+        assert out["n_transitions"] == 1
+        assert out["n_resolved"] == 1
+        assert out["median_lag"] == pytest.approx(2.0)
+
+    def test_a_genuinely_absent_state_column_is_NOT_an_error(self):
+        """Overlap is the WRONG discriminator. The only transition here targets
+        state 1, which has no column — zero overlap, but legitimate: that
+        transition is truly unresolved and keeps the NaN convention. A guard
+        keyed on overlap would wrongly raise here."""
+        ref, idx = self._ref()
+        out = compute_sojourn_lag_headline(ref, pd.DataFrame({0: [1.0] * 60}, index=idx))
+        assert out["n_transitions"] == 1
+        assert out["n_resolved"] == 0
+        assert np.isnan(out["median_lag"])
+
+    def test_bool_columns_are_rejected_too(self):
+        """bool is an int subclass in Python; a True/False-keyed matrix is not a
+        state labeling and must not slip through the isinstance check."""
+        ref, idx = self._ref()
+        probs = pd.DataFrame({True: [1.0] * 60, False: [0.0] * 60}, index=idx)
+        with pytest.raises(ValueError, match="CANONICAL INTEGER state labels"):
+            compute_sojourn_lag_headline(ref, probs)

@@ -1,13 +1,13 @@
 {
   "name": "regime_profiles",
-  "created": "2026-09-18T17:19:59.338023",
+  "created": "2026-09-18T19:06:01.219986",
   "config_hash": "6c209fad",
-  "rows": 5,
+  "rows": 6,
   "columns": 2,
   "col_names": [
     "state",
     "profile"
   ],
   "index_start": "0",
-  "index_end": "4"
+  "index_end": "5"
 }

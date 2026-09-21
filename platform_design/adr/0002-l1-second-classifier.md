@@ -2,18 +2,44 @@
 
 ## Status
 
-**Proposed, 2026-09-17.** Phase 7 (`07-regime-representation`), wave 2 (planned and executed in
-wave 3). Requirement coverage: **REG-01's deferred clauses** (a second, independent labeler on a
-disjoint feature set; the disjointness assertion; the dependence measurement; the joint
-allocation lift) and **INV-01 in full** (D-09's wave-2 deferral, closed by plan 07-07's screen).
+**Accepted, 2026-09-21**, by plan 07-12. Phase 7 (`07-regime-representation`), wave 2.
 
-**This ADR is written at Proposed BEFORE classifier #2 is fit and before any evaluation run
-happens.** That ordering is the point, not an accident of scheduling: D-17 requires the trial
-ceiling to be on the record before the runs it budgets for, and D-13 spends **zero** selection
-trials choosing classifier #2's constants. A record written after the fit could not distinguish
-"pinned by construction" from "chosen because it looked better." Plan 07-11 amends this ADR to
-Accepted once the measurements from plans 07-09 and 07-10 exist — those measurements will be
-appended to a decision already made, never used to revise it.
+**What this acceptance covers, stated before anything else so it cannot be over-read.** What is
+accepted is the **decision**: a second labeler was specified on a disjoint leadership/relative
+feature set, its constants were pinned by rule rather than chosen by search, it was fit, and its
+relationship to classifier #1 was measured. **This is not a finding that classifier #2 adds an
+independent axis, and nothing in this document may be cited as one.** Criterion 6's
+pre-registered test returned **INCONCLUSIVE** and the criterion is **UNRESOLVED**; criterion 7's
+wealth lift came out **negative** (−0.123438 nats over 588 steps, 1972-01-31 → 2020-12-31).
+Both are recorded in full below, with their windows.
+
+Requirement coverage is split accordingly and is claimed at exactly that width:
+**REG-01 is claimed PARTIALLY** — criterion 6 is the named open item — and **INV-01 in full**
+(D-09's wave-2 deferral, closed by plan 07-07's screen). See § Requirement coverage.
+
+### How this status was reached — the original pre-declaration, kept verbatim
+
+The two paragraphs below are the Status section as written on 2026-09-17, before classifier #2
+was fit. They are preserved rather than replaced, because the ordering they describe is the
+evidence that the constants were not chosen to flatter a result:
+
+> **Proposed, 2026-09-17.** Phase 7 (`07-regime-representation`), wave 2 (planned and executed in
+> wave 3). Requirement coverage: **REG-01's deferred clauses** (a second, independent labeler on a
+> disjoint feature set; the disjointness assertion; the dependence measurement; the joint
+> allocation lift) and **INV-01 in full** (D-09's wave-2 deferral, closed by plan 07-07's screen).
+>
+> **This ADR is written at Proposed BEFORE classifier #2 is fit and before any evaluation run
+> happens.** That ordering is the point, not an accident of scheduling: D-17 requires the trial
+> ceiling to be on the record before the runs it budgets for, and D-13 spends **zero** selection
+> trials choosing classifier #2's constants. A record written after the fit could not distinguish
+> "pinned by construction" from "chosen because it looked better." Plan 07-11 amends this ADR to
+> Accepted once the measurements from plans 07-09 and 07-10 exist — those measurements will be
+> appended to a decision already made, never used to revise it.
+
+One correction to that text, labelled rather than silently applied: acceptance was carried out by
+plan **07-12**, not 07-11. Plan 07-11 measured criterion 7 and wrote `07-JOINT-LIFT.md`; 07-12 is
+the closure plan that accepts this ADR. The substance — measurements appended to a decision
+already made, never used to revise it — held.
 
 ## Context
 
@@ -466,14 +492,25 @@ close.
 
 | Requirement | Edge | Status | Resolution |
 |---|---|---|---|
-| REG-01 | adjacency | **resolved** (wave 1); **re-opened and re-resolved** by classifier #2 | Wave 1: driver and reference feature sets compared as ORDERED lists plus a set comparison for the failure message. Classifier #2 re-opens it because it has its own ordered frozen list: `freeze_classifier2_columns` reuses `_reference_label_columns` unmodified and preserves declaration order, and order is load-bearing because `canonicalize_states` locates `sort_column` by position. Pinned by `tests/unit/test_platform_labeling_classifier2.py` (declaration-order and exclusion tests). |
-| REG-01 | empty | **resolved** (wave 1); **re-opened and re-resolved** by classifier #2 | Wave 1: an empty or shorter-than-K frozen list raises a named `ValueError` at the `_refit_l1` boundary. Classifier #2 mirrors both messages in shape at its own boundary (`freeze_classifier2_columns` raises on an empty resolved list and on a list shorter than K = 3), so the two boundaries read alike and neither can surface as an opaque error from inside the clustering fit. |
-| REG-01 | ordering | **resolved** (wave 1); **re-opened and re-resolved** by classifier #2 — the substantive one | Wave 1: output order is stable and load-bearing, nothing in the call chain re-sorts the frozen list. Classifier #2 genuinely re-opens this: its state numbering cannot use classifier #1's `trailing_return_1m` default (D-10 excludes it), so it passes `sort_column="rs_equities_bonds"` **explicitly**, and a test asserts that a feature frame lacking that column **raises** rather than warning. Plan 07-05 deleted the fallback precisely so this edge cannot be resolved silently. |
-| INV-01 | boundary | **resolved** (wave 2, plan 07-07) | Two distinct boundaries, both pinned: the stability tolerance boundary (`test_stable_at_exact_tolerance_boundary` — a range of exactly `LOADING_STABILITY_TOLERANCE` classifies *stable*, i.e. `<=` not `<`), and the holdout cutoff (`test_holdout_boundary_applied_before_any_ratio_is_computed`, `test_no_result_admissible_month_exceeds_the_holdout_cutoff`). |
-| INV-01 | adjacency | **resolved** (wave 2, plan 07-07) | Era windows are adjacent expanding slices; `test_era_windows_never_leak_future_values_into_an_early_era` asserts an early era's loading is unchanged by values that only exist in a later era, and `test_era_count_is_a_handful_not_one_per_month` pins the stride so eras are a handful, not one per month. |
+| REG-01 | adjacency | **resolved** (wave 1); **re-opened and re-resolved** by classifier #2 | Wave 1: driver and reference feature sets compared as ORDERED lists plus a set comparison for the failure message. Classifier #2 re-opens it because it has its own ordered frozen list: `freeze_classifier2_columns` reuses `_reference_label_columns` **unmodified**, so wave 1's ordered-list treatment carries across unchanged, and order is load-bearing because `canonicalize_states` locates `sort_column` by position. Named tests: `test_platform_labeling_classifier2.py::TestFreezeClassifier2Columns::test_returns_every_candidate_in_declaration_order`, `::test_matches_reference_label_columns_called_directly` (the reuse is asserted, not assumed), `::test_late_starting_candidate_excluded_by_name_with_its_first_valid_month` and `::test_candidate_absent_from_the_frame_is_excluded_not_a_keyerror`. The **criterion-5 disjointness assertion** compares ordered lists at the same boundary: `test_platform_features_relative.py::test_disjoint_from_lean_feature_set`, `::test_configured_feature_list_is_disjoint_from_the_lean_set` and `::test_resolved_frozen_list_is_disjoint_from_the_lean_set` — the last of which asserts the *resolved* frozen eight, not merely the declared candidates, is disjoint from classifier #1's lean 13. |
+| REG-01 | empty | **resolved** (wave 1); **re-opened and re-resolved** by classifier #2 | Wave 1: an empty or shorter-than-K frozen list raises a named `ValueError` at the `_refit_l1` boundary. Classifier #2 mirrors both messages in shape at its own boundary (`freeze_classifier2_columns` raises on an empty resolved list and on a list shorter than K — K is **5** after the 2026-09-18 RE-PIN, not the 3 this row was drafted against), so the two boundaries read alike and neither can surface as an opaque error from inside the clustering fit. Named tests: `test_platform_labeling_classifier2.py::TestFreezeClassifier2Columns::test_empty_frozen_list_raises_naming_the_count` and `::test_shorter_than_K_raises_naming_the_count_and_K`, plus `::test_all_candidates_nan_after_the_decision_date_raises`. The dependence side of the same edge is pinned by `test_platform_evaluation_dependence.py::test_disjoint_index_gives_nan_statistics_and_warns_without_raising`, `::test_disjoint_index_never_reports_zero` and `::test_disjoint_span_renders_as_a_finding_not_as_a_number` — a zero `n_compared` is reported as a disjoint-span finding with NaN statistics and a WARNING, **never** as agreement or as independence. |
+| REG-01 | ordering | **resolved** (wave 1); **re-opened and re-resolved** by classifier #2 — the substantive one | Wave 1: output order is stable and load-bearing, nothing in the call chain re-sorts the frozen list. Classifier #2 genuinely re-opens this: its state numbering cannot use classifier #1's `trailing_return_1m` default (D-10 excludes it), so it passes `sort_column="rs_equities_bonds"` **explicitly**, and a test asserts that a feature frame lacking that column **raises** rather than warning. Plan 07-05 deleted the fallback precisely so this edge cannot be resolved silently. Named tests that re-resolve it: `test_platform_labeling_classifier2.py::TestLabelLeadershipRegimes::test_missing_ordering_column_raises` (the raise, not a warning), `::test_states_are_numbered_by_ascending_sort_column_centroid` (the ordering is the pinned column's, not centroid column 0's), `::test_two_calls_on_the_same_frame_return_identical_states` (idempotence), `::test_returns_frozen_columns_states_and_confidences_aligned`, and `test_platform_labeling.py::test_disjoint_feature_set_end_to_end_explicit_sort_column` (permutation-stability end-to-end for a feature list disjoint from classifier #1's). The frozen list's order is load-bearing because `canonicalize_states` locates `sort_column` **by position** among the centroid columns; `TestFreezeClassifier2Columns::test_returns_every_candidate_in_declaration_order` pins that order. |
+| INV-01 | boundary | **resolved** (wave 2, plan 07-07) | **The ratio-admissibility boundary, named first because it is the one D-11's freeze turns on:** a ratio's first admissible month is the **later** of its two sources' first valid months, and must fall at or before the **1972-01-31** first decision date to survive the freeze. Pinned by `tests/unit/test_platform_macro_ingest.py::test_boundary_m2_gdp_first_valid_is_the_later_source_start`. Two further boundaries, both pinned: (`test_stable_at_exact_tolerance_boundary` — a range of exactly `LOADING_STABILITY_TOLERANCE` classifies *stable*, i.e. `<=` not `<`), and the holdout cutoff (`test_holdout_boundary_applied_before_any_ratio_is_computed`, `test_no_result_admissible_month_exceeds_the_holdout_cutoff`). |
+| INV-01 | adjacency | **resolved** (wave 2, plan 07-07) | **The denominator-adjacency case, stated first:** `fred_gdp` is quarterly and is forward-filled across the months of a quarter, so **adjacent months of a GDP-denominated ratio share a denominator by construction**. No interpolation was added, and none is implied by the forward fill. Pinned by `tests/unit/test_platform_macro_ingest.py::test_adjacency_denominator_not_interpolated_across_a_quarter`, which recovers the denominator back out of the ratio and asserts it is **constant within a quarter** rather than sloping. Separately, era windows are adjacent expanding slices; `test_era_windows_never_leak_future_values_into_an_early_era` asserts an early era's loading is unchanged by values that only exist in a later era, and `test_era_count_is_a_handful_not_one_per_month` pins the stride so eras are a handful, not one per month. |
 | INV-01 | empty | **resolved** (wave 2, plan 07-07) | `test_no_computable_candidate_raises` / `test_no_candidate_computable_raises` — zero computable candidates raises rather than returning an empty survivor list; `test_all_nan_candidate_excluded_with_warning` and `test_missing_column_excluded_with_warning` cover the per-candidate empty case with a named WARNING. |
 | INV-01 | ordering | **resolved** (wave 2, plan 07-07) | `test_returns_frame_indexed_by_ordered_candidate_names` and `test_results_are_in_invariant_candidates_declared_order` — results follow `INVARIANT_CANDIDATES`' declared order, and the loadings frame is indexed by candidate NAME, never by component index (`test_rejects_integer_or_component_label_index`, which is also R4's structural guard). |
-| INV-01 | precision | **resolved** (wave 2, plan 07-07) | The measured per-era loading ranges are 4.4e-16 and 2.2e-16 — machine precision, not drift — and are classified *stable* rather than being mistaken for movement. The exact-boundary comparison test above pins the float comparison as inclusive, and plan 07-07 §4's caveat records that a 1/√2 loading on two standardized candidates is an arithmetic identity rather than evidence, so "stable at machine precision" is not over-read. |
+| INV-01 | precision | **resolved** (wave 2, plan 07-07) | **The named tolerance a stability claim would fail at is `LOADING_STABILITY_TOLERANCE = 0.15`** (`platform/features/invariants.py`), applied as `range <= 0.15` — inclusive at the boundary. Loadings are compared **unrounded**; rounding to five decimals happens only for display in the screening record. The measured per-era loading ranges are 4.4e-16 and 2.2e-16 — machine precision, not drift — and are classified *stable* rather than being mistaken for movement. The exact-boundary comparison test above pins the float comparison as inclusive, and plan 07-07 §4's caveat records that a 1/√2 loading on two standardized candidates is an arithmetic identity rather than evidence, so "stable at machine precision" is not over-read. |
+
+**AMENDMENT 2026-09-21 (plan 07-12), labelled rather than silent.** The eight rows above were
+drafted at Proposed. At acceptance every row was re-checked against the tree and **five rows were
+extended, none weakened and none re-classified**: REG-01 `adjacency` and `empty` and all four
+INV-01 rows now name the specific test that resolves them rather than describing it, REG-01
+`ordering` names the five tests that re-resolve it against classifier #2, INV-01 `boundary` and
+`adjacency` lead with the two `test_platform_macro_ingest.py` tests the wave-2 plan specified,
+and INV-01 `precision` states the numeric tolerance (0.15) instead of calling it small. One
+factual correction is carried in the `empty` row: it was drafted against **K = 3** and K is now
+**5** after the 2026-09-18 RE-PIN. Every named test was verified to exist in the tree by name on
+2026-09-21. No row's status changed; none was deferred at Proposed and none is deferred now.
 
 ---
 
@@ -608,3 +645,400 @@ lift evaluations and **zero** registry rows:
 `tests/unit/test_platform_labeling_classifier2.py::TestClassifier2LiveOccupancyAgainstDesign44`
 now asserts criterion 1 against the live fit as a plain passing test; before the re-pin it carried
 a `strict=True` xfail recording the breach.
+
+---
+
+## ACCEPTANCE 2026-09-21 — Consequences, as measured
+
+This section is appended at acceptance. Nothing above it is revised by it; where a figure above
+was superseded by a re-pin or a re-measurement, that is said here rather than by editing the
+earlier text. **Every number below carries its window in the same table cell or sentence** — the
+binding condition wave 1's UAT attached to criterion 3, extended to criteria 5, 6 and 7.
+
+**D-06 governs: measurement is the gate, not the sign.** That is not a licence to present an
+unfavourable number favourably. Where a result came out badly it is stated in the units it is
+actually in, first, with no clause after it doing repair work.
+
+### Criterion 5 — occupancy and disjointness: **MET**
+
+Classifier #2 as re-pinned (K = 5, λ = 16.0; see § RE-PIN 2026-09-18), fit on the dev-carved
+span:
+
+| state | occupancy (696 months, 1963-01-31 → 2020-12-31) | §4.4 floor ≥~8% | §4.4 cap ≤~35% |
+|---|---|---|---|
+| 0 | **16.6667%** | PASS | PASS |
+| 1 | **22.7011%** | PASS | PASS |
+| 2 | **22.4138%** | PASS | PASS |
+| 3 | **23.8506%** | PASS | PASS |
+| 4 | **14.3678%** | PASS | PASS |
+
+Occupancy **sum error exactly 0.0** over those 696 months. All five states sit inside §4.4
+criterion 1's **~8%–35%** band; **classifier #2 has no sub-floor state and does not invoke the
+recurrence exemption** design §4.4 gained on 2026-09-18 (classifier #1 does — see § Requirement
+coverage). Disjointness from classifier #1's lean 13 is asserted on the **resolved** frozen eight,
+not merely on the declared candidate list, by
+`tests/unit/test_platform_features_relative.py::test_resolved_frozen_list_is_disjoint_from_the_lean_set`.
+
+**Correction carried, not buried: there is no "§4.4 five-percent floor."** ROADMAP criterion 5 as
+originally worded cited one. §4.4 criterion 1 reads "every state ≥ ~8% and ≤ ~35% of months" — a
+**two-sided** band. The 5% figure was a project-wide misquote corrected on 2026-09-17
+(ADR-0001 § AMENDMENT 2026-09-17); the table above is scored against the real, two-sided
+criterion, which is the stricter reading in both directions.
+
+### Criterion 6 — dependence: **UNRESOLVED**. Neither met nor failed.
+
+Re-measured after **both** classifiers were re-pinned, so the statistics recorded at Proposed and
+in `07-DEPENDENCE.md` §3 are **void** and are superseded here.
+
+| statistic | value | measured over |
+|---|---|---|
+| Adjusted Rand | **0.354841** | `n_compared` = **695** months, **1963-02-28 → 2020-12-31**, K₁ = 6 vs K₂ = 5 |
+| Normalized mutual information | **0.464088** | `n_compared` = **695** months, **1963-02-28 → 2020-12-31**, K₁ = 6 vs K₂ = 5 |
+| Cramér's V | **0.589748** | `n_compared` = **695** months, **1963-02-28 → 2020-12-31**, K₁ = 6 vs K₂ = 5 |
+
+Read against the **block-permutation control** (2000 resamples, seed 20260918; block counts used:
+classifier #1 **26**, classifier #2 **13**), which holds each labeling's own sojourn structure and
+occupancy fixed and destroys only the alignment between them:
+
+| statistic | observed | null p50 | p95 | p99 | observed percentile |
+|---|---|---|---|---|---|
+| Adjusted Rand | 0.354841 | 0.2164 | 0.3332 | 0.4086 | 96.75 |
+| **NMI** (the pre-registered read) | **0.464088** | 0.3406 | **0.449202** | **0.501195** | **96.60** |
+| Cramér's V | 0.589748 | 0.5214 | 0.6178 | 0.6584 | 87.70 |
+
+**Verdict, by the rule committed at `298b1bc` before the control code existed:**
+p95 0.449202 < observed NMI 0.464088 ≤ p99 0.501195 → **INCONCLUSIVE**.
+
+**What that means, said plainly and without repair.** The association is elevated above what
+temporal blockiness alone explains, but not by enough to call. **This measurement cannot decide
+whether classifier #2 added an axis, and nothing else in this ADR decides it either.** Criterion
+6 is therefore **open**, and that is why REG-01 is claimed PARTIALLY below rather than in full.
+
+**No tie-break was run and none may be.** The pre-registration forbids a fourth statistic, a
+different null and a re-run at another seed; all three would be the garden of forking paths it
+exists to close. **Criterion 7 is not a tie-break on criterion 6** — it is a separate,
+independently pre-planned measurement asking a different question, and it is not offered here as
+evidence about dependence.
+
+One property of the null is recorded because it bears on how the number should be read, and it
+cuts in classifier #2's favour rather than against it: `_shuffle_blocks` merges same-state blocks
+that land adjacent, so each resample is slightly blockier than its input, shifting the null
+**up**. The bias is one-directional and conservative — it can push a verdict toward "failed to add
+an axis" but can never manufacture "added an axis." An inconclusive result under such a null is
+mildly favourable to classifier #2. **It is not a resolution of the criterion and is not offered
+as one.**
+
+### Criterion 7 — joint allocation lift: **MET as a measurement. The wealth sign is negative.**
+
+Routing `L1_ONLY_LAST_FILTERED_STATE`, decision-bearing, pinned at decision (e) before any run.
+Both legs from one harness differing only in `blend_weight_1`; `blend_weight_1 = 1.0` **is** the
+#1-alone leg.
+
+| | classifier #1 alone | joint (#1 × #2) |
+|---|---|---|
+| **Window** | **588 steps, 1972-01-31 → 2020-12-31** | **588 steps, 1972-01-31 → 2020-12-31** |
+| Degraded steps | **0 of 588** | **0 of 588** |
+| Terminal log wealth (588 steps, 1972-01-31 → 2020-12-31) | **4.718723** nats | **4.595285** nats |
+| Max drawdown (same 588 steps, same window) | **−28.1442%**, 47 months underwater | **−25.7358%**, 40 months underwater |
+| Annualized Sharpe (588 monthly obs, same window) | **0.917073** | **0.914903** |
+| Registry tag | `07-11-c1-alone-L1only` | `07-11-joint-c1xc2-L1only` |
+
+| Axis | Value | Window (inline) | Governing (universal) band | Inside? |
+|---|---|---|---|---|
+| `wealth_delta` | **−0.123438 nats** | **588 steps, 1972-01-31 → 2020-12-31** | `abs(x) < 15` | yes |
+| `dd_delta` | **+0.024084** (+2.41 pp; the joint leg's drawdown is *shallower*) | **588 steps, 1972-01-31 → 2020-12-31** | `x ∈ [−1, 1]` (**revised**) | yes |
+
+**The wealth result, in the units it is actually in.** `wealth_delta = −0.123438` nats means the
+joint leg ended at e^(−0.123438) ≈ **0.8839×** the #1-alone leg's terminal wealth over those 588
+months — an **11.61% shortfall in terminal wealth**. **Blending classifier #2 in at the pinned
+weight made the book poorer over the measured window.** Costs are not the explanation: the joint
+leg paid **0.025557 less** in total transaction cost over the same 588 steps (0.070435 vs
+0.095992) and still ended 0.123438 nats lower. The shortfall is in the gross allocation the blend
+produced.
+
+**The drawdown result is a separate number and does not offset the wealth result.** `dd_delta =
++0.024084` is a difference of two drawdown fractions: the joint leg's worst peak-to-trough loss
+was **2.41 percentage points shallower** (−25.74% vs −28.14%) and its longest underwater stretch
+**7 months shorter** (40 vs 47), over the same 588 steps. That is a real, measured improvement on
+one axis. **It is not a reason to describe the phase's headline lift as favourable**, and it is
+additionally qualified by the § Named limitation below: this labeling identifies crises *ex post*,
+so a drawdown avoided in the labeling is not a drawdown avoided in real time.
+
+**Criterion 7 is satisfied because the lift was measured honestly and with its window, not
+because it came out well.** D-06 makes measurement the gate. The sign is stated, not softened.
+
+**The ADR's own named failure signature for this routing — "the two legs disagree in sign on
+joint lift" — half fired, and is recorded rather than explained.** On `wealth_delta` the two
+routings agree (−0.123438 L1-only, −0.134505 L2, both over 588 steps 1972-01-31 → 2020-12-31). On
+`dd_delta` they disagree in sign: **+0.024084** (L1-only) versus **−0.001137** (L2, over the same
+588 steps). The L2 magnitude is about one twentieth of the L1-only figure, so "the L2 path shows
+no drawdown effect" describes it better than "contradiction" — but it **is** a sign disagreement
+on one of two axes and it is **not explained here**. Per the firewall clause it is reported and
+not acted on.
+
+### The deflated Sharpe — **neither leg clears the multiple-testing hurdle**
+
+| Leg | Observed Sharpe (588 obs, 1972-01-31 → 2020-12-31) | `n_trials` | Trial count read at (UTC) | `sharpe_variance` | DSR |
+|---|---|---|---|---|---|
+| classifier #1 alone | 0.917073 | **42** | 2026-09-21T14:24:23.984933Z | 1.0 (placeholder) | **2.28151 × 10⁻¹²** |
+| joint (#1 × #2) | 0.914903 | **42** | 2026-09-21T14:24:23.984933Z | 1.0 (placeholder) | **1.46904 × 10⁻¹¹** |
+
+`format_dsr_verdict`'s own output, quoted verbatim for **both** legs:
+
+> "Deflated Sharpe ratio 0.0000 does not clear the multiple-testing hurdle — statistically
+> indistinguishable from a skill-less discovery given the number of trials searched."
+
+**The result does not clear the multiple-testing hurdle.** Both DSRs are far below 0.5. There is
+no near-miss to report and no target to have fallen short of: `07-VALIDATION.md` sets none for
+this number, precisely so there is nothing to miss narrowly. The joint leg's raw Sharpe
+(0.914903) is also *lower* than the baseline's (0.917073) over the same 588 steps, so the blend
+did not help on this axis before deflation either.
+
+`expected_max_sharpe(42, 1.0) = 2.208694`. **`sharpe_variance` is the declared `1.0` placeholder,
+not a measured quantity** — `registry_sharpe_variance()` logs that it found too few usable Sharpe
+observations on every call. That is a property of the estimator declared in
+`07-DSR-ESTIMATOR-NOTE.md` long before these runs, not a caveat invented for this result, and it
+is stated here **after** the verdict because it qualifies nothing above.
+
+### Estimator repair, 2026-09-21 — recorded because it changed the rules, not the verdicts
+
+`07-DSR-ESTIMATOR-NOTE.md` § AMENDMENT 2026-09-21 (commit `230c91c`) repaired a live trap in the
+estimator, decided by Glenn after plan 07-11 declined to write a `sharpe` key and flagged why.
+`_MIN_USABLE_SHARPE_OBSERVATIONS` was **2**: any two Sharpe-bearing rows switched
+`registry_sharpe_variance` off the conservative placeholder onto a computed value. Measured on
+plan 07-11's own two rows (Sharpe 0.917073 and 0.914903), sample variance 2.354450e-06 collapses
+`expected_max_sharpe(42, ·)` from **2.208694** to **0.003389** — a **99.85% collapse** of the
+hurdle, after which essentially any strategy clears DSR. The deeper error was a category one:
+those two rows are two arms of **one** ablation, not independently tried configurations.
+
+Two independent defences were implemented: `_MIN_USABLE_SHARPE_OBSERVATIONS` **2 → 20**, and
+`config["independent_trial"] is False` **excludes a row entirely** from the across-trials
+variance. Trial rows now do carry `metrics["sharpe"]`; plan 07-11's two rows were backfilled with
+`independent_trial: False`. **Today's verdicts are unchanged** — `sharpe_variance` is still 1.0,
+`expected_max_sharpe(42, 1.0)` is still 2.208694, and both DSRs above still do not clear.
+`DEGENERATE_SHARPE_VARIANCE = 1.0` **remains a declared assumption** governing every DSR this
+project reports, until 20 independent Sharpe-bearing trials exist — a longer road than before the
+repair, deliberately, because the previous road was short because it was wrong.
+
+---
+
+## ⚠ Named limitation, foregrounded here (not a footnote): what criterion 7's window and routing make this number, and what they make it not
+
+This is a section, in ADR-0001's own style, because a limitation that decides how a headline
+number may be cited does not belong in a parenthetical.
+
+**Criterion 7's lift was measured on 588 steps, 1972-01-31 → 2020-12-31, through the L1-only
+routing.** That routing runs **no L2 refit**, which is why both legs ran 588 of 588 steps with
+**0 degraded steps** — wave 1's dominant degradation mechanism (an early small post-embargo
+window starving a K-fold) is structurally absent from this path. The clean window is a
+*consequence of the routing*, not evidence that the production stack behaves this way.
+
+**What this number is therefore not comparable to.** Wave 1's `wealth_delta` **+0.377847** and
+`dd_delta` **−0.066124** were measured **through L2, on 356 steps ending 2017-05**, against a
+470-step ablation ending 2020-12, and they are a **different subtraction**: *strategy minus
+no-regime ablation*, where criterion 7's is *joint (#1 × #2) minus classifier-#1-alone*.
+**Any table placing +0.377847 beside −0.123438 without stating both differences is
+misreporting.** Criterion 7's #1-alone baseline was re-run through this harness and was never
+reused from wave 1.
+
+**What the routing costs in meaning.** Each classifier contributes a **degenerate one-hot on its
+own last filtered state**, so criterion 7 measures the L1→L4 path, not the production L1→L2→L4
+path. The L2 observational leg exists precisely because that gap is real; it is firewalled, and
+per the firewall clause **nothing downstream in this phase changed on the basis of it**.
+
+**What feeds that path, stated because it is uncomfortable rather than despite it.** Classifier
+#1's per-step **filtered** labeling changes state in **246 of 588 decision months (41.84%)**,
+against a full-sample label-transition rate of **3.60% (25 of 695 months, 1963-02-28 →
+2020-12-31)**. Classifier #2's filtered labeling changes in **24 of 588 (4.08%)** against a
+full-sample **1.72% (12 of 696 months, 1963-01-31 → 2020-12-31)**. **No plausibility band governs
+the filtered rate** — band 3b governs the full-sample labeling and says nothing about it — so
+nothing fired, and this is recorded as a finding rather than laundered through a band that was
+never about it. A labeler that re-labels its own most recent month in two months out of five is
+churning, that churn feeds the tilt directly under this routing, and it is the most likely
+mechanical source of the #1-alone leg's 0.163251 mean monthly turnover.
+
+**And the drawdown improvement must not be read as crisis-timing skill.** Classifier #1's crisis
+state has a **median sojourn of 3.0 months — exactly on design §4.4 criterion 2's boundary** —
+against §5.4's typical 1–3 month detection lag. This labeling identifies crises *ex post*.
+Whether L2 can nowcast them early enough to trade is **L2's question and it is unanswered**.
+`dd_delta = +0.024084 over 588 steps, 1972-01-31 → 2020-12-31` is **not** evidence that crises are
+nowcastable in time to act.
+
+---
+
+## Requirement coverage
+
+### REG-01 — claimed **PARTIALLY**. Criterion 6 is the named open item.
+
+Phase-wave 1 (plans 07-01…07-04, ADR-0001) satisfied the **feature-policy clauses**: one
+documented policy shared by the walk-forward driver and the evaluation reference, the §5.4
+sojourn/lag ratio made interpretable with its resolved-transition count, and classifier #1's
+ablation delta re-measured on both axes.
+
+Phase-wave 2 (plans 07-05…07-12, this ADR) satisfies **three** of REG-01's four remaining
+clauses and leaves **one open**:
+
+| REG-01 clause | Status | Evidence |
+|---|---|---|
+| A second, independent classifier fit **unsupervised** on features **disjoint** from classifier #1's | **satisfied** | Classifier #2, K = 5, λ = 16.0, frozen Lean 8; occupancy table above (696 months, 1963-01-31 → 2020-12-31) |
+| The **disjointness assertion** (a test, not a claim) | **satisfied** | `test_platform_features_relative.py::test_resolved_frozen_list_is_disjoint_from_the_lean_set` and two sibling tests |
+| Orthogonality **measured, not assumed** | **measured; the verdict is UNRESOLVED** | `07-DEPENDENCE.md` — ARI 0.354841 / NMI 0.464088 / Cramér's V 0.589748 over `n_compared` = 695 months, 1963-02-28 → 2020-12-31; block-permutation control returns **INCONCLUSIVE** at the 96.60th percentile against p95 0.449202 / p99 0.501195 |
+| Joint allocation lift **assessed walk-forward** against classifier #1 alone, every configuration registry-logged | **satisfied** | `07-JOINT-LIFT.md` — `wealth_delta` **−0.123438**, `dd_delta` **+0.024084**, both over 588 steps 1972-01-31 → 2020-12-31; tags `07-11-c1-alone-L1only` and `07-11-joint-c1xc2-L1only` |
+
+**The measurement clause is discharged; the question it was asked to answer is not.** REG-01 is
+therefore **PARTIAL, not complete**, and the open item is named rather than folded in:
+**criterion 6's dependence verdict is unresolved, no tie-break is permitted, and no independent
+second axis is established by this phase.** Closing it requires either more data or a different
+instrument, in a phase that pre-registers its rule the way this one did.
+
+### INV-01 — claimed **IN FULL**. All four clauses, each with its artifact.
+
+ADR-0001 recorded INV-01 as "entirely deferred to wave 2" under D-09. This closes that
+enumeration, clause by clause:
+
+| # | INV-01 clause | Artifact that satisfies it |
+|---|---|---|
+| 1 | Named invariant candidates **constructed and screened**, with dimensional reduction used as a **discovery tool** only | `07-INV01-SCREENING.md` §1–§2; `platform/features/invariants.py::screen_invariant_candidates`. `compute_candidate_loadings()` reads only `pca.components_`; **`pca.transform()` is never called anywhere in the module**, so no component *score* was ever computed |
+| 2 | **Loading stability tested across eras**, with a named tolerance | `loading_stability_across_eras()` over **10 eras** ending **1972-01-31 → 2017-01-31** (expanding windows, `min_train=120`, `step=60`), tolerance **`LOADING_STABILITY_TOLERANCE = 0.15`**, inclusive at the boundary; both candidates classified **stable**, per-era PC1 loading 0.70711 with ranges 4.4e-16 and 2.2e-16 |
+| 3 | **Every candidate logged to the trial registry** and assessed walk-forward | 2 rows tagged `07-07-inv01-screen`, written to the real `registry/trials.jsonl` (not `NO_REGISTRY`); `total_trial_count()` read **38** at 2026-09-17T15:09:17Z and **40** at 2026-09-17T15:10:37Z |
+| 4 | Survivors admitted as **named** features, never anonymous principal components (design decision R4) | Named survivors **`m2_gdp`** (`fred_m2sl / fred_gdp`) and **`credit_gdp`** (`fred_totalsl / fred_gdp`). Only **`m2_gdp`** enters classifier #2's frozen eight; `credit_gdp` is dropped for near-collinearity (0.957–0.969 with `m2_gdp` across eras) — a rejection recorded, not silent. R4 is held **structurally**, pinned by `test_platform_features_invariants.py::test_rejects_integer_or_component_label_index` |
+
+**⚠ Read clause 2's result at plan 07-07 §4's own strength, which this ADR does not upgrade.** A
+PC1 loading of exactly 1/√2 on **two** standardized candidates is an **arithmetic identity** —
+the first component of exactly two positively-correlated standardized series must split its
+weight evenly — not, by itself, evidence of genuine five-decade economic stability. The
+screening record says so; era screening was **survived**, and that is all that is claimed.
+
+---
+
+## Rejections, restated rather than quietly dropped
+
+Five candidate directions were rejected during this phase. Each is restated here with its reason
+so the record of what was *not* built is as durable as the record of what was:
+
+1. **`BCNSDODNS`** — quarterly-native, 305 observations from 1945-10. Using it would require
+   exactly the forward-fill treatment the chosen series avoid. Rejected **pre-ingestion**.
+2. **`TOTBKCR`** — starts **1973**, after the **1962** spine start, so it cannot serve a
+   labeling frozen at the 1972-01 first decision date. Rejected **pre-ingestion**.
+3. **Market-cap/GDP (the "Buffett indicator")** — **stays blocked** (D-12): no free source back
+   to 1962; FRED's Wilshire series starts around 1970. Restated, not worked around.
+4. **Gold/equity relative strength** — **admissible in principle** under D-10's ratio rule,
+   **excluded in fact** by D-11's freeze: `gold` starts **1985-02** while `oil` runs from
+   **1962-01**, so the ratio cannot clear the 1972-01 first decision date.
+5. **A product `(state_1, state_2)` state space** — rejected per **D-14**: K₁ × K₂ cells over
+   roughly 590 decision months thins rare cells far below §4.4's **~8%** floor. The two
+   probability vectors are consumed independently and only the resulting weight Series are
+   combined; no product index is ever formed.
+
+---
+
+## The four plausibility bands, as confirmed or revised
+
+Decided by Glenn on 2026-09-18 at plan 07-10's human-verify gate, **before any joint-lift number
+existed** (`07-BANDS.md` §8). Governing values:
+
+| Quantity | Governing (universal) value | Advisory (domain) trigger | Disposition |
+|---|---|---|---|
+| `wealth_delta` | `abs(x) < 15` | `abs(x) ≥ 5` → recorded note | Domain band `abs(x) < 5` **CONFIRMED** as the domain tier; deliberately **not** tightened toward the observed value |
+| `dd_delta` | **`x ∈ [−1, 1]`** | `abs(x) ≥ 0.5` → recorded note | **REVISED** from `[−2, 2]`. The old bound was wider than the quantity's own arithmetic range (`max_drawdown ∈ [−1, 0]` per leg ⇒ difference ∈ `[−1, 1]`) and **could therefore only confirm** — this project's signature defect shape. The revised bound is definitional: a breach proves a leg's `max_drawdown` is not a fraction in `[−1, 0]`, i.e. the KPI is broken |
+| `n_transitions` | **REVISED and SPLIT** | — | (a) `sojourn_lag` within-window count → definitional `n_resolved ≤ n_transitions ≤ n_label_transitions`; a breach is a counting bug, never a strategy outcome. (b) full-sample labeling → a **rate** band, implausible above `0.10 × n_months`. A fixed count is length-dependent; a rate is not |
+| `pct_disagree` | `< 0.02` **OR** `n_compared == 0` **OR** coverage materially below expectation without a *recorded* reason | — | Threshold **CONFIRMED unrevised at 0.02**; the **statement** revised to carry its denominator. Live in `platform/evaluation/disagreement.py`, not left as prose — the defect it fixes was real: `n_compared == 0` previously logged a warning but set `suspicious = False` |
+
+**There is no "five-percent floor" anywhere in this project's design.** §4.4 criterion 1 is
+`≥ ~8%` and `≤ ~35%`; the 5% figure was a misquote corrected 2026-09-17 and is not a band.
+
+**Per D-07 these remain plausibility bands, not quality gates.** The governing tier can only fail
+on a **broken measurement**, never on a bad-but-working model. **Audit item A11 therefore remains
+open and conscious** — Glenn declined to promote the domain tier to a gate, which would have
+closed A11 by gating on `[ASSUMED]` numbers. A11 is open by deliberate choice, and this ADR does
+not close it.
+
+At criterion 7 both governing bands held (`abs(−0.123438) < 15`; `+0.024084 ∈ [−1, 1]`), so the
+measurement is not broken and criterion 7 reports. **Neither advisory trigger fired**, so no
+domain note was recorded. Band 3's clauses hold for both labelings, and band 4's denominator
+clauses were **exercised live** — `expected_n_compared = 588` was passed and coverage came back
+at exactly 588, so the third clause **could have fired and did not**.
+
+---
+
+## Trial arithmetic at acceptance
+
+| Item | Value | Source |
+|---|---|---|
+| Component 1 — INV-01 screen rows (spent) | **2** (38 → 40) | live reads 2026-09-17T15:09:17Z and 15:10:37Z |
+| Component 2 — criterion 7 evaluation rows (ceiling **4**, actual **2**) | **2** (40 → 42) | live reads 2026-09-21T14:18:34.285851Z and 14:24:23.984933Z |
+| Component 3 — the L2 observational leg | **0** rows | `NO_REGISTRY` sentinel, per decision (e) |
+| **Live `total_trial_count()` at acceptance** | **42**, read **2026-09-21T15:37:29.833014Z** | live read performed for this section, not copied from a planning document |
+| Ceiling for the remainder of this phase | **44** (= 40 + 4) | § Trial ceiling above |
+| Ceiling respected? | **yes — 42 ≤ 44**, with **2** rows of the budget unspent | arithmetic on the reading above |
+
+The component-2 harness appends **exactly one** row per call, not two —
+`run_full_backtest_evaluation`'s factor of two comes from its own two `append_trial` sites and
+does not apply to `run_joint_backtest`. So component 2 spent 2 of its budgeted 4. **Spending
+fewer rows than a ceiling is the only direction a ceiling permits.**
+
+**Standing warning, restated from ADR-0001 and extended: any literal count is stale the moment it
+is written.** `30`, `34`, `35`, `38`, `40` and `42` are all figures of a particular moment. `38`
+is the provenance header's `prior_genuine_trials`; **`42` is a live reading at
+2026-09-21T15:37:29.833014Z and nothing more.** Exceeding **44** requires an explicit amendment to
+this ADR; the formula is not a cap the code enforces, it is the arithmetic a reader uses to check
+whether search-creep occurred silently between two readings.
+
+---
+
+## Deferrals and open items at acceptance
+
+Recorded as decisions and carried forward, not closed by acceptance:
+
+1. **Criterion 6 is UNRESOLVED.** No tie-break was run and none may be — the pre-registration at
+   `298b1bc` forbids it. **No further dependence statistic may be computed on these labelings.**
+2. **§4.4 criterion 3 (subsample stability under Hungarian matching) has never been run** for
+   **either** classifier. Nothing in this ADR rests on it having passed and nothing here implies
+   it has. Both ADR-0001 and ADR-0002 claim criteria 1 and 2, never "all six."
+3. **ADR-0001 condition (iv) is implemented for per-regime Sharpe only.** `allocation/joint_tilt.py`
+   flags every sub-floor regime at WARNING and partially pools its per-regime Sharpe toward the
+   all-history estimate with credibility `min(1, occupancy / floor)`. **Its covariance clause is
+   NOT implemented** — no per-regime covariance exists at L4-01 to shrink. That clause falls to
+   **L3** (design §6.2) and **condition (iv) must not be described as complete.**
+4. **`vol_targeted_tilt` and `driver.py:497` remain condition-(iv)-non-compliant** for consumers
+   other than the joint harness: they apply no pooling. Only the `blend_regime_tilts` path
+   applies it today.
+5. **Classifier #1's filtered labeling changes state in 246 of 588 decision months (41.84%)**
+   against a **3.60%** full-sample rate. **No band governs the filtered rate.** That churn feeds
+   the tilt directly under the chosen routing.
+6. **Classifier #2's §5.4 ratio is 1.074** — median sojourn **29.0 months**, median detection lag
+   **27.0 months**, **only 5 of 12 transitions resolved**, over 588 steps 1972-01-31 → 2020-12-31.
+   The lag very nearly consumes the sojourn. **This phase gathered no evidence that classifier
+   #2's leadership structure is detectable in real time early enough to allocate on.**
+7. **The crisis state's median sojourn is 3.0 months, exactly on criterion 2's boundary**, against
+   a 1–3 month detection lag. Criterion 7's `dd_delta` is **not** evidence crises are nowcastable
+   in time to act.
+8. **`DEGENERATE_SHARPE_VARIANCE = 1.0` remains a declared assumption** governing every DSR this
+   project reports, until **20** independent Sharpe-bearing trials exist.
+9. **Whether the registry should carry Sharpe metrics at all** is resolved for the recording
+   convention (it does, with `independent_trial: False` on non-independent arms) but the
+   estimator still runs on the placeholder. Left open.
+10. **Audit item A11 remains open and conscious** — no gate in this project can fail on a
+    bad-but-working model, only on a broken one. **Open by Glenn's deliberate choice**, not by
+    oversight.
+11. **The L2 CV-robustness question was routed around, not resolved.** The L1-only routing
+    sidesteps `_cv_safe_active_features` for criterion 7 rather than freezing L2's separate
+    admission path. It **remains open with its own future ADR**, exactly as ADR-0001 left it.
+12. **Classifier #2 is never nowcast by L2 in this phase.** The L2 observational leg is the only
+    evidence gathered on that question and it is firewalled from decisions.
+13. **The `add-alongside` decision stands, and the measured results confirm it was the right
+    call.** § Consequences recorded three conditions that would together force a promote: low
+    measured dependence, positive joint lift on **both** axes inside the confirmed bands, and a
+    DSR clearing 0.5. **None of the three landed** — dependence is unresolved, `wealth_delta` is
+    negative, and neither DSR clears. A promote-or-product design is therefore **recorded as a
+    named follow-up and not acted on inside this phase**, since D-13 forbids the blend-weight
+    search a promote would require. `blend_weight_1` was pinned at **0.50** and **never swept**;
+    this ADR says nothing about what any other weight would produce.
+
+### The three caveats wave 2 inherited from `07-UAT.md`
+
+| Wave-1 caveat | Status at acceptance |
+|---|---|
+| 1 — criterion 3's comparison window (356 steps ending 2017-05 vs a 470-step baseline ending 2020-12), cause understood as L2's CV degradation; resolution needs an L2 CV design decision | **STILL STANDING.** Routed around, not resolved — see open item 11. The L1-only routing produced a clean 588-of-588 window *because it runs no L2 refit*, which does not answer wave 1's question |
+| 2 — drawdown got worse under the frozen policy (`dd_delta` −0.014364 → −0.066124), and the strategy remains last of five legs | **STILL STANDING**, and not discharged by criterion 7's `+0.024084`: that is a **different subtraction** over a **different window and routing** (see § Named limitation). Nothing measured in wave 2 re-rates the wave-1 comparison |
+| 3 — four `[ASSUMED]` bands unconfirmed; confirm or revise before wave 2 leans on them | **DISCHARGED.** All four were confirmed or revised at plan 07-10's gate on 2026-09-18, **before any joint-lift number existed** — `07-BANDS.md` §8, restated above. Band 2 was revised because it could only confirm; band 4's clauses were implemented in code and exercised live |

@@ -106,6 +106,64 @@ First-order Markov ⇒ sojourns geometric (memoryless, mode at 1). Real regimes 
 5. **Decision-relevance:** states must differ in the **conditional distribution of asset returns** (means, vols, correlations), not merely in feature space. Validate K against out-of-sample allocation value, not likelihood. (BIC/AIC over-select K on financial data; ICL is the better information criterion if one is used.)
 6. **Effective-sample honesty:** post-war US ≈ 15–30 independent regime transitions. Any structure requiring more parameters than that supports must be constrained (semantic skeleton, shrinkage), not estimated freely.
 
+
+> ### AMENDMENT 2026-09-18 — criterion 1's floor, and the recurrence test that supersedes it
+>
+> **Authorized by Glenn, 2026-09-18**, after criterion 1 as written forced a choice between
+> satisfying the floor and keeping a crisis state at all.
+>
+> **What was found.** Classifier #1 could not satisfy `every state >= ~8%` at any (K, λ). The
+> binding state sat at 1.2–5.8% across the entire grid. Satisfying the floor required K=4, which
+> dissolved it. At K=5 the cap was unsatisfiable too. The floor was not mis-tuned; it was
+> colliding with something real.
+>
+> **What the state actually is.** At K=6, λ=10 it occupies 40 months (5.76%) across **nine
+> distinct episodes**: 1970-05, 1973-11 (11 mo), 1981-09, 1987-10, 1990-08, 2002-06, 2008-09
+> (8 mo), 2011-08 and 2020-03 — the 1970 recession, the oil shock, Volcker, Black Monday, the
+> Gulf War, the dotcom trough, the GFC, the European debt crisis and COVID. Its centroid is high
+> credit spread, high realized vol, depressed trailing return.
+>
+> **Why the floor is the wrong instrument here.** Criterion 1's floor is a proxy for "this state
+> has enough observations to be trusted". Criterion 3 tests the same thing directly and better:
+> *"A regime that evaporates when 2008–09 is dropped is an episode, not a regime."* Drop 2008–09
+> from the state above and eight independent episodes remain. A 5.76% state recurring across nine
+> crises spanning fifty years is more evidently a regime than a 20% state appearing once as a
+> contiguous block — and criterion 1, being blind to arrangement, scores the second higher.
+> Occupancy share and evidential weight are not the same quantity.
+>
+> **The amendment.** Criterion 1 now reads:
+>
+> 1. **Occupancy:** every state ≤ ~35% of months, and every state ≥ ~8% of months **except** a
+>    state that satisfies the *recurrence exemption* below.
+>
+>    **Recurrence exemption.** At most **one** state per labeling may fall below the floor, and
+>    only if all of the following hold and are recorded in that labeling's ADR:
+>    (i) it recurs in **at least three temporally separated episodes**, so that removing any one
+>        leaves the state intact — criterion 3 applied directly, not by proxy;
+>    (ii) its episodes are economically identifiable, named individually in the ADR, not merely
+>        counted;
+>    (iii) its centroid profile is stated, and is coherent across episodes rather than a residual
+>        bucket of unlike months;
+>    (iv) every downstream statistic computed on it carries an explicit low-n flag, and it is
+>        **not** used for unshrunk point estimates — no per-regime Sharpe, no per-regime
+>        covariance — without partial pooling toward the all-history model (§6.1 mitigation 2);
+>    (v) the ~35% cap is **not** relaxed by this exemption, for any state.
+>
+>    A state failing any of (i)–(iv) is an episode, and criterion 3's verdict stands: it is merged.
+>
+> **What this does not license.** This is not a general loosening. It is one exemption, one state,
+> conditioned on a stronger test than the one it replaces. A sub-floor state that appears once —
+> such as the 11-month GFC-only state K=5 produced — is **not** exempt and must be merged.
+>
+> **Why the project accepts the cost.** §1 states the platform's purpose: *"sidestepping
+> 2000/2008-class regime damage."* A criterion that forces the crisis state to be dissolved
+> optimizes a labeling diagnostic against the reason the platform exists. Recorded as a
+> deliberate amendment rather than a silent deviation, so any future reader sees the tradeoff
+> was made, by whom, and on what evidence.
+>
+> **Scope.** Applies to every labeling. Classifier #2 (K=5, λ=16) satisfies the unamended
+> criterion 1 and does **not** invoke this exemption; its status is unchanged.
+
 ---
 
 ## 5. Layer 2 — Regime Prediction (causal)

@@ -64,6 +64,23 @@ log = logging.getLogger(__name__)
 
 DEFAULT_SUSPICIOUS_THRESHOLD = 0.02
 
+# Fraction of the expected month count below which n_compared is itself
+# suspicious. 07-BANDS.md band 4, confirmed by Glenn 2026-09-18.
+DEFAULT_MIN_COVERAGE = 0.90
+
+_SUSPICIOUS_ZERO_DENOMINATOR = (
+    "n_compared == 0. A percentage without a denominator is not a result: "
+    "label_disagreement returns pct_disagree == 0.0 for a disjoint span, which "
+    "reads as PERFECT AGREEMENT while comparing nothing. This is the failure the "
+    "band's original 0.02 threshold caught only by coincidence."
+)
+_SUSPICIOUS_LOW_COVERAGE = (
+    "n_compared is materially below the expected month count with no recorded "
+    "reason. The statistic describes a narrower window than the caller believes. "
+    "ADR-0001's 232-of-588 L2-degradation narrowing is exactly this shape and was "
+    "found by hand, not by a band."
+)
+
 _SUSPICIOUS_REASON = (
     "pct_disagree is below the suspicious_threshold with n_compared > 0. A "
     "hindsight full-sample fit and a per-step walk-forward fit should still "
@@ -117,6 +134,9 @@ def measure_label_disagreement(
     filtered_state_probs: pd.DataFrame,
     *,
     suspicious_threshold: float = DEFAULT_SUSPICIOUS_THRESHOLD,
+    expected_n_compared: int | None = None,
+    min_coverage: float = DEFAULT_MIN_COVERAGE,
+    coverage_reason: str = "",
 ) -> dict[str, Any]:
     """Criterion-3's disagreement measurement, delegating to the located
     ``label_disagreement`` methodology so the result is comparable to the
@@ -131,7 +151,16 @@ def measure_label_disagreement(
             matrix, columns ``state_{k}`` strings.
         suspicious_threshold: below this ``pct_disagree`` (with
             ``n_compared > 0``), the result is flagged ``suspicious``
-            (default 0.02, ``07-VALIDATION.md``'s ``[ASSUMED]`` band).
+            (default 0.02, ``07-VALIDATION.md``'s ``[ASSUMED]`` band —
+            CONFIRMED unrevised by Glenn 2026-09-18, 07-BANDS.md band 4).
+        expected_n_compared: the month count the caller expects to compare. When
+            given, an ``n_compared`` below ``min_coverage`` of it is suspicious.
+            Omit only when there is genuinely no expectation to state.
+        min_coverage: fraction of ``expected_n_compared`` below which coverage is
+            suspicious (default 0.90).
+        coverage_reason: a recorded, non-empty explanation for a short window
+            SUPPRESSES the coverage clause. "Recorded" is the operative word: an
+            unexplained shortfall stays suspicious.
 
     Returns:
         dict — every key ``label_disagreement`` returns (``n_compared``,
@@ -146,25 +175,37 @@ def measure_label_disagreement(
 
     result: dict[str, Any] = dict(label_disagreement(reference, comparison))
 
+    # REVISED 2026-09-18 (07-BANDS.md band 4, Glenn's disposition). The band is
+    # now: suspicious if pct_disagree < threshold OR n_compared == 0 OR
+    # n_compared is materially below expectation without a recorded reason.
+    #
+    # n_compared == 0 previously set suspicious = False and returned. It warned,
+    # but a caller reading the flag rather than the log saw "not suspicious" on
+    # the one case the band exists to catch.
     if result["n_compared"] == 0:
-        log.warning(
-            "measure_label_disagreement: n_compared == 0 — the two labelings' "
-            "date indexes do not overlap. This is a disjoint-span finding, "
-            "never an error, and must never be reported as pct_disagree == "
-            "0.0 meaning perfect agreement."
-        )
-        result["suspicious"] = False
-        result["suspicious_reason"] = ""
+        log.warning("measure_label_disagreement: SUSPICIOUS — %s", _SUSPICIOUS_ZERO_DENOMINATOR)
+        result["suspicious"] = True
+        result["suspicious_reason"] = _SUSPICIOUS_ZERO_DENOMINATOR
         return result
 
-    suspicious = bool(result["pct_disagree"] < suspicious_threshold)
+    reasons: list[str] = []
+    if result["pct_disagree"] < suspicious_threshold:
+        reasons.append(_SUSPICIOUS_REASON)
+    if expected_n_compared is not None and not coverage_reason:
+        if result["n_compared"] < min_coverage * expected_n_compared:
+            reasons.append(
+                f"{_SUSPICIOUS_LOW_COVERAGE} n_compared={result['n_compared']} vs "
+                f"expected={expected_n_compared} (floor {min_coverage:.0%})."
+            )
+
+    suspicious = bool(reasons)
     result["suspicious"] = suspicious
-    result["suspicious_reason"] = _SUSPICIOUS_REASON if suspicious else ""
+    result["suspicious_reason"] = " | ".join(reasons)
     if suspicious:
         log.warning(
-            "measure_label_disagreement: SUSPICIOUS — pct_disagree=%.6f is "
-            "below suspicious_threshold=%.4f with n_compared=%d. %s",
-            result["pct_disagree"], suspicious_threshold, result["n_compared"], _SUSPICIOUS_REASON,
+            "measure_label_disagreement: SUSPICIOUS — pct_disagree=%.6f, "
+            "n_compared=%d. %s",
+            result["pct_disagree"], result["n_compared"], result["suspicious_reason"],
         )
     return result
 

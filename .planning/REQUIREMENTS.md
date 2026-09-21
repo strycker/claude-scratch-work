@@ -66,7 +66,7 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Invariants (INV)
 
-- [ ] **REG-01**: One documented feature policy shared by the walk-forward driver and the
+- [~] **REG-01**: One documented feature policy shared by the walk-forward driver and the
   evaluation reference (resolves audit items A13/A15), with the §5.4 sojourn/lag ratio made
   interpretable and classifier #1's ablation delta re-measured on both wealth and drawdown;
   then a **second, independent regime classifier** fit unsupervised on relative/leadership
@@ -74,7 +74,42 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
   joint allocation lift assessed walk-forward against classifier #1 alone — every
   configuration logged to the trial registry. Scope in
   `.planning/PROPOSAL-phase-regime-representation.md`
-- [ ] **INV-01**: Named, era-stable invariant candidates (e.g. M2/GDP, market cap/GDP, credit/GDP) constructed and screened using dimensional-reduction techniques as discovery tools; loading stability tested across eras; every candidate logged to the trial registry and assessed walk-forward; survivors admitted as **named** features, never anonymous principal components (preserves design decision R4)
+
+  > **DELIVERED PARTIALLY — Phase 7, 2026-09-21. The open item is named, not folded in:
+  > criterion 6's dependence verdict is UNRESOLVED.** Wave 1 (ADR-0001) satisfied the
+  > feature-policy, §5.4-interpretability and ablation-re-measurement clauses. Wave 2 (ADR-0002)
+  > satisfies three of the four remaining clauses — the second independent classifier on a
+  > disjoint feature set, the disjointness assertion
+  > (`test_resolved_frozen_list_is_disjoint_from_the_lean_set`), and the joint lift assessed
+  > walk-forward against classifier #1 alone (`wealth_delta` **−0.123438**, `dd_delta`
+  > **+0.024084**, both over **588 steps, 1972-01-31 → 2020-12-31**, tags
+  > `07-11-c1-alone-L1only` / `07-11-joint-c1xc2-L1only`). **The orthogonality clause was
+  > measured but its verdict is unresolved:** the pre-registered block-permutation control
+  > returned **INCONCLUSIVE** — NMI **0.464088** at the **96.60th** percentile against p95
+  > 0.449202 and p99 0.501195, `n_compared` = **695** months, **1963-02-28 → 2020-12-31** — and
+  > the pre-registration at `298b1bc` forbids a tie-break. **No independent second axis is
+  > established by this phase.** Evidence:
+  > `platform_design/adr/0002-l1-second-classifier.md` § Requirement coverage and
+  > § ACCEPTANCE 2026-09-21; `.planning/phases/07-regime-representation/07-DEPENDENCE.md`,
+  > `07-JOINT-LIFT.md`.
+
+- [x] **INV-01**: Named, era-stable invariant candidates (e.g. M2/GDP, market cap/GDP, credit/GDP) constructed and screened using dimensional-reduction techniques as discovery tools; loading stability tested across eras; every candidate logged to the trial registry and assessed walk-forward; survivors admitted as **named** features, never anonymous principal components (preserves design decision R4)
+
+  > **DELIVERED IN FULL — Phase 7, 2026-09-21**, closing the D-09 wave-2 deferral ADR-0001
+  > recorded. All four clauses, each with its artifact: (1) candidates constructed and screened
+  > with dimensional reduction as a **discovery tool only** — `pca.transform()` is never called
+  > in `platform/features/invariants.py`, so no component score was ever computed; (2) loading
+  > stability tested across **10 eras ending 1972-01-31 → 2017-01-31** at the named tolerance
+  > **`LOADING_STABILITY_TOLERANCE = 0.15`**; (3) every candidate logged to the real trial
+  > registry — 2 rows tagged `07-07-inv01-screen`, `total_trial_count()` 38 → 40; (4) survivors
+  > admitted as **named** features — `m2_gdp` and `credit_gdp`, of which only `m2_gdp` enters
+  > classifier #2's frozen eight (`credit_gdp` dropped for 0.957–0.969 collinearity), R4 held
+  > structurally by `test_rejects_integer_or_component_label_index`. **Claimed at the strength
+  > of the evidence and no further:** the era screen was *survived*; a PC1 loading of exactly
+  > 1/√2 on two standardized candidates is an arithmetic identity, not by itself evidence of
+  > five-decade economic stability. Evidence:
+  > `platform_design/adr/0002-l1-second-classifier.md` § Requirement coverage;
+  > `.planning/phases/07-regime-representation/07-INV01-SCREENING.md`.
 
 ## v2 Requirements
 
@@ -161,8 +196,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-03 | Phase 5 | Complete |
 | EVAL-04 | Phase 5 | Complete |
 | NB-01 | Phase 6 | Complete |
-| REG-01 | Phase 7 | Pending |
-| INV-01 | Phase 7 | Pending |
+| REG-01 | Phase 7 | **Partial** — criterion 6 (dependence) UNRESOLVED; see ADR-0002 |
+| INV-01 | Phase 7 | Complete |
 | MIG-01 | Phase 8 | Pending |
 
 **Coverage:**

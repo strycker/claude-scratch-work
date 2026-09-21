@@ -139,6 +139,15 @@ def compute_sojourn_lag_headline(
 
     Returns:
         dict with keys ``median_sojourn``, ``median_lag``, ``ratio``.
+
+    Raises:
+        ValueError: if ``filtered_probs_matrix`` carries any non-integer column
+            (T0.12). Such a matrix — the ``state_{k}``-string shape is the usual
+            culprit — scores every transition unresolved and would return
+            ``n_resolved=0, median_lag=NaN``, indistinguishable from "real-time
+            detection never happened". A target state that is simply ABSENT from
+            an otherwise integer-keyed matrix is NOT an error: that transition is
+            genuinely unresolved and keeps the NaN convention.
     """
     states_arr = np.asarray(full_sample_states)
     occ = occupancy_and_sojourns(states_arr)
@@ -152,6 +161,41 @@ def compute_sojourn_lag_headline(
         if states_arr[i] != states_arr[i - 1]:
             target_state = int(states_arr[i])
             transitions_by_state.setdefault(target_state, []).append(i)
+
+    # ── T0.12 guard: a wrong column shape must not read as "no detections" ──
+    #
+    # target_state is an int. When filtered_probs_matrix carries "state_{k}"
+    # STRING columns instead of canonical integer labels, `0 not in
+    # ["state_0", ...]` is True for EVERY state, so every transition fell into
+    # the no-column branch below and the function returned n_resolved = 0,
+    # median_lag = NaN, ratio = NaN — with no exception and no warning. That
+    # reads as the substantive finding "real-time detection never happened" when
+    # the cause is that the caller passed the wrong matrix shape. Plan 07-11's
+    # first draft reported 0 of 25 transitions resolved for exactly this reason,
+    # and the wave-2 validation audit confirmed the trap was still live.
+    #
+    # The discriminator is the column TYPE, not overlap with the observed target
+    # states. Overlap is the wrong test: a labeling whose only transition targets
+    # a state that genuinely never appears as a column has zero overlap and is
+    # still perfectly legitimate — that transition is unresolved and keeps the
+    # NaN convention. What is never legitimate is a column that cannot denote a
+    # canonical integer state at all.
+    non_integer_columns = [
+        col for col in filtered_probs_matrix.columns
+        if not (isinstance(col, (int, np.integer)) and not isinstance(col, bool))
+    ]
+    if non_integer_columns:
+        raise ValueError(
+            "compute_sojourn_lag_headline: filtered_probs_matrix must be keyed by "
+            "CANONICAL INTEGER state labels (build_filtered_probs_matrix's own "
+            f"output). Got {len(non_integer_columns)} non-integer column(s): "
+            f"{[repr(c) for c in non_integer_columns[:5]]}"
+            f"{' ...' if len(non_integer_columns) > 5 else ''}. The usual culprit is "
+            "a 'state_{k}'-string matrix, against which every transition scores "
+            "unresolved and this function returns n_resolved=0, median_lag=NaN — "
+            "indistinguishable from 'real-time detection never happened'. Refusing "
+            "to report a zero that means a shape error."
+        )
 
     pooled_lags: list[float] = []
     for target_state, positions in transitions_by_state.items():

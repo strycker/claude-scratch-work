@@ -64,6 +64,106 @@ GARCH(1,1)/EWMA per asset; **vol targeting** overlay (size ∝ 1/σ̂); regime-c
 ### T0.8  Wire in `feature_gating.py` (causal-feature guard)  `S`  (R5, §8.2, salvaged)
 Enforce `features_supervised.parquet` (causal) for L2 training; `--allow-noncausal-features` opt-in falls back with a loud warning. Cheap, and it locks in the L1-may-see-future / L2-may-not invariant the whole design rests on. Do early alongside T0.1.
 
+### T0.11  Filtered-labeling churn — BLOCKING Phase 8  `M`  (R8, §5.3, §5.4)
+**Raised by the Phase 7 wave-2 UAT (2026-09-21) and marked BLOCKING by Glenn: Phase 8 does not
+start until this is addressed.**
+
+Classifier #1's **filtered** labeling changes state in **246 of 588 decision months (41.84%)**
+against a full-sample transition rate of **3.60%** — a ~12× gap. The filtered series is what a
+weekly report actually consumes; the full-sample rate is the smoothed hindsight view and is not
+what anyone would trade on. A labeler that re-labels its own most recent month two months in five
+feeds that instability directly into the allocation tilt, and therefore into criterion 7's
+measured lift.
+
+Design §5.4 names this quantity precisely: the smoothed-versus-filtered gap **is** "the measured
+hindsight content of the strategy". Here it is large and was never budgeted for.
+
+**No band governs it.** `07-BANDS.md` band 3b is a full-sample band and never sees the filtered
+series. The churn value is now *pinned* by
+`tests/unit/test_platform_joint_diagnostics_record.py` (re-derived from the persisted per-step
+columns, with a non-degeneracy guard so a 0% reading cannot be an artefact) — but pinning a number
+is not governing it. A regression would be caught; the current value is still unacceptable.
+
+### Diagnosis, measured 2026-09-21
+
+| | |
+|---|---|
+| filtered state changes | 246 / 588 (**41.84%**) |
+| full-sample transitions | 22 (3.74%) |
+| **median filtered run length** | **1.0 month** |
+| runs of exactly one month | **136 of 247** |
+| changes >3 months from any real transition | **184 (74.8%)** |
+| churn rate *inside* ±3-month transition windows | 49.2% |
+| churn rate *outside* them | **39.8%** |
+
+**The filtered labeling is effectively memoryless.** It re-decides almost every month, and the
+churn rate in quiet periods (39.8%) is nearly as high as near genuine regime boundaries (49.2%).
+This is not a model being appropriately uncertain at turns — a model like that would churn at
+boundaries and settle between them. It is a model with no persistence at all.
+
+**Root cause, confirmed and named by the design itself.**
+`prediction/nowcaster.py::build_nowcaster_training_set` is `X = features_df.loc[common]` — there
+is no prior state distribution in the feature set. Design §5.1: *"Include prior predicted state
+distribution as a feature (recursive structure). **Without it, persistence is discarded and
+predictions flicker.**"*
+
+**Second finding.** §5.3's hysteresis module exists (`allocation/hysteresis.py`) and is used by
+`report/weekly.py`, but audit item **A7** found it gates nothing in the backtest driver — weights
+come straight from `vol_targeted_tilt(regime_probs, …)`. The anti-flicker machinery the design
+specifies is built and unwired.
+
+### Approach — decided by Glenn 2026-09-21: **both, §5.1 first, then §5.3**
+
+They do different jobs and the design separates them deliberately: §5.1 fixes the *predictions*,
+§5.3 fixes the *allocation response*. Wiring §5.3 alone would leave the 41.84% unchanged — it is a
+labeling metric — and merely stop the churn propagating, which is treating the symptom.
+
+**The trap §5.1 must avoid, and it is this project's P1 sin in its easiest form.** The honest
+feature is the prior **predicted (filtered)** distribution, produced recursively within each
+walk-forward step. Using the prior **smoothed label** would be look-ahead — the smoothed label is
+built from future data — and would make CV accuracy look excellent while production flickers
+exactly as it does now. The plan must carry a guard test that **fails** if the smoothed label is
+ever substituted for the predicted one.
+
+**Vehicle:** its own GSD phase, planned after Phase 7 merges, with research on recursive features
+under walk-forward without leakage, the guard above, and a measured before/after on the 41.84%
+figure over the same 588-step window plus a criterion 7 re-run.
+
+**Do not** address it by smoothing the reported number — that would hide the quantity §5.4 says to
+report prominently.
+
+**Blocked on:** nothing. This is next.
+
+### T0.12  `compute_sojourn_lag_headline` silent zero — **CLOSED 2026-09-21**  `S`  (R7)
+**Found in the Phase 7 wave-2 validation audit (2026-09-21) and reproduced independently.**
+
+Passing `state_{k}` probability columns where integer state labels are expected returns
+`n_resolved = 0`, `median_lag = NaN`, `ratio = NaN` — **with no exception and no warning**. It
+reads as "detection never happened", a substantive finding, when the real cause is a wrong matrix
+shape.
+
+This is the fifth recorded instance of this project's signature defect class, and **it is still
+live**: plan 07-11 fixed its own call site after its first draft reported 0 of 25 transitions
+resolved, and the validation audit pinned the behaviour with a demonstration test — but the
+function itself is unchanged, so the trap is armed for the next caller.
+
+**CLOSED 2026-09-21.** Glenn moved it into the blocking set alongside T0.11 and it was fixed:
+the function now raises `ValueError` naming the offending columns.
+
+**The discriminator is column TYPE, not overlap with the observed states.** The first cut of the
+guard tested whether any transition target state appeared as a column, and that was wrong — a
+labeling whose only transition targets a state that genuinely never appears as a column has zero
+overlap and is perfectly legitimate: that transition is truly unresolved and keeps the NaN
+convention. Caught by testing the case before shipping. What is never legitimate is a column that
+cannot denote a canonical integer state at all, so the guard rejects any non-integer column
+(`bool` included, since it is an `int` subclass and a True/False-keyed matrix is not a labeling).
+
+Five tests pin it, including the positive control that integer-keyed matrices still compute a
+real headline — without it the guard could only refuse, which is the same defect shape wearing
+the opposite sign. The validation audit's own
+`test_wrong_column_labels_still_produce_a_silent_zero`, written to pin that the defect was *live*,
+was **inverted rather than deleted** so the history stays visible and a regression fails there.
+
 ### T0.9  Registered nested selection inside the walk-forward loop  `XL`  (R7/R14, §8.4, §22)
 **Raised by Glenn at the Phase 7 wave-2 decision checkpoint (2026-09-17), deferred to keep that
 phase's trial budget honest.** Today every feature set and hyperparameter that a model needs

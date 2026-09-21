@@ -471,3 +471,98 @@ and now these occupancy figures). The common shape is a measurement recorded onc
 a derived artifact, with nothing asserting it can be reproduced. The consistency test added on
 2026-09-18 closes that hole for the raw/features pair; the occupancy figures had no equivalent
 guard, which is why this survived a week.
+
+---
+
+## RE-PIN 2026-09-18 — K = 6, lambda = 10.0, under design §4.4's amended criterion 1
+
+Resolves the criterion-1 breach recorded in the addendum above. Authorized by Glenn, who
+directed that §4.4 itself be amended rather than the crisis state be dissolved.
+
+### The problem this solves
+
+Classifier #1 at K=5, λ=52.0 breached criterion 1 at **both** ends (state 0 at 1.5827%, state 3
+at 39.2806%). A full sweep established the breach was not a tuning failure:
+
+- **At K=5, no λ in [8, 52] satisfied either end.** The binding state sat at 1.2–5.8% throughout,
+  and some state always exceeded the ~35% cap.
+- **At K=3**, two states sat at 40.6% — cap breach.
+- **At K=4**, the band was satisfiable (λ ∈ [12, 40]) — but only by dissolving the sub-floor state
+  entirely. Its 11 months were exactly 2008-07 → 2009-05, and at K=4 they scattered 8/3 across
+  two ordinary states.
+
+So the floor could be satisfied, or a crisis state could exist, but not both.
+
+### Why λ was wrong independently of K
+
+λ = 52.0 was `4 × 13`, computed on the **lean** feature set. The fit reads the **10 frozen**
+columns (`_reference_label_columns` at `first_decision = 1972-01-31`). The jump penalty was
+scaled to a feature set the model never sees. λ is now a formula of the **fitted** count:
+**10.0 = 1 × n(frozen) = 1 × 10**.
+
+### The pinned values, by rule
+
+**K = 6.** The only K whose cap is satisfiable while retaining a sub-floor crisis state. Measured
+window: at K=6 the ~35% cap passes for λ ∈ [6, 12].
+
+**λ = 10.0.** Mid-window, and it maximises the minimum occupancy (5.7554%) — the quantity
+criterion 1's floor is about — among all in-window values.
+
+### Measured result (695 months, 1963-02-28 → 2020-12-31)
+
+| state | occupancy | cap ≤~35% | median sojourn |
+|---|---|---|---|
+| 0 | 5.7554% | PASS | 3.0 mo |
+| 1 | 32.8058% | PASS | 32.0 mo |
+| 2 | 10.2158% | PASS | 71.0 mo |
+| 3 | 28.7770% | PASS | 46.5 mo |
+| 4 | 12.0863% | PASS | 12.0 mo |
+| 5 | 10.3597% | PASS | 13.0 mo |
+
+Cap passes on all six. State 0 is below the ~8% floor and invokes the **recurrence exemption**.
+
+### The recurrence exemption, conditions (i)–(v) recorded as §4.4 requires
+
+**(i) At least three temporally separated episodes.** State 0 recurs in **nine**, totalling 40
+months. Removing any single episode — 2008-09 included — leaves the state intact.
+
+**(ii) Episodes named individually, not merely counted:**
+
+| episode | months | event |
+|---|---|---|
+| 1970-05 → 1970-07 | 3 | 1970 recession / Penn Central |
+| 1973-11 → 1974-09 | 11 | OPEC oil shock, 1973-74 bear market |
+| 1981-09 | 1 | Volcker disinflation recession |
+| 1987-10 → 1988-01 | 4 | Black Monday |
+| 1990-08 → 1990-10 | 3 | Gulf War / S&L recession |
+| 2002-06 → 2002-09 | 4 | dot-com bust trough |
+| 2008-09 → 2009-04 | 8 | Global Financial Crisis |
+| 2011-08 → 2011-10 | 3 | European sovereign debt crisis / US downgrade |
+| 2020-03 → 2020-05 | 3 | COVID crash |
+
+**(iii) Centroid profile, coherent across episodes:** low `trailing_return_3m`, high
+`realized_vol_3m`, low `trailing_return_1m` — falling prices with elevated realized volatility.
+Not a residual bucket: the profile is the same economic signature in every episode above.
+
+**(iv) Low-n discipline.** Every downstream statistic on state 0 must carry an explicit low-n
+flag, and it must **not** be used for unshrunk per-regime point estimates — no per-regime Sharpe,
+no per-regime covariance — without partial pooling toward the all-history model (design §6.1
+mitigation 2). **This is an obligation on plans 07-10 through 07-12 and on L3/L4, not a
+formality; it is not yet implemented and must not be assumed satisfied.**
+
+**(v) The ~35% cap is not relaxed**, and is not relaxed here — all six states pass it.
+
+### Limitations, stated
+
+- **State 0's median sojourn is 3.0 months — exactly at criterion 2's boundary** (`no state with
+  median < 3 months`). It passes, on the line. A crisis state this brief interacts badly with
+  §5.4's median-sojourn / detection-lag ratio: at a typical 1–3 month detection lag, the lag
+  consumes most or all of the sojourn. **This labeling can identify crises ex post; whether L2
+  can nowcast them in time to act is a separate and unanswered question**, and criterion 7 must
+  not be read as answering it.
+- **Criterion 3's formal subsample-stability test (Hungarian matching) has still not been run**
+  for either classifier. The nine-episode recurrence is strong evidence for state 0 specifically,
+  not a substitute for the test across all states.
+- This re-pin changes every classifier #1 label, so the dependence measurement in
+  `07-DEPENDENCE.md` is void and is re-run, as Glenn directed. The pre-registered decision rule
+  committed at `298b1bc` survives the re-run unchanged.

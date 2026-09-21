@@ -171,3 +171,83 @@ class TestMeasureLabelDisagreement:
         assert result["n_compared"] == 470
         assert result["n_disagree"] == 389
         assert result["pct_disagree"] == pytest.approx(0.8276595744680851, abs=1e-12)
+
+
+# ── Band 4 as revised 2026-09-18 (07-BANDS.md, Glenn's disposition) ─────────
+#
+# The band is now: suspicious if pct_disagree < threshold OR n_compared == 0 OR
+# n_compared is materially below expectation with no recorded reason.
+#
+# The zero-denominator clause is the load-bearing one: before this revision the
+# code WARNED on n_compared == 0 but set suspicious = False, so a caller reading
+# the flag rather than the log saw "not suspicious" on the single case the band
+# exists to catch.
+
+
+class TestBand4RevisedDenominatorClauses:
+    @staticmethod
+    def _probs(idx, state: int, k: int = 5) -> pd.DataFrame:
+        data = {f"state_{i}": [1.0 if i == state else 0.0] * len(idx) for i in range(k)}
+        return pd.DataFrame(data, index=idx)
+
+    def test_zero_denominator_is_now_suspicious_not_merely_logged(self):
+        """Regression on the exact defect: disjoint spans returned
+        suspicious=False while pct_disagree read 0.0 — 'perfect agreement'
+        over nothing. Flipping this back to False fails here."""
+        from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
+
+        a = pd.date_range("1970-01-31", periods=12, freq="ME")
+        b = pd.date_range("2000-01-31", periods=12, freq="ME")
+        ref = pd.Series([0] * 12, index=a, name="state")
+        res = measure_label_disagreement(ref, self._probs(b, 0))
+
+        assert res["n_compared"] == 0
+        assert res["suspicious"] is True
+        assert "n_compared == 0" in res["suspicious_reason"]
+
+    def test_short_window_without_a_recorded_reason_is_suspicious(self):
+        """ADR-0001's 232-of-588 narrowing is this shape and was found by hand."""
+        from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
+
+        idx = pd.date_range("1972-01-31", periods=100, freq="ME")
+        ref = pd.Series([0] * 50 + [1] * 50, index=idx, name="state")
+        comp = self._probs(idx[:60], 0)  # only 60 of an expected 100 months
+        res = measure_label_disagreement(ref, comp, expected_n_compared=100)
+
+        assert res["n_compared"] == 60
+        assert res["suspicious"] is True
+        assert "materially below" in res["suspicious_reason"]
+
+    def test_a_RECORDED_reason_suppresses_the_coverage_clause(self):
+        """'Recorded' is the operative word — an explained shortfall is not
+        suspicious, an unexplained one is. Without this the band would fire on
+        every legitimately narrowed window."""
+        from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
+
+        idx = pd.date_range("1972-01-31", periods=100, freq="ME")
+        ref = pd.Series([0] * 50 + [1] * 50, index=idx, name="state")
+        comp = self._probs(idx[:60], 0)
+        res = measure_label_disagreement(
+            ref, comp, expected_n_compared=100,
+            coverage_reason="L2 degraded 40 steps; recorded in ADR-0001",
+        )
+        assert res["n_compared"] == 60
+        assert "materially below" not in res["suspicious_reason"]
+
+    def test_full_coverage_and_normal_disagreement_is_not_suspicious(self):
+        """The band must still be able to say 'fine' — otherwise it only confirms
+        in the other direction."""
+        from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
+
+        idx = pd.date_range("1972-01-31", periods=100, freq="ME")
+        ref = pd.Series([0] * 50 + [1] * 50, index=idx, name="state")
+        comp = self._probs(idx, 0)   # disagrees on the last 50 -> 0.50
+        res = measure_label_disagreement(ref, comp, expected_n_compared=100)
+        assert res["n_compared"] == 100
+        assert res["suspicious"] is False
+        assert res["suspicious_reason"] == ""
+
+    def test_threshold_itself_is_unchanged_at_0_02(self):
+        from trading_crab_lib.platform.evaluation.disagreement import DEFAULT_SUSPICIOUS_THRESHOLD
+
+        assert DEFAULT_SUSPICIOUS_THRESHOLD == 0.02

@@ -197,6 +197,11 @@ class TestLabelLeadershipRegimes:
         assert len(occupancy) == 5
         assert abs(sum(occupancy.values()) - 1.0) < 1e-12
 
+    # sklearn rightly warns that it found 1 distinct cluster for n_clusters=5.
+    # That is the POINT of _degenerate_frame: every column is constant, so the
+    # fit must collapse. Silenced here (not globally) so a ConvergenceWarning
+    # from anywhere else stays visible in the pytest summary.
+    @pytest.mark.filterwarnings("ignore::sklearn.exceptions.ConvergenceWarning")
     def test_never_occupied_state_is_a_zero_entry_not_a_missing_key(self, tmp_path):
         """Degenerate (constant) data collapses the fit to one state; K=5 must
         still report FIVE entries, four of them 0.0 — passing n_states=K
@@ -211,6 +216,7 @@ class TestLabelLeadershipRegimes:
         assert sorted(occupancy.values()) == pytest.approx([0.0, 0.0, 0.0, 0.0, 1.0])
         assert abs(sum(occupancy.values()) - 1.0) < 1e-12
 
+    @pytest.mark.filterwarnings("ignore::sklearn.exceptions.ConvergenceWarning")
     def test_below_floor_state_warns_naming_that_state_and_still_returns(self, tmp_path, caplog):
         """§4.4 criterion 1's ~8% floor is report-only (D-02/D-07): a loud
         WARNING naming the offending state index, and the labeler still
