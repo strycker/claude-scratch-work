@@ -499,7 +499,8 @@ that has never been run is run.
 
 **Depends on**: Phase 7
 **Blocks**: Phase 9 (Migration) — per the Phase 7 wave-2 UAT ruling, 2026-09-21
-**Requirements**: (to be assigned at planning)
+**Requirements**: PER-01, PER-02, PER-03, PER-04, PER-05, PER-06, PER-07, PER-08, PER-09, PER-10
+— assigned at planning 2026-09-21, one per success criterion 0–9 in order.
 
 **Why this phase exists.** Phase 7's UAT measured classifier #1's *filtered* labeling changing
 state in **246 of 587 step-pairs (41.91%)** against a full-sample rate of 3.74%. Median filtered
@@ -600,6 +601,47 @@ run length is **1.0 month**; 136 of 247 runs are a single month.
      suite is at **2018**. Also fix F-4: the churn rate's denominator is 587 pairs, not 588 months
      (`246/587 = 41.91%`, recorded as 41.84%) — the fix breaks an existing pin, so do both in one
      commit.
+
+**Plans**: 10 plans across 5 execution waves, planned 2026-09-21. Two blocking
+`checkpoint:decision` gates — A11 in wave 1 (deliberately **ahead** of every number, so a gate is
+never chosen after seeing the value it judges) and §5.3's mechanism plus the 0.70/0.40 pair in
+wave 4.
+
+> ⚠ **The two tracks never share a plan, and that is the phase's core structural decision.**
+> Track A is the L1 terminal-month churn (`state_1`, **246/587 = 41.91%**) and Track B is the L2
+> filtered posterior (`argmax(regime_probs)`, never measured before this phase). A §5.1-style
+> change **cannot** move Track A. Criterion 0 — persisting the per-step probability matrix — gates
+> criteria 1, 2 and 4 and is therefore plan 08-01, the phase tracer.
+
+**Wave 1** *(no dependencies; 08-05 blocks on a human decision)*
+
+- [ ] 08-01-PLAN.md — **Tracer.** Persist the per-step probability matrix end to end and split criterion 2's churn into its two named series, with the l1only identity pinned and F-4's denominator fixed alongside its pin *(PER-01, PER-03, PER-10)*
+- [ ] 08-02-PLAN.md — Track A's zero-trial terminal-month diagnostic: churn vs `iloc[-k]` for k = 1…6, both classifiers, anchored elementwise to the tracked curve at k = 1 *(PER-04)*
+- [ ] 08-03-PLAN.md — §4.4 criterion 3 machinery: Hungarian matching on de-standardized centroids, the within-state split-half null, the evaporation flag, and the four subsample schemes *(PER-06)*
+- [ ] 08-04-PLAN.md — G6 pinned as the known **non**-compliance across all three `vol_targeted_tilt` consumers, with the both-halves rule *(PER-09)*
+- [ ] 08-05-PLAN.md — **A11 answered, written as the reversal it is** — decided in wave 1 so the ruling precedes every number it could judge *(PER-08)*
+
+**Wave 2** *(08-06 blocked on 08-01; 08-07 blocked on 08-03)*
+
+- [ ] 08-06-PLAN.md — The explicit Bayes filter (no training column at all) plus the **signed** detection offset, and the leakage guard whose substituted arm proves it discriminates *(PER-02)*
+- [ ] 08-07-PLAN.md — Run §4.4 criterion 3 for both classifiers under all four schemes; write the record with the pre-registered prediction quoted from its commit *(PER-06)*
+
+**Wave 3** *(blocked on 08-06)*
+
+- [ ] 08-08-PLAN.md — Wire the filter into both drivers and the weekly report; report **three** churn numbers (A, B0 the control, B1 the new one) with the l1only curve pinned bit-for-bit *(PER-02, PER-03)*
+
+**Wave 4** *(blocked on 08-08)*
+
+- [ ] 08-09-PLAN.md — §5.3's hysteresis gates allocation and A7 closes, at two blocking decisions whose registry cost is priced before the choice *(PER-05)*
+
+**Wave 5** *(blocked on 08-02, 08-05, 08-07, 08-09)*
+
+- [ ] 08-10-PLAN.md — Criterion 7 re-measured (both legs, one harness, window inline), recorded counts corrected against a live collection, and the phase's closing measurement record *(PER-07, PER-10)*
+
+**Explicit non-goals**: no λ sweep; no dependence statistic of any kind; no migration work; no
+2021+ holdout use for any selection decision; no re-pin of K or λ; no target pre-declared for
+either churn metric; `legacy/` and the reference submodules untouched; the legacy-import ratchet
+stays at **31** and may only decrease.
 
 ---
 

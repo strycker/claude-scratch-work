@@ -64,6 +64,46 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 - [ ] **MIG-01**: Platform decoupled from the legacy library (4 seams vendored, import-guard test) and migrated to `strycker/trading-crab` (two-package layout), tests green in that repo's CI, real run reproduces the reference numbers, README/docs updated — step plan in `MIGRATION-PLAN.md`
 
+### Regime Persistence & Stability (PER)
+
+Minted at Phase 8 planning, 2026-09-21, one per ROADMAP Phase 8 success criterion 0–9 in order.
+The corrected causal model behind them is in `08-CONTEXT.md`'s AMENDMENT: the recorded 41.91%
+filtered churn is an **L1** quantity (`joint_driver.py:502`), while design §5.1 changes **L2** and
+under the decision-bearing `ROUTING_L1_ONLY` `_refit_l2` is never called
+(`joint_driver.py:431`). The two tracks are therefore separate requirements and neither may be
+measured by the other's metric.
+
+- [ ] **PER-01**: The per-step probability matrix the walk-forward drivers accumulate
+  (`driver.py:530-532`, `joint_driver.py:508-510`) is persisted to disk for both classifiers and
+  both routings — the prerequisite that gates PER-02, PER-03 and PER-05 (criterion 0)
+- [ ] **PER-02**: A prior-state belief propagates into the nowcaster's consumed output via an
+  explicit Bayes filter, `π_t ∝ [Σ π_{t−1} A] · L_t`, with zero train/serve skew, zero leakage
+  surface and zero free parameters — and a guard test that **fails** on a smoothed substitution
+  (criterion 1, reworded 2026-09-21; design §5.1/§4.2)
+- [ ] **PER-03**: Both churn series are reported with their own denominators, windows and degraded
+  counts, and neither can masquerade as the other: Track A (`state_1` changes / 587) and Track B
+  (`argmax(regime_probs)`), with no target pre-declared for either (criterion 2)
+- [ ] **PER-04**: Track A is diagnosed before it is changed — the zero-trial terminal-month
+  diagnostic, churning the step-*t* fit's label for months *t−1 … t−6* across steps. A λ sweep is
+  **not** authorized (criterion 3)
+- [ ] **PER-05**: §5.3's hysteresis gates allocation, closing audit item A7, evaluated only after
+  the probability vector stops being degenerate; the mechanism and the 0.70/0.40 pair are human
+  decisions, not planner choices (criterion 4; design §5.3)
+- [ ] **PER-06**: §4.4 criterion 3 is RUN for both classifiers under four subsample schemes —
+  drop first decade, drop last decade, circular block bootstrap, and leave-one-episode-out — using
+  centroid distance in de-standardized units with Hungarian matching, a within-state split-half
+  null at the same n, and subsample occupancy on every row (criterion 5; design §4.4)
+- [ ] **PER-07**: Criterion 7 is re-measured under whatever changed, both legs, one harness,
+  window inline; the prior `wealth_delta` −0.123438 / `dd_delta` +0.024084 is a comparison point,
+  not a target (criterion 6)
+- [ ] **PER-08**: Audit item A11 — *"no gate fails on a bad model"* — is answered and written as
+  the reversal of the 2026-09-18 decision to leave it open (criterion 7)
+- [ ] **PER-09**: Validation gap G6 is pinned as the known **non**-compliance: non-joint consumers
+  of `vol_targeted_tilt` receive the unpooled per-regime estimate (criterion 8)
+- [ ] **PER-10**: Recorded counts match measured reality — the four documentation sites, and
+  F-4's churn denominator (587 adjacent pairs, not 588 months) with its pin moved in the same
+  commit (criterion 9)
+
 ### Invariants (INV)
 
 - [~] **REG-01**: One documented feature policy shared by the walk-forward driver and the
@@ -198,7 +238,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NB-01 | Phase 6 | Complete |
 | REG-01 | Phase 7 | **Partial** — criterion 6 (dependence) UNRESOLVED; see ADR-0002 |
 | INV-01 | Phase 7 | Complete |
-| MIG-01 | Phase 8 | Pending |
+| PER-01 | Phase 8 | Pending |
+| PER-02 | Phase 8 | Pending |
+| PER-03 | Phase 8 | Pending |
+| PER-04 | Phase 8 | Pending |
+| PER-05 | Phase 8 | Pending |
+| PER-06 | Phase 8 | Pending |
+| PER-07 | Phase 8 | Pending |
+| PER-08 | Phase 8 | Pending |
+| PER-09 | Phase 8 | Pending |
+| PER-10 | Phase 8 | Pending |
+| MIG-01 | Phase 9 | Pending |
 
 **Coverage:**
 
