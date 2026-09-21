@@ -84,10 +84,53 @@ series. The churn value is now *pinned* by
 columns, with a non-degeneracy guard so a 0% reading cannot be an artefact) — but pinning a number
 is not governing it. A regression would be caught; the current value is still unacceptable.
 
-Candidate directions, none yet chosen: design §5.3's hysteresis bands (act above ~0.7, unwind
-below ~0.4), the recursive prior-state feature §5.1 requires and which may be missing or
-underweighted, or a churn band with a declared threshold. **Do not** address it by smoothing the
-reported number — that would hide the quantity §5.4 says to report prominently.
+### Diagnosis, measured 2026-09-21
+
+| | |
+|---|---|
+| filtered state changes | 246 / 588 (**41.84%**) |
+| full-sample transitions | 22 (3.74%) |
+| **median filtered run length** | **1.0 month** |
+| runs of exactly one month | **136 of 247** |
+| changes >3 months from any real transition | **184 (74.8%)** |
+| churn rate *inside* ±3-month transition windows | 49.2% |
+| churn rate *outside* them | **39.8%** |
+
+**The filtered labeling is effectively memoryless.** It re-decides almost every month, and the
+churn rate in quiet periods (39.8%) is nearly as high as near genuine regime boundaries (49.2%).
+This is not a model being appropriately uncertain at turns — a model like that would churn at
+boundaries and settle between them. It is a model with no persistence at all.
+
+**Root cause, confirmed and named by the design itself.**
+`prediction/nowcaster.py::build_nowcaster_training_set` is `X = features_df.loc[common]` — there
+is no prior state distribution in the feature set. Design §5.1: *"Include prior predicted state
+distribution as a feature (recursive structure). **Without it, persistence is discarded and
+predictions flicker.**"*
+
+**Second finding.** §5.3's hysteresis module exists (`allocation/hysteresis.py`) and is used by
+`report/weekly.py`, but audit item **A7** found it gates nothing in the backtest driver — weights
+come straight from `vol_targeted_tilt(regime_probs, …)`. The anti-flicker machinery the design
+specifies is built and unwired.
+
+### Approach — decided by Glenn 2026-09-21: **both, §5.1 first, then §5.3**
+
+They do different jobs and the design separates them deliberately: §5.1 fixes the *predictions*,
+§5.3 fixes the *allocation response*. Wiring §5.3 alone would leave the 41.84% unchanged — it is a
+labeling metric — and merely stop the churn propagating, which is treating the symptom.
+
+**The trap §5.1 must avoid, and it is this project's P1 sin in its easiest form.** The honest
+feature is the prior **predicted (filtered)** distribution, produced recursively within each
+walk-forward step. Using the prior **smoothed label** would be look-ahead — the smoothed label is
+built from future data — and would make CV accuracy look excellent while production flickers
+exactly as it does now. The plan must carry a guard test that **fails** if the smoothed label is
+ever substituted for the predicted one.
+
+**Vehicle:** its own GSD phase, planned after Phase 7 merges, with research on recursive features
+under walk-forward without leakage, the guard above, and a measured before/after on the 41.84%
+figure over the same 588-step window plus a criterion 7 re-run.
+
+**Do not** address it by smoothing the reported number — that would hide the quantity §5.4 says to
+report prominently.
 
 **Blocked on:** nothing. This is next.
 
