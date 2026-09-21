@@ -74,3 +74,6 @@ Thumbs.db
 
 # GSD ephemeral agent worktrees (live isolation dirs; never commit)
 .claude/worktrees/
+
+# GSD research-store digest cache — tooling artifact, not a planning record
+.planning/research/.cache/
