@@ -2,9 +2,9 @@
 phase: 7
 slug: regime-representation
 scope: phase-wave 2 ONLY (criteria 5, 6, 7 + INV-01)
-status: draft
+status: validated
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-09-15
 supersedes: 07-VALIDATION-WAVE1.md (wave 1's, status validated — reused, not replaced)
 ---
@@ -142,4 +142,79 @@ A check that cannot fail is worse than no check — it manufactures confidence.
 - [ ] Legacy-import ratchet still ≤ 31 after the port
 - [ ] `nyquist_compliant: true`
 
-**Approval:** pending
+**Approval:** pending — see the 2026-09-21 audit below
+
+
+---
+
+## Validation Audit 2026-09-21 (wave 2, plans 07-05 … 07-12)
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 7 |
+| Resolved (automated test added) | 3 |
+| Partially resolved (names-only guard) | 1 |
+| Unvalidatable as specified / left open | 3 |
+
+**Suite:** baseline **1983 passed / 0 skipped / 0 xfailed** → **2013 passed / 0 skipped /
+0 xfailed** after this audit (+30, all in one new file). No drop, no new skip.
+
+### Wave 0 gap list — closed
+
+Every row of the Wave 0 list above now has a real file, and all five of the phase's
+recorded "check that can only confirm" defects are repaired in the tree:
+
+| Wave-0 item | Delivered as | Can it fail? |
+|---|---|---|
+| `sort_column` no-fallback | `test_platform_labeling_classifier2.py::test_missing_ordering_column_raises` | yes — a restored fallback returns instead of raising |
+| relative-feature disjointness | `test_platform_features_relative.py::test_resolved_frozen_list_is_disjoint_from_the_lean_set` | yes — asserts the *resolved* eight, not the declared candidates |
+| dependence | `test_platform_evaluation_dependence.py` (6 classes, incl. `block_permutation_null`) | yes — identical labelings sit above the null, independent ones inside it |
+| joint tilt | `test_platform_allocation_joint_tilt.py::test_pooling_changes_the_portfolio_weights_not_just_a_flag_field` | yes — and it is explicitly the anti-"flag field exists" test |
+| deflated Sharpe | `test_platform_evaluation_deflated_sharpe.py::TestAblationArmsCannotCollapseTheHurdle` | yes |
+| INV-01 ingestion | `test_platform_macro_ingest.py` boundary/adjacency + `test_platform_features_invariants.py` (holdout, registry, era leakage) | yes — era-leakage and holdout-cutoff tests both assert a value that would change |
+| ratchet guard | `test_platform_legacy_import_ratchet.py::test_the_broken_grep_is_not_the_exit_criterion` | yes — the repaired defect is itself asserted |
+
+Two retired defects verified repaired rather than reworded: the **§4.4 occupancy cap** is now a
+real two-sided `[~8%, ~35%]` band asserted against the live fit
+(`test_live_occupancy_within_design_44_band`, with a separate loud presence test so it cannot
+pass by absence), and **`dd_delta`'s universal band is `[-1, 1]`**, pinned by
+`test_dd_delta_universal_band_is_the_revised_minus_one_to_one` with the old `[-2, 2]` explicitly
+named as retired for being wider than the quantity's reachable range.
+
+### Gaps found this audit
+
+| # | Gap | Disposition |
+|---|---|---|
+| G1 | **Filtered-labeling churn ungoverned** (open item 5) — 246/588 (41.84%) vs 3.60% full-sample. No band, and nothing re-derived the recorded number from the data it describes. | **FILLED** — `tests/unit/test_platform_joint_diagnostics_record.py::TestFilteredChurnIsReDerivedFromTheCurve` |
+| G2 | **Ablation validity unasserted** — nothing checked that the joint and baseline legs (and the two routings) walk the *same* classifier state paths; a divergence would silently turn the lift into something other than an ablation of the blend. | **FILLED** — `TestBothLegsWalkTheSameClassifierPaths` |
+| G3 | **`n_resolved` unguarded as a live quantity** (open item 6) — 5/12 for classifier #2 was reported but nothing would notice a regression to the `n_resolved = 0 / median_lag = NaN` shape that once read as "detection never happened". | **FILLED** — `TestResolvedTransitionCountIsLive`, incl. a positive control and a pin of the still-present silent-zero at the `compute_sojourn_lag_headline` boundary |
+| G4 | **ADR-0002's probe-edge table is documentation** (open item 8) — it names ~25 tests and would not fail if it drifted. | **PARTIALLY FILLED** — `TestProbeEdgeTableNamesRealTests` asserts every cited file and function still exists. **Names only**: it cannot notice a cited test whose body drifted off the edge it is cited for. Stated in the test's own docstring, not hidden. |
+| G5 | **ADR-0001 condition (iv)'s covariance clause** (open item 3) — no test in the tree references it. Nothing would detect either its arrival or its continued absence. | **NOT VALIDATED** — the clause is unimplemented; a test asserting "not implemented" would only confirm. Implementation-side item, not a test gap. |
+| G6 | **`vol_targeted_tilt` / `driver.py:497` (iv)-non-compliance** (open item 4) — the non-compliance is recorded in prose only; no test pins that non-joint consumers get the unpooled path. | **NOT FILLED** — `allocation/tilt.py` and `backtest/driver.py` are out of this audit's write scope, and a guard here belongs with the fix, not ahead of it. |
+| G7 | **§4.4 criterion 3 Hungarian subsample stability never run** (open item 2) for either classifier. | **UNVALIDATABLE AS SPECIFIED** — no implementation exists to test; this is missing measurement, not missing coverage of existing behaviour. |
+
+### Deliberately not done
+
+- **No dependence statistic of any kind was computed.** Criterion 6 stays UNRESOLVED; the
+  pre-registration at `298b1bc` forbids a tie-break and this audit did not run one. The
+  dependence tests were read, not re-executed against the live labelings.
+- **A11 left open** per the developer's standing choice.
+- **`MAX_LEGACY_IMPORT_SITES` untouched** at 31.
+
+### Incidental finding, recorded not acted on
+
+The firewalled **L2 routing degrades 100 of 588 steps** (87 classifier #1, 13 classifier #2)
+against 0 under the decision-bearing L1-only routing. Degraded steps hold the previous weights
+and therefore *dampen* measured churn, so any future churn comparison across routings must carry
+that count. It is now re-derived from the curve in
+`test_degraded_step_count_matches_the_measurement_record` rather than living only in a JSON file.
+
+### Coverage verdict
+
+| Requirement | Verdict | Basis |
+|---|---|---|
+| **REG-01** | **COVERED, with one governed-but-unbanded quantity now pinned** | criteria 5 and 7 carry failing-capable tests end to end (disjointness of the *resolved* list, raising `sort_column`, the two-sided occupancy band on the live fit, blend endpoints/hand-computed blend/pooling-moves-weights, the revised `dd_delta` band, DSR hurdle arithmetic). Criterion 6 is measured, deliberately ungated, and **UNRESOLVED by pre-registration** — not a coverage gap. Criterion 8's guard is the ratchet test, which now asserts the broken grep is not the exit criterion. |
+| **INV-01** | **COVERED** | `features/invariants.py` is tested on the properties that can actually be wrong: holdout boundary applied *before* any ratio is computed, no admissible month past the cutoff, era windows that cannot leak forward, registry row counts including the sentinel, a distinct non-empty reason per rejection, and declared-order results. Ingestion side pinned by the boundary (later-of-two-sources) and adjacency (denominator constant within a quarter, recovered back out of the ratio) tests. |
+
+Neither verdict rests on a test that merely asserts a field exists or that a value lies inside a
+bound wider than its own reachable range.
