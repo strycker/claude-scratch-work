@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Representation
 status: in-progress
-stopped_at: "Completed 07-08-PLAN.md (ADR-0002 Proposed, classifier #2 fit)"
-last_updated: "2026-09-17T20:22:34.389Z"
+stopped_at: Completed 07-11-PLAN.md
+last_updated: "2026-09-21T14:55:21.305Z"
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 47
-  completed_plans: 43
+  completed_plans: 46
 current_phase: 7
-last_activity: 2026-09-17
-last_activity_desc: "Phase 7 plan 07-08 executed — ADR-0002 at Proposed before the fit, classifier #2 fit on the disjoint Lean 8 (occupancy 15.37/46.12/38.51%, 1963-01 → 2020-12), suite 1844 → 1873"
+last_activity: 2026-09-21
+last_activity_desc: "Phase 7 plan 07-11 executed — criterion 7 measured: wealth_delta -0.123438, dd_delta +0.024084, both over 588 steps 1972-01-31 → 2020-12-31 (L1-only routing); neither leg's DSR clears the hurdle at 42 trials; suite 1949 → 1977"
 ---
 
 # Project State
@@ -336,7 +336,7 @@ scoring now uses it — **required, not cosmetic**: it scores
 2020 as "today" every week. Three tests pin the wiring specifically and fail
 against the unwired code.
 
-Progress: [███████▌░░] 75% (6 of 8 phases; phase 7 in flight, 8 of its 12 plans done)
+Progress: [███████▌░░] 75% (6 of 8 phases; phase 7 in flight, 11 of its 12 plans done)
 
 ### Roadmap restructure (2026-08-04)
 
@@ -391,6 +391,7 @@ numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
 | Phase 05 P06 | 7min | 3 tasks | 2 files |
 | Phase 06 P01 | 55min | 3 tasks | 11 files |
 | Phase 7 P08 | 1 session | 3 tasks | 6 files |
+| Phase 07 P11 | 1h05m | 3 tasks | 6 files |
 
 *Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
 *Updated after each plan completion.*
@@ -429,6 +430,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 06-01: D-01 fresh-package boundary verified via static AST import-graph closure (not sys.modules) to survive test-order pollution
 - [Phase ?]: 07-08: classifier #2 pinned before the fit (Lean 8, K=3, lambda=32.0=4n, sort_column=rs_equities_bonds, blend_weight_1=0.50) and recorded in ADR-0002 at Proposed
 - [Phase ?]: 07-08: criterion-7 routing is L1 decision-bearing / L2 observational via NO_REGISTRY, firewalled from D-16/D-17/DSR — a fourth option, not one of the plan's three
+- [Phase 07-11]: Criterion 7 measured: wealth_delta -0.123438, dd_delta +0.024084, both over 588 steps 1972-01-31 to 2020-12-31 (joint bw1=0.50 minus classifier-#1-alone bw1=1.00, L1-only routing). Both governing bands held; neither leg's DSR clears the multiple-testing hurdle at 42 trials.
+- [Phase 07-11]: Joint harness degrades a step if EITHER classifier fails, so the two legs share a degraded-step SET rather than merely an index — the strongest available guarantee that the comparison is a one-parameter ablation.
+- [Phase 07-11]: No sharpe key written into the trial registry: two near-identical legs would collapse registry_sharpe_variance from its 1.0 placeholder to ~1e-6, silently disabling the multiple-testing correction project-wide. Left open as an ADR-0002 amendment question.
 
 ### Pending Todos
 
@@ -536,8 +540,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-17T20:22:26.885Z
-Stopped at: Completed 07-08-PLAN.md (ADR-0002 Proposed, classifier #2 fit)
+Last session: 2026-09-21T14:55:09.288Z
+Stopped at: Completed 07-11-PLAN.md
 Resume file: .planning/phases/07-regime-representation/07-04-SUMMARY.md (then ADR-0001's
 "Deferrals and open items" for wave 2's starting point)
 
