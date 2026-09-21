@@ -208,3 +208,64 @@ once real Sharpe-bearing rows accumulate, the resulting sample variance will be 
 pooled-population estimate than the paper's own "one strategy class" framing strictly assumes.
 This is why the result is reported as "a deflated Sharpe ratio," not "the deflated Sharpe design
 §22 specifies," until both gaps close.
+
+---
+
+## AMENDMENT 2026-09-21 — the estimator had a live trap; recording convention set
+
+**Decided by Glenn, 2026-09-21**, after plan 07-11 declined to write a `sharpe` key and
+flagged why.
+
+### The trap
+
+`_MIN_USABLE_SHARPE_OBSERVATIONS` was **2**. Any two `sharpe`-bearing rows switched
+`registry_sharpe_variance` off its conservative 1.0 placeholder and onto a computed value.
+Measured on plan 07-11's two rows (Sharpe **0.917073** and **0.914903**):
+
+| | |
+|---|---|
+| sample variance (ddof=1) | 2.354450e-06 |
+| `expected_max_sharpe(42, 1.0)` | **2.208694** |
+| `expected_max_sharpe(42, 2.35e-06)` | **0.003389** |
+
+A **99.85% collapse** of the multiple-testing hurdle, after which essentially any strategy
+clears DSR. The trap was armed regardless of what 07-11 did: it would have fired for whoever
+added the key next.
+
+### The deeper error, which raising the minimum alone would not have fixed
+
+In Bailey–López de Prado, `sharpe_variance` is the dispersion of Sharpe ratios **across
+independently-tried configurations** — it estimates how good the best of N trials looks by luck.
+Plan 07-11's two rows are **two arms of one ablation**: the baseline is `blend_weight_1 = 1.0`
+of the *same* harness, deliberately near-identical to the joint leg. Including them answers "how
+different are the two arms of one comparison" — approximately zero by construction — rather than
+"how much do different strategies vary". That is a category error, not a tuning problem.
+
+### Two independent defences, both implemented
+
+1. **`_MIN_USABLE_SHARPE_OBSERVATIONS` 2 → 20.** A variance estimate from n=2 is unusable
+   whatever the rows are.
+2. **`config["independent_trial"] is False` excludes a row entirely.** Arms of one ablation never
+   enter the across-trials variance.
+
+Each is pinned by its own test so removing either fails, plus a test asserting 20 genuine trials
+*do* produce a computed variance — otherwise the guard could only ever confirm "placeholder",
+which is this project's signature defect shape.
+
+### Recording convention, going forward
+
+Trial rows **do** carry `metrics["sharpe"]`, so the registry accumulates what the estimator will
+eventually need. A row that is an arm of an ablation, a sensitivity sweep, or any other
+non-independent comparison **must** set `config["independent_trial"] = False`. The default is
+independent; the flag is an explicit opt-out for rows that are not.
+
+Plan 07-11's two rows were backfilled accordingly. **Today's verdicts are unchanged**:
+`sharpe_variance` is still the 1.0 placeholder, `expected_max_sharpe(42, 1.0)` is still 2.208694,
+and both legs' DSR (2.28151e-12 baseline, 1.46904e-11 joint) still do not clear the hurdle.
+
+### What remains an assumption
+
+`DEGENERATE_SHARPE_VARIANCE = 1.0` is still a declared placeholder, not a measured quantity, and
+governs every DSR this project reports. It stays that way until 20 independent Sharpe-bearing
+trials exist. That is a longer road than before this amendment, deliberately — the previous road
+was short because it was wrong.

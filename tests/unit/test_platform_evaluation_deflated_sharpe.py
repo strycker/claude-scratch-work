@@ -19,12 +19,14 @@ range alone.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 from scipy.stats import norm
 
 from trading_crab_lib.platform.evaluation.deflated_sharpe import (
+    _MIN_USABLE_SHARPE_OBSERVATIONS,
     DEGENERATE_SHARPE_VARIANCE,
     deflated_sharpe_ratio,
     expected_max_sharpe,
@@ -261,14 +263,30 @@ class TestRegistrySharpeVariance:
         _write_ledger(path, [_header_row(38), _sharpe_row("a", 0.4)])
         assert registry_sharpe_variance(path=path) == DEGENERATE_SHARPE_VARIANCE
 
-    def test_computes_sample_variance_with_two_or_more_observations(self, tmp_path):
-        """>= 2 usable Sharpe rows -> real sample variance (ddof=1), not the placeholder."""
+    def test_computes_sample_variance_at_or_above_the_minimum(self, tmp_path):
+        """>= _MIN_USABLE_SHARPE_OBSERVATIONS usable rows -> real sample variance.
+
+        RE-PINNED 2026-09-21: this asserted 4 rows sufficed, because the minimum
+        was 2. Glenn raised it to 20 after the two plan-07-11 rows were measured
+        to collapse expected_max_sharpe(42, .) from 2.208694 to 0.003389 — a
+        99.85% drop in the multiple-testing hurdle. The test now builds exactly
+        the minimum rather than a literal 4, so it tracks the constant instead of
+        silently re-encoding an old value.
+        """
         path = tmp_path / "trials.jsonl"
-        sharpes = [0.2, 0.5, 0.9, 1.1]
+        sharpes = [0.2 + 0.07 * i for i in range(_MIN_USABLE_SHARPE_OBSERVATIONS)]
         _write_ledger(path, [_header_row(38)] + [_sharpe_row(str(i), s) for i, s in enumerate(sharpes)])
         result = registry_sharpe_variance(path=path)
         assert result == pytest.approx(float(np.var(sharpes, ddof=1)))
         assert result != DEGENERATE_SHARPE_VARIANCE
+
+    def test_one_below_the_minimum_falls_back_to_the_placeholder(self, tmp_path):
+        """The boundary, pinned from the other side — otherwise the test above
+        could pass with the minimum set to anything at or below the row count."""
+        path = tmp_path / "trials.jsonl"
+        sharpes = [0.2 + 0.07 * i for i in range(_MIN_USABLE_SHARPE_OBSERVATIONS - 1)]
+        _write_ledger(path, [_header_row(38)] + [_sharpe_row(str(i), s) for i, s in enumerate(sharpes)])
+        assert registry_sharpe_variance(path=path) == DEGENERATE_SHARPE_VARIANCE
 
     def test_never_raises_on_malformed_metrics(self, tmp_path):
         """A row with a non-numeric sharpe value is skipped, not a crash."""
@@ -294,3 +312,92 @@ class TestRegistrySharpeVariance:
         result = registry_sharpe_variance()
         assert isinstance(result, float)
         assert result > 0.0
+
+
+# ── The 2026-09-21 guard: ablation arms must not collapse the DSR hurdle ─────
+#
+# Before this guard, _MIN_USABLE_SHARPE_OBSERVATIONS was 2, so ANY two
+# sharpe-bearing rows switched registry_sharpe_variance off its conservative
+# 1.0 placeholder onto a computed value. Plan 07-11's two rows (0.917073 and
+# 0.914903) have sample variance 2.354450e-06, which drops
+# expected_max_sharpe(42, .) from 2.208694 to 0.003389 -- a 99.85% collapse,
+# after which essentially any strategy clears DSR.
+#
+# Two independent defences, each pinned separately so removing either fails.
+
+
+class TestAblationArmsCannotCollapseTheHurdle:
+    @staticmethod
+    def _registry(tmp_path, rows) -> Path:
+        p = tmp_path / "trials.jsonl"
+        with p.open("w") as fh:
+            for cfg, metrics in rows:
+                fh.write(json.dumps({"config_hash": "x", "config": cfg, "metrics": metrics}) + "\n")
+        return p
+
+    def test_the_two_07_11_arms_leave_the_variance_at_the_placeholder(self, tmp_path):
+        """The exact live case. Both defences apply; either alone suffices."""
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import (
+            DEGENERATE_SHARPE_VARIANCE,
+            registry_sharpe_variance,
+        )
+        p = self._registry(tmp_path, [
+            ({"trial_tag": "07-11-c1-alone-L1only", "independent_trial": False}, {"sharpe": 0.917073}),
+            ({"trial_tag": "07-11-joint-c1xc2-L1only", "independent_trial": False}, {"sharpe": 0.914903}),
+        ])
+        assert registry_sharpe_variance(p) == DEGENERATE_SHARPE_VARIANCE
+
+    def test_hurdle_survives_those_two_rows(self, tmp_path):
+        """The consequence, asserted on the hurdle itself rather than on the
+        variance — this is what the collapse would actually have destroyed."""
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import (
+            expected_max_sharpe,
+            registry_sharpe_variance,
+        )
+        p = self._registry(tmp_path, [
+            ({"trial_tag": "a", "independent_trial": False}, {"sharpe": 0.917073}),
+            ({"trial_tag": "b", "independent_trial": False}, {"sharpe": 0.914903}),
+        ])
+        assert expected_max_sharpe(42, registry_sharpe_variance(p)) > 2.0
+
+    def test_minimum_alone_blocks_two_UNFLAGGED_rows(self, tmp_path):
+        """Defence 1 in isolation: even without the independence flag, n=2 is
+        below the minimum. Lowering _MIN_USABLE_SHARPE_OBSERVATIONS back to 2
+        fails here."""
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import (
+            DEGENERATE_SHARPE_VARIANCE,
+            registry_sharpe_variance,
+        )
+        p = self._registry(tmp_path, [
+            ({"trial_tag": "a"}, {"sharpe": 0.917073}),
+            ({"trial_tag": "b"}, {"sharpe": 0.914903}),
+        ])
+        assert registry_sharpe_variance(p) == DEGENERATE_SHARPE_VARIANCE
+
+    def test_independence_flag_alone_excludes_arms_among_many_rows(self, tmp_path):
+        """Defence 2 in isolation: with 20+ genuine trials present, the flagged
+        arms are still excluded. Deleting the flag check changes the variance."""
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import registry_sharpe_variance
+
+        genuine = [({"trial_tag": f"t{i}"}, {"sharpe": 0.5 + 0.05 * i}) for i in range(20)]
+        arms = [({"trial_tag": "arm-a", "independent_trial": False}, {"sharpe": 0.917073}),
+                ({"trial_tag": "arm-b", "independent_trial": False}, {"sharpe": 0.914903})]
+        dir_a, dir_b = tmp_path / "a", tmp_path / "b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        with_arms = registry_sharpe_variance(self._registry(dir_a, genuine + arms))
+        without = registry_sharpe_variance(self._registry(dir_b, genuine))
+        assert with_arms == pytest.approx(without)
+
+    def test_twenty_genuine_trials_DO_produce_a_computed_variance(self, tmp_path):
+        """The guard must not be a one-way ratchet to 'always placeholder' —
+        otherwise it could only confirm. With 20 independent observations the
+        estimator computes a real variance."""
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import (
+            DEGENERATE_SHARPE_VARIANCE,
+            registry_sharpe_variance,
+        )
+        rows = [({"trial_tag": f"t{i}"}, {"sharpe": 0.2 + 0.07 * i}) for i in range(20)]
+        v = registry_sharpe_variance(self._registry(tmp_path, rows))
+        assert v != DEGENERATE_SHARPE_VARIANCE
+        assert v > 0.0

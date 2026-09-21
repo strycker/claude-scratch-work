@@ -69,7 +69,25 @@ DEGENERATE_SHARPE_VARIANCE: Final[float] = 1.0
 
 #: Minimum number of usable Sharpe observations before the registry population's own
 #: sample variance is trusted over the degenerate-case fallback (07-DSR-ESTIMATOR-NOTE.md §3/4).
-_MIN_USABLE_SHARPE_OBSERVATIONS: Final[int] = 2
+# RAISED 2 -> 20 on 2026-09-21 (Glenn's decision). At 2, any two sharpe-bearing
+# rows switched this estimator off its conservative placeholder and onto a
+# computed value. Measured with plan 07-11's two rows (Sharpe 0.917073 and
+# 0.914903): sample variance 2.354450e-06, and expected_max_sharpe(42, .) falls
+# from 2.208694 to 0.003389 — a 99.85% collapse of the multiple-testing hurdle,
+# after which essentially any strategy clears DSR. A variance estimate from
+# n=2 is unusable regardless of which two rows they are.
+_MIN_USABLE_SHARPE_OBSERVATIONS: Final[int] = 20
+
+# Rows whose config carries ``independent_trial: False`` are excluded from the
+# variance entirely. In Bailey-Lopez de Prado, sharpe_variance is the dispersion
+# of Sharpe ratios ACROSS INDEPENDENTLY-TRIED CONFIGURATIONS — it estimates how
+# good the best of N trials looks by luck. Two arms of ONE ablation (a baseline
+# and its single-parameter variant) are deliberately near-identical, so counting
+# them answers "how different are the two arms of one comparison" (~0 by
+# construction) rather than "how much do different strategies vary". That is a
+# category error, not a tuning problem: raising the minimum alone would only
+# defer it until enough ablation rows accumulated.
+_INDEPENDENT_TRIAL_KEY: Final[str] = "independent_trial"
 
 #: format_dsr_verdict's reporting threshold (07-VALIDATION.md: no target, but a value at
 #: or below this must be reported plainly as not clearing the hurdle).
@@ -206,12 +224,24 @@ def registry_sharpe_variance(path: Path | str | None = None) -> float:
         is_header = df["config"].apply(
             lambda cfg: isinstance(cfg, dict) and cfg.get("record_type") == PROVENANCE_RECORD_TYPE
         )
-        for metrics in df.loc[~is_header, "metrics"]:
-            if isinstance(metrics, dict) and "sharpe" in metrics:
-                try:
-                    sharpe_values.append(float(metrics["sharpe"]))
-                except (TypeError, ValueError):
-                    log.warning("registry_sharpe_variance: unparseable sharpe metric %r skipped", metrics.get("sharpe"))
+        n_excluded = 0
+        for cfg, metrics in zip(df.loc[~is_header, "config"], df.loc[~is_header, "metrics"], strict=False):
+            if not (isinstance(metrics, dict) and "sharpe" in metrics):
+                continue
+            if isinstance(cfg, dict) and cfg.get(_INDEPENDENT_TRIAL_KEY) is False:
+                n_excluded += 1
+                continue
+            try:
+                sharpe_values.append(float(metrics["sharpe"]))
+            except (TypeError, ValueError):
+                log.warning("registry_sharpe_variance: unparseable sharpe metric %r skipped", metrics.get("sharpe"))
+        if n_excluded:
+            log.info(
+                "registry_sharpe_variance: excluded %d sharpe-bearing row(s) marked "
+                "%s=False — arms of one ablation are not independent trials and must "
+                "not enter the across-trials variance.",
+                n_excluded, _INDEPENDENT_TRIAL_KEY,
+            )
 
     if len(sharpe_values) < _MIN_USABLE_SHARPE_OBSERVATIONS:
         log.warning(
