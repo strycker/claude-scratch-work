@@ -91,7 +91,7 @@ reported number — that would hide the quantity §5.4 says to report prominentl
 
 **Blocked on:** nothing. This is next.
 
-### T0.12  `compute_sojourn_lag_headline` returns a silent zero on the wrong column shape  `S`  (R7)
+### T0.12  `compute_sojourn_lag_headline` silent zero — **CLOSED 2026-09-21**  `S`  (R7)
 **Found in the Phase 7 wave-2 validation audit (2026-09-21) and reproduced independently.**
 
 Passing `state_{k}` probability columns where integer state labels are expected returns
@@ -104,9 +104,22 @@ live**: plan 07-11 fixed its own call site after its first draft reported 0 of 2
 resolved, and the validation audit pinned the behaviour with a demonstration test — but the
 function itself is unchanged, so the trap is armed for the next caller.
 
-Fix: raise, or return an explicit sentinel plus a loud WARNING, on a column shape the function
-cannot interpret. A function that cannot distinguish "no detections" from "you passed the wrong
-thing" must not report the first.
+**CLOSED 2026-09-21.** Glenn moved it into the blocking set alongside T0.11 and it was fixed:
+the function now raises `ValueError` naming the offending columns.
+
+**The discriminator is column TYPE, not overlap with the observed states.** The first cut of the
+guard tested whether any transition target state appeared as a column, and that was wrong — a
+labeling whose only transition targets a state that genuinely never appears as a column has zero
+overlap and is perfectly legitimate: that transition is truly unresolved and keeps the NaN
+convention. Caught by testing the case before shipping. What is never legitimate is a column that
+cannot denote a canonical integer state at all, so the guard rejects any non-integer column
+(`bool` included, since it is an `int` subclass and a True/False-keyed matrix is not a labeling).
+
+Five tests pin it, including the positive control that integer-keyed matrices still compute a
+real headline — without it the guard could only refuse, which is the same defect shape wearing
+the opposite sign. The validation audit's own
+`test_wrong_column_labels_still_produce_a_silent_zero`, written to pin that the defect was *live*,
+was **inverted rather than deleted** so the history stays visible and a regression fails there.
 
 ### T0.9  Registered nested selection inside the walk-forward loop  `XL`  (R7/R14, §8.4, §22)
 **Raised by Glenn at the Phase 7 wave-2 decision checkpoint (2026-09-17), deferred to keep that

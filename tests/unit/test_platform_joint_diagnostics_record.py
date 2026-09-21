@@ -222,15 +222,19 @@ class TestResolvedTransitionCountIsLive:
             assert sl["n_resolved"] > 0, f"{clf}: finite ratio on 0 resolved transitions"
             assert np.isfinite(sl["median_lag"])
 
-    def test_wrong_column_labels_still_produce_a_silent_zero(self):
-        """Documents the defect that is STILL present at the function boundary.
+    def test_wrong_column_labels_now_RAISE_instead_of_a_silent_zero(self):
+        """T0.12 CLOSED 2026-09-21 — this test previously asserted the defect.
 
-        Passing a probability matrix whose columns are ``state_{k}`` strings --
-        the shape that caused the original misreading -- yields a clean-looking
-        ``n_resolved = 0 / median_lag = NaN`` with no exception and no warning.
-        The caller is the only thing standing between that and a published
-        number. Pinned so any future hardening of this boundary is a visible,
-        test-breaking change rather than an undocumented one.
+        It was written by the wave-2 validation audit to pin that the silent zero
+        was *still live* at the function boundary: a probability matrix keyed by
+        ``state_{k}`` strings returned a clean-looking ``n_resolved = 0 /
+        median_lag = NaN`` with no exception and no warning, and only the caller
+        stood between that and a published number.
+
+        Glenn marked it blocking and it was fixed. The pin is inverted rather than
+        deleted, so the history stays visible and a regression that restores the
+        silent zero fails here — which is exactly what the original pin promised:
+        "any future hardening of this boundary is a visible, test-breaking change".
         """
         index = pd.date_range("1972-01-31", periods=12, freq="ME")
         states = pd.Series([0] * 4 + [1] * 4 + [0] * 4, index=index)
@@ -238,15 +242,15 @@ class TestResolvedTransitionCountIsLive:
         good.loc[index[6:8], 1] = 0.95   # state 1 detected 2 months late
         good.loc[index[10:], 0] = 0.95   # state 0 detected 2 months late
 
+        # Positive control: the integer-keyed path still measures.
         resolved = compute_sojourn_lag_headline(states, good)
         assert resolved["n_resolved"] > 0, "positive control failed -- detection is broken"
         assert np.isfinite(resolved["median_lag"])
 
+        # The defect's own input now raises rather than returning a zero.
         mislabelled = good.rename(columns={0: "state_0", 1: "state_1"})
-        silent = compute_sojourn_lag_headline(states, mislabelled)
-        assert silent["n_transitions"] == resolved["n_transitions"]
-        assert silent["n_resolved"] == 0
-        assert np.isnan(silent["median_lag"])
+        with pytest.raises(ValueError, match="CANONICAL INTEGER state labels"):
+            compute_sojourn_lag_headline(states, mislabelled)
 
 
 # ── 4. ADR-0002's probe-edge table: names only, and says so ─────────────────
