@@ -370,7 +370,7 @@ class TestBlockPermutationNull:
         return pd.Series(vals, index=idx, name="state")
 
     def test_shuffling_preserves_occupancy_exactly(self):
-        from trading_crab_lib.platform.evaluation.dependence import _blocks, _shuffle_blocks
+        from trading_crab_lib.platform.evaluation.dependence import _shuffle_blocks
 
         s = self._blocky([(0, 30), (1, 50), (0, 20), (2, 40)]).to_numpy()
         rng = np.random.default_rng(1)
