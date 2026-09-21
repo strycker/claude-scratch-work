@@ -502,57 +502,104 @@ that has never been run is run.
 **Requirements**: (to be assigned at planning)
 
 **Why this phase exists.** Phase 7's UAT measured classifier #1's *filtered* labeling changing
-state in **246 of 588 decision months (41.84%)** against a **3.74%** full-sample rate. Median
-filtered run length is **1.0 month**; 136 of 247 runs are a single month; **74.8%** of changes
-fall more than three months from any real transition, and quiet-period churn (39.8%) is nearly as
-high as boundary churn (49.2%). The labeling is effectively memoryless. Design §5.4 calls the
-smoothed-vs-filtered gap "the measured hindsight content of the strategy" — here it is ~11× and
-was never budgeted. That churn feeds the allocation tilt directly, and therefore criterion 7's
-measured lift.
+state in **246 of 587 step-pairs (41.91%)** against a full-sample rate of 3.74%. Median filtered
+run length is **1.0 month**; 136 of 247 runs are a single month.
+
+> ### CORRECTION 2026-09-21 — the first scoping of this phase had the causal model wrong
+>
+> These criteria originally assumed the 41.91% churn was L2 nowcaster flicker, fixable by §5.1's
+> recursive prior-state feature. **Research and independent verification show it is not.**
+>
+> - `joint_driver.py:502` sets `state_1 = states_1.iloc[-1]` — the **jump model's** (L1) label.
+> - `joint_driver.py:431` — under the decision-bearing `ROUTING_L1_ONLY`,
+>   `probs_1 = _last_state_one_hot(states_1)`; **`_refit_l2` is never called.**
+> - Classifier #2 runs the **same code path** and churns **4.09%** (24/587).
+>
+> So a §5.1 fix, which changes L2, **cannot move that number**. The original criterion 2 would
+> have reported 246 → 246 bit-for-bit whether the fix worked perfectly or not at all — an
+> unfalsifiable criterion, inside a phase written to catch unfalsifiable criteria. Sixth recorded
+> instance of this project's signature defect; authored by Claude, caught by its own research.
+>
+> **There are two distinct problems and they are now separated:**
+>
+> **A — L1 terminal-month churn (41.91%).** The DP's terminal month is the only month with no
+> right neighbour, so deviating there costs **λ** where an interior deviation costs **2λ** — and
+> the filtered labeling reads exactly that month, every step. Classifier #1 has **λ/d = 1.0**;
+> #2 has **2.0** and churns 10× less. This is a consequence of the λ re-pin of 2026-09-18
+> (coefficient 4 → 1).
+>
+> **B — L2 flat posteriors.** Under `l2` routing `active_regime` changes **462/587 (78.7%)** and
+> is all-cash in **387/588** months, implying **≥309/488** non-degraded steps had max calibrated
+> probability below the 0.70 act threshold. 0.70 is **4.2× uniform at K=6**. §5.1 addresses this.
+
+**Depends on**: Phase 7
+**Blocks**: Phase 9 (Migration) — per the Phase 7 wave-2 UAT ruling, 2026-09-21
 
 **Success Criteria** (what must be TRUE):
 
-  1. **§5.1's recursive prior-state feature exists and is honest.** The nowcaster's feature set
-     includes the prior **predicted (filtered)** state distribution, produced recursively within
-     each walk-forward step. A guard test **fails** if the prior **smoothed** label is ever
-     substituted — that label is built from future data, and substituting it would make CV
-     accuracy look excellent while production flickered unchanged (P1, this project's documented
-     first sin, in its easiest form).
+  0. **PREREQUISITE — the per-step probability matrix is persisted.** `driver.py:530-532`
+     accumulates it and throws it away; only the equity curve is written. Nothing in criteria 1–3
+     is measurable without it. Small and boring; it gates everything else.
 
-  2. **The churn is measurably lower, on the same window.** Filtered state-change rate re-measured
-     over the same 588 steps, 1972-01-31 → 2020-12-31, reported before and after. A target is not
-     pre-declared here; the number is reported with its window either way.
+  1. **A prior-state belief propagates into the nowcaster's output, and it cannot leak.**
+     **REWORDED 2026-09-21** from "the feature set includes the prior predicted distribution".
+     An explicit Bayes filter — `π_t ∝ [Σ π_{t−1} A] · L_t`, with `A` the existing empirical
+     transition matrix — satisfies §5.1's intent ("a discriminative replacement for the HMM
+     filter", §5.1's own first sentence) with **zero train/serve skew, zero leakage surface and
+     zero free parameters**, because it has no training-time analogue at all. It does not put the
+     prior state in the feature set, and the original wording required that; the wording is
+     changed deliberately, not reinterpreted.
+     The L1 labeler is **non-causal within its window by design** (`jump_model.py:15-18`), so a
+     *trained* prior-state column would carry post-t information that no holdout, purge or embargo
+     can detect. Eliminating that channel beats guarding it.
 
-  3. **§5.3's hysteresis gates allocation, closing audit item A7.** `update_active_regime` is
-     already imported by both drivers and today gates nothing — A7 (rated High, open since
-     2026-09-09): *"the thresholds stabilize a label, not a portfolio."* Either allocation acts on
-     it, or the criterion is reworded; silently leaving it inert is not an option.
+  2. **Both churn series are reported, and neither can masquerade as the other.**
+     - **A's metric:** `state_1` changes / 587. Currently **246 (41.91%)**. A §5.1-style change
+       must NOT move it; if it appears to, something is wired wrong.
+     - **B's metric:** `argmax(regime_probs)` churn — **never measured anywhere**, and the object
+       criterion 1 actually changes. Requires criterion 0.
+     No target is pre-declared for either. Both are reported with their window.
 
-  4. **§4.4 criterion 3 is RUN, for both classifiers.** Subsample re-estimation (drop first
-     decade / drop last decade / block bootstrap) with Hungarian matching on distribution
-     distances to defeat label switching. There is currently **no implementation anywhere** in
-     `src/` or `tests/`. This is the criterion that decides whether classifier #1's crisis state
-     is a regime or an *episode* — the §4.4 amendment of 2026-09-18 admitted it on a
-     nine-episode recurrence argument, which is evidence *for* the exemption but is not this
-     test. The result is recorded whichever way it falls.
+  3. **Track A is diagnosed before it is changed.** The zero-trial diagnostic: record the step-*t*
+     fit's label for months *t−1 … t−6* and churn each series across steps. Falling churn in *k*
+     confirms the terminal-month edge artefact; flat churn refutes it and λ/d is the whole story.
+     **A λ sweep is NOT authorized** — it costs one registry trial per value against 42/44 used,
+     and needs its own ruling.
 
-  5. **Criterion 7 is re-measured** under the changed labeling, so the phase's effect on the
-     headline is visible rather than inferred. Both legs, one harness, window stated inline.
+  4. **§5.3's hysteresis gates allocation, closing audit item A7 — and is evaluated only after B.**
+     Verified 2026-09-21: `active_regime` is elementwise equal to `state_1` in all 588 months, so
+     under the decision-bearing routing the hysteresis is a **provable identity** on a one-hot
+     input. It cannot be evaluated until the probability vector stops being degenerate, which is
+     why §5.1 comes first. Mechanism (hard gate / bounded turnover / magnitude-scaling) and the
+     0.70/0.40 pair are **decision checkpoints for Glenn**, not planner choices.
 
-  6. **A11 is revisited.** Glenn deliberately left it open on 2026-09-18 when the band tiers were
-     decided (universal gates, domain advises) and on 2026-09-21 chose to reopen it. The question
-     — should any gate fail on a bad-but-working model, rather than only on a broken measurement?
-     — is answered and recorded as a decision, in either direction. This is a reversal of a prior
-     choice and must be written as one.
+  5. **§4.4 criterion 3 is RUN for both classifiers**, with **four** subsample schemes: drop first
+     decade, drop last decade, circular block bootstrap, **and leave-one-episode-out**. The fourth
+     is added because the three named schemes are poorly aimed: classifier #1's **state 2** is
+     **one contiguous episode, 1996-07 → 2002-05** — exactly the "20% state appearing once as a
+     contiguous block" the §4.4 amendment describes — and **neither decade-drop touches it**.
+     Leave-one-episode-out is the design's own "drop 2008-09" generalised; for a one-episode state
+     it is degenerate, **and that degeneracy is the answer**, with no threshold invented.
+     Use **centroid distance in de-standardized units** (empirical multivariate Wasserstein is
+     unusable at n=40: sampling bias 2.88 against a true signal of 0.949) with
+     `scipy.optimize.linear_sum_assignment`. Report a **within-state split-half null at the same
+     n** as the yardstick — the null is **0.706**, not 0, at n=40. Every row carries subsample
+     occupancy, because `_recompute_centroids` freezes zero-occupancy states at their previous
+     centroid and would otherwise score an evaporated state as *stable*.
 
-  7. **The (iv)-non-compliance gap is pinned.** A test asserts that non-joint consumers of
-     `vol_targeted_tilt` (notably `driver.py:497`) receive the **unpooled** per-regime estimate,
-     so validation gap G6 is guarded rather than living in prose. The wave-2 audit could not
-     write it — that file was outside its scope.
+  6. **Criterion 7 is re-measured** under whatever changed, both legs, one harness, window inline.
 
-  8. **Recorded counts match reality.** `CLAUDE.md` (two places) and `README.md`'s badge claim
-     **1705** tests; the suite is at **2018**. Trivial to fix, and exactly the shape of recorded
-     number that has already misled this project three times.
+  7. **A11 is revisited and answered.** Reopened by Glenn 2026-09-21 after being deliberately left
+     open on 2026-09-18. Written as the reversal of a prior decision that it is.
+
+  8. **Validation gap G6 is pinned** — a test asserting non-joint consumers of `vol_targeted_tilt`
+     (notably `driver.py:497`) receive the **unpooled** estimate. Pin the known **non**-compliance;
+     writing it as a compliance assertion produces a test that can only pass.
+
+  9. **Recorded counts match reality.** `CLAUDE.md` ×2 and `README.md`'s badge say **1705**; the
+     suite is at **2018**. Also fix F-4: the churn rate's denominator is 587 pairs, not 588 months
+     (`246/587 = 41.91%`, recorded as 41.84%) — the fix breaks an existing pin, so do both in one
+     commit.
 
 ---
 

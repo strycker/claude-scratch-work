@@ -142,3 +142,81 @@ on `[ASSUMED]` numbers that no measurement in this project supports.
 Criterion 7 is **re-measured** under the changed labeling. Its previous value is a comparison
 point, not a target — a change in it is the expected consequence of fixing the labeling, and is
 reported with its window either way. **No target is pre-declared for the churn reduction.**
+
+---
+
+## AMENDMENT 2026-09-21 — D-01 through D-03 had the causal model wrong
+
+`08-RESEARCH.md`'s F-1 overturns this document's own framing. Verified independently before
+acceptance; every figure below was re-derived from the tracked artifacts at `b1c3519`.
+
+### What was wrong
+
+D-01 measured the churn on `state_1`. D-02 named §5.1's missing prior-state feature as the cause.
+**Both are individually true and the link between them is false.**
+
+- `joint_driver.py:502` — `state_1 = states_1.iloc[-1]`, the **jump model's** label (L1).
+- `joint_driver.py:431` — under the decision-bearing `ROUTING_L1_ONLY`,
+  `probs_1 = _last_state_one_hot(states_1)`; **`_refit_l2` is never called.**
+- Classifier #2 runs the **same code path** and churns **4.09%** (24/587).
+
+§5.1 changes L2. The 41.91% is L1. **The fix cannot move the number**, and the phase's original
+criterion 2 would have reported 246 → 246 whether it worked perfectly or not at all.
+
+The match between the measurement and §5.1's *"without it, predictions flicker"* was
+**linguistic, not causal**. It was never checked that the measured series comes from the component
+§5.1 fixes. Sixth recorded instance of this project's signature defect — a check that can only
+confirm — authored by Claude while scoping a phase whose purpose is catching exactly that.
+
+### The corrected model: two problems
+
+**A — L1 terminal-month churn (41.91%).** The DP's terminal month is the only month with no right
+neighbour, so deviating there costs **λ** where an interior deviation costs **2λ**; the filtered
+labeling reads exactly that month, every step. λ/d is **1.0** for #1 and **2.0** for #2 — a
+consequence of the λ re-pin of 2026-09-18 (coefficient 4 → 1). *Existence* follows from the
+objective at `jump_model.py:43-45`; *magnitude* is unmeasured and is what the zero-trial
+diagnostic settles.
+
+**B — L2 flat posteriors.** `active_regime` changes **462/587 (78.7%)** under `l2` routing and is
+all-cash in **387/588**, implying **≥309/488** non-degraded steps had max probability below 0.70.
+That bound follows from the function's branch structure, not an estimate. 0.70 is **4.2× uniform
+at K=6**; it was written against §4.2's HMM-filter intuition where posteriors are sharp.
+
+### Decisions taken on this amendment (Glenn, 2026-09-21)
+
+- **Target both, correctly separated.** Criterion 2 splits into A's metric (`state_1` churn) and
+  B's metric (`argmax(regime_probs)` churn, never measured). Neither may masquerade as the other.
+- **Criterion 1 is REWORDED to accept an explicit Bayes filter** — `π_t ∝ [Σ π_{t−1} A] · L_t` —
+  over a trained prior-state column. Zero train/serve skew, zero leakage surface, zero free
+  parameters, free cold start. It satisfies §5.1's intent and fails the original wording, and the
+  wording was changed deliberately rather than reinterpreted. Decisive reason: the L1 labeler is
+  **non-causal within its window by design**, so a trained prior-state column carries post-t
+  information that **no holdout, purge or embargo can detect**. Eliminating the channel beats
+  guarding it.
+
+### Resolved by Claude with reasons stated, not silently
+
+- **Q-5 — leave-one-episode-out added** as a fourth subsample scheme. Classifier #1's state 2 is
+  **one contiguous episode (1996-07 → 2002-05)** and **neither decade-drop touches it**. The three
+  named schemes miss the actual failure mode. Costs no trials; invents no threshold.
+- **Q-7 — the zero-trial λ/d diagnostic is IN scope**; a **λ sweep is NOT**, since it costs one
+  registry trial per value against 42/44 used and needs its own ruling.
+- **Q-8 — F-4's denominator is fixed**, not annotated: 246/587 = 41.91%, recorded as 41.84%. The
+  fix breaks the pin at `test_platform_joint_diagnostics_record.py:133`; both in one commit.
+- **Cold start** follows from the Bayes filter: the unconditional class distribution, free, with
+  the *same rule at train and serve* — a rule that differs between them *is* train/serve skew.
+
+### Still open — for Glenn, as plan checkpoints
+
+- **Q-3** — §5.3 mechanism: hard gate / bounded turnover / magnitude-scaling. Research recommends
+  magnitude-scaling as the only one satisfying both A7's letter and §5.1's "consume the
+  probabilities, never the argmax". Hard gate would put the book **100% cash in 387/588 months**.
+- **Q-4** — the 0.70/0.40 pair: re-pin (costs trials) or define relative to 1/K.
+- **Q-6/A11** — reopened; must be written as a reversal.
+
+### One further inconsistency found, recorded not scheduled
+
+`report/weekly.py` computes the hysteresis state, persists it, hands `vol_targeted_tilt` the raw
+probabilities anyway, and `assemble_weekly_report` then recomputes its own `probs.idxmax()` at
+line 117 — while printing an explanation of the hysteresis cold-start rule at lines 134-139. **The
+report narrates a state machine whose output it does not show.** Whoever touches §5.3 should look.
