@@ -432,16 +432,30 @@ def run_joint_backtest(
                 probs_1 = _last_state_one_hot(states_1)
                 probs_2 = _last_state_one_hot(states_2)
             else:
+                # Each classifier's nowcaster is caught SEPARATELY so the degrade
+                # count attributes the failure to the labeler that actually
+                # starved the K-fold. A single try around both would report every
+                # L2 failure against one classifier — a count that reads as
+                # evidence about classifier #2 while measuring something else.
                 try:
                     probs_1 = _refit_l2(train_1, states_1, dev_features_1.loc[[t]], cfg)
-                    probs_2 = _refit_l2(train_2, states_2, dev_features_2.loc[[t]], cfg)
                 except _L2_DEGRADE_EXCEPTIONS as exc:
                     log.warning(
-                        "Step %s: L2 refit degraded (RESEARCH Pitfall 2) — holding "
-                        "previous weights: %s", t, exc,
+                        "Step %s: classifier #1 L2 refit degraded (RESEARCH Pitfall 2) "
+                        "— holding previous weights: %s", t, exc,
                     )
                     degraded = True
-                    n_degraded_2 += 1
+                    n_degraded_1 += 1
+                if not degraded:
+                    try:
+                        probs_2 = _refit_l2(train_2, states_2, dev_features_2.loc[[t]], cfg)
+                    except _L2_DEGRADE_EXCEPTIONS as exc:
+                        log.warning(
+                            "Step %s: classifier #2 L2 refit degraded (RESEARCH Pitfall 2) "
+                            "— holding previous weights: %s", t, exc,
+                        )
+                        degraded = True
+                        n_degraded_2 += 1
 
         if degraded:
             new_weights = prev_weights
