@@ -1,0 +1,76 @@
+{
+  "suffix": "l1only",
+  "n_steps": 588,
+  "classifier_1": {
+    "full_sample": {
+      "n_label_transitions": 25,
+      "n_months": 695,
+      "first_month": "1963-02-28",
+      "last_month": "2020-12-31",
+      "transition_rate": 0.03597122302158273,
+      "band_3b_threshold_rate": 0.1,
+      "band_3b_ok": true
+    },
+    "walk_forward_filtered": {
+      "n_transitions": 246,
+      "n_steps": 588,
+      "first_date": "1972-01-31",
+      "last_date": "2020-12-31",
+      "transition_rate": 0.41836734693877553
+    },
+    "sojourn_lag": {
+      "median_sojourn": 9.5,
+      "median_lag": 4.0,
+      "ratio": 2.375,
+      "n_transitions": 25,
+      "n_resolved": 25,
+      "act_threshold": 0.7
+    },
+    "band_3a_ok": true,
+    "disagreement": {
+      "n_compared": 588,
+      "n_disagree": 463,
+      "pct_disagree": 0.7874149659863946,
+      "first_common_date": "1972-01-31 00:00:00",
+      "last_common_date": "2020-12-31 00:00:00",
+      "suspicious": false,
+      "suspicious_reason": ""
+    }
+  },
+  "classifier_2": {
+    "full_sample": {
+      "n_label_transitions": 12,
+      "n_months": 696,
+      "first_month": "1963-01-31",
+      "last_month": "2020-12-31",
+      "transition_rate": 0.017241379310344827,
+      "band_3b_threshold_rate": 0.1,
+      "band_3b_ok": true
+    },
+    "walk_forward_filtered": {
+      "n_transitions": 24,
+      "n_steps": 588,
+      "first_date": "1972-01-31",
+      "last_date": "2020-12-31",
+      "transition_rate": 0.04081632653061224
+    },
+    "sojourn_lag": {
+      "median_sojourn": 29.0,
+      "median_lag": 27.0,
+      "ratio": 1.0740740740740742,
+      "n_transitions": 12,
+      "n_resolved": 5,
+      "act_threshold": 0.7
+    },
+    "band_3a_ok": true,
+    "disagreement": {
+      "n_compared": 588,
+      "n_disagree": 489,
+      "pct_disagree": 0.8316326530612245,
+      "first_common_date": "1972-01-31 00:00:00",
+      "last_common_date": "2020-12-31 00:00:00",
+      "suspicious": false,
+      "suspicious_reason": ""
+    }
+  }
+}
