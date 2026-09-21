@@ -328,8 +328,10 @@ class TestJointLiftTable:
         assert out["baseline_terminal_log_wealth"] == pytest.approx(0.0)
 
     def test_dd_delta_is_joint_minus_baseline_drawdown(self):
-        joint = self._curve([-0.20, 0.0, 0.0, 0.0])
-        base = self._curve([-0.10, 0.0, 0.0, 0.0])
+        # A peak must exist BEFORE the drop: max_drawdown_and_duration measures
+        # against the running peak, and the first observation IS its own peak.
+        joint = self._curve([0.0, -0.20, 0.0, 0.0])
+        base = self._curve([0.0, -0.10, 0.0, 0.0])
         out = jd.joint_lift_table(joint, base)
         assert out["dd_delta"] == pytest.approx(-0.20 - (-0.10))
 
