@@ -1042,3 +1042,9 @@ Recorded as decisions and carried forward, not closed by acceptance:
 | 1 — criterion 3's comparison window (356 steps ending 2017-05 vs a 470-step baseline ending 2020-12), cause understood as L2's CV degradation; resolution needs an L2 CV design decision | **STILL STANDING.** Routed around, not resolved — see open item 11. The L1-only routing produced a clean 588-of-588 window *because it runs no L2 refit*, which does not answer wave 1's question |
 | 2 — drawdown got worse under the frozen policy (`dd_delta` −0.014364 → −0.066124), and the strategy remains last of five legs | **STILL STANDING**, and not discharged by criterion 7's `+0.024084`: that is a **different subtraction** over a **different window and routing** (see § Named limitation). Nothing measured in wave 2 re-rates the wave-1 comparison |
 | 3 — four `[ASSUMED]` bands unconfirmed; confirm or revise before wave 2 leans on them | **DISCHARGED.** All four were confirmed or revised at plan 07-10's gate on 2026-09-18, **before any joint-lift number existed** — `07-BANDS.md` §8, restated above. Band 2 was revised because it could only confirm; band 4's clauses were implemented in code and exercised live |
+
+---
+
+## A11 RULING 2026-09-21 — open item 10 is CLOSED, and closed by a reversal
+
+Open item 10 above ("Audit item A11 remains open and conscious … Open by Glenn's deliberate choice") was **reversed and CLOSED** on 2026-09-21: A11 is ANSWERED YES, promoting the deflated-Sharpe hurdle `expected_max_sharpe(total_trial_count(), sharpe_variance)` to a governing quality tier — see [`0003-quality-gate-tier.md`](0003-quality-gate-tier.md) and `.planning/phases/08-regime-persistence-stability/08-A11.md`, which together record the consequence that criterion 7's `✅ MET` above is **FAILED** on both legs, and note that open item 8's placeholder `sharpe_variance` now governs a gate rather than a report.
