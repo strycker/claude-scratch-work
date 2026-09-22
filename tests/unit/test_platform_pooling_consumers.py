@@ -251,3 +251,197 @@ class TestDriverConsumer:
         )
 
         _assert_unpooled_not_pooled(observed, unpooled, consumer="backtest/driver.py:497")
+
+
+# ── arm 2: report/weekly.py:249 — unpooled, and this is the one Glenn reads ──
+
+
+def _hand_built_sub_floor_table() -> pd.DataFrame:
+    """The ``returns_by_regime`` checkpoint shape, with regime 2 at 5.98% occupancy.
+
+    ``regime_occupancy`` estimates a regime's months as the max ``n_obs`` across its
+    assets, so 120 / 100 / 14 gives shares 0.5128 / 0.4274 / **0.0598** — only the last
+    is below ``OCCUPANCY_FLOOR``. Sharpes are derived from the per-cell moments rather
+    than typed independently, so the table is internally coherent and
+    ``_all_history_sharpe``'s exact sufficient-statistic reconstruction is exercised.
+    """
+    #: The sub-floor regime carries TWO positive-Sharpe assets whose ratio pooling
+    #: changes. With only one positive asset, ``_per_regime_tilt`` normalizes it to 1.0
+    #: either way and pooling moves the Sharpes but NOT the weights — the contrast arm
+    #: would then be vacuous for exactly the reason half 1 alone is (issue found while
+    #: executing 08-04; the first fixture attempt had it).
+    rows = [
+        (0, "SPY", 0.0120, 0.030, 120),
+        (0, "TLT", 0.0005, 0.020, 120),
+        (1, "SPY", 0.0040, 0.045, 100),
+        (1, "TLT", 0.0010, 0.018, 100),
+        (SUB_FLOOR_REGIME, "SPY", 0.0005, 0.040, 14),
+        (SUB_FLOOR_REGIME, "TLT", 0.0300, 0.030, 14),
+    ]
+    return pd.DataFrame(
+        [
+            {
+                "regime": regime,
+                "asset": asset,
+                "mean_monthly_return": mean,
+                "std_monthly_return": std,
+                _SHARPE_COL: (mean / std) * np.sqrt(12),
+                "hit_rate": 0.5,
+                "max_drawdown": -0.2,
+                "n_obs": n_obs,
+            }
+            for regime, asset, mean, std, n_obs in rows
+        ]
+    )
+
+
+def _synthetic_asset_returns(n_months: int = 36, seed: int = 7) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2018-01-31", periods=n_months, freq="ME")
+    return pd.DataFrame(
+        {"SPY": rng.normal(0.006, 0.03, n_months), "TLT": rng.normal(0.001, 0.02, n_months)},
+        index=idx,
+    )
+
+
+class _FakeNowcaster:
+    """Minimal ``predict_proba`` stand-in — classes span all three regimes."""
+
+    classes_ = np.array([0, 1, SUB_FLOOR_REGIME])
+
+    def predict_proba(self, features_row: pd.DataFrame) -> np.ndarray:
+        return np.array([[0.5, 0.3, 0.2]])
+
+
+class _FakeCheckpointManager:
+    """Serves exactly the five artifacts ``_build_report_inputs`` loads."""
+
+    def __init__(self, returns_by_regime: pd.DataFrame, asset_returns: pd.DataFrame) -> None:
+        self._payload = {
+            "regime_labels": pd.DataFrame({"state": [0, 1, SUB_FLOOR_REGIME, 0, 1, 0]}),
+            "returns_by_regime": returns_by_regime,
+            "asset_returns": asset_returns,
+        }
+
+    def load_model(self, name: str) -> _FakeNowcaster:
+        assert name == "nowcaster"
+        return _FakeNowcaster()
+
+    def load(self, name: str):
+        return self._payload[name]
+
+
+class TestWeeklyConsumer:
+    """``report/weekly.py:249`` hands ``vol_targeted_tilt`` the UNPOOLED estimate.
+
+    This is the consumer that reaches the human: the weekly markdown Glenn reads before
+    trading in Fidelity is built from the tilt computed here.
+    """
+
+    def test_weekly_tilt_call_receives_the_unpooled_returns_by_regime(self, monkeypatch):
+        """G6, weekly arm: the same known non-compliance, in the human-facing path.
+
+        A red result means ``report/weekly.py`` started pooling — move this pin
+        deliberately (see ``08-G6.md``); it is not a bug in the test.
+        """
+        from trading_crab_lib.platform.report import weekly
+
+        unpooled = _hand_built_sub_floor_table()
+        asset_returns = _synthetic_asset_returns()
+        _assert_sub_floor_precondition(unpooled)
+
+        captured_tables: list[pd.DataFrame] = []
+        real_tilt = weekly.vol_targeted_tilt
+
+        def spy_tilt(regime_or_probs, returns_by_regime, asset_returns_arg, **kwargs):
+            captured_tables.append(returns_by_regime.copy())
+            return real_tilt(regime_or_probs, returns_by_regime, asset_returns_arg, **kwargs)
+
+        monkeypatch.setattr(weekly, "vol_targeted_tilt", spy_tilt)
+        monkeypatch.setattr(weekly, "load_full_span", lambda name: _synthetic_asset_returns())
+        monkeypatch.setattr(weekly, "load_active_regime", lambda cm: None)
+        monkeypatch.setattr(weekly, "save_active_regime", lambda regime, cm: None)
+
+        cfg = {"allocation": {"target_vol_annual": 0.10, "ewma_halflife_months": 6, "portfolio_vol_min_obs": 3}}
+        weekly._build_report_inputs(cfg, cm=_FakeCheckpointManager(unpooled, asset_returns))
+
+        assert captured_tables, "vol_targeted_tilt was never called — the spy captured nothing"
+        _assert_unpooled_not_pooled(captured_tables[-1], unpooled, consumer="report/weekly.py:249")
+
+
+# ── arm 3: allocation/joint_tilt.py:319 — pools, and the difference is real ──
+
+
+class TestJointTiltContrast:
+    """``joint_tilt`` DOES pool, and that changes the portfolio, not just a label.
+
+    Without this arm G6 could be read as a difference of naming. It is not: on the same
+    sub-floor fixture the two paths produce different weights.
+    """
+
+    def test_pooled_joint_tilt_produces_different_weights_than_the_unpooled_path(self):
+        """The asymmetry is behavioural. A red result means ``joint_tilt`` stopped pooling."""
+        from trading_crab_lib.platform.allocation.joint_tilt import blend_regime_tilts
+        from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
+
+        unpooled = _hand_built_sub_floor_table()
+        asset_returns = _synthetic_asset_returns()
+        _assert_sub_floor_precondition(unpooled)
+
+        probs = pd.Series({0: 0.5, 1: 0.3, SUB_FLOOR_REGIME: 0.2})
+
+        # weight_1 = 1.0 makes the blend the classifier-#1-alone path, so pooling is the
+        # ONLY remaining difference between the two calls — a one-parameter contrast.
+        pooled_result = blend_regime_tilts(
+            probs, unpooled, probs, unpooled, asset_returns,
+            weight_1=1.0, target_vol_annual=0.10, halflife=6, min_obs=3,
+        )
+        unpooled_result = vol_targeted_tilt(
+            probs, unpooled, asset_returns, target_vol_annual=0.10, halflife=6, min_obs=3,
+        )
+
+        pooled_weights = pooled_result["weights"]
+        raw_weights = unpooled_result["weights"]
+        assert not pooled_weights.empty and pooled_weights.sum() > 0, "pooled path degenerated to all-cash"
+        assert not raw_weights.empty and raw_weights.sum() > 0, "unpooled path degenerated to all-cash"
+
+        deltas = {
+            asset: float(pooled_weights.get(asset, 0.0) - raw_weights.get(asset, 0.0))
+            for asset in sorted(set(pooled_weights.index) | set(raw_weights.index))
+        }
+        moved = {asset: d for asset, d in deltas.items() if abs(d) > 1e-9}
+        assert moved, (
+            "joint_tilt's condition-(iv) pooling changed no weight on a fixture with a "
+            f"sub-floor regime — G6 would then be a distinction without a difference. Deltas: {deltas}"
+        )
+
+
+# ── the three-row summary, asserted rather than written ──────────────────────
+
+#: (call site, pools?, class, test method). Asserted by ``TestG6Summary`` — renaming an
+#: arm without updating this row fails the suite, so the table cannot drift from reality.
+G6_CONSUMER_TABLE = (
+    ("backtest/driver.py:497", False, "TestDriverConsumer",
+     "test_driver_tilt_call_receives_the_unpooled_returns_by_regime"),
+    ("report/weekly.py:249", False, "TestWeeklyConsumer",
+     "test_weekly_tilt_call_receives_the_unpooled_returns_by_regime"),
+    ("allocation/joint_tilt.py:319", True, "TestJointTiltContrast",
+     "test_pooled_joint_tilt_produces_different_weights_than_the_unpooled_path"),
+)
+
+
+class TestG6Summary:
+    """The record G6 leaves behind: three consumers, two unpooled, one pooled."""
+
+    def test_every_row_of_the_summary_table_resolves_to_a_real_arm(self):
+        for call_site, _pools, class_name, method_name in G6_CONSUMER_TABLE:
+            cls = globals().get(class_name)
+            assert cls is not None, f"{call_site}: summary names {class_name}, which does not exist here"
+            assert hasattr(cls, method_name), f"{call_site}: {class_name} has no test {method_name}"
+
+    def test_exactly_two_consumers_are_unpooled_and_one_pools(self):
+        pooling = [pools for _site, pools, _cls, _method in G6_CONSUMER_TABLE]
+        assert len(G6_CONSUMER_TABLE) == 3
+        assert len({site for site, _p, _c, _m in G6_CONSUMER_TABLE}) == 3, "duplicate call site in the summary"
+        assert pooling.count(False) == 2, "G6 records two unpooled consumers"
+        assert pooling.count(True) == 1, "G6 records exactly one pooling consumer"
