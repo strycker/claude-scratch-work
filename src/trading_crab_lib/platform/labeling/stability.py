@@ -98,9 +98,25 @@ log = logging.getLogger(__name__)
 #: on the row and the reader sees it. Raising this to a non-zero count would be a
 #: persistence threshold invented after the fact, which §4.4 gives no warrant for.
 EVAPORATED_OCCUPANCY_MONTHS = 0
+
+#: Block lengths (months) reported as a ladder rather than as one chosen value.
+#: Politis & White (2004), corrected by Patton, Politis & White (2009), give a
+#: data-driven optimal block length of O(n^(1/3)); at n=695 labeled months that
+#: anchor is ~8.9 months. The anchor is **quoted rather than obeyed**: it targets
+#: the asymptotic MSE of a long-run-variance estimate, not the preservation of
+#: persistence. Classifier #1's median sojourn is 9.5 months and classifier #2's
+#: is 29.0, so a ~9-month block destroys exactly the structure criterion 3 tests.
+#: The ladder brackets both medians; a result holding across it is strong, and a
+#: result that flips across it is itself the finding.
+BLOCK_LENGTH_LADDER: tuple[int, ...] = (6, 12, 24, 48)
+
 #: Default seed for every stochastic scheme and for the split-half null. Carried
 #: on every bootstrap row so a re-run is reproducible without guessing.
 DEFAULT_STABILITY_SEED = 20260921
+
+#: A decade, in months — the span the two contiguous decade-drop schemes remove.
+DECADE_MONTHS = 120
+
 
 # ── de-standardization: the common unit space ──
 
@@ -338,6 +354,7 @@ def match_states(
         "is_identity": bool(np.array_equal(partners, np.arange(K))),
     }
 
+
 def split_half_null(
     X_destd_rows, *, n_reps: int = 200, seed: int = DEFAULT_STABILITY_SEED
 ) -> dict:
@@ -511,6 +528,273 @@ def stability_row(
         "seed": seed,
         "degenerate": degenerate,
     }
+
+
+# ── the four subsample schemes ──
+
+
+def scheme_drop_first_decade(index, *, months: int = DECADE_MONTHS) -> np.ndarray:
+    """Positional indices of *index* with the first *months* months removed.
+
+    Contiguous and time-ordered — the resampled series is a genuine sub-period,
+    unlike the block bootstrap below.
+    """
+    n = len(index)
+    if n <= months:
+        raise ValueError(f"cannot drop the first {months} months from {n} months")
+    return np.arange(months, n, dtype=int)
+
+
+def scheme_drop_last_decade(index, *, months: int = DECADE_MONTHS) -> np.ndarray:
+    """Positional indices of *index* with the last *months* months removed."""
+    n = len(index)
+    if n <= months:
+        raise ValueError(f"cannot drop the last {months} months from {n} months")
+    return np.arange(0, n - months, dtype=int)
+
+
+def scheme_circular_block_bootstrap(
+    index, block_length: int, *, seed: int = DEFAULT_STABILITY_SEED
+) -> tuple[np.ndarray, int]:
+    """Circular block bootstrap positions plus the synthetic-seam count.
+
+    **Circular** so the resampled series keeps length exactly ``len(index)`` for
+    every block length, including ones that do not divide n evenly (the trailing
+    partial block is truncated, and blocks wrap past the end).
+
+    ``n_seams`` — the number of adjacent pairs in the resampled series that were
+    **not** adjacent in the original — is a required return value, not an
+    optional extra. The jump model penalises state changes *in index order*, so a
+    block-bootstrapped series contains synthetic seams at which the penalty fires
+    on artefacts. A reader must be able to discount by how many. This is why block
+    bootstrap is the **weakest** of the four schemes for a temporally penalized
+    model specifically, and should not be presented as the equal of the two
+    contiguous decade drops.
+
+    Args:
+        index: the reference index (only its length is used).
+        block_length: block size in months; see :data:`BLOCK_LENGTH_LADDER`.
+        seed: per-call RNG seed. The RNG is created here, never global, so two
+            calls with the same seed return identical positions.
+
+    Returns:
+        ``(positions, n_seams)`` — positions is a length-``len(index)`` int array
+        of positional indices into *index* (with repeats), n_seams an int.
+    """
+    n = len(index)
+    if n == 0:
+        raise ValueError("index must be non-empty")
+    if not 1 <= block_length <= n:
+        raise ValueError(f"block_length must be in [1, {n}], got {block_length}")
+    rng = np.random.default_rng(seed)
+    n_blocks = int(np.ceil(n / block_length))
+    starts = rng.integers(0, n, size=n_blocks)
+    offsets = np.arange(block_length)
+    positions = ((starts[:, None] + offsets[None, :]) % n).reshape(-1)[:n].astype(int)
+    # A seam is any adjacency the ORIGINAL series did not contain. Position n-1
+    # followed by 0 is a wrap, not an original adjacency, so it counts.
+    n_seams = int(np.count_nonzero(positions[1:] != positions[:-1] + 1))
+    return positions, n_seams
+
+
+def scheme_leave_one_episode_out(states, state_id: int, *, n_states: int | None = None) -> dict:
+    """Drop the months of *state_id*'s LONGEST contiguous episode.
+
+    This is design §4.4's own "drop 2008-09" example, generalised: does the state
+    survive on its remaining episodes? It exists because the three named schemes
+    are, by construction, poorly aimed at the actual failure mode — classifier
+    #1's state 2 is one contiguous 71-month episode (1996-07 -> 2002-05) and
+    **neither decade-drop touches it**.
+
+    For a state with exactly one episode the scheme is degenerate: every month of
+    the state is removed. **That degeneracy is the answer**, reached with no
+    invented threshold — a state that cannot survive leave-one-episode-out
+    because it has only one episode is the design's own definition of an
+    *episode* rather than a regime. ``degenerate=True`` is a finding, not an
+    error, and callers must not treat it as one.
+
+    Args:
+        states: array-like or pd.Series of canonicalized labels.
+        state_id: the state whose longest episode is removed.
+        n_states: passed through to :func:`state_episodes`.
+
+    Returns:
+        dict with ``"positions"`` (int array of surviving positional indices),
+        ``"mask"`` (bool array, True = kept), ``"degenerate"`` (bool),
+        ``"n_episodes_before"`` (int) and ``"n_months_dropped"`` (int).
+
+    Raises:
+        ValueError: if *state_id* has no months at all (there is no episode to
+            leave out, and silently returning the full sample would report a
+            never-occupied state as surviving the scheme).
+    """
+    info = state_episodes(states, n_states=n_states)[int(state_id)]
+    if info["n_episodes"] == 0:
+        raise ValueError(
+            f"state {state_id} has zero episodes — leave-one-episode-out is undefined; "
+            "read its occupancy instead (an unoccupied state has already evaporated)."
+        )
+    longest = max(info["episodes"], key=lambda e: e["length"])
+    n = len(states)
+    mask = np.ones(n, dtype=bool)
+    mask[longest["start"]: longest["end"] + 1] = False
+    return {
+        "positions": np.flatnonzero(mask).astype(int),
+        "mask": mask,
+        "degenerate": bool(info["n_episodes"] == 1),
+        "n_episodes_before": int(info["n_episodes"]),
+        "n_months_dropped": int(longest["length"]),
+    }
+
+
+# ── the runner ──
+
+
+def _check_frozen_columns(actual: Sequence[str], expected: Sequence[str], *, scheme: str) -> None:
+    """Raise unless *actual* equals *expected* exactly, in order (Trap C)."""
+    actual_list, expected_list = list(actual), list(expected)
+    if actual_list == expected_list:
+        return
+    missing = [c for c in expected_list if c not in actual_list]
+    extra = [c for c in actual_list if c not in expected_list]
+    raise ValueError(
+        f"Trap C [{scheme}]: subsample column set differs from the reference fit's "
+        f"frozen list — {len(actual_list)} surviving vs {len(expected_list)} expected "
+        f"(missing={missing}, extra={extra}, reordered={not missing and not extra}). "
+        "The frozen column list is held fixed at the full-sample list across every "
+        "subsample so criterion 3 measures STATE stability; re-deriving it per "
+        "subsample measures FEATURE-SET churn instead."
+    )
+
+
+def _normalize_schemes(schemes) -> list[tuple[str, np.ndarray, dict]]:
+    """Accept a mapping or a sequence of (name, positions[, extra]) tuples."""
+    items = schemes.items() if isinstance(schemes, Mapping) else schemes
+    out: list[tuple[str, np.ndarray, dict]] = []
+    for item in items:
+        if len(item) == 2:
+            name, spec = item
+            extra: dict = {}
+        elif len(item) == 3:
+            name, spec, extra = item
+        else:
+            raise ValueError(f"scheme entry must be (name, positions[, extra]), got {item!r}")
+        if isinstance(spec, Mapping):  # e.g. scheme_leave_one_episode_out's dict
+            extra = {**{k: v for k, v in spec.items() if k not in ("positions", "mask")}, **extra}
+            spec = spec["positions"]
+        arr = np.asarray(spec)
+        if arr.dtype == bool:
+            arr = np.flatnonzero(arr)
+        out.append((str(name), arr.astype(int), dict(extra)))
+    return out
+
+
+def run_stability(
+    X_df: pd.DataFrame,
+    *,
+    K: int,
+    lam: float,
+    n_restarts: int = 10,
+    sort_column: str = "trailing_return_1m",
+    reference_fit: StabilityFit,
+    schemes,
+    classifier: str = "",
+    random_state: int = 42,
+    null_reps: int = 200,
+    seed: int = DEFAULT_STABILITY_SEED,
+) -> list[dict]:
+    """Refit at the PINNED (K, lambda) on each subsample and emit one row per (scheme, state).
+
+    **An identity Hungarian assignment means the canonical ordering held. It does
+    NOT mean the states persisted.** ``canonicalize_states`` sorts states on the
+    ascending ``sort_column`` centroid, so identity is the expected outcome of
+    that sort, not evidence about persistence; the informative outputs are the
+    matched distances beside their n-matched nulls. If the assignment is **not**
+    the identity, the canonical ordering itself flipped between subsamples, and
+    that is a finding in its own right — every downstream occupancy, profile and
+    lift number is keyed on those ids.
+
+    Nothing is selected here. (K, lambda, n_restarts, sort_column) are passed in
+    pinned; no result may re-pin them and no trial is recorded.
+
+    Args:
+        X_df: the reference feature frame, columns already frozen to
+            ``reference_fit.columns`` in order.
+        K: pinned number of states.
+        lam: pinned per-jump penalty.
+        n_restarts: k-means warm starts per subsample fit.
+        sort_column: canonicalization key.
+        reference_fit: the full-sample :class:`StabilityFit` to match against.
+        schemes: mapping ``{name: positions}`` or a sequence of
+            ``(name, positions[, extra])``; ``positions`` may be positional
+            indices, a boolean mask, or a scheme dict carrying ``"positions"``.
+            Anything in ``extra`` (``block_length``, ``n_seams``, ``degenerate``,
+            ``seed``) is carried onto every row of that scheme.
+        classifier: label carried on every row and named in the evaporation WARNING.
+        random_state: base seed for each subsample fit.
+        null_reps: split-half null replications per state.
+        seed: seed for the split-half null.
+
+    Returns:
+        list of :func:`stability_row` dicts, one per (scheme, reference state).
+
+    Raises:
+        ValueError: if any subsample's column set differs from
+            ``reference_fit.columns`` (Trap C), with the surviving-vs-expected
+            counts in the message.
+    """
+    expected = list(reference_fit.columns)
+    _check_frozen_columns(list(X_df.columns), expected, scheme="input frame")
+
+    rows: list[dict] = []
+    for name, positions, extra in _normalize_schemes(schemes):
+        X_sub = X_df.iloc[positions]
+        # A column entirely NaN over the subsample would be inadmissible under the
+        # freeze rule and would silently shrink the feature set — Trap C's channel.
+        surviving = [c for c in X_sub.columns if X_sub[c].notna().any()]
+        _check_frozen_columns(surviving, expected, scheme=name)
+
+        sub_fit = fit_for_stability(
+            X_sub, K=K, lam=lam, n_restarts=n_restarts,
+            sort_column=sort_column, random_state=random_state,
+        )
+        _check_frozen_columns(sub_fit.columns, expected, scheme=name)
+
+        match = match_states(
+            reference_fit.centroids_destandardized, sub_fit.centroids_destandardized
+        )
+        episodes = state_episodes(sub_fit.states, n_states=K)
+        sub_states = sub_fit.states.to_numpy()
+        n_sub = len(sub_states)
+
+        for state in range(K):
+            months = int(sub_fit.occupancy[state])
+            null = split_half_null(
+                sub_fit.rows_destandardized.loc[sub_states == state],
+                n_reps=null_reps, seed=seed,
+            )
+            rows.append(stability_row(
+                classifier=classifier,
+                scheme=name,
+                state=state,
+                subsample_occupancy_months=months,
+                subsample_occupancy_pct=(months / n_sub) if n_sub else float("nan"),
+                matched_partner=match["assignment"][state],
+                is_identity=match["is_identity"],
+                matched_distance=match["matched_distance"][state],
+                margin=match["margin"][state],
+                split_half_null_median=null["median"],
+                split_half_null_p10=null["p10"],
+                split_half_null_p90=null["p90"],
+                split_half_null_n=null["n"],
+                n_episodes=episodes[state]["n_episodes"],
+                longest_episode=episodes[state]["longest_episode"],
+                block_length=extra.get("block_length"),
+                n_seams=extra.get("n_seams"),
+                seed=extra.get("seed"),
+                degenerate=extra.get("degenerate"),
+            ))
+    return rows
 
 
 if __name__ == "__main__":

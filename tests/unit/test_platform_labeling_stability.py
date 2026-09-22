@@ -37,12 +37,18 @@ from trading_crab_lib.platform.labeling.jump_model import (
     standardize_features,
 )
 from trading_crab_lib.platform.labeling.stability import (
+    BLOCK_LENGTH_LADDER,
     DEFAULT_STABILITY_SEED,
     EVAPORATED_OCCUPANCY_MONTHS,
     StabilityFit,
     destandardize_centroids,
     fit_for_stability,
     match_states,
+    run_stability,
+    scheme_circular_block_bootstrap,
+    scheme_drop_first_decade,
+    scheme_drop_last_decade,
+    scheme_leave_one_episode_out,
     split_half_null,
     stability_row,
     standardization_params,
@@ -84,6 +90,7 @@ def _clustered_frame(
         {c: rng.normal(0.0, noise, n) + offsets for c in COLUMNS},
         index=pd.date_range("1960-01-31", periods=n, freq="ME"),
     )
+
 
 # ── Task 1: a common unit space ──
 
@@ -244,6 +251,7 @@ class TestFitForStability:
         assert isinstance(fit, StabilityFit)
         assert fit.columns == COLUMNS
         assert list(fit.states.index) == list(X.index)
+
 
 # ── Task 2: matching, the null, evaporation, margins ──
 
@@ -408,3 +416,257 @@ class TestStateEpisodes:
         assert episodes[3]["n_episodes"] == 0
         assert episodes[3]["longest_episode"] == 0
         assert episodes[3]["months"] == 0
+
+
+# ── Task 3: the four subsample schemes ──
+
+
+class TestContiguousSchemes:
+    def test_drop_first_decade_drops_the_leading_months(self):
+        idx = pd.date_range("1963-02-28", periods=695, freq="ME")
+        positions = scheme_drop_first_decade(idx)
+        assert positions[0] == 120
+        assert len(positions) == 695 - 120
+        assert np.array_equal(positions, np.arange(120, 695))
+
+    def test_drop_last_decade_drops_the_trailing_months(self):
+        idx = pd.date_range("1963-02-28", periods=695, freq="ME")
+        positions = scheme_drop_last_decade(idx)
+        assert positions[-1] == 695 - 121
+        assert len(positions) == 695 - 120
+
+    def test_decade_drops_refuse_a_too_short_index(self):
+        idx = pd.date_range("2015-01-31", periods=60, freq="ME")
+        with pytest.raises(ValueError, match="cannot drop"):
+            scheme_drop_first_decade(idx)
+        with pytest.raises(ValueError, match="cannot drop"):
+            scheme_drop_last_decade(idx)
+
+
+class TestCircularBlockBootstrap:
+    def test_length_is_preserved_for_every_ladder_value(self):
+        idx = pd.date_range("1963-02-28", periods=695, freq="ME")
+        for block in BLOCK_LENGTH_LADDER:
+            positions, _ = scheme_circular_block_bootstrap(idx, block, seed=DEFAULT_STABILITY_SEED)
+            assert len(positions) == 695, f"block_length={block} did not preserve n"
+            assert positions.min() >= 0 and positions.max() < 695
+        assert 695 % 48 != 0, "fixture must include a block length that does not divide n"
+
+    def test_one_block_of_full_length_produces_exactly_zero_or_one_seam(self):
+        """Both outcomes must occur: 1 at the wrap point, and 0 when the draw starts at 0.
+
+        Asserting only ``n_seams in {0, 1}`` would be satisfied by the broken
+        ``n_seams = n_blocks`` (one block => always 1). Pinning the zero case to
+        the draw that starts at position 0 is what makes seams distinguishable
+        from blocks.
+        """
+        idx = pd.date_range("1963-02-28", periods=101, freq="ME")
+        seen_zero_start = seen_wrapped = False
+        for seed in range(400):
+            positions, n_seams = scheme_circular_block_bootstrap(idx, len(idx), seed=seed)
+            assert len(positions) == len(idx)
+            assert n_seams in {0, 1}, f"seed={seed} gave {n_seams} seams for a single block"
+            if positions[0] == 0:
+                assert n_seams == 0, (
+                    f"seed={seed} starts at position 0 so the block is the original series "
+                    f"in order and contains NO synthetic seam, but n_seams={n_seams} — "
+                    "seams are being counted as blocks"
+                )
+                seen_zero_start = True
+            else:
+                assert n_seams == 1, f"seed={seed} wraps once but n_seams={n_seams}"
+                seen_wrapped = True
+        assert seen_zero_start and seen_wrapped, "fixture never exercised both cases"
+
+    def test_unit_blocks_are_almost_all_seams_but_never_more_than_n_minus_one(self):
+        idx = pd.date_range("1963-02-28", periods=300, freq="ME")
+        _, n_seams = scheme_circular_block_bootstrap(idx, 1, seed=DEFAULT_STABILITY_SEED)
+        assert n_seams >= len(idx) - 6, (
+            f"block_length=1 should give ~{len(idx) - 1} seams, got {n_seams} — seams are "
+            "not being counted"
+        )
+        assert n_seams <= len(idx) - 1, (
+            f"n_seams={n_seams} exceeds the {len(idx) - 1} adjacent pairs that exist — "
+            f"blocks ({len(idx)} of them here) are being counted instead of seams"
+        )
+
+    def test_seam_count_matches_the_calendar_adjacency_of_the_resampled_labels(self):
+        """Independent formulation: a seam is any consecutive pair of resampled
+        months that are not consecutive months in the original calendar."""
+        idx = pd.date_range("1963-02-28", periods=120, freq="ME")
+        for block in (3, 7, 24):
+            positions, n_seams = scheme_circular_block_bootstrap(idx, block, seed=99)
+            labels = idx[positions]
+            expected = sum(
+                1 for i in range(1, len(labels))
+                if labels[i] != (labels[i - 1] + pd.offsets.MonthEnd(1))
+            )
+            assert n_seams == expected, (
+                f"block_length={block}: reported {n_seams} seams but the resampled "
+                f"calendar contains {expected} non-consecutive adjacencies"
+            )
+
+    def test_bootstrap_is_seeded_per_call(self):
+        idx = pd.date_range("1963-02-28", periods=200, freq="ME")
+        a, sa = scheme_circular_block_bootstrap(idx, 12, seed=DEFAULT_STABILITY_SEED)
+        b, sb = scheme_circular_block_bootstrap(idx, 12, seed=DEFAULT_STABILITY_SEED)
+        c, _ = scheme_circular_block_bootstrap(idx, 12, seed=DEFAULT_STABILITY_SEED + 1)
+        assert np.array_equal(a, b) and sa == sb
+        assert not np.array_equal(a, c)
+
+    def test_block_length_is_validated(self):
+        idx = pd.date_range("1963-02-28", periods=50, freq="ME")
+        with pytest.raises(ValueError, match="block_length"):
+            scheme_circular_block_bootstrap(idx, 51)
+        with pytest.raises(ValueError, match="block_length"):
+            scheme_circular_block_bootstrap(idx, 0)
+
+
+class TestLeaveOneEpisodeOut:
+    STATES = pd.Series([0] * 15 + [1] * 10 + [2] * 20 + [1] * 10 + [0] * 6 + [1] * 10 + [0] * 4)
+
+    def test_a_one_episode_state_is_degenerate_and_that_is_the_answer(self):
+        occupancy = np.bincount(self.STATES.to_numpy(), minlength=3)
+        result = scheme_leave_one_episode_out(self.STATES, 2, n_states=3)
+        assert result["degenerate"] is True, (
+            "a state with exactly one episode cannot survive leave-one-episode-out; "
+            "that degeneracy IS the finding (the design's own definition of an episode), "
+            "reached with no invented threshold"
+        )
+        assert result["n_episodes_before"] == 1
+        assert result["n_months_dropped"] == int(occupancy[2]) == 20
+        assert int((self.STATES.to_numpy()[result["positions"]] == 2).sum()) == 0
+
+    def test_a_three_episode_state_survives_on_its_two_shorter_episodes(self):
+        result = scheme_leave_one_episode_out(self.STATES, 0, n_states=3)
+        assert result["degenerate"] is False
+        assert result["n_episodes_before"] == 3
+        assert result["n_months_dropped"] == 15
+        survivors = self.STATES.to_numpy()[result["positions"]]
+        assert int((survivors == 0).sum()) == 10  # the 6-month and 4-month episodes
+        assert state_episodes(survivors, n_states=3)[0]["n_episodes"] == 2
+
+    def test_an_unoccupied_state_raises_rather_than_silently_surviving(self):
+        """Returning the full sample for a never-occupied state would report it as
+        having survived the scheme. It has already evaporated; say so loudly."""
+        never_occupied = pd.Series([0] * 20)
+        with pytest.raises(ValueError, match="zero episodes"):
+            scheme_leave_one_episode_out(never_occupied, 1, n_states=3)
+
+
+# ── Task 3: the runner and Trap C ──
+
+
+class TestTrapCFrozenColumns:
+    def test_run_stability_raises_when_the_subsample_column_set_differs(self):
+        X = _clustered_frame([0.0, 2.0, 4.0], n_per=40)
+        ref = fit_for_stability(X, K=3, lam=5.0, n_restarts=2, sort_column=SORT_COLUMN)
+        X_missing = X.drop(columns=["gold"])
+
+        with pytest.raises(ValueError) as excinfo:
+            run_stability(
+                X_missing, K=3, lam=5.0, n_restarts=2, sort_column=SORT_COLUMN,
+                reference_fit=ref,
+                schemes={"drop_first": scheme_drop_first_decade(X_missing.index, months=20)},
+            )
+        message = str(excinfo.value)
+        assert "Trap C" in message
+        assert f"{D - 1} surviving vs {D} expected" in message, message
+        assert "gold" in message
+
+    def test_run_stability_raises_when_a_column_is_all_nan_within_the_subsample(self):
+        """Trap C's realistic channel: the freeze rule admits a column only if it is
+        non-NaN over the window, so a subsample can silently shrink the feature set."""
+        X = _clustered_frame([0.0, 2.0, 4.0], n_per=40)
+        X.loc[X.index[:50], "gold"] = np.nan
+        ref = fit_for_stability(X, K=3, lam=5.0, n_restarts=2, sort_column=SORT_COLUMN)
+
+        with pytest.raises(ValueError, match="Trap C"):
+            run_stability(
+                X, K=3, lam=5.0, n_restarts=2, sort_column=SORT_COLUMN,
+                reference_fit=ref, schemes={"first_50": np.arange(50)},
+            )
+
+
+class TestRunStability:
+    def test_run_stability_emits_one_row_per_scheme_and_state(self):
+        X = _clustered_frame([0.0, 2.0, 4.0], n_per=40)
+        ref = fit_for_stability(X, K=3, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN)
+        block_positions, n_seams = scheme_circular_block_bootstrap(
+            X.index, 12, seed=DEFAULT_STABILITY_SEED
+        )
+        rows = run_stability(
+            X, K=3, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN,
+            reference_fit=ref, classifier="synthetic", null_reps=25,
+            schemes=[
+                ("drop_first_decade", scheme_drop_first_decade(X.index, months=20), {}),
+                ("drop_last_decade", scheme_drop_last_decade(X.index, months=20), {}),
+                ("block_12", block_positions,
+                 {"block_length": 12, "n_seams": n_seams, "seed": DEFAULT_STABILITY_SEED}),
+            ],
+        )
+        assert len(rows) == 3 * 3
+        required = {
+            "classifier", "scheme", "state", "evaporated", "subsample_occupancy_months",
+            "subsample_occupancy_pct", "matched_partner", "is_identity", "matched_distance",
+            "margin", "split_half_null_median", "split_half_null_n", "n_episodes",
+            "longest_episode",
+        }
+        for row in rows:
+            assert required <= set(row)
+            assert isinstance(row["evaporated"], bool)
+        block_rows = [r for r in rows if r["scheme"] == "block_12"]
+        assert all(r["n_seams"] == n_seams and r["block_length"] == 12 for r in block_rows)
+        assert all(r["seed"] == DEFAULT_STABILITY_SEED for r in block_rows)
+
+    def test_run_stability_accepts_a_leave_one_episode_out_dict_and_carries_degeneracy(self):
+        X = _clustered_frame([0.0, 2.0, 4.0], n_per=40)
+        ref = fit_for_stability(X, K=3, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN)
+        loo = scheme_leave_one_episode_out(ref.states, 0, n_states=3)
+        rows = run_stability(
+            X, K=3, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN,
+            reference_fit=ref, classifier="synthetic", null_reps=25,
+            schemes=[("loo_state0", loo, {})],
+        )
+        assert len(rows) == 3
+        assert all(r["degenerate"] is loo["degenerate"] for r in rows)
+
+    def test_run_stability_carries_the_null_beside_every_matched_distance(self):
+        X = _clustered_frame([0.0, 2.0, 4.0], n_per=40)
+        ref = fit_for_stability(X, K=3, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN)
+        rows = run_stability(
+            X, K=3, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN,
+            reference_fit=ref, classifier="synthetic", null_reps=50,
+            schemes={"drop_first_decade": scheme_drop_first_decade(X.index, months=20)},
+        )
+        for row in rows:
+            if row["subsample_occupancy_months"] >= 2:
+                assert row["split_half_null_median"] > 0.0, (
+                    "a matched distance without its n-matched null is unreadable; the "
+                    "null is not zero (08-RESEARCH.md §5.2)"
+                )
+                assert row["split_half_null_n"] == row["subsample_occupancy_months"]
+
+
+class TestNoThresholdAndNoVerdict:
+    def test_the_module_defines_no_persistence_threshold_and_emits_no_verdict(self):
+        from trading_crab_lib.platform.labeling import stability
+
+        row = stability_row(
+            classifier="c", scheme="s", state=0, subsample_occupancy_months=40,
+            subsample_occupancy_pct=0.1, matched_partner=0, is_identity=True,
+            matched_distance=0.5, margin=0.4, split_half_null_median=0.7,
+        )
+        for banned in ("verdict", "passed", "stable", "persists", "is_regime"):
+            assert banned not in row, f"stability_row emits a verdict field {banned!r}"
+        assert stability.EVAPORATED_OCCUPANCY_MONTHS == 0
+        names = [n for n in vars(stability) if n.isupper()]
+        assert set(names) == {
+            "EVAPORATED_OCCUPANCY_MONTHS", "BLOCK_LENGTH_LADDER",
+            "DEFAULT_STABILITY_SEED", "DECADE_MONTHS",
+        }, f"unexpected module constant (a persistence threshold?): {names}"
+
+    def test_block_length_ladder_brackets_both_median_sojourns(self):
+        assert BLOCK_LENGTH_LADDER == (6, 12, 24, 48)
+        assert min(BLOCK_LENGTH_LADDER) < 9.5 < max(BLOCK_LENGTH_LADDER)   # classifier #1
+        assert min(BLOCK_LENGTH_LADDER) < 29.0 < max(BLOCK_LENGTH_LADDER)  # classifier #2
