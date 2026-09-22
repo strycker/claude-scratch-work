@@ -83,6 +83,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
 
+from trading_crab_lib.platform.labeling.diagnostics import occupancy_and_sojourns
 from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
     fit_jump_model,
@@ -91,6 +92,15 @@ from trading_crab_lib.platform.labeling.jump_model import (
 
 log = logging.getLogger(__name__)
 
+#: A state is EVAPORATED at **zero months exactly**, not at a fraction of them.
+#: "Near-zero" is a judgement and this module does not make judgements: a state
+#: holding 1 to 3 months of a subsample is NOT flagged — its occupancy is carried
+#: on the row and the reader sees it. Raising this to a non-zero count would be a
+#: persistence threshold invented after the fact, which §4.4 gives no warrant for.
+EVAPORATED_OCCUPANCY_MONTHS = 0
+#: Default seed for every stochastic scheme and for the split-half null. Carried
+#: on every bootstrap row so a re-run is reproducible without guessing.
+DEFAULT_STABILITY_SEED = 20260921
 
 # ── de-standardization: the common unit space ──
 
@@ -327,6 +337,181 @@ def match_states(
         "margin": margin,
         "is_identity": bool(np.array_equal(partners, np.arange(K))),
     }
+
+def split_half_null(
+    X_destd_rows, *, n_reps: int = 200, seed: int = DEFAULT_STABILITY_SEED
+) -> dict:
+    """Within-state split-half null centroid distance at this state's own n.
+
+    Splits ONE state's own months at random into two halves, takes the centroid
+    distance between them, repeats, and reports the quantiles. This is the
+    data-derived answer to "how far apart do two samples of *the same* state land
+    at this n", with zero invented parameters — and it is indispensable, because
+    the null is **not zero**: ``08-RESEARCH.md`` §5.2 measured 0.706 at n=40, d=10
+    against a true signal of 0.949. That figure is a *synthetic* benchmark and is
+    deliberately not hard-coded here or anywhere in this module.
+
+    Args:
+        X_destd_rows: (n, d) array-like of one state's own rows, in the SAME
+            de-standardized (winsorized) units as the centroids being compared.
+        n_reps: number of random splits.
+        seed: RNG seed; the RNG is created per call, never global.
+
+    Returns:
+        dict with ``"median"``, ``"p10"``, ``"p90"``, ``"n"`` and ``"n_reps"``.
+        ``median``/``p10``/``p90`` are ``nan`` when n < 2 (no split exists).
+    """
+    arr = np.asarray(pd.DataFrame(X_destd_rows).to_numpy(), dtype=float)
+    n = int(arr.shape[0])
+    if n < 2:
+        return {"median": float("nan"), "p10": float("nan"), "p90": float("nan"), "n": n, "n_reps": 0}
+    rng = np.random.default_rng(seed)
+    half = n // 2
+    dists = np.empty(n_reps, dtype=float)
+    for rep in range(n_reps):
+        perm = rng.permutation(n)
+        a = arr[perm[:half]].mean(axis=0)
+        b = arr[perm[half:]].mean(axis=0)
+        dists[rep] = float(np.linalg.norm(a - b))
+    return {
+        "median": float(np.median(dists)),
+        "p10": float(np.quantile(dists, 0.10)),
+        "p90": float(np.quantile(dists, 0.90)),
+        "n": n,
+        "n_reps": int(n_reps),
+    }
+
+
+def state_episodes(states, *, n_states: int | None = None) -> dict[int, dict]:
+    """Contiguous runs ("episodes") per state, with spans, count and longest.
+
+    The run-length arithmetic is cross-checked against
+    ``diagnostics.occupancy_and_sojourns`` — the project's existing run-length
+    machinery — rather than trusted on its own: a mismatch in ``n_runs`` raises.
+    This module needs the *spans* (which ``occupancy_and_sojourns`` does not
+    return) for leave-one-episode-out, so the scan is unavoidable; pinning it
+    against the existing scanner is what keeps it from being a second, silently
+    divergent implementation.
+
+    Args:
+        states: array-like or pd.Series of canonicalized state labels.
+        n_states: total number of possible states; defaults to ``max+1``. Pass K
+            to surface never-occupied states (they get ``n_episodes == 0``).
+
+    Returns:
+        dict state id -> ``{"episodes": [{"start", "end", "length", ...}, ...],
+        "n_episodes": int, "longest_episode": int, "months": int}``. ``start`` and
+        ``end`` are **positional** (0-based, end inclusive); when *states* is a
+        pd.Series the index labels are carried as ``start_label``/``end_label``.
+
+    Raises:
+        RuntimeError: if the scan disagrees with ``occupancy_and_sojourns``.
+    """
+    labels = states.index if isinstance(states, pd.Series) else None
+    arr = np.asarray(states, dtype=int)
+    if arr.size == 0:
+        raise ValueError("states must be non-empty")
+    total = int(n_states) if n_states is not None else int(arr.max()) + 1
+
+    out: dict[int, dict] = {state: {"episodes": [], "n_episodes": 0, "longest_episode": 0, "months": 0}
+                            for state in range(total)}
+    start = 0
+    for pos in range(1, arr.size + 1):
+        if pos == arr.size or arr[pos] != arr[start]:
+            state = int(arr[start])
+            episode = {"start": start, "end": pos - 1, "length": pos - start}
+            if labels is not None:
+                episode["start_label"] = labels[start]
+                episode["end_label"] = labels[pos - 1]
+            if state in out:
+                out[state]["episodes"].append(episode)
+            start = pos
+    for state, info in out.items():
+        info["n_episodes"] = len(info["episodes"])
+        info["longest_episode"] = max((e["length"] for e in info["episodes"]), default=0)
+        info["months"] = int((arr == state).sum())
+
+    # Pin against the existing run-length scanner rather than duplicating it silently.
+    reference = occupancy_and_sojourns(arr, n_states=total)["sojourns"]
+    for state, info in out.items():
+        expected = int(reference[state]["n_runs"])
+        if info["n_episodes"] != expected:
+            raise RuntimeError(
+                f"episode scan disagrees with occupancy_and_sojourns for state {state}: "
+                f"{info['n_episodes']} vs {expected}"
+            )
+    return out
+
+
+def stability_row(
+    *,
+    classifier: str,
+    scheme: str,
+    state: int,
+    subsample_occupancy_months: int,
+    subsample_occupancy_pct: float,
+    matched_partner: int,
+    is_identity: bool,
+    matched_distance: float,
+    margin: float,
+    split_half_null_median: float,
+    split_half_null_p10: float = float("nan"),
+    split_half_null_p90: float = float("nan"),
+    split_half_null_n: int = 0,
+    n_episodes: int = 0,
+    longest_episode: int = 0,
+    block_length: int | None = None,
+    n_seams: int | None = None,
+    seed: int | None = None,
+    degenerate: bool | None = None,
+) -> dict:
+    """One (classifier, scheme, state) record — §5.5's seven quantities plus ``evaporated``.
+
+    ``evaporated`` is constructed **first**, from occupancy alone, and every
+    consumer can read it without reading the distance. That ordering is the whole
+    point: ``_recompute_centroids`` freezes a zero-occupancy state at its previous
+    centroid, so an evaporated state's ``matched_distance`` is ~0 and a
+    distance-only reader scores it *stable* (Trap B).
+
+    Logs a WARNING per evaporated state, naming the classifier, the scheme and the
+    state id — a flagged field in a parquet is easy to miss; a WARNING in the run
+    log is not.
+
+    Returns:
+        dict; ``"evaporated"`` is bool, never None.
+    """
+    evaporated = bool(int(subsample_occupancy_months) <= EVAPORATED_OCCUPANCY_MONTHS)
+    if evaporated:
+        log.warning(
+            "EVAPORATED: classifier=%s scheme=%s state=%d captured 0 months in the "
+            "subsample. Its centroid was FROZEN by _recompute_centroids, so its "
+            "matched distance (%.6g) means the centroid did not move — NOT that the "
+            "state persisted.",
+            classifier, scheme, int(state), float(matched_distance),
+        )
+    return {
+        "classifier": classifier,
+        "scheme": scheme,
+        "state": int(state),
+        "evaporated": evaporated,
+        "subsample_occupancy_months": int(subsample_occupancy_months),
+        "subsample_occupancy_pct": float(subsample_occupancy_pct),
+        "matched_partner": int(matched_partner),
+        "is_identity": bool(is_identity),
+        "matched_distance": float(matched_distance),
+        "margin": float(margin),
+        "split_half_null_median": float(split_half_null_median),
+        "split_half_null_p10": float(split_half_null_p10),
+        "split_half_null_p90": float(split_half_null_p90),
+        "split_half_null_n": int(split_half_null_n),
+        "n_episodes": int(n_episodes),
+        "longest_episode": int(longest_episode),
+        "block_length": block_length,
+        "n_seams": n_seams,
+        "seed": seed,
+        "degenerate": degenerate,
+    }
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

@@ -33,14 +33,20 @@ import pandas as pd
 import pytest
 
 from trading_crab_lib.platform.labeling.jump_model import (
+    _recompute_centroids,
     standardize_features,
 )
 from trading_crab_lib.platform.labeling.stability import (
+    DEFAULT_STABILITY_SEED,
+    EVAPORATED_OCCUPANCY_MONTHS,
     StabilityFit,
     destandardize_centroids,
     fit_for_stability,
     match_states,
+    split_half_null,
+    stability_row,
     standardization_params,
+    state_episodes,
 )
 
 COLUMNS = [
@@ -238,3 +244,167 @@ class TestFitForStability:
         assert isinstance(fit, StabilityFit)
         assert fit.columns == COLUMNS
         assert list(fit.states.index) == list(X.index)
+
+# ── Task 2: matching, the null, evaporation, margins ──
+
+
+class TestHungarianMatching:
+    def test_match_states_recovers_a_known_non_identity_permutation(self):
+        X = _clustered_frame([0.0, 2.0, 4.0, 6.0], n_per=40)
+        ref = fit_for_stability(X, K=4, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN)
+
+        perm = np.array([2, 0, 3, 1])
+        sub = ref.centroids_destandardized.iloc[perm].reset_index(drop=True)
+        result = match_states(ref.centroids_destandardized, sub)
+
+        inverse = np.argsort(perm)
+        assert result["assignment"] == {k: int(inverse[k]) for k in range(4)}
+        assert float(result["matched_distance"].max()) < 1e-9
+        assert result["is_identity"] is False
+        assert result["cost_matrix"].shape == (4, 4)
+
+    def test_match_states_reports_identity_when_nothing_moved(self):
+        X = _clustered_frame([0.0, 3.0])
+        ref = fit_for_stability(X, K=2, lam=5.0, n_restarts=2, sort_column=SORT_COLUMN)
+        result = match_states(ref.centroids_destandardized, ref.centroids_destandardized)
+        assert result["is_identity"] is True
+        assert float(result["matched_distance"].max()) == 0.0
+
+    def test_margin_near_one_flags_an_arbitrary_assignment_at_a_tiny_distance(self):
+        """Margins near 1.0 say the assignment is arbitrary REGARDLESS of how small
+        the matched distance is — the construction below has both."""
+        K, radius = 4, 1e-3
+        ref = np.zeros((K, D))
+        for k in range(K):
+            ref[k, k] = radius
+        centre = ref.mean(axis=0)
+        rng = np.random.default_rng(5)
+        sub = centre[None, :] + rng.normal(0.0, radius * 1e-3, (K, D))
+
+        result = match_states(
+            pd.DataFrame(ref, columns=COLUMNS), pd.DataFrame(sub, columns=COLUMNS)
+        )
+        assert float(result["matched_distance"].max()) < 1e-2, "distances should be small"
+        assert np.abs(result["margin"] - 1.0).max() < 0.2, (
+            f"margins {np.round(result['margin'], 4).tolist()} should sit near 1.0 when "
+            "every subsample centroid is equidistant from every reference centroid"
+        )
+
+
+class TestSplitHalfNull:
+    def test_split_half_null_is_materially_non_zero_at_n_40(self):
+        """The null is not zero. A distance-to-self implementation would return ~0."""
+        rng = np.random.default_rng(1)
+        rows = pd.DataFrame(rng.normal(0.0, 1.0, (40, D)), columns=COLUMNS)
+        null = split_half_null(rows, n_reps=200, seed=DEFAULT_STABILITY_SEED)
+        assert null["n"] == 40
+        assert null["n_reps"] == 200
+        assert null["median"] > 0.3, (
+            f"split-half null median {null['median']:.4f} at n=40, d=10 is implausibly "
+            "small — a null computed as a distance-to-self is ~0 and would make every "
+            "matched distance look significant"
+        )
+        assert null["p10"] <= null["median"] <= null["p90"]
+
+    def test_split_half_null_falls_as_n_rises(self):
+        rng = np.random.default_rng(2)
+        big = rng.normal(0.0, 1.0, (400, D))
+        small = split_half_null(pd.DataFrame(big[:40], columns=COLUMNS), n_reps=200)
+        large = split_half_null(pd.DataFrame(big, columns=COLUMNS), n_reps=200)
+        assert large["median"] < small["median"], (
+            f"null at n=400 ({large['median']:.4f}) should be below the null at n=40 "
+            f"({small['median']:.4f}) on the same distribution"
+        )
+
+    def test_split_half_null_is_nan_when_no_split_exists(self):
+        null = split_half_null(pd.DataFrame(np.zeros((1, D)), columns=COLUMNS))
+        assert np.isnan(null["median"])
+        assert null["n"] == 1
+
+
+class TestTrapBEvaporation:
+    """Trap B: a state that vanishes between halves is a stability failure even
+    when the surviving states match well."""
+
+    def test_evaporated_state_is_flagged_true_despite_a_zero_matched_distance(self):
+        X = _clustered_frame([0.0, 2.0, 4.0], n_per=40)
+        ref = fit_for_stability(X, K=3, lam=5.0, n_restarts=3, sort_column=SORT_COLUMN)
+
+        # A subsample decode in which state 2 captured ZERO months.
+        sub_states = ref.states.to_numpy().copy()
+        sub_states[sub_states == 2] = 1
+        assert int((sub_states == 2).sum()) == 0
+
+        frozen = _recompute_centroids(
+            standardize_features(X), sub_states, 3, ref.centroids_standardized
+        )
+        assert np.array_equal(frozen[2], ref.centroids_standardized[2]), (
+            "_recompute_centroids' freeze-on-empty rule is what makes this trap real"
+        )
+
+        sub_destd = destandardize_centroids(frozen, ref.params, ref.columns)
+        result = match_states(ref.centroids_destandardized, sub_destd)
+        distance = float(result["matched_distance"][2])
+
+        row = stability_row(
+            classifier="test", scheme="trap_b", state=2,
+            subsample_occupancy_months=0, subsample_occupancy_pct=0.0,
+            matched_partner=result["assignment"][2], is_identity=result["is_identity"],
+            matched_distance=distance, margin=result["margin"][2],
+            split_half_null_median=float("nan"),
+        )
+
+        assert distance < 1e-12, f"expected a frozen (distance-0) centroid, got {distance:.3e}"
+        assert row["subsample_occupancy_months"] == 0
+        assert row["evaporated"] is True, (
+            f"TRAP B: state 2 captured ZERO months yet its matched distance is "
+            f"{distance:.3e}. That zero means _recompute_centroids FROZE the centroid "
+            f"(jump_model.py:126-138), not that the state persisted. A reader scoring "
+            f"'small distance => stable' marks an evaporated state stable, which is the "
+            f"precise failure criterion 3 exists to catch. evaporated must outrank the "
+            f"distance."
+        )
+
+    def test_a_state_with_a_few_months_is_not_flagged_evaporated(self):
+        """Near-zero is a judgement. EVAPORATED is zero months exactly."""
+        assert EVAPORATED_OCCUPANCY_MONTHS == 0
+        row = stability_row(
+            classifier="test", scheme="s", state=1,
+            subsample_occupancy_months=3, subsample_occupancy_pct=0.01,
+            matched_partner=1, is_identity=True, matched_distance=0.4, margin=0.3,
+            split_half_null_median=0.7,
+        )
+        assert row["evaporated"] is False
+        assert row["subsample_occupancy_months"] == 3
+
+    def test_evaporation_is_logged_at_warning(self, caplog):
+        with caplog.at_level("WARNING"):
+            stability_row(
+                classifier="classifier1", scheme="drop_last_decade", state=4,
+                subsample_occupancy_months=0, subsample_occupancy_pct=0.0,
+                matched_partner=4, is_identity=True, matched_distance=0.0, margin=1.0,
+                split_half_null_median=float("nan"),
+            )
+        assert "EVAPORATED" in caplog.text
+        assert "classifier1" in caplog.text
+        assert "drop_last_decade" in caplog.text
+
+
+class TestStateEpisodes:
+    def test_state_episodes_reports_spans_counts_and_the_longest(self):
+        states = pd.Series([0] * 15 + [1] * 10 + [2] * 20 + [1] * 10 + [0] * 6 + [1] * 10 + [0] * 4)
+        episodes = state_episodes(states, n_states=3)
+        assert episodes[0]["n_episodes"] == 3
+        assert [e["length"] for e in episodes[0]["episodes"]] == [15, 6, 4]
+        assert episodes[0]["longest_episode"] == 15
+        assert episodes[0]["months"] == 25
+        assert episodes[2]["n_episodes"] == 1
+        span = episodes[2]["episodes"][0]
+        assert (span["start"], span["end"], span["length"]) == (25, 44, 20)
+        assert (span["start_label"], span["end_label"]) == (25, 44)  # Series index labels
+
+    def test_state_episodes_surfaces_a_never_occupied_state(self):
+        episodes = state_episodes(np.array([0] * 10 + [1] * 10), n_states=4)
+        assert episodes[3]["n_episodes"] == 0
+        assert episodes[3]["longest_episode"] == 0
+        assert episodes[3]["months"] == 0
