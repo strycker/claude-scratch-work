@@ -1,0 +1,224 @@
+{
+  "plan": "08-08",
+  "ruling": "2026-09-23 (Glenn): causal invariance is the GOVERNING leakage guard; S-1 is an observational reading. Two-stage on real data: S-1 detects, a truncation cut at p-1 adjudicates; any break halts.",
+  "generated_by": "scripts/diagnose_s1_truncation.py <T> <out-dir>  (NO_REGISTRY; inputs truncated at T before build_inputs)",
+  "compared_against": [
+    "outputs/reports/platform/joint_lift/joint_lift_belief_1_l2.parquet",
+    "outputs/reports/platform/joint_lift/joint_lift_belief_2_l2.parquet"
+  ],
+  "method": "every belief row with date <= T from the truncated run vs the committed full-run belief matrix; bit_identical = index equal AND max abs diff exactly 0.0",
+  "scope_note": "A p-1 cut rules out structural read-ahead of any size (all rows <= T identical) and smoothing-type influence AT these turns; it does not sweep every month (the unit-suite governing test does, on 08-06's synthetic world).",
+  "registry_total_trial_count": {
+    "before": 42,
+    "after": 42
+  },
+  "n_negative_offsets": 4,
+  "n_adjudicated": 4,
+  "n_break": 0,
+  "cuts": [
+    {
+      "T": "1982-08-31",
+      "seconds": 489.5,
+      "frozen_1": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "frozen_2": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "last_step": "1982-08-31",
+      "classifier_1": {
+        "rows_trunc": 66,
+        "rows_full_le_T": 66,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "classifier_2": {
+        "rows_trunc": 66,
+        "rows_full_le_T": 66,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "adjudicates": [
+        {
+          "classifier": 2,
+          "position": 236,
+          "date": "1982-09-30",
+          "offset": -1,
+          "s1_verdict": "lead"
+        }
+      ],
+      "verdict": "not leakage"
+    },
+    {
+      "T": "1988-01-31",
+      "seconds": 98.8,
+      "frozen_1": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "frozen_2": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "last_step": "1988-01-31",
+      "classifier_1": {
+        "rows_trunc": 123,
+        "rows_full_le_T": 123,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "classifier_2": {
+        "rows_trunc": 123,
+        "rows_full_le_T": 123,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "adjudicates": [
+        {
+          "classifier": 1,
+          "position": 300,
+          "date": "1988-02-29",
+          "offset": -6,
+          "s1_verdict": "held_through_miss"
+        }
+      ],
+      "verdict": "not leakage"
+    },
+    {
+      "T": "1995-03-31",
+      "seconds": 1084.3,
+      "frozen_1": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "frozen_2": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "last_step": "1995-03-31",
+      "classifier_1": {
+        "rows_trunc": 209,
+        "rows_full_le_T": 209,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "classifier_2": {
+        "rows_trunc": 209,
+        "rows_full_le_T": 209,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "adjudicates": [
+        {
+          "classifier": 2,
+          "position": 387,
+          "date": "1995-04-30",
+          "offset": -12,
+          "s1_verdict": "lead"
+        }
+      ],
+      "verdict": "not leakage"
+    },
+    {
+      "T": "2012-08-31",
+      "seconds": 1239.8,
+      "frozen_1": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "frozen_2": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "last_step": "2012-08-31",
+      "classifier_1": {
+        "rows_trunc": 407,
+        "rows_full_le_T": 407,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "classifier_2": {
+        "rows_trunc": 407,
+        "rows_full_le_T": 407,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true
+      },
+      "adjudicates": [
+        {
+          "classifier": 2,
+          "position": 596,
+          "date": "2012-09-30",
+          "offset": -31,
+          "s1_verdict": "lead"
+        }
+      ],
+      "verdict": "not leakage"
+    }
+  ]
+}

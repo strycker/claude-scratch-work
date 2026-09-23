@@ -476,3 +476,22 @@ def test_why_A_and_the_prior_are_fixed_rederiving_them_breaks_the_HONEST_filter(
     s = states.iloc[: cut + 1]
     rederived = _run_filter(s, evidence[: cut + 1], transition_matrix_for(s, state_index=IDX)).to_numpy()
     assert not np.array_equal(rederived, full[: cut + 1])
+
+
+def test_every_real_negative_offset_was_adjudicated_bit_identical():
+    """Two-stage real-data guard: S-1 detects, invariance adjudicates. Every negative
+    offset in _MEASURED_S1 must have a truncation cut at p-1 in the committed record,
+    bit-identical for BOTH classifiers — any break would have halted the plan."""
+    import json
+
+    record = json.loads((_JOINT_LIFT / "s1_truncation_invariance.json").read_text())
+    cuts = {c["T"]: c for c in record["cuts"]}
+    for clf, checkpoint in ((1, "regime_labels"), (2, "regime_labels_2")):
+        reference = _real_reference(checkpoint)
+        for p in _MEASURED_S1[clf]["lead_positions"] + _MEASURED_S1[clf]["held_through_miss_positions"]:
+            t = str(reference.index[p - 1].date())
+            assert t in cuts, f"classifier #{clf} offset at {p} has no truncation cut at {t}"
+            for c in ("classifier_1", "classifier_2"):
+                assert cuts[t][c]["bit_identical"] is True, (t, c)
+                assert cuts[t][c]["max_abs_diff"] == 0.0 and cuts[t][c]["index_equal"] is True
+                assert cuts[t][c]["rows_trunc"] == cuts[t][c]["rows_full_le_T"] > 0
