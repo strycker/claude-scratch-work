@@ -15,6 +15,9 @@ lag (the "fooled by its own backtest" failure).
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -322,3 +325,44 @@ class TestT012WrongColumnShapeRaises:
         probs = pd.DataFrame({True: [1.0] * 60, False: [0.0] * 60}, index=idx)
         with pytest.raises(ValueError, match="CANONICAL INTEGER state labels"):
             compute_sojourn_lag_headline(ref, probs)
+
+
+# ── Plan 08-06 Task 2: the extraction of _transitions_by_state moved nothing ───────
+#
+# These read the REAL dev inputs from tracked files, not the committed JSON alone: a
+# pin that only re-read diagnostics_l1only.json would pass whatever the refactor did
+# to the function, because the JSON was written before it. Both inputs are tracked
+# (data/checkpoints/platform/regime_labels.parquet and the l1only joint curve), so
+# nothing here skips in CI. The reconstruction mirrors
+# scripts/joint_lift_diagnostics.py::diagnose exactly: dev split of the full-sample
+# L1 labels, and a one-hot of the walk-forward state_1 column (exact, not an
+# approximation, under ROUTING_L1_ONLY).
+
+_JOINT_LIFT_DIR = Path(__file__).resolve().parents[2] / "outputs" / "reports" / "platform" / "joint_lift"
+
+
+def _real_dev_inputs() -> tuple[pd.Series, pd.DataFrame]:
+    from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+    from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+
+    full = get_platform_checkpoint_manager().load("regime_labels")["state"]
+    dev, _ = split_by_holdout_boundary(full.to_frame("state"), cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    filtered = pd.read_parquet(_JOINT_LIFT_DIR / "joint_lift_joint_l1only.parquet")["state_1"].dropna().astype(int)
+    probs = pd.DataFrame({int(k): (filtered == k).astype(float) for k in sorted(filtered.unique())}, index=filtered.index)
+    return dev["state"], probs
+
+
+class TestHeadlinePinOnRealDevInputs:
+    def test_classifier_1_headline_is_9_5_over_4_0_with_25_of_25(self):
+        states, probs = _real_dev_inputs()
+        assert states.index.max() <= pd.Timestamp("2020-12-31")  # holdout never read
+        out = compute_sojourn_lag_headline(states, probs, act_threshold=0.70)
+        assert (out["median_sojourn"], out["median_lag"], out["ratio"]) == (9.5, 4.0, 2.375)
+        assert (out["n_transitions"], out["n_resolved"]) == (25, 25)
+
+    def test_recomputation_equals_the_committed_record(self):
+        record = json.loads((_JOINT_LIFT_DIR / "diagnostics_l1only.json").read_text())["classifier_1"]["sojourn_lag"]
+        states, probs = _real_dev_inputs()
+        out = compute_sojourn_lag_headline(states, probs, act_threshold=record["act_threshold"])
+        for key in ("median_sojourn", "median_lag", "ratio", "n_transitions", "n_resolved"):
+            assert out[key] == record[key], key
