@@ -47,6 +47,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from trading_crab_lib.platform.evaluation.churn import argmax_churn, read_probability_matrix
 from trading_crab_lib.platform.evaluation.sojourn_lag import compute_sojourn_lag_headline
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -62,6 +63,12 @@ _SUFFIXES = ("l1only", "l2")
 #: 07-11-SUMMARY / 07-12-SUMMARY open item 5, as measured 2026-09-21.
 _PINNED_FILTERED_TRANSITIONS = {"classifier_1": 246, "classifier_2": 24}
 _PINNED_N_STEPS = 588
+#: Track B's window under the firewalled L2 routing: the driver accumulates a
+#: per-step row only on NON-degraded steps (joint_driver.py:508-510), so the
+#: probability matrix is 100 rows shorter than the curve. Pitfall 6: a churn
+#: rate quoted without this count is not quotable.
+_PINNED_L2_DEGRADED = 100
+_PINNED_L2_NOWCAST_ROWS = _PINNED_N_STEPS - _PINNED_L2_DEGRADED
 #: Open item 6: 5 of 12 -- a drop to 0 is the "detection never happened" shape.
 _PINNED_C2_RESOLVED = (5, 12)
 
@@ -171,6 +178,109 @@ class TestFilteredChurnIsReDerivedFromTheCurve:
         assert len(states) == _PINNED_N_STEPS
         assert states.notna().all(), f"{col} carries NaN -- churn over it is not a measurement"
         assert states.nunique() >= 2, f"{col} is constant -- a 0% churn would be an artefact"
+
+
+# ── 1b. The two churn series: Track A and Track B, never interchangeable ────
+
+
+class TestTheTwoChurnSeriesAreSeparatelyDenominated:
+    """08-RESEARCH.md § F-1's split, pinned so neither series can wear the other's name.
+
+    Track A is ``state_N`` — the L1 jump model's terminal-month label
+    (``joint_driver.py:502``). Track B is the argmax of the persisted per-step
+    probability matrix, the object design §5.1 changes. Under the
+    decision-bearing ``ROUTING_L1_ONLY`` they are the SAME SERIES by
+    construction, and that degeneracy is what these tests record.
+    """
+
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_under_l1only_the_argmax_IS_the_state_column(self, clf):
+        """The identity pin — a pin of a DEGENERACY, not of a success.
+
+        Under ``ROUTING_L1_ONLY`` the tilt is fed
+        ``_last_state_one_hot(states_1)`` (``joint_driver.py:431``), so the
+        "nowcast churn" is the label churn wearing a different name and every
+        criterion-2 number measured on Track A is unmovable by an L2 change.
+
+        If this ever flips to False, something has begun feeding the tilt a
+        NON-degenerate probability vector under the decision-bearing routing.
+        That is not necessarily wrong — but it means every criterion-7 number
+        recorded before the change was measured against a different input and is
+        NO LONGER COMPARABLE to any number measured after it.
+        """
+        ident = _diagnostics("l1only")["series_identity"][clf]
+        assert ident["argmax_equals_state_elementwise"] is True, (
+            f"l1only/{clf}: the one-hot degeneracy at joint_driver.py:431 no longer "
+            "holds. Pre-change criterion-7 numbers are not comparable to post-change ones."
+        )
+        assert ident["n_mismatched_months"] == 0
+        assert ident["n_compared"] == _PINNED_N_STEPS
+
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_under_l2_the_argmax_is_NOT_the_state_column(self, clf):
+        """The falsifier of "the split is cosmetic".
+
+        If Track A and Track B were one object read twice, this assertion could
+        not fail under any routing. It fails here only because the L2 routing
+        actually calls ``_refit_l2`` and the nowcaster's argmax departs from the
+        jump model's terminal label.
+        """
+        ident = _diagnostics("l2")["series_identity"][clf]
+        assert ident["argmax_equals_state_elementwise"] is False, (
+            f"l2/{clf}: the nowcaster's argmax is elementwise identical to {ident['state_column']} "
+            "— the two 'series' are one object and the split records nothing."
+        )
+        assert ident["n_mismatched_months"] > 0
+
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_the_two_blocks_carry_different_denominators_under_l2(self, clf):
+        """Track A spans every step; Track B spans only the non-degraded ones.
+
+        A test that asserted only "both blocks exist" could not fail on a
+        copy-paste. These three numbers can only agree if the two blocks were
+        computed from two different objects over two different windows.
+        """
+        rec = _diagnostics("l2")[clf]
+        assert rec["walk_forward_filtered"]["n_steps"] == _PINNED_N_STEPS
+        assert rec["walk_forward_nowcast"]["n_rows"] == _PINNED_L2_NOWCAST_ROWS
+        assert rec["walk_forward_nowcast"]["n_degraded"] == _PINNED_L2_DEGRADED
+        assert (
+            rec["walk_forward_nowcast"]["n_rows"]
+            + rec["walk_forward_nowcast"]["n_degraded"]
+            == _PINNED_N_STEPS
+        )
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_each_block_names_its_own_track_in_the_record(self, suffix, clf):
+        """The strings are part of the artifact, not a comment in the source."""
+        rec = _diagnostics(suffix)[clf]
+        assert rec["walk_forward_filtered"]["track"].startswith("A —")
+        assert rec["walk_forward_nowcast"]["track"].startswith("B —")
+        assert "state_N" in rec["walk_forward_filtered"]["track"]
+        assert "§5.1" in rec["walk_forward_nowcast"]["track"]
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_track_b_is_re_derivable_from_its_own_named_artifact(self, suffix, clf):
+        """The record names a parquet; the parquet must reproduce the number.
+
+        This is what makes Track B falsifiable rather than merely reported: the
+        rate is recomputed here from the persisted matrix, not trusted.
+        """
+        block = _diagnostics(suffix)[clf]["walk_forward_nowcast"]
+        source = Path(block["source"])
+        matrix = read_probability_matrix(source if source.is_absolute() else _ROOT / source)
+        measured = argmax_churn(matrix)
+        assert measured["n_changes"] == block["n_changes"]
+        assert measured["n_rows"] == block["n_rows"]
+        assert measured["rate"] == pytest.approx(block["rate"], abs=1e-12)
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("clf,pinned", sorted(_PINNED_FILTERED_TRANSITIONS.items()))
+    def test_track_a_count_is_unchanged_by_the_split(self, suffix, clf, pinned):
+        """Adding Track B must not have moved Track A's own number."""
+        assert _diagnostics(suffix)[clf]["walk_forward_filtered"]["n_transitions"] == pinned
 
 
 # ── 2. Ablation validity: the legs must share the classifier paths ──────────

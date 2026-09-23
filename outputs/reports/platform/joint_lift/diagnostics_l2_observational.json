@@ -12,11 +12,23 @@
       "band_3b_ok": true
     },
     "walk_forward_filtered": {
+      "track": "A \u2014 L1 jump model terminal-month label (state_N); NOT movable by an L2 change",
       "n_transitions": 246,
       "n_steps": 588,
       "first_date": "1972-01-31",
       "last_date": "2020-12-31",
       "transition_rate": 0.41836734693877553
+    },
+    "walk_forward_nowcast": {
+      "track": "B \u2014 argmax of the L2 nowcaster's calibrated posterior; the object design \u00a75.1 changes",
+      "n_changes": 221,
+      "n_rows": 488,
+      "n_pairs": 487,
+      "rate": 0.4537987679671458,
+      "n_degraded": 100,
+      "first_date": "1974-02-28",
+      "last_date": "2020-12-31",
+      "source": "outputs/reports/platform/joint_lift/joint_lift_probs_1_l2.parquet"
     },
     "sojourn_lag": {
       "median_sojourn": 9.5,
@@ -48,11 +60,23 @@
       "band_3b_ok": true
     },
     "walk_forward_filtered": {
+      "track": "A \u2014 L1 jump model terminal-month label (state_N); NOT movable by an L2 change",
       "n_transitions": 24,
       "n_steps": 588,
       "first_date": "1972-01-31",
       "last_date": "2020-12-31",
       "transition_rate": 0.04081632653061224
+    },
+    "walk_forward_nowcast": {
+      "track": "B \u2014 argmax of the L2 nowcaster's calibrated posterior; the object design \u00a75.1 changes",
+      "n_changes": 66,
+      "n_rows": 488,
+      "n_pairs": 487,
+      "rate": 0.13552361396303902,
+      "n_degraded": 100,
+      "first_date": "1974-02-28",
+      "last_date": "2020-12-31",
+      "source": "outputs/reports/platform/joint_lift/joint_lift_probs_2_l2.parquet"
     },
     "sojourn_lag": {
       "median_sojourn": 29.0,
@@ -71,6 +95,22 @@
       "last_common_date": "2020-12-31 00:00:00",
       "suspicious": false,
       "suspicious_reason": ""
+    }
+  },
+  "series_identity": {
+    "classifier_1": {
+      "argmax_equals_state_elementwise": false,
+      "n_mismatched_months": 184,
+      "n_compared": 488,
+      "state_column": "state_1",
+      "probs_source": "outputs/reports/platform/joint_lift/joint_lift_probs_1_l2.parquet"
+    },
+    "classifier_2": {
+      "argmax_equals_state_elementwise": false,
+      "n_mismatched_months": 276,
+      "n_compared": 488,
+      "state_column": "state_2",
+      "probs_source": "outputs/reports/platform/joint_lift/joint_lift_probs_2_l2.parquet"
     }
   }
 }
