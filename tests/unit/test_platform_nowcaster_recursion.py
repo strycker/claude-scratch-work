@@ -312,15 +312,28 @@ def _real_act_threshold() -> float:
     return float(load_platform_config()["allocation"]["hysteresis"]["act_threshold"])
 
 
-#: Measured 2026-09-23 on the real belief paths (plan 08-08), reported, never dropped.
-#: Classifier #1: position 300 (1988-02-29), a return into state 4 after the reference's
-#: 4-month state-0 run 1987-10..1988-01 (the October 1987 crash) that the belief held
-#: state 4 straight through (belief[4] 0.81-0.96, belief[0] <= 0.01).
-_MEASURED_HELD_THROUGH_MISSES = {1: [300], 2: []}
+#: S-1 on the REAL belief paths, measured 2026-09-23 (plan 08-08) — an OBSERVATIONAL
+#: reading since Glenn's ruling of the same day (08-08-PLAN.md "RULING — 2026-09-23"):
+#: causal invariance is the governing leakage guard; S-1's three clauses are unchanged
+#: (T-08-40b), and its counts are pinned here as measured so that any movement is seen.
+#: Every negative offset below was ADJUDICATED by a truncation cut at p-1
+#: (s1_truncation_invariance.json): bit-identical, i.e. not leakage.
+#: - #1: 0 LEADs; 1 held-through miss at 300 (1988-02-29, -6) — a return into state 4
+#:   after the reference's 4-month state-0 run 1987-10..1988-01 that the belief held
+#:   state 4 straight through.
+#: - #2: 3 LEADs at 236 (1982-09, -1), 387 (1995-04, -12), 596 (2012-09, -31), 0 misses.
+#:   Classifier #2's walk-forward and reference labelings agree 41.3% after the best 1:1
+#:   relabelling (08-CHURN.md §5.2): S-1 compares two vocabularies there.
+_MEASURED_S1 = {
+    1: {"n_negative": 1, "lead_positions": [], "held_through_miss_positions": [300]},
+    2: {"n_negative": 3, "lead_positions": [236, 387, 596], "held_through_miss_positions": []},
+}
 
 
 @pytest.mark.parametrize("clf,checkpoint", [(1, "regime_labels"), (2, "regime_labels_2")])
-def test_real_data_the_filtered_belief_never_LEADS_a_reference_transition(clf, checkpoint):
+def test_real_data_s1_counts_are_pinned_as_measured(clf, checkpoint):
+    """Fails if any S-1 count or position moves. It no longer gates (see the ruling);
+    the governing guard is the invariance test below and the real-data truncation record."""
     reference = _real_reference(checkpoint)
     belief = read_probability_matrix(_JOINT_LIFT / f"joint_lift_belief_{clf}_l2.parquet")
     assert reference.index.max() <= pd.Timestamp("2020-12-31")  # holdout never read
@@ -330,13 +343,15 @@ def test_real_data_the_filtered_belief_never_LEADS_a_reference_transition(clf, c
     offsets = compute_signed_detection_offsets(reference, belief, act_threshold=act)
     classified = classify_negative_offsets(reference, belief, offsets, act)
 
-    assert classified["n_negative"] == offsets["n_negative"]
-    assert classified["n_lead"] == 0, (
-        f"classifier #{clf}: {classified['n_lead']} strictly negative offset(s) are LEADS under the "
-        f"pre-registered held-through-return rule — proof that post-t information reached the belief. "
-        f"HALT. Details: {[d for d in classified['details'] if d['verdict'] == 'lead']}"
+    measured = {
+        "n_negative": offsets["n_negative"],
+        "lead_positions": classified["lead_positions"],
+        "held_through_miss_positions": classified["held_through_miss_positions"],
+    }
+    assert measured == _MEASURED_S1[clf], (
+        f"classifier #{clf}: S-1 moved from its measured reading {_MEASURED_S1[clf]} to {measured}. "
+        "Any new negative offset must be ADJUDICATED by a truncation cut at p-1 "
+        "(scripts/diagnose_s1_truncation.py) before this pin is moved."
     )
-    assert classified["n_held_through_miss"] + classified["n_lead"] == offsets["n_negative"]
-    assert classified["held_through_miss_positions"] == _MEASURED_HELD_THROUGH_MISSES[clf], (
-        "a held-through miss appeared or disappeared — report it, never drop it"
-    )
+    assert classified["n_lead"] + classified["n_held_through_miss"] == offsets["n_negative"]
+
