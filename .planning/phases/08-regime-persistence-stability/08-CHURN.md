@@ -177,3 +177,58 @@ python scripts/run_joint_lift.py --routing l2 --dump-curves <dir>        # NO_RE
 pytest tests/unit/test_platform_nowcaster_recursion.py -k real_data       # #1 green, #2 RED: 3 LEADs
 pytest tests/unit/test_platform_evaluation_sojourn_lag.py -k HeldThrough  # the rule's synthetic pins
 ```
+
+## 5. Orchestrator investigation of the halt (2026-09-23) — evidence for the ruling, NOT a reclassification
+
+The halt stands. S-1's three clauses are unchanged and its verdict — **3 LEADs on classifier
+#2** — is recorded as measured. What follows tests candidate readings (a) and (c) directly, so
+the human ruling rests on measurement rather than on argument.
+
+### 5.1 Candidate (a), a genuine leak — REFUTED by a causal-invariance test
+
+Method (`scripts/diagnose_s1_truncation.py`): physically truncate `monthly_features` and
+`monthly_raw` at a cutoff T **before** `build_inputs`, so every derived frame and both frozen
+column lists are rebuilt from truncated data; run the l2 joint leg (`NO_REGISTRY`); compare
+the filtered belief at every month ≤ T with the committed full-run belief matrices. Each T is
+the month immediately before one LEAD's reference transition.
+
+| T | covers LEAD | months ≤ T compared | classifier #1 | classifier #2 |
+|---|---|---|---|---|
+| 1982-08-31 | 236 (offset −1) | 66 | bit-identical, max diff 0.0 | bit-identical, max diff 0.0 |
+| 1995-03-31 | 387 (offset −12) | 209 | bit-identical, max diff 0.0 | bit-identical, max diff 0.0 |
+| 2012-08-31 | 596 (offset −31) | 407 | bit-identical, max diff 0.0 | bit-identical, max diff 0.0 |
+
+**Why three cutoffs rule out a leak everywhere, not just at three months:** the driver runs
+the same code at every step, so a code path reading *j* months ahead would read ahead at every
+step, and any truncation would perturb the last *j* months before it. All months ≤ T are
+identical — including month T itself — at three independent cutoffs, so no lookahead of any
+size exists. **Every belief value that produced each LEAD was computed from data dated at or
+before that LEAD.** Registry 42 before and after; nothing tracked was written by the runs.
+
+### 5.2 Candidate (c), label disagreement — CONFIRMED for classifier #2
+
+Classifier #2's walk-forward terminal-month labels (08-02's `c2_lag1_state`, 588 months,
+1971-12 → 2020-11) against its full-sample reference `regime_labels_2`:
+
+- Raw state-id agreement **16.7%**; after the best one-to-one (Hungarian) relabelling **41.3%**.
+- The walk-forward labeler assigns **state 4 to 359 of the 361 months 1990-09 → 2020-12**. The
+  reference splits the same span into state 2 (1990-09 → 1998-10, mostly), state 3
+  (1998-11 → 2012-08) and state 4 (2012-09 → 2020-12).
+
+The belief and the reference therefore **do not share a state vocabulary** for classifier #2.
+S-1's premise — that an offset between them measures *when* the belief learned of a
+transition — does not hold: at 596, "a 31-month lead into reference state 4" is the belief
+sitting in the walk-forward labeler's catch-all state, which happens to carry the same id.
+
+### 5.3 What this does and does not establish
+
+- **Does:** no post-*t* information reaches the belief (5.1). Classifier #2's LEADs are
+  artefacts of comparing two labelings that do not agree on what the states are (5.2), and
+  are consistent with (b) as well.
+- **Does not:** establish that the filter is *useful*, or that classifier #2's walk-forward
+  vocabulary is sound. 41.3% aligned agreement is itself a finding about classifier #2 — every
+  #2 metric that compares walk-forward output to the full-sample reference (detection lag,
+  §5.4 ratio, S-1) is measured across two vocabularies.
+- **Does not:** relax S-1. Whether S-1 remains the governing leakage guard, is superseded by
+  the invariance test, or is scoped to classifiers whose vocabularies align, is the human
+  ruling T-08-40b reserves.
