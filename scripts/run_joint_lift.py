@@ -286,6 +286,23 @@ def run(routing_flag: str, *, dry_run: bool, dump_dir: str | None = None) -> dic
                 int(joint_meta["n_steps"]) - info["n_rows"], info["path"],
             )
 
+        # Plan 08-08: the FILTERED BELIEF path, beside the raw posterior above. Written
+        # only when the Bayes filter actually ran (l2 routing); under l1only there is
+        # no belief — the one-hot is a label, not a likelihood — and writing the
+        # one-hot under a "belief" name would be the masquerade the split forbids.
+        if joint_meta.get("use_regime_filter"):
+            for clf, per_step in (
+                (1, joint_meta["per_step_belief_1"]),
+                (2, joint_meta["per_step_belief_2"]),
+            ):
+                info = write_probability_matrix(
+                    per_step, out / f"joint_lift_belief_{clf}_{suffix}.parquet"
+                )
+                log.info(
+                    "belief matrix classifier #%d (%s): %d rows of %d steps -> %s",
+                    clf, suffix, info["n_rows"], joint_meta["n_steps"], info["path"],
+                )
+
     lift = joint_lift_table(joint_curve, baseline_curve)
     baseline_kpis = _leg_kpis(baseline_curve, baseline_meta)
     joint_kpis = _leg_kpis(joint_curve, joint_meta)

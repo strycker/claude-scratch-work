@@ -56,15 +56,29 @@ No arm asserts a target for churn: none is pre-declared (08-CONTEXT.md), and an
 arm that asserted one would turn a measurement into a gate after the fact. The
 real-data arm (``joint_lift_probs_1_l2.parquet``) is plan 08-08's, which owns the
 wiring and therefore the number.
+
+**Plan 08-08's real-data arm** (bottom of this file) runs the signed offset over the
+REAL filtered belief path (``joint_lift_belief_{1,2}_l2.parquet``) against the real
+full-sample reference labels, and classifies every strictly negative offset with
+``classify_negative_offsets`` — the held-through-return rule pre-registered in
+08-08-PLAN.md (AMENDED 2026-09-23, before any real 08-08 number existed) and pinned
+against this file's synthetic arms in ``test_platform_evaluation_sojourn_lag.py``
+first. ``n_lead == 0`` is the gate: one LEAD is proof that post-*t* information
+reached the belief. Held-through misses are reported with their positions, never
+dropped.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from trading_crab_lib.platform.evaluation.churn import read_probability_matrix
 from trading_crab_lib.platform.evaluation.sojourn_lag import (
+    classify_negative_offsets,
     compute_signed_detection_offsets,
     compute_sojourn_lag_headline,
 )
@@ -276,3 +290,53 @@ def test_caveat_an_honest_filter_that_MISSES_a_short_regime_reads_as_a_lead():
     # was never registered by the belief at all.
     assert (states.iloc[36:45] == 0).all()
     assert belief[0].iloc[36:45].max() < ACT
+
+
+# ── Plan 08-08: the REAL-DATA arm ────────────────────────────────────────────────
+
+_JOINT_LIFT = Path(__file__).resolve().parents[2] / "outputs" / "reports" / "platform" / "joint_lift"
+
+
+def _real_reference(checkpoint: str) -> pd.Series:
+    from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+    from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+
+    full = get_platform_checkpoint_manager().load(checkpoint)["state"]
+    dev, _ = split_by_holdout_boundary(full.to_frame("state"), cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    return dev["state"]
+
+
+def _real_act_threshold() -> float:
+    from trading_crab_lib.platform.config import load_platform_config
+
+    return float(load_platform_config()["allocation"]["hysteresis"]["act_threshold"])
+
+
+#: Measured 2026-09-23 on the real belief paths (plan 08-08), reported, never dropped.
+#: Classifier #1: position 300 (1988-02-29), a return into state 4 after the reference's
+#: 4-month state-0 run 1987-10..1988-01 (the October 1987 crash) that the belief held
+#: state 4 straight through (belief[4] 0.81-0.96, belief[0] <= 0.01).
+_MEASURED_HELD_THROUGH_MISSES = {1: [300], 2: []}
+
+
+@pytest.mark.parametrize("clf,checkpoint", [(1, "regime_labels"), (2, "regime_labels_2")])
+def test_real_data_the_filtered_belief_never_LEADS_a_reference_transition(clf, checkpoint):
+    reference = _real_reference(checkpoint)
+    belief = read_probability_matrix(_JOINT_LIFT / f"joint_lift_belief_{clf}_l2.parquet")
+    assert reference.index.max() <= pd.Timestamp("2020-12-31")  # holdout never read
+    assert belief.index.max() <= pd.Timestamp("2020-12-31")
+    act = _real_act_threshold()
+
+    offsets = compute_signed_detection_offsets(reference, belief, act_threshold=act)
+    classified = classify_negative_offsets(reference, belief, offsets, act)
+
+    assert classified["n_negative"] == offsets["n_negative"]
+    assert classified["n_lead"] == 0, (
+        f"classifier #{clf}: {classified['n_lead']} strictly negative offset(s) are LEADS under the "
+        f"pre-registered held-through-return rule — proof that post-t information reached the belief. "
+        f"HALT. Details: {[d for d in classified['details'] if d['verdict'] == 'lead']}"
+    )
+    assert classified["n_held_through_miss"] + classified["n_lead"] == offsets["n_negative"]
+    assert classified["held_through_miss_positions"] == _MEASURED_HELD_THROUGH_MISSES[clf], (
+        "a held-through miss appeared or disappeared — report it, never drop it"
+    )
