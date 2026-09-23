@@ -615,11 +615,11 @@ wave 4.
 
 **Wave 1** *(no dependencies; 08-05 blocks on a human decision)*
 
-- [ ] 08-01-PLAN.md — **Tracer.** Persist the per-step probability matrix end to end and split criterion 2's churn into its two named series, with the l1only identity pinned and F-4's denominator fixed alongside its pin *(PER-01, PER-03, PER-10)*
-- [ ] 08-02-PLAN.md — Track A's zero-trial terminal-month diagnostic: churn vs `iloc[-k]` for k = 1…6, both classifiers, anchored elementwise to the tracked curve at k = 1 *(PER-04)*
-- [ ] 08-03-PLAN.md — §4.4 criterion 3 machinery: Hungarian matching on de-standardized centroids, the within-state split-half null, the evaporation flag, and the four subsample schemes *(PER-06)*
-- [ ] 08-04-PLAN.md — G6 pinned as the known **non**-compliance across all three `vol_targeted_tilt` consumers, with the both-halves rule *(PER-09)*
-- [ ] 08-05-PLAN.md — **A11 answered, written as the reversal it is** — decided in wave 1 so the ruling precedes every number it could judge *(PER-08)*
+- [x] 08-01-PLAN.md — **Tracer.** Persist the per-step probability matrix end to end and split criterion 2's churn into its two named series, with the l1only identity pinned and F-4's denominator fixed alongside its pin *(PER-01, PER-03, PER-10)*
+- [x] 08-02-PLAN.md — Track A's zero-trial terminal-month diagnostic: churn vs `iloc[-k]` for k = 1…6, both classifiers, anchored elementwise to the tracked curve at k = 1 *(PER-04)*
+- [x] 08-03-PLAN.md — §4.4 criterion 3 machinery: Hungarian matching on de-standardized centroids, the within-state split-half null, the evaporation flag, and the four subsample schemes *(PER-06)*
+- [x] 08-04-PLAN.md — G6 pinned as the known **non**-compliance across all three `vol_targeted_tilt` consumers, with the both-halves rule *(PER-09)*
+- [x] 08-05-PLAN.md — **A11 answered, written as the reversal it is** — decided in wave 1 so the ruling precedes every number it could judge *(PER-08)*
 
 **Wave 2** *(08-06 blocked on 08-01; 08-07 blocked on 08-03)*
 
@@ -688,5 +688,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
-| 7. Regime Representation | 11/12 | In progress — wave 1 closed (verified+validated+UAT); 07-05..07-11 executed; ADR-0002 still Proposed, criterion 6 UNRESOLVED, criterion 7 measured; 07-12 outstanding | wave 1: 2026-09-15; 07-11: 2026-09-21 |
-| 8. Migration to Public Repo | 0/TBD | Not started | - |
+| 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
+| 8. Regime Persistence & Stability | 5/10 | In progress — wave 1 complete; A11 answered (b-promote-dsr); Track A edge artefact refuted | wave 1: 2026-09-23 |
+| 9. Migration to Public Repo | 0/TBD | Not started | - |

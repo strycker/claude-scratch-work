@@ -73,7 +73,7 @@ under the decision-bearing `ROUTING_L1_ONLY` `_refit_l2` is never called
 (`joint_driver.py:431`). The two tracks are therefore separate requirements and neither may be
 measured by the other's metric.
 
-- [ ] **PER-01**: The per-step probability matrix the walk-forward drivers accumulate
+- [x] **PER-01**: The per-step probability matrix the walk-forward drivers accumulate
   (`driver.py:530-532`, `joint_driver.py:508-510`) is persisted to disk for both classifiers and
   both routings — the prerequisite that gates PER-02, PER-03 and PER-05 (criterion 0)
 - [ ] **PER-02**: A prior-state belief propagates into the nowcaster's consumed output via an
@@ -83,7 +83,7 @@ measured by the other's metric.
 - [ ] **PER-03**: Both churn series are reported with their own denominators, windows and degraded
   counts, and neither can masquerade as the other: Track A (`state_1` changes / 587) and Track B
   (`argmax(regime_probs)`), with no target pre-declared for either (criterion 2)
-- [ ] **PER-04**: Track A is diagnosed before it is changed — the zero-trial terminal-month
+- [x] **PER-04**: Track A is diagnosed before it is changed — the zero-trial terminal-month
   diagnostic, churning the step-*t* fit's label for months *t−1 … t−6* across steps. A λ sweep is
   **not** authorized (criterion 3)
 - [ ] **PER-05**: §5.3's hysteresis gates allocation, closing audit item A7, evaluated only after
@@ -96,9 +96,9 @@ measured by the other's metric.
 - [ ] **PER-07**: Criterion 7 is re-measured under whatever changed, both legs, one harness,
   window inline; the prior `wealth_delta` −0.123438 / `dd_delta` +0.024084 is a comparison point,
   not a target (criterion 6)
-- [ ] **PER-08**: Audit item A11 — *"no gate fails on a bad model"* — is answered and written as
+- [x] **PER-08**: Audit item A11 — *"no gate fails on a bad model"* — is answered and written as
   the reversal of the 2026-09-18 decision to leave it open (criterion 7)
-- [ ] **PER-09**: Validation gap G6 is pinned as the known **non**-compliance: non-joint consumers
+- [x] **PER-09**: Validation gap G6 is pinned as the known **non**-compliance: non-joint consumers
   of `vol_targeted_tilt` receive the unpooled per-regime estimate (criterion 8)
 - [ ] **PER-10**: Recorded counts match measured reality — the four documentation sites, and
   F-4's churn denominator (587 adjacent pairs, not 588 months) with its pin moved in the same
@@ -238,15 +238,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NB-01 | Phase 6 | Complete |
 | REG-01 | Phase 7 | **Partial** — criterion 6 (dependence) UNRESOLVED; see ADR-0002 |
 | INV-01 | Phase 7 | Complete |
-| PER-01 | Phase 8 | Pending |
+| PER-01 | Phase 8 | Complete |
 | PER-02 | Phase 8 | Pending |
 | PER-03 | Phase 8 | Pending |
-| PER-04 | Phase 8 | Pending |
+| PER-04 | Phase 8 | Complete |
 | PER-05 | Phase 8 | Pending |
 | PER-06 | Phase 8 | Pending |
 | PER-07 | Phase 8 | Pending |
-| PER-08 | Phase 8 | Pending |
-| PER-09 | Phase 8 | Pending |
+| PER-08 | Phase 8 | Complete |
+| PER-09 | Phase 8 | Complete |
 | PER-10 | Phase 8 | Pending |
 | MIG-01 | Phase 9 | Pending |
 

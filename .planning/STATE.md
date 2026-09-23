@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
-status: planning
-stopped_at: Phase 7 closed and merged; Phase 8 (Regime Persistence & Stability) created, awaiting planning
-last_updated: "2026-09-21T18:40:00.000Z"
+status: executing
+stopped_at: Phase 8 wave 1 complete (5/10 plans); wave 2 (08-06, 08-07) next
+last_updated: "2026-09-23T00:00:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 47
-  completed_plans: 47
+  total_plans: 57
+  completed_plans: 52
 current_phase: 8
-last_activity: 2026-09-21
-last_activity_desc: "Phase 7 CLOSED — ADR-0002 Accepted 2026-09-21. INV-01 delivered in full; REG-01 delivered PARTIALLY, criterion 6's dependence verdict UNRESOLVED (NMI 0.464088 at the 96.60th percentile, p95 0.449202, p99 0.501195) with no tie-break permitted. Criterion 5 MET; criterion 7 MET as a measurement with wealth_delta -0.123438 (an 11.61% terminal-wealth shortfall) and dd_delta +0.024084, both over 588 steps 1972-01-31 → 2020-12-31. Ratchet re-measured at 31, unchanged. Suite 2018 passed, 0 skipped (1983 at close; +30 from the wave-2 Nyquist audit, +5 from T0.12's fix)"
+last_activity: 2026-09-23
+last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
 ---
 
 # Project State
@@ -28,7 +28,40 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: **7 — Regime Representation — CLOSED 2026-09-21**
+Phase: **8 — Regime Persistence & Stability — EXECUTING**
+Status: **WAVE 1 COMPLETE (5 of 10 plans).** Next: wave 2 — `08-06` (Bayes filter + signed
+detection offset, dep 08-01) and `08-07` (§4.4 criterion 3 run, dep 08-03). Both autonomous.
+Full suite **2150 passed, 0 skipped, 0 failed**; ruff/flake8 clean; both wheels build and ship
+`evaluation/churn.py` + `labeling/stability.py`. Registry **42 of 44**. Ratchet **31**.
+
+**Requirements closed by wave 1:** PER-01 (08-01), PER-04 (08-02), PER-08 (08-05), PER-09 (08-04).
+**Partially delivered, completed later:** PER-03 (08-08), PER-06 (08-07 runs 08-03's machinery),
+PER-10 (08-01 did the F-4 half; 08-10 pins the suite count).
+
+**What wave 1 established, as measured:**
+
+- **A11 ANSWERED — `b-promote-dsr`** (Glenn, 2026-09-22), taken *before* 08-01/08-02 produced
+  any number, so the pre-registration claim stands unqualified. `registry rows spent: 0`.
+  **Criterion 7's MET becomes FAILED retroactively** on both legs of the l1only routing —
+  DSR 2.28e-12 (baseline) and 1.47e-11 (joint) against hurdle 2.208694. ADR-0003 Accepted.
+  The gate is decided and tested but **not yet wired**: 08-10 must add it to `joint_lift_table`
+  before re-measuring criterion 7.
+- **Track A's terminal-month edge artefact is REFUTED** by criterion 3's pre-registered rule.
+  Classifier #1 churn is flat in k: **246 / 242 / 245 / 248 / 247 / 249** of 587 pairs for
+  k = 1…6 (1972-01-31 → 2020-12-31); #2 is 24–25. k=1 anchored to `state_1` at 0/588
+  mismatches. The 41.91% is the labeler's own path, not its edge. **The lever is λ, and a λ sweep
+  is not authorized** — so classifier #1's churn is not fixable in this phase, and **08-09's
+  bounded turnover is the only mechanism left that can move the decision-bearing leg.**
+  Not ruled out: edge effects longer than 6 months; λ/d not isolated from K, features and d.
+- **Both churn series exist and are separately denominated** (08-01). l1only: Track A ≡ Track B
+  (identity pinned True). l2: #1 Track B **221/487 = 45.38%**, #2 **66/487 = 13.55%** (100
+  degraded), identity pinned False. Max posterior < 0.70 in **355/488** rows for #1.
+- **l1only is bit-reproducible** — curves byte-identical to HEAD; criterion 7 reproduces to the
+  last digit. 08-10's 1e-12 reproduction gate is safe.
+
+---
+
+### Previously: Phase 7 — Regime Representation — CLOSED 2026-09-21
 Status: **PHASE CLOSED.** 12 of 12 plans executed. ADR-0002 **Accepted 2026-09-21**; all eight
 probe edges resolved with a named test each; legacy-import ratchet re-measured at **31**
 (unchanged, constant untouched); full suite **1983 passed, 0 skipped, 0 xfailed**.
@@ -490,6 +523,20 @@ Recent decisions affecting current work:
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
 
 ### Pending Todos
+
+- **(Phase 8, found in 08-01, NOT fixed) `_leg_kpis` carries F-4's off-by-one.**
+  `scripts/run_joint_lift.py::_leg_kpis` computes `state_{1,2}_transition_rate` as changes /
+  `n_steps` (588), not / pairs (587). It feeds the committed `measurement_*.json`, which still
+  say **0.418367** while `diagnostics_*.json` now say **0.418980** — two records, same 246 changes,
+  different rates. Natural home: 08-10, which already regenerates both measurement records.
+  A criterion-9 ("recorded counts match reality") item.
+
+- **(Phase 8, found in 08-01) the l2 leg drifts ~1e-7 across environments, not across runs.**
+  Within one container l2 is bit-reproducible run to run; against HEAD's l2 curves (produced in
+  a different container, 2026-09-21) numeric columns differ by up to **8.54e-08**, KPI
+  `wealth_delta` by ~3e-10. `degraded` / `state_*` / `active_regime` identical; argmax unaffected
+  (min top-2 gap 0.002). Cause unconfirmed — most plausibly BLAS/CPU. **l1only is unaffected.**
+  Any cross-environment l2 comparison needs a ~1e-7 tolerance.
 
 - **Release-engineering tech debt, recorded as `ROADMAP.md` Tier 0.5 (R1–R4), deferred
   deliberately 2026-09-11/14 — none block Phase 7, but R1 touches it directly.**
