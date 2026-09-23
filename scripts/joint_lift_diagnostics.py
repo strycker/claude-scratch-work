@@ -40,6 +40,7 @@ from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manage
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.evaluation.churn import (
     argmax_churn,
+    churn_rate,
     read_probability_matrix,
 )
 from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
@@ -198,9 +199,14 @@ def diagnose(curves_dir: Path, *, suffix: str) -> dict[str, Any]:
                 "track": TRACK_A,
                 "n_transitions": _n_transitions(filtered),
                 "n_steps": int(len(joint)),
+                # F-4 (plan 08-01): a change is a property of an adjacent PAIR, so
+                # the rate divides by n_steps - 1. Recorded as 246/588 = 41.84%
+                # before this fix; 246/587 = 41.91% is the rate. Routed through
+                # evaluation/churn.py so this phase has ONE churn-rate definition.
+                "n_pairs": int(len(joint)) - 1,
                 "first_date": str(joint.index.min().date()),
                 "last_date": str(joint.index.max().date()),
-                "transition_rate": _n_transitions(filtered) / max(1, len(joint)),
+                "transition_rate": churn_rate(_n_transitions(filtered), int(len(joint))),
             },
             "walk_forward_nowcast": {
                 "track": TRACK_B,

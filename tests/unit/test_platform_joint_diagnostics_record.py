@@ -10,7 +10,9 @@ only confirm). A pin can fail; a made-up band cannot.
 Covered here:
 
 1. **Filtered-labeling churn** (07-12 open item 5). Classifier #1's walk-forward
-   *filtered* labeling changes state in 246 of 588 decision months (41.84%)
+   *filtered* labeling changes state across 246 of the 587 adjacent pairs in 588
+   decision months (41.91% = 246/587).
+   (Superseded: the 41.84% recorded before plan 08-01 divided by months; see F-4.)
    against a 3.60% full-sample rate. That churn feeds the tilt directly and no
    band governs it. The tests below RE-DERIVE the churn from the persisted
    per-step ``state_1`` / ``state_2`` columns and assert it equals the recorded
@@ -137,16 +139,40 @@ class TestFilteredChurnIsReDerivedFromTheCurve:
     @pytest.mark.parametrize("suffix", _SUFFIXES)
     @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
     def test_recorded_rate_equals_count_over_steps(self, suffix, clf):
+        """F-4 (plan 08-01): the rate is denominated in adjacent PAIRS.
+
+        The name is kept for traceability to the plan that moved this pin; the
+        body no longer divides by steps. Before 08-01 this asserted
+        ``n_transitions / n_steps`` -- a correct assertion about an incorrect
+        quantity, since a change is a property of a pair and 588 months carry
+        587 pairs.
+        """
         wf = _diagnostics(suffix)[clf]["walk_forward_filtered"]
         assert wf["n_steps"] == _PINNED_N_STEPS
-        assert wf["transition_rate"] == pytest.approx(wf["n_transitions"] / wf["n_steps"], abs=1e-12)
+        assert wf["n_pairs"] == wf["n_steps"] - 1
+        assert wf["transition_rate"] == pytest.approx(wf["n_transitions"] / wf["n_pairs"], abs=1e-12)
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_recorded_rate_is_not_the_month_denominated_value(self, suffix, clf):
+        """Rejects F-4's old denominator explicitly.
+
+        Without this, the pair-denominated assertion above passes under EITHER
+        denominator whenever the record and the test are changed together -- the
+        failure mode this project has recorded three times. 246/587 and 246/588
+        differ by ~6e-4, far outside the 1e-9 tolerance.
+        """
+        wf = _diagnostics(suffix)[clf]["walk_forward_filtered"]
+        assert wf["transition_rate"] != pytest.approx(wf["n_transitions"] / wf["n_steps"], abs=1e-9), (
+            f"{suffix}/{clf}: the recorded filtered rate divides by MONTHS again (F-4 regression)"
+        )
 
     @pytest.mark.parametrize("clf,pinned", sorted(_PINNED_FILTERED_TRANSITIONS.items()))
     def test_churn_is_pinned_at_its_reported_value(self, clf, pinned):
         """Open item 5's number, pinned. No band governs it -- so it is pinned.
 
         A change here is not necessarily a bug, but it MUST be a deliberate,
-        visible act: the reported 41.84% / 4.08% churn is what the tilt trades
+        visible act: the reported 41.91% / 4.09% churn (246/587, 24/587) is what the tilt trades
         on, and it must not move unnoticed.
         """
         measured = _diagnostics("l1only")[clf]["walk_forward_filtered"]["n_transitions"]
