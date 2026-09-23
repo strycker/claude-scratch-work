@@ -1,0 +1,219 @@
+{
+  "generated_by": "scripts/terminal_month_diagnostic.py (plan 08-02)",
+  "max_lag": 6,
+  "window": {
+    "n_steps": 588,
+    "first_date": "1972-01-31",
+    "last_date": "2020-12-31"
+  },
+  "registry_trials_consumed": 0,
+  "lambda_swept": false,
+  "date_misalignments": [],
+  "classifier_1": {
+    "K": 6,
+    "lambda": 10.0,
+    "d": 10,
+    "lambda_over_d": 1.0,
+    "frozen_columns": [
+      "cape_shiller",
+      "credit_spread_baa_aaa",
+      "curve_10y3m",
+      "div_yield",
+      "oil",
+      "real_rate_level",
+      "realized_vol_1m",
+      "realized_vol_3m",
+      "trailing_return_1m",
+      "trailing_return_3m"
+    ],
+    "n_steps": 588,
+    "n_degraded": 0,
+    "by_lag": [
+      {
+        "k": 1,
+        "n_changes": 246,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.4190800681431005
+      },
+      {
+        "k": 2,
+        "n_changes": 242,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.4122657580919932
+      },
+      {
+        "k": 3,
+        "n_changes": 245,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.41737649063032367
+      },
+      {
+        "k": 4,
+        "n_changes": 248,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.42248722316865417
+      },
+      {
+        "k": 5,
+        "n_changes": 247,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.42078364565587734
+      },
+      {
+        "k": 6,
+        "n_changes": 249,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.424190800681431
+      }
+    ],
+    "fixed_month_revision": [
+      {
+        "k": 2,
+        "n_compared": 587,
+        "n_differs": 237,
+        "rate": 0.403747870528109
+      },
+      {
+        "k": 3,
+        "n_compared": 586,
+        "n_differs": 263,
+        "rate": 0.44880546075085326
+      },
+      {
+        "k": 4,
+        "n_compared": 585,
+        "n_differs": 273,
+        "rate": 0.4666666666666667
+      },
+      {
+        "k": 5,
+        "n_compared": 584,
+        "n_differs": 280,
+        "rate": 0.4794520547945205
+      },
+      {
+        "k": 6,
+        "n_compared": 583,
+        "n_differs": 298,
+        "rate": 0.5111492281303602
+      }
+    ],
+    "anchor": {
+      "k1_matches_tracked_curve": true,
+      "n_mismatched": 0,
+      "n_compared": 588,
+      "tracked_source": "outputs/reports/platform/joint_lift/joint_lift_joint_l1only.parquet",
+      "k1_n_changes": 246,
+      "k1_n_changes_expected": 246
+    }
+  },
+  "classifier_2": {
+    "K": 5,
+    "lambda": 16.0,
+    "d": 8,
+    "lambda_over_d": 2.0,
+    "frozen_columns": [
+      "rs_equities_bonds",
+      "rs_oil_equities",
+      "equities_tr_mom_12m",
+      "long_duration_tr_mom_12m",
+      "oil_mom_12m",
+      "corr_equities_tr_long_duration_tr_24m",
+      "cpi_acceleration",
+      "m2_gdp"
+    ],
+    "n_steps": 588,
+    "n_degraded": 0,
+    "by_lag": [
+      {
+        "k": 1,
+        "n_changes": 24,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.04088586030664395
+      },
+      {
+        "k": 2,
+        "n_changes": 24,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.04088586030664395
+      },
+      {
+        "k": 3,
+        "n_changes": 25,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.04258943781942078
+      },
+      {
+        "k": 4,
+        "n_changes": 24,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.04088586030664395
+      },
+      {
+        "k": 5,
+        "n_changes": 24,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.04088586030664395
+      },
+      {
+        "k": 6,
+        "n_changes": 24,
+        "n_rows": 588,
+        "n_pairs": 587,
+        "rate": 0.04088586030664395
+      }
+    ],
+    "fixed_month_revision": [
+      {
+        "k": 2,
+        "n_compared": 587,
+        "n_differs": 24,
+        "rate": 0.04088586030664395
+      },
+      {
+        "k": 3,
+        "n_compared": 586,
+        "n_differs": 29,
+        "rate": 0.04948805460750853
+      },
+      {
+        "k": 4,
+        "n_compared": 585,
+        "n_differs": 30,
+        "rate": 0.05128205128205128
+      },
+      {
+        "k": 5,
+        "n_compared": 584,
+        "n_differs": 42,
+        "rate": 0.07191780821917808
+      },
+      {
+        "k": 6,
+        "n_compared": 583,
+        "n_differs": 44,
+        "rate": 0.07547169811320754
+      }
+    ],
+    "anchor": {
+      "k1_matches_tracked_curve": true,
+      "n_mismatched": 0,
+      "n_compared": 588,
+      "tracked_source": "outputs/reports/platform/joint_lift/joint_lift_joint_l1only.parquet",
+      "k1_n_changes": 24,
+      "k1_n_changes_expected": 24
+    }
+  },
+  "full_window_run": true
+}
