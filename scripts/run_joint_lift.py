@@ -63,6 +63,7 @@ from trading_crab_lib.platform.backtest.joint_driver import (
 )
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
+from trading_crab_lib.platform.evaluation.churn import write_probability_matrix
 from trading_crab_lib.platform.evaluation.deflated_sharpe import (
     deflated_sharpe_ratio,
     format_dsr_verdict,
@@ -258,6 +259,32 @@ def run(routing_flag: str, *, dry_run: bool, dump_dir: str | None = None) -> dic
         suffix = "l1only" if routing == ROUTING_L1_ONLY else "l2"
         baseline_curve.to_parquet(out / f"joint_lift_baseline_{suffix}.parquet")
         joint_curve.to_parquet(out / f"joint_lift_joint_{suffix}.parquet")
+
+        # ROADMAP criterion 0: the per-step probability matrix the driver
+        # accumulates (joint_driver.py:508-510) reaches disk, so every number
+        # about the nowcaster's filtered path can be RECOMPUTED from an artifact
+        # rather than trusted from a log.
+        #
+        # Only the JOINT leg's matrices are written. The two legs differ solely
+        # in `blend_weight_1`, and the suite already pins that they share the
+        # state path exactly (test_joint_and_baseline_legs_share_the_state_path_exactly),
+        # so a second pair of files would be two names for one object.
+        for clf, per_step in (
+            (1, joint_meta["per_step_metrics_1"]),
+            (2, joint_meta["per_step_metrics_2"]),
+        ):
+            info = write_probability_matrix(
+                per_step, out / f"joint_lift_probs_{clf}_{suffix}.parquet"
+            )
+            # Pitfall 6: a churn rate quoted without its degraded count is not
+            # quotable. The driver appends only on NON-degraded steps, so the
+            # difference below IS the degraded-step count (100 of 588 under l2).
+            log.info(
+                "probability matrix classifier #%d (%s): %d rows of %d steps; "
+                "difference %d = degraded steps -> %s",
+                clf, suffix, info["n_rows"], joint_meta["n_steps"],
+                int(joint_meta["n_steps"]) - info["n_rows"], info["path"],
+            )
 
     lift = joint_lift_table(joint_curve, baseline_curve)
     baseline_kpis = _leg_kpis(baseline_curve, baseline_meta)
