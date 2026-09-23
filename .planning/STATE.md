@@ -528,8 +528,8 @@ Recent decisions affecting current work:
   `scripts/run_joint_lift.py::_leg_kpis` computes `state_{1,2}_transition_rate` as changes /
   `n_steps` (588), not / pairs (587). It feeds the committed `measurement_*.json`, which still
   say **0.418367** while `diagnostics_*.json` now say **0.418980** — two records, same 246 changes,
-  different rates. Natural home: 08-10, which already regenerates both measurement records.
-  A criterion-9 ("recorded counts match reality") item.
+  different rates. **Folded into 08-10 Task 1 — approved by Glenn 2026-09-23.** Source fix and
+  record regeneration land in one commit; a verify accepts /587 and rejects /588 (fails today).
 
 - **(Phase 8, found in 08-01) the l2 leg drifts ~1e-7 across environments, not across runs.**
   Within one container l2 is bit-reproducible run to run; against HEAD's l2 curves (produced in
