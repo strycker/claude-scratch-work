@@ -24,6 +24,7 @@ import pytest
 
 from trading_crab_lib.platform.evaluation.sojourn_lag import (
     build_filtered_probs_matrix,
+    compute_signed_detection_offsets,
     compute_sojourn_lag_headline,
 )
 from trading_crab_lib.platform.honesty.gap_lag import compute_detection_lag, sojourn_lag_ratio
@@ -366,3 +367,123 @@ class TestHeadlinePinOnRealDevInputs:
         out = compute_sojourn_lag_headline(states, probs, act_threshold=record["act_threshold"])
         for key in ("median_sojourn", "median_lag", "ratio", "n_transitions", "n_resolved"):
             assert out[key] == record[key], key
+
+
+# ── Plan 08-06 Task 2: compute_signed_detection_offsets ────────────────────────────
+
+
+def _single_transition_fixture(col_values: list[float], *, i: int = 10, n: int = 20):
+    """States 0 until position i, then state 1. Column 1 is ``col_values``."""
+    idx = pd.date_range("1990-01-31", periods=n, freq="ME")
+    states = pd.Series([0] * i + [1] * (n - i), index=idx)
+    probs = pd.DataFrame({0: [1.0 - v for v in col_values], 1: col_values}, index=idx)
+    return states, probs
+
+
+class TestSignedOffsetAgreesWithDetectionLag:
+    def test_elementwise_equal_where_no_belief_leads(self):
+        """Four transitions, none led: forward lags 2, 1, 3 and one unresolved.
+        Every signed offset must equal compute_detection_lag's answer for the same
+        transition, NaN for NaN. Fails on any divergence in the forward branch."""
+        idx = pd.date_range("1990-01-31", periods=26, freq="ME")
+        # transitions: @6 -> 1, @11 -> 0, @15 -> 2, @20 -> 1
+        states = pd.Series([0] * 6 + [1] * 5 + [0] * 4 + [2] * 5 + [1] * 6, index=idx)
+        col0 = [0.9] * 6 + [0.1] * 6 + [0.8] * 3 + [0.1] * 11  # @11 crosses @12: lag 1
+        col1 = [0.0] * 8 + [0.75] * 3 + [0.0] * 15              # @6 crosses @8: lag 2; @20 never: NaN
+        col2 = [0.0] * 18 + [0.9] * 8                            # @15 crosses @18: lag 3
+        probs = pd.DataFrame({0: col0, 1: col1, 2: col2}, index=idx)
+
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+
+        expected = [
+            compute_detection_lag([pos], probs[s].reindex(states.index), threshold=0.7)["lags"][0]
+            for pos, s in zip(out["positions"], out["target_states"])
+        ]
+        assert out["positions"] == [6, 11, 15, 20]
+        np.testing.assert_array_equal(np.array(out["offsets"]), np.array(expected))
+        np.testing.assert_array_equal(np.array(out["offsets"]), np.array([2.0, 1.0, 3.0, np.nan]))
+        assert out["n_negative"] == 0 and out["n_zero_or_negative"] == 0
+        assert out["min_offset"] == 1.0
+
+    def test_agrees_on_every_transition_of_the_real_dev_inputs(self):
+        """The real l1only inputs: wherever compute_detection_lag is not 0, the signed
+        offset must equal it exactly; where it is 0, the signed offset must be <= 0.
+        Measured 2026-09-23: all 25 transitions have lag >= 1, so all 25 are equal and
+        none leads (min_offset 1.0, median 4.0 — the headline's own median)."""
+        states, probs = _real_dev_inputs()
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.70)
+        assert out["n_transitions"] == 25
+        for pos, s, off in zip(out["positions"], out["target_states"], out["offsets"]):
+            lag = compute_detection_lag([pos], probs[s].reindex(states.index), threshold=0.70)["lags"][0]
+            if lag == 0:
+                assert off <= 0, (pos, s, off)
+            elif np.isnan(lag):
+                assert np.isnan(off), (pos, s, off)
+            else:
+                assert off == lag, (pos, s, off, lag)
+        assert out["median_offset"] == compute_sojourn_lag_headline(states, probs)["median_lag"] == 4.0
+
+
+class TestNegativeOffsetsAreReachable:
+    def test_a_three_month_lead_is_exactly_minus_3(self):
+        """Column 1 is above threshold from i-3 onward; below at i-4. The offset is -3.
+        compute_detection_lag on the same input says 0 — the floor this function exists
+        to remove. Fails if the backward walk is missing (that would read 0 too)."""
+        col = [0.1] * 7 + [0.8] * 13  # i = 10; run starts at 7
+        states, probs = _single_transition_fixture(col)
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [-3.0]
+        assert out["n_negative"] == 1 and out["n_zero_or_negative"] == 1
+        assert out["min_offset"] == -3.0
+        assert compute_detection_lag([10], probs[1], threshold=0.7)["lags"] == [0.0]
+
+    def test_crossing_exactly_at_the_transition_is_zero_not_negative(self):
+        col = [0.1] * 10 + [0.8] * 10
+        states, probs = _single_transition_fixture(col)
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [0.0]
+        assert out["n_negative"] == 0 and out["n_zero_or_negative"] == 1
+
+    def test_the_run_boundary_is_respected(self):
+        """Above at i and i-1, BELOW at i-2, above again at i-5..i-3. The contiguous
+        run containing i starts at i-1, so the offset is -1 — not -5, which a naive
+        'first crossing anywhere before' search would return."""
+        col = [0.1] * 5 + [0.8] * 3 + [0.1] + [0.8] * 11  # i=10: 9,10 above; 8 below; 5..7 above
+        states, probs = _single_transition_fixture(col)
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [-1.0]
+
+    def test_nan_before_the_first_decision_stops_the_walk(self):
+        """Pre-warmup months carry NaN (no filtered row); NaN is never 'at or above'."""
+        idx = pd.date_range("1990-01-31", periods=20, freq="ME")
+        states = pd.Series([0] * 10 + [1] * 10, index=idx)
+        probs = pd.DataFrame({0: [0.1] * 14, 1: [0.9] * 14}, index=idx[6:])  # first row at position 6
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [-4.0]
+
+
+class TestUnresolvedStaysNaN:
+    def test_never_crossing_is_nan_counted_but_excluded_from_the_median(self):
+        idx = pd.date_range("1990-01-31", periods=20, freq="ME")
+        states = pd.Series([0] * 5 + [1] * 5 + [2] * 10, index=idx)
+        probs = pd.DataFrame(
+            {0: [0.9] * 5 + [0.0] * 15, 1: [0.0] * 7 + [0.8] * 3 + [0.0] * 10, 2: [0.3] * 20}, index=idx
+        )
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"][0] == 2.0 and np.isnan(out["offsets"][1])
+        assert out["n_transitions"] == 2 and out["n_resolved"] == 1
+        assert out["median_offset"] == 2.0 and out["min_offset"] == 2.0
+
+    def test_a_target_state_with_no_column_is_nan(self):
+        states, probs = _single_transition_fixture([0.1] * 20)
+        out = compute_signed_detection_offsets(states, probs[[0]], act_threshold=0.7)
+        assert np.isnan(out["offsets"][0]) and out["n_resolved"] == 0
+        assert np.isnan(out["median_offset"]) and np.isnan(out["min_offset"])
+
+
+class TestSignedOffsetReusesTheT012Guard:
+    def test_string_columns_raise_naming_this_function(self):
+        states, probs = _single_transition_fixture([0.1] * 20)
+        probs.columns = ["state_0", "state_1"]
+        with pytest.raises(ValueError, match="compute_signed_detection_offsets: .*CANONICAL INTEGER"):
+            compute_signed_detection_offsets(states, probs)

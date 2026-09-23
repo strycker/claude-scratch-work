@@ -32,10 +32,18 @@ threshold — exactly the "fooled by its own backtest" failure this honesty
 metric exists to prevent. Per-target-state lags are pooled across all
 transitions (grouped by their own target state) before taking the median.
 
+Plan 08-06 adds ONE piece of new arithmetic, and says so:
+``compute_signed_detection_offsets``. ``compute_detection_lag`` searches
+forward only and floors at zero; the signed offset calls it for every
+transition the belief has not already crossed, and walks BACKWARDS through
+the contiguous at-or-above-threshold run only where it has. Both functions
+derive transitions from the same ``_transitions_by_state`` rule.
+
 Usage::
 
     from trading_crab_lib.platform.evaluation.sojourn_lag import (
-        build_filtered_probs_matrix, compute_sojourn_lag_headline,
+        build_filtered_probs_matrix, compute_signed_detection_offsets,
+        compute_sojourn_lag_headline,
     )
 
     filtered_probs_matrix = build_filtered_probs_matrix(per_step_metrics)
@@ -252,6 +260,103 @@ def compute_sojourn_lag_headline(
         "ratio": ratio,
         "n_transitions": n_transitions,
         "n_resolved": n_resolved,
+        "act_threshold": act_threshold,
+    }
+
+
+def compute_signed_detection_offsets(
+    full_sample_states: pd.Series,
+    filtered_probs_matrix: pd.DataFrame,
+    *,
+    act_threshold: float = 0.70,
+) -> dict:
+    """Per-transition SIGNED detection offset — a lag that is allowed to be negative.
+
+    **Why this exists beside** ``compute_detection_lag``: that function searches
+    ``probs.iloc[t:]`` only (``honesty/gap_lag.py:86``), so it floors at zero. A
+    belief that already sat above the threshold *before* the reference transition
+    reads as lag **0** there — indistinguishable from a same-month detection. A
+    causal filtered belief cannot know a transition before the data that reveal
+    it; a smoothed (two-sided) label can and does. The leakage guard
+    (``tests/unit/test_platform_nowcaster_recursion.py``) has to tell those two
+    apart, so it needs a quantity that can go below zero. ``compute_detection_lag``
+    is not changed: its forward-only convention is right for a detection *lag*.
+    This is a different quantity with a different name.
+
+    **Definition.** Transitions come from :func:`_transitions_by_state` — the same
+    rule the headline uses. For a transition at position ``i`` into state ``s``,
+    let ``c`` be ``filtered_probs_matrix[s]`` reindexed onto
+    ``full_sample_states.index`` (dates with no filtered row carry NaN, which never
+    counts as at-or-above the threshold):
+
+    - ``c[i] >= act_threshold``: walk **backwards** to the start ``j`` of the
+      contiguous at-or-above-threshold run containing ``i``; the offset is
+      ``j - i <= 0``. Only the run containing ``i`` counts — an earlier, separate
+      excursion above the threshold is not a lead on this transition. A run that
+      reaches the first observed row is truncated there, so the offset is then the
+      most negative value the data can show.
+    - otherwise: the offset is ``compute_detection_lag``'s own answer for that
+      transition (called, not reimplemented), which is ``>= 1`` or NaN.
+
+    Unresolved (NaN) transitions — the column never crosses at or after ``i``, or
+    ``s`` has no column at all — are counted in ``n_transitions`` and excluded from
+    ``median_offset``/``min_offset``, the same convention ``compute_detection_lag``
+    documents.
+
+    Returns:
+        dict with ``offsets`` (list, chronological order), ``positions`` and
+        ``target_states`` (parallel lists), ``per_state`` (state -> offsets),
+        ``n_transitions``, ``n_resolved``, ``min_offset``, ``median_offset``,
+        ``n_negative`` (offset < 0), ``n_zero_or_negative`` (offset <= 0),
+        ``act_threshold``.
+
+    Raises:
+        ValueError: on a non-integer-keyed matrix (the shared T0.12 guard).
+    """
+    _require_integer_state_columns(filtered_probs_matrix, caller="compute_signed_detection_offsets")
+    states_arr = np.asarray(full_sample_states)
+    transitions_by_state = _transitions_by_state(states_arr)
+
+    by_position: dict[int, tuple[int, float]] = {}
+    per_state: dict[int, list[float]] = {}
+    for target_state, positions in transitions_by_state.items():
+        if target_state not in filtered_probs_matrix.columns:
+            offsets = [float("nan")] * len(positions)
+        else:
+            own_column = filtered_probs_matrix[target_state].reindex(full_sample_states.index)
+            forward = compute_detection_lag(positions, own_column, threshold=act_threshold)["lags"]
+            values = own_column.to_numpy(dtype=float)
+            offsets = []
+            for i, lag in zip(positions, forward):
+                if values[i] >= act_threshold:
+                    # The backward walk. compute_detection_lag (gap_lag.py:86) would
+                    # report 0 here whether the belief crossed this month or crossed
+                    # months ago; the guard needs to know which. Walk back to the
+                    # start of the contiguous at-or-above run that contains i.
+                    j = i
+                    while j - 1 >= 0 and values[j - 1] >= act_threshold:
+                        j -= 1
+                    offsets.append(float(j - i))
+                else:
+                    offsets.append(float(lag))
+        per_state[target_state] = offsets
+        for i, off in zip(positions, offsets):
+            by_position[i] = (target_state, off)
+
+    ordered = sorted(by_position)
+    all_offsets = [by_position[i][1] for i in ordered]
+    resolved = [o for o in all_offsets if not np.isnan(o)]
+    return {
+        "offsets": all_offsets,
+        "positions": ordered,
+        "target_states": [by_position[i][0] for i in ordered],
+        "per_state": per_state,
+        "n_transitions": len(all_offsets),
+        "n_resolved": len(resolved),
+        "min_offset": float(min(resolved)) if resolved else float("nan"),
+        "median_offset": float(np.median(resolved)) if resolved else float("nan"),
+        "n_negative": sum(1 for o in resolved if o < 0),
+        "n_zero_or_negative": sum(1 for o in resolved if o <= 0),
         "act_threshold": act_threshold,
     }
 
