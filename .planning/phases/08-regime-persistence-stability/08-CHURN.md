@@ -198,12 +198,24 @@ the month immediately before one LEAD's reference transition.
 | 1995-03-31 | 387 (offset −12) | 209 | bit-identical, max diff 0.0 | bit-identical, max diff 0.0 |
 | 2012-08-31 | 596 (offset −31) | 407 | bit-identical, max diff 0.0 | bit-identical, max diff 0.0 |
 
-**Why three cutoffs rule out a leak everywhere, not just at three months:** the driver runs
-the same code at every step, so a code path reading *j* months ahead would read ahead at every
-step, and any truncation would perturb the last *j* months before it. All months ≤ T are
-identical — including month T itself — at three independent cutoffs, so no lookahead of any
-size exists. **Every belief value that produced each LEAD was computed from data dated at or
-before that LEAD.** Registry 42 before and after; nothing tracked was written by the runs.
+**What three cutoffs establish — and, corrected the same day, what they do not.**
+- **Structural lookahead — ruled out everywhere.** The driver runs the same code at every
+  step, so a code path that *reads* rows *j* months ahead would do so at every step, and any
+  truncation would perturb the last *j* months before it. All months ≤ T — including month T
+  — are identical at three independent cutoffs, so no structural read-ahead of any size exists.
+- **Smoothing-type influence — ruled out at the three LEADs, not everywhere.** A two-sided
+  decode leaks future into past only where the evidence is ambiguous. Measured on 08-06's
+  synthetic world: Arm 2's smoothed substitution breaks invariance at cuts 13, 44 and 68 (the
+  month before each led turn) and is **invariant at arbitrary cuts 30, 60, 90 and 110**. Each
+  real-data cutoff here sits at the month before a LEAD — exactly where such a leak would have
+  manufactured it — so **every belief value that produced each of the three LEADs was computed
+  from data dated at or before that LEAD.** A claim that no smoothing-type influence exists at
+  *any* month would need a cut at every month; the unit-suite guard does that on the synthetic
+  world, and the real-data runs do not.
+
+An earlier version of this section said the three cutoffs rule out "a leak everywhere". That
+over-claimed for smoothing-type influence and is corrected above. Registry 42 before and after;
+nothing tracked was written by the runs.
 
 ### 5.2 Candidate (c), label disagreement — CONFIRMED for classifier #2
 
