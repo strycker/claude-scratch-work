@@ -89,7 +89,7 @@ measured by the other's metric.
 - [ ] **PER-05**: §5.3's hysteresis gates allocation, closing audit item A7, evaluated only after
   the probability vector stops being degenerate; the mechanism and the 0.70/0.40 pair are human
   decisions, not planner choices (criterion 4; design §5.3)
-- [ ] **PER-06**: §4.4 criterion 3 is RUN for both classifiers under four subsample schemes —
+- [x] **PER-06**: §4.4 criterion 3 is RUN for both classifiers under four subsample schemes —
   drop first decade, drop last decade, circular block bootstrap, and leave-one-episode-out — using
   centroid distance in de-standardized units with Hungarian matching, a within-state split-half
   null at the same n, and subsample occupancy on every row (criterion 5; design §4.4)
@@ -243,7 +243,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PER-03 | Phase 8 | Pending |
 | PER-04 | Phase 8 | Complete |
 | PER-05 | Phase 8 | Pending |
-| PER-06 | Phase 8 | Pending |
+| PER-06 | Phase 8 | Complete (named limitation: `evaporated` flag inert under K-fixed refits) |
 | PER-07 | Phase 8 | Pending |
 | PER-08 | Phase 8 | Complete |
 | PER-09 | Phase 8 | Complete |

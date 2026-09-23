@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
 status: executing
-stopped_at: Phase 8 wave 1 complete (5/10 plans); wave 2 (08-06, 08-07) next
+stopped_at: Phase 8 waves 1-2 complete (7/10 plans); wave 3 (08-08) next
 last_updated: "2026-09-23T00:00:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 52
+  completed_plans: 54
 current_phase: 8
 last_activity: 2026-09-23
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
@@ -29,7 +29,13 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **8 — Regime Persistence & Stability — EXECUTING**
-Status: **WAVE 1 COMPLETE (5 of 10 plans).** Next: wave 2 — `08-06` (Bayes filter + signed
+Status: **WAVES 1-2 COMPLETE (7 of 10 plans).** Wave 2 (2026-09-23): 08-06 built the zero-parameter
+Bayes filter and the signed detection offset; 08-07 RAN §4.4 criterion 3 for both classifiers
+(PER-06 closed, with a named limitation — see Pending Todos). Suite 2212 passed, 0 skipped.
+Registry 42. Next: wave 3 — `08-08` wires the filter in, under the held-through-return rule
+pre-registered 2026-09-23 before any real 08-08 number existed.
+
+**Wave 1 as closed:** **WAVE 1 COMPLETE (5 of 10 plans).** Next: wave 2 — `08-06` (Bayes filter + signed
 detection offset, dep 08-01) and `08-07` (§4.4 criterion 3 run, dep 08-03). Both autonomous.
 Full suite **2150 passed, 0 skipped, 0 failed**; ruff/flake8 clean; both wheels build and ship
 `evaluation/churn.py` + `labeling/stability.py`. Registry **42 of 44**. Ratchet **31**.
@@ -523,6 +529,31 @@ Recent decisions affecting current work:
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
 
 ### Pending Todos
+
+- **(Phase 8, found in 08-07 — decision needed) the `evaporated` flag cannot fire under a K-fixed
+  refit.** It is built from the subsample state's occupancy, and the refit always repopulates
+  every one of the K slots. Measured: **36 rows** where every one of the reference state's months
+  is absent from the subsample; **0** flagged. That is the exact failure criterion 5 built the
+  flag to catch ("would otherwise score an evaporated state as stable") — a check that can only
+  confirm. The true signal is carried in every row as `reference_months_in_subsample` (and
+  `partner_overlap_months`). Recommended: redefine `evaporated` as `reference_months_in_subsample
+  == 0`, which needs 08-07's artifacts regenerated. Not changed — it is a definition, not a typo.
+
+- **(Phase 8, found in 08-07, NOT fixed — no committed number affected) `stability.run_stability`
+  keys rows on the reference state id.** `matched_distance[state]` is the distance to
+  `assignment[state]`, but occupancy, split-half null and episodes are read from the subsample
+  state carrying the *same id* — two different states in one row whenever the Hungarian
+  assignment is not the identity, which for classifier #1 is every scheme. 08-03's tests only
+  exercised identity assignments. 08-07's runner composes the public functions keyed on the
+  partner and is correct; the defective function is called only by its own `__main__` footer and
+  tests. Fix: key on `assignment[state]`, with a non-identity fixture that fails first.
+
+- **(Phase 8, verified 2026-09-23 — no leak, but unguarded) `run_joint_lift.build_inputs` derives
+  features on the uncut `monthly_raw` (68 post-2020 rows).** Verified: `add_relative_features`,
+  `build_core_research_series` and `compute_monthly_returns` give pre-2021 values **identical**
+  (max |diff| 0.0, identical NaN pattern, 708 rows) whether computed on the full or carved frame,
+  so criterion 7 is clean. The safety is incidental — it holds because each is backward-looking.
+  Recommended: a test pinning that invariance, so a future full-sample transform fails loudly.
 
 - **(Phase 8, found in 08-06, NOT fixed — predates the phase) the sojourn/lag headline counts
   transitions the platform could never have acted on.** `compute_detection_lag`'s forward search

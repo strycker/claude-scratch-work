@@ -623,8 +623,8 @@ wave 4.
 
 **Wave 2** *(08-06 blocked on 08-01; 08-07 blocked on 08-03)*
 
-- [ ] 08-06-PLAN.md — The explicit Bayes filter (no training column at all) plus the **signed** detection offset, and the leakage guard whose substituted arm proves it discriminates *(PER-02)*
-- [ ] 08-07-PLAN.md — Run §4.4 criterion 3 for both classifiers under all four schemes; write the record with the pre-registered prediction quoted from its commit *(PER-06)*
+- [x] 08-06-PLAN.md — The explicit Bayes filter (no training column at all) plus the **signed** detection offset, and the leakage guard whose substituted arm proves it discriminates *(PER-02)*
+- [x] 08-07-PLAN.md — Run §4.4 criterion 3 for both classifiers under all four schemes; write the record with the pre-registered prediction quoted from its commit *(PER-06)*
 
 **Wave 3** *(blocked on 08-06)*
 
@@ -689,5 +689,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
-| 8. Regime Persistence & Stability | 5/10 | In progress — wave 1 complete; A11 answered (b-promote-dsr); Track A edge artefact refuted | wave 1: 2026-09-23 |
+| 8. Regime Persistence & Stability | 7/10 | In progress — waves 1-2 complete; A11 answered (b-promote-dsr); Track A edge artefact refuted; §4.4 criterion 3 run | wave 2: 2026-09-23 |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
