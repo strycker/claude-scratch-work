@@ -31,6 +31,26 @@ plan's ``must_haves``):
   (``TestAblationSkipInvariant`` proves skip=True == skip=False
   byte-for-byte).
 
+**The Bayes filter (plan 08-08, ROADMAP criterion 1).** With
+``use_regime_filter=True`` (the default) the nowcaster's raw posterior is filtered
+into a belief — ``prediction/regime_filter.py``'s ``π_t ∝ [π_{t−1} A] · L_t`` —
+carried across steps as a LOOP VARIABLE (``prev_belief``). ``A`` and the class
+prior come from the step's own in-window labels; the cold start is
+``unconditional_belief`` on those labels, the SAME function object
+``joint_driver.py`` and ``report/weekly.py`` use (a cold start that differed
+between train and serve would itself be train/serve skew). The **belief** is what
+``update_active_regime`` and ``vol_targeted_tilt`` consume. The raw posterior is
+still accumulated into ``per_step_metrics["proba"]`` so raw-posterior churn stays
+measurable as a control; the belief goes into ``per_step_metrics["belief"]`` /
+``["belief_classes"]`` (empty when the filter is off). There are no in-window labels
+on a degraded step here (L1 and L2 share one try), so there is no ``A`` to advance
+by and the belief is held with a WARNING (``joint_driver.py``, whose L1 labels
+survive an L2 degrade, advances by ``predict_only_step`` instead). The filter is not
+applied on the ``use_regime_tilt=False`` ablation, whose constant one-state vector
+is not a posterior. Known approximation (plan 08-06): the class prior is the whole
+in-window label distribution, while the nowcaster trains on the D-01 embargoed
+subset — slightly different priors, stated rather than absorbed.
+
 Exactly one registry trial is logged per full run (mirroring, not
 duplicating, ``run_walkforward``'s single-trial convention) — this loop is
 NOT a call to ``run_walkforward`` (A1: the per-step body is new code; only
@@ -77,6 +97,11 @@ from trading_crab_lib.platform.labeling.jump_model import (
     standardize_features,
 )
 from trading_crab_lib.platform.prediction.nowcaster import build_nowcaster_training_set, fit_nowcaster
+from trading_crab_lib.platform.prediction.regime_filter import (
+    filter_step,
+    transition_matrix_for,
+    unconditional_belief,
+)
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
@@ -333,6 +358,7 @@ def run_backtest(
     registry_path: Any = None,
     frozen_l1_features: list[str] | None = None,
     trial_tag: str | None = None,
+    use_regime_filter: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """Run the L1->L4 expanding-window walk-forward loop, log exactly one trial.
 
@@ -389,14 +415,19 @@ def run_backtest(
             deduplicates identical configs (confirmed against
             ``registry/trials.jsonl``, where several adjacent rows share an
             identical ``config`` payload) — the tag is provenance, not a key.
+        use_regime_filter: filter the posterior into a belief and hand the
+            belief to the hysteresis and the tilt (plan 08-08). ``False``
+            reproduces the pre-08-08 curve exactly.
 
     Returns:
         tuple[pd.DataFrame, dict[str, list]]: ``(equity_curve, per_step_metrics)``.
         ``equity_curve`` is indexed by decision date with columns
         ``return``, ``turnover``, ``cost``, ``active_regime``, ``scale``,
         ``degraded``. ``per_step_metrics`` has keys ``dates``, ``proba``,
-        ``classes`` — NO loop-sourced ``y_true`` (review F2); the report
-        layer joins ``y_true`` from the smoothed reference by date.
+        ``classes`` (the RAW posterior) and ``belief``, ``belief_classes`` (the
+        filtered belief; empty when the filter did not run) — NO loop-sourced
+        ``y_true`` (review F2); the report layer joins ``y_true`` from the
+        smoothed reference by date.
     """
     backtest_cfg = cfg.get("backtest", {})
     if min_train is None:
@@ -419,7 +450,13 @@ def run_backtest(
     dev_asset_returns, _ = split_by_holdout_boundary(asset_returns, cutoff=DEFAULT_HOLDOUT_CUTOFF)
 
     records: list[dict[str, Any]] = []
-    per_step_metrics: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    per_step_metrics: dict[str, list] = {
+        "dates": [], "proba": [], "classes": [], "belief": [], "belief_classes": [],
+    }
+    # The filter's recursion state — a LOOP VARIABLE, not a feature (plan 08-08).
+    prev_belief: pd.Series | None = None
+    state_index = list(range(int(cfg.get("labeling", {}).get("K", 5))))
+    apply_filter = use_regime_filter and use_regime_tilt
 
     prev_weights: pd.Series = pd.Series(dtype=float)
     prev_active_regime: int | None = None
@@ -482,6 +519,20 @@ def run_backtest(
                 states = pd.Series(dtype=float)
                 regime_probs = pd.Series(dtype=float)
 
+        belief = regime_probs  # what the allocator consumes
+        if apply_filter:
+            if degraded:
+                if prev_belief is not None:
+                    log.warning(
+                        "Step %s: degraded step has no in-window labels — holding the filtered "
+                        "belief unchanged (no A to advance by)", t,
+                    )
+            else:
+                prior = unconditional_belief(states, state_index=state_index)
+                transition = transition_matrix_for(states, state_index=state_index)
+                belief = filter_step(prior if prev_belief is None else prev_belief, transition, regime_probs, prior)
+                prev_belief = belief
+
         if degraded:
             new_weights = prev_weights
             new_active_regime = prev_active_regime
@@ -489,13 +540,13 @@ def run_backtest(
         else:
             stats = returns_by_regime_stats(dev_asset_returns.loc[train_index], states)
             new_active_regime = update_active_regime(
-                regime_probs,
+                belief,
                 prev_active_regime,
                 act_threshold=act_threshold,
                 unwind_threshold=unwind_threshold,
             )
             tilt = vol_targeted_tilt(
-                regime_probs,
+                belief,
                 stats,
                 dev_asset_returns.loc[train_index],
                 target_vol_annual=target_vol_annual,
@@ -530,6 +581,9 @@ def run_backtest(
             per_step_metrics["dates"].append(t)
             per_step_metrics["proba"].append(regime_probs.values)
             per_step_metrics["classes"].append(list(regime_probs.index))
+            if apply_filter:
+                per_step_metrics["belief"].append(belief.values)
+                per_step_metrics["belief_classes"].append(list(belief.index))
 
         prev_weights = new_weights
         prev_active_regime = new_active_regime

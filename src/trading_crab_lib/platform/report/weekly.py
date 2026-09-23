@@ -23,6 +23,23 @@ the new state (load-before-save order, Pitfall 3) — all isolated in
 ``_build_report_inputs()`` so it can be swapped out in tests without real
 Phase 1/3 checkpoint data on disk.
 
+**The Bayes filter at serve (plan 08-08).** The nowcaster's posterior is filtered
+into a belief (``prediction/regime_filter.py``) before the hysteresis and the tilt
+see it — the same recursion ``backtest/driver.py`` and ``joint_driver.py`` run in
+their loops, so the allocator consumes the same kind of object at train and serve.
+The belief persists across runs in the ``regime_belief`` checkpoint, loaded BEFORE
+it is saved (the Pitfall 3 ordering the hysteresis state uses), in the same block
+as the hysteresis and immediately before it. The cold start — no checkpoint, or a
+persisted null — is ``unconditional_belief`` on the ``regime_labels`` the nowcaster
+was trained on: the SAME function object the drivers use, because a cold start that
+differed between train and serve would itself be train/serve skew. ``A`` is
+``transition_matrix_for`` on those labels. One filter step is one MONTH: the belief
+carries the as-of date of the feature row it absorbed, a weekly re-run inside the
+same month reuses it unchanged (re-filtering would count the same month's evidence
+again), and a gap of several months advances by ``predict_only_step`` for each
+unobserved month. Known approximation (plan 08-06): the class prior is the whole
+label series' distribution, while the nowcaster trains on the D-01 embargoed subset.
+
 Usage::
 
     python3 -m trading_crab_lib.platform.report.weekly [--send-email]
@@ -47,6 +64,12 @@ from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty.holdout import load_full_span
+from trading_crab_lib.platform.prediction.regime_filter import (
+    filter_step,
+    predict_only_step,
+    transition_matrix_for,
+    unconditional_belief,
+)
 from trading_crab_lib.platform.prediction.transition_matrix import empirical_transition_matrix
 from trading_crab_lib.platform.report.holdings import load_account_weights
 
@@ -56,6 +79,87 @@ log = logging.getLogger(__name__)
 # `report:` section) — used only when cfg omits the key (defensive .get() pattern).
 _DEFAULT_TRADE_THRESHOLD_PCT = 0.03
 _DEFAULT_MIN_OBS_FLAG = 6
+
+_BELIEF_CHECKPOINT = "regime_belief"
+
+
+def load_regime_belief(cm=None) -> pd.Series | None:
+    """Load the previous run's filtered regime belief. Cold start (no checkpoint yet,
+    or a persisted null) returns None — the caller then uses ``unconditional_belief``.
+
+    The returned Series is indexed by integer state and its ``name`` is the as-of
+    month (``pd.Timestamp``) of the feature row it absorbed, or None if unrecorded.
+    """
+    cm = cm or get_platform_checkpoint_manager()
+    try:
+        frame = cm.load(_BELIEF_CHECKPOINT)
+    except FileNotFoundError:
+        return None
+    if frame.empty or frame["belief"].isna().all() or frame["state"].isna().all():
+        return None
+    belief = pd.Series(frame["belief"].to_numpy(dtype=float), index=[int(v) for v in frame["state"]])
+    as_of = frame["as_of"].iloc[0] if "as_of" in frame.columns else None
+    belief.name = None if as_of is None or pd.isna(as_of) else pd.Timestamp(as_of)
+    return belief
+
+
+def save_regime_belief(belief: pd.Series | None, cm=None, *, as_of: pd.Timestamp | None = None) -> None:
+    """Persist the filtered belief (or None) with the as-of month it absorbed."""
+    cm = cm or get_platform_checkpoint_manager()
+    if belief is None:
+        frame = pd.DataFrame([{"state": None, "belief": None, "as_of": as_of}])
+    else:
+        frame = pd.DataFrame({
+            "state": [int(v) for v in belief.index],
+            "belief": belief.to_numpy(dtype=float),
+            "as_of": [as_of] * len(belief),
+        })
+    cm.save(frame, _BELIEF_CHECKPOINT)
+
+
+def _months_between(earlier: pd.Timestamp, later: pd.Timestamp) -> int:
+    return (later.year - earlier.year) * 12 + (later.month - earlier.month)
+
+
+def advance_regime_belief(
+    prev_belief: pd.Series | None,
+    regime_labels: pd.Series,
+    regime_probs: pd.Series,
+    *,
+    state_index: list[int],
+    as_of: pd.Timestamp,
+) -> pd.Series:
+    """This run's belief from the loaded one: cold start, same-month reuse, or filter.
+
+    - no previous belief (or its states differ from ``state_index``): cold start from
+      ``unconditional_belief(regime_labels)`` — the drivers' rule — then one filter step;
+    - previous belief already absorbed ``as_of``: returned unchanged (no double count);
+    - otherwise ``predict_only_step`` once per unobserved month in between, then one
+      ``filter_step`` with this month's posterior.
+    """
+    prior = unconditional_belief(regime_labels, state_index=state_index)
+    transition = transition_matrix_for(regime_labels, state_index=state_index)
+    start = prior
+    if prev_belief is not None and sorted(int(v) for v in prev_belief.index) == sorted(state_index):
+        prev_as_of = prev_belief.name
+        if prev_as_of is not None and _months_between(pd.Timestamp(prev_as_of), as_of) == 0:
+            return prev_belief.rename(None)
+        if prev_as_of is not None and _months_between(pd.Timestamp(prev_as_of), as_of) < 0:
+            log.warning(
+                "regime_belief checkpoint is dated %s, after this run's %s — cold-starting the filter",
+                prev_as_of, as_of,
+            )
+        else:
+            start = prev_belief.rename(None)
+            gap = 1 if prev_as_of is None else _months_between(pd.Timestamp(prev_as_of), as_of)
+            for _ in range(gap - 1):
+                start = predict_only_step(start, transition)
+    elif prev_belief is not None:
+        log.warning(
+            "regime_belief checkpoint covers states %s, not %s — cold-starting the filter",
+            list(prev_belief.index), state_index,
+        )
+    return filter_step(start, transition, regime_probs, prior)
 
 
 def trades_implied(
@@ -98,6 +202,7 @@ def assemble_weekly_report(
     returns_by_regime: pd.DataFrame,
     target_weights: pd.Series,
     accounts: list[str],
+    regime_belief: pd.Series | dict | None = None,
     cash: float | None = None,
     accounts_dir: Path | None = None,
     min_obs_flag: int = _DEFAULT_MIN_OBS_FLAG,
@@ -127,6 +232,18 @@ def assemble_weekly_report(
         for regime_id, p in probs.sort_values(ascending=False).items():
             lines.append(f"- regime {regime_id}: {p:.1%}")
     lines.append("")
+    # ponytail: plan 08-08 only SHOWS the filtered belief beside the raw posterior —
+    # the belief is what the hysteresis and the tilt consumed. This section still
+    # recomputes its own probs.idxmax() above and narrates a hysteresis state machine
+    # whose output it does not show; passing the hysteresis output in instead is the
+    # full §5.3 correction and belongs to plan 08-09.
+    if regime_belief is not None:
+        belief = pd.Series(regime_belief, dtype=float)
+        lines.append("## Filtered Regime Belief (what the allocation consumed)")
+        lines.append("")
+        for regime_id, p in belief.sort_values(ascending=False).items():
+            lines.append(f"- regime {regime_id}: {p:.1%}")
+        lines.append("")
 
     # ── 2. Trajectory (empirical transition matrix) ───────────────────────
     lines.append("## Trajectory (Empirical Transition Matrix)")
@@ -216,7 +333,8 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     asset_returns) on disk.
 
     Returns:
-        dict with keys ``regime_probs``, ``transition_matrix``,
+        dict with keys ``regime_probs`` (raw posterior), ``regime_belief``
+        (the filtered belief the allocation consumed), ``transition_matrix``,
         ``returns_by_regime``, ``target_weights``, ``cash``.
     """
     cm = cm or get_platform_checkpoint_manager()
@@ -237,9 +355,19 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     allocation_cfg = cfg.get("allocation", {})
     hysteresis_cfg = allocation_cfg.get("hysteresis", {})
 
+    # Bayes filter (plan 08-08): load BEFORE save, immediately before the hysteresis,
+    # so the belief the hysteresis sees is this run's.
+    state_index = list(range(int(cfg.get("labeling", {}).get("K", 5))))
+    as_of = pd.Timestamp(monthly_features.index[-1])
+    prev_belief = load_regime_belief(cm)  # load BEFORE save (Pitfall 3)
+    regime_belief = advance_regime_belief(
+        prev_belief, regime_labels, regime_probs, state_index=state_index, as_of=as_of
+    )
+    save_regime_belief(regime_belief, cm, as_of=as_of)  # save AFTER load
+
     prev_active = load_active_regime(cm)  # load BEFORE save (Pitfall 3)
     active_regime = update_active_regime(
-        regime_probs,
+        regime_belief,
         prev_active,
         act_threshold=hysteresis_cfg.get("act_threshold", 0.70),
         unwind_threshold=hysteresis_cfg.get("unwind_threshold", 0.40),
@@ -247,7 +375,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     save_active_regime(active_regime, cm)  # save AFTER load
 
     tilt = vol_targeted_tilt(
-        regime_probs,
+        regime_belief,
         returns_by_regime,
         asset_returns,
         target_vol_annual=allocation_cfg.get("target_vol_annual", 0.10),
@@ -257,6 +385,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
 
     return {
         "regime_probs": regime_probs,
+        "regime_belief": regime_belief,
         "transition_matrix": empirical_transition_matrix(regime_labels),
         "returns_by_regime": returns_by_regime,
         "target_weights": tilt["weights"],
@@ -290,6 +419,7 @@ def main(argv: list[str] | None = None) -> int:
     inputs = _build_report_inputs(cfg)
     markdown = assemble_weekly_report(
         regime_probs=inputs["regime_probs"],
+        regime_belief=inputs.get("regime_belief"),
         transition_matrix=inputs["transition_matrix"],
         returns_by_regime=inputs["returns_by_regime"],
         target_weights=inputs["target_weights"],

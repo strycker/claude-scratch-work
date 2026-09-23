@@ -215,3 +215,146 @@ class TestReuseConventions:
         assert "trading_crab_lib.reporting" not in source
         assert "import load_portfolio" not in source
         assert "from trading_crab_lib.config import" not in source
+
+
+# ── the Bayes filter at serve (plan 08-08) ──────────────────────────────────
+
+
+class _FakeNowcaster:
+    classes_ = [0, 1, 2]
+
+    def predict_proba(self, row):
+        return [[0.30, 0.45, 0.25]]
+
+
+def _serve_env(monkeypatch, tmp_path, *, as_of: str = "2026-08-31"):
+    """A real CheckpointManager in tmp_path plus in-memory inputs for _build_report_inputs.
+
+    ``regime_labels`` is deliberately NON-uniform (state 0 dominates), so the filtered
+    belief cannot coincide with the raw posterior by accident of a flat prior.
+    """
+    from trading_crab_lib.checkpoints import CheckpointManager
+
+    cm = CheckpointManager(checkpoint_dir=tmp_path / "cp")
+    idx = pd.date_range("2020-01-31", as_of, freq="ME")
+    labels = pd.Series(([0] * 12 + [1] * 4 + [2] * 3) * (len(idx) // 19 + 1), dtype=int).iloc[: len(idx)]
+    labels.index = idx
+    frames = {
+        "regime_labels": pd.DataFrame({"state": labels}),
+        "returns_by_regime": pd.DataFrame(
+            {
+                "regime": [0, 0, 1, 1, 2, 2],
+                "asset": ["SPY", "TLT"] * 3,
+                "mean_monthly_return": [0.01, 0.0, -0.01, 0.01, 0.0, 0.005],
+                "sharpe_annualized": [1.0, 0.2, -0.5, 0.8, 0.1, 0.6],
+                "n_obs": [30] * 6,
+            }
+        ),
+        "asset_returns": pd.DataFrame({"SPY": [0.01, -0.02] * 20, "TLT": [0.0, 0.01] * 20},
+                                      index=pd.date_range("2023-01-31", periods=40, freq="ME")),
+    }
+    real_load = cm.load
+
+    def load(name):
+        return frames[name] if name in frames else real_load(name)
+
+    monkeypatch.setattr(cm, "load", load)
+    monkeypatch.setattr(cm, "load_model", lambda name: _FakeNowcaster())
+    monkeypatch.setattr(weekly, "load_full_span", lambda name: pd.DataFrame({"x": range(len(idx))}, index=idx))
+    cfg = {"labeling": {"K": 3}, "allocation": {"ewma_halflife_months": 6, "portfolio_vol_min_obs": 3}}
+    return cm, cfg, labels
+
+
+class TestRegimeBeliefAtServe:
+    def test_one_cold_start_rule_across_all_three_modules(self):
+        """Asserted on the RESOLVED FUNCTION OBJECT, not by grep — a grep passes on a
+        copied implementation. A divergent cold start is the only way train/serve skew
+        can enter this design."""
+        import trading_crab_lib.platform.backtest.driver as d
+        import trading_crab_lib.platform.backtest.joint_driver as j
+        from trading_crab_lib.platform.prediction import regime_filter
+
+        for module in (d, j, weekly):
+            assert getattr(module, "unconditional_belief", None) is regime_filter.unconditional_belief, module.__name__
+
+    def test_cold_start_calls_the_shared_helper_and_the_tilt_gets_the_belief(self, monkeypatch, tmp_path):
+        cm, cfg, labels = _serve_env(monkeypatch, tmp_path)
+        cold, tilt, hyst = [], [], []
+        real_ub, real_tilt, real_hyst = weekly.unconditional_belief, weekly.vol_targeted_tilt, weekly.update_active_regime
+        monkeypatch.setattr(weekly, "unconditional_belief", lambda *a, **k: cold.append(a) or real_ub(*a, **k))
+        monkeypatch.setattr(weekly, "vol_targeted_tilt", lambda p, *a, **k: tilt.append(p) or real_tilt(p, *a, **k))
+        monkeypatch.setattr(weekly, "update_active_regime", lambda p, *a, **k: hyst.append(p) or real_hyst(p, *a, **k))
+
+        out = weekly._build_report_inputs(cfg, cm)
+
+        assert len(cold) == 1 and cold[0][0].equals(labels)
+        belief, raw = out["regime_belief"], out["regime_probs"]
+        from trading_crab_lib.platform.prediction.regime_filter import (
+            filter_step,
+            transition_matrix_for,
+            unconditional_belief,
+        )
+
+        prior = unconditional_belief(labels, state_index=[0, 1, 2])
+        assert not prior.round(9).eq(1 / 3).all(), "fixture prior is uniform; it cannot discriminate"
+        expected = filter_step(prior, transition_matrix_for(labels, state_index=[0, 1, 2]), raw, prior)
+        pd.testing.assert_series_equal(belief, expected)
+        assert (belief - raw.reindex(belief.index)).abs().max() > 1e-6, "belief equals the raw posterior"
+        assert len(tilt) == 1 and tilt[0] is belief, "vol_targeted_tilt must receive the filtered belief"
+        assert len(hyst) == 1 and hyst[0] is belief, "the hysteresis must see this run's belief"
+
+    def test_load_before_save_the_run_filters_from_the_LOADED_belief(self, monkeypatch, tmp_path):
+        cm, cfg, labels = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        loaded = pd.Series({0: 0.1, 1: 0.1, 2: 0.8})
+        weekly.save_regime_belief(loaded, cm, as_of=pd.Timestamp("2026-07-31"))
+        starts = []
+        real_filter = weekly.filter_step
+        monkeypatch.setattr(weekly, "filter_step", lambda b, *a: starts.append(b.copy()) or real_filter(b, *a))
+
+        out = weekly._build_report_inputs(cfg, cm)
+
+        assert len(starts) == 1
+        pd.testing.assert_series_equal(starts[0], loaded, check_names=False)
+        saved = weekly.load_regime_belief(cm)
+        pd.testing.assert_series_equal(saved, out["regime_belief"], check_names=False)
+        assert saved.name == pd.Timestamp("2026-08-31")
+        assert not starts[0].equals(saved.rename(None)), "the start must be the loaded belief, not the one just saved"
+
+    def test_a_weekly_rerun_in_the_same_month_does_not_double_count(self, monkeypatch, tmp_path):
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path)
+        first = weekly._build_report_inputs(cfg, cm)["regime_belief"]
+        calls = []
+        real_filter = weekly.filter_step
+        monkeypatch.setattr(weekly, "filter_step", lambda *a: calls.append(a) or real_filter(*a))
+        second = weekly._build_report_inputs(cfg, cm)["regime_belief"]
+        assert calls == []
+        pd.testing.assert_series_equal(first, second)
+
+    def test_a_multi_month_gap_advances_by_predict_only_per_missing_month(self, monkeypatch, tmp_path):
+        cm, cfg, labels = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        weekly.save_regime_belief(pd.Series({0: 0.1, 1: 0.1, 2: 0.8}), cm, as_of=pd.Timestamp("2026-05-31"))
+        calls = []
+        real_pos = weekly.predict_only_step
+        monkeypatch.setattr(weekly, "predict_only_step", lambda *a: calls.append(a) or real_pos(*a))
+        weekly._build_report_inputs(cfg, cm)
+        assert len(calls) == 2  # June and July unobserved; August filtered
+
+    def test_persisted_null_and_missing_checkpoint_are_cold_starts(self, tmp_path):
+        from trading_crab_lib.checkpoints import CheckpointManager
+
+        cm = CheckpointManager(checkpoint_dir=tmp_path / "cp")
+        assert weekly.load_regime_belief(cm) is None
+        weekly.save_regime_belief(None, cm)
+        assert weekly.load_regime_belief(cm) is None
+
+    def test_the_report_shows_the_belief_beside_the_raw_posterior(self, tmp_path):
+        md = weekly.assemble_weekly_report(
+            regime_probs={0: 0.5, 1: 0.5},
+            regime_belief={0: 0.8, 1: 0.2},
+            transition_matrix=pd.DataFrame(),
+            returns_by_regime=pd.DataFrame(),
+            target_weights=pd.Series(dtype=float),
+            accounts=[],
+        )
+        assert "## Filtered Regime Belief" in md
+        assert "regime 0: 80.0%" in md
