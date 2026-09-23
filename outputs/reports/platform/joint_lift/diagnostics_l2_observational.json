@@ -1,6 +1,246 @@
 {
   "suffix": "l2",
   "n_steps": 588,
+  "persistence_readings": {
+    "classifier_1": {
+      "s1_status": "OBSERVATIONAL since the 2026-09-23 ruling (08-08-PLAN.md): causal invariance is the governing leakage guard; every negative offset is adjudicated by a truncation cut recorded in s1_truncation_invariance.json",
+      "act_threshold": 0.7,
+      "reference": "regime_labels split at 2020-12-31",
+      "raw_posterior": {
+        "sojourn_lag": {
+          "median_sojourn": 9.5,
+          "median_lag": 111.0,
+          "ratio": 0.08558558558558559,
+          "n_transitions": 25,
+          "n_resolved": 15
+        },
+        "transition_window_accuracy": {
+          "overall_accuracy": 0.15368852459016394,
+          "transition_accuracy": 0.1111111111111111,
+          "steady_state_accuracy": 0.16452442159383032
+        },
+        "max_prob": {
+          "n_rows": 488,
+          "n_below_act_threshold": 355,
+          "act_threshold": 0.7,
+          "quantiles": {
+            "q00": 0.22603832255813847,
+            "q10": 0.34818186303051507,
+            "q25": 0.4183414950214248,
+            "q50": 0.5724392428356093,
+            "q75": 0.710548800222979,
+            "q90": 0.763472706738545,
+            "q100": 0.9625
+          }
+        },
+        "signed_offsets": {
+          "min_offset": 3.0,
+          "median_offset": 111.0,
+          "n_transitions": 25,
+          "n_resolved": 15,
+          "n_negative": 0,
+          "n_zero_or_negative": 0
+        },
+        "negative_offset_classification": {
+          "n_lead": 0,
+          "n_held_through_miss": 0,
+          "lead_positions": [],
+          "held_through_miss_positions": [],
+          "details": []
+        }
+      },
+      "belief": {
+        "sojourn_lag": {
+          "median_sojourn": 9.5,
+          "median_lag": 72.5,
+          "ratio": 0.1310344827586207,
+          "n_transitions": 25,
+          "n_resolved": 20
+        },
+        "transition_window_accuracy": {
+          "overall_accuracy": 0.09016393442622951,
+          "transition_accuracy": 0.20202020202020202,
+          "steady_state_accuracy": 0.061696658097686374
+        },
+        "max_prob": {
+          "n_rows": 488,
+          "n_below_act_threshold": 181,
+          "act_threshold": 0.7,
+          "quantiles": {
+            "q00": 0.2524334827858639,
+            "q10": 0.49821891576728417,
+            "q25": 0.6027935282647838,
+            "q50": 0.7734577068909649,
+            "q75": 0.9036402074743553,
+            "q90": 0.9639330114371903,
+            "q100": 0.9999654191603855
+          }
+        },
+        "signed_offsets": {
+          "min_offset": -6.0,
+          "median_offset": 72.5,
+          "n_transitions": 25,
+          "n_resolved": 20,
+          "n_negative": 1,
+          "n_zero_or_negative": 1
+        },
+        "negative_offset_classification": {
+          "n_lead": 0,
+          "n_held_through_miss": 1,
+          "lead_positions": [],
+          "held_through_miss_positions": [
+            300
+          ],
+          "details": [
+            {
+              "position": 300,
+              "date": "1988-02-29",
+              "offset": -6.0,
+              "state": 4,
+              "preceding_state": 0,
+              "preceding_run": [
+                296,
+                299
+              ],
+              "verdict": "held_through_miss"
+            }
+          ]
+        }
+      }
+    },
+    "classifier_2": {
+      "s1_status": "OBSERVATIONAL since the 2026-09-23 ruling (08-08-PLAN.md): causal invariance is the governing leakage guard; every negative offset is adjudicated by a truncation cut recorded in s1_truncation_invariance.json",
+      "act_threshold": 0.7,
+      "reference": "regime_labels_2 split at 2020-12-31",
+      "raw_posterior": {
+        "sojourn_lag": {
+          "median_sojourn": 29.0,
+          "median_lag": 122.0,
+          "ratio": 0.23770491803278687,
+          "n_transitions": 12,
+          "n_resolved": 2
+        },
+        "transition_window_accuracy": {
+          "overall_accuracy": 0.42008196721311475,
+          "transition_accuracy": 0.18867924528301888,
+          "steady_state_accuracy": 0.4482758620689655
+        },
+        "max_prob": {
+          "n_rows": 488,
+          "n_below_act_threshold": 476,
+          "act_threshold": 0.7,
+          "quantiles": {
+            "q00": 0.25166084375444975,
+            "q10": 0.35216187835196155,
+            "q25": 0.3859095157639458,
+            "q50": 0.4575301204992194,
+            "q75": 0.5547099328180986,
+            "q90": 0.6133786618010331,
+            "q100": 0.7767870441734034
+          }
+        },
+        "signed_offsets": {
+          "min_offset": 110.0,
+          "median_offset": 122.0,
+          "n_transitions": 12,
+          "n_resolved": 2,
+          "n_negative": 0,
+          "n_zero_or_negative": 0
+        },
+        "negative_offset_classification": {
+          "n_lead": 0,
+          "n_held_through_miss": 0,
+          "lead_positions": [],
+          "held_through_miss_positions": [],
+          "details": []
+        }
+      },
+      "belief": {
+        "sojourn_lag": {
+          "median_sojourn": 29.0,
+          "median_lag": 44.0,
+          "ratio": 0.6590909090909091,
+          "n_transitions": 12,
+          "n_resolved": 11
+        },
+        "transition_window_accuracy": {
+          "overall_accuracy": 0.39549180327868855,
+          "transition_accuracy": 0.20754716981132076,
+          "steady_state_accuracy": 0.41839080459770117
+        },
+        "max_prob": {
+          "n_rows": 488,
+          "n_below_act_threshold": 73,
+          "act_threshold": 0.7,
+          "quantiles": {
+            "q00": 0.29902314994595997,
+            "q10": 0.6326604021612894,
+            "q25": 0.8399201217192265,
+            "q50": 0.9480972460905055,
+            "q75": 0.9856259538684736,
+            "q90": 0.9990243639272938,
+            "q100": 0.9999118640813934
+          }
+        },
+        "signed_offsets": {
+          "min_offset": -31.0,
+          "median_offset": 44.0,
+          "n_transitions": 12,
+          "n_resolved": 11,
+          "n_negative": 3,
+          "n_zero_or_negative": 3
+        },
+        "negative_offset_classification": {
+          "n_lead": 3,
+          "n_held_through_miss": 0,
+          "lead_positions": [
+            236,
+            387,
+            596
+          ],
+          "held_through_miss_positions": [],
+          "details": [
+            {
+              "position": 236,
+              "date": "1982-09-30",
+              "offset": -1.0,
+              "state": 2,
+              "preceding_state": 0,
+              "preceding_run": [
+                132,
+                235
+              ],
+              "verdict": "lead"
+            },
+            {
+              "position": 387,
+              "date": "1995-04-30",
+              "offset": -12.0,
+              "state": 2,
+              "preceding_state": 1,
+              "preceding_run": [
+                374,
+                386
+              ],
+              "verdict": "lead"
+            },
+            {
+              "position": 596,
+              "date": "2012-09-30",
+              "offset": -31.0,
+              "state": 4,
+              "preceding_state": 3,
+              "preceding_run": [
+                430,
+                595
+              ],
+              "verdict": "lead"
+            }
+          ]
+        }
+      }
+    }
+  },
   "classifier_1": {
     "full_sample": {
       "n_label_transitions": 25,
@@ -30,6 +270,21 @@
       "first_date": "1974-02-28",
       "last_date": "2020-12-31",
       "source": "outputs/reports/platform/joint_lift/joint_lift_probs_1_l2.parquet"
+    },
+    "walk_forward_belief": {
+      "track": "B1 \u2014 argmax of the Bayes-filtered belief (regime_filter over the L2 posterior); what the allocator consumes under l2. Compare against B0 (walk_forward_nowcast), the control",
+      "applicable": true,
+      "n_changes": 81,
+      "n_rows": 488,
+      "n_pairs": 487,
+      "rate": 0.16632443531827515,
+      "n_degraded": 100,
+      "first_date": "1974-02-28",
+      "last_date": "2020-12-31",
+      "source": "outputs/reports/platform/joint_lift/joint_lift_belief_1_l2.parquet",
+      "index_equals_nowcast_index": true,
+      "n_mismatched_months_vs_posterior": 273,
+      "n_compared_vs_posterior": 488
     },
     "sojourn_lag": {
       "median_sojourn": 9.5,
@@ -79,6 +334,21 @@
       "first_date": "1974-02-28",
       "last_date": "2020-12-31",
       "source": "outputs/reports/platform/joint_lift/joint_lift_probs_2_l2.parquet"
+    },
+    "walk_forward_belief": {
+      "track": "B1 \u2014 argmax of the Bayes-filtered belief (regime_filter over the L2 posterior); what the allocator consumes under l2. Compare against B0 (walk_forward_nowcast), the control",
+      "applicable": true,
+      "n_changes": 30,
+      "n_rows": 488,
+      "n_pairs": 487,
+      "rate": 0.061601642710472276,
+      "n_degraded": 100,
+      "first_date": "1974-02-28",
+      "last_date": "2020-12-31",
+      "source": "outputs/reports/platform/joint_lift/joint_lift_belief_2_l2.parquet",
+      "index_equals_nowcast_index": true,
+      "n_mismatched_months_vs_posterior": 155,
+      "n_compared_vs_posterior": 488
     },
     "sojourn_lag": {
       "median_sojourn": 29.0,

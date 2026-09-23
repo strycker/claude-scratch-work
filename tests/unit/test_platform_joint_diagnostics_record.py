@@ -422,3 +422,125 @@ class TestProbeEdgeTableNamesRealTests:
         assert not missing, (
             "ADR-0002's probe-edge table names tests that no longer exist: " + ", ".join(missing)
         )
+
+
+# ── 5. Plan 08-08: three churn numbers — A (pinned), B0 (the control), B1 (reported) ──
+
+#: Track B's pre-filter value, QUOTED from 08-01-SUMMARY.md ("221 / 487 = 45.38%",
+#: "66 / 487 = 13.55%", 488 rows, 100 degraded), not re-derived after the change —
+#: re-deriving it afterwards would compare against a number nobody can reproduce.
+#: The nowcaster is untouched by plan 08-08, so B0 must not move; that invariance is
+#: the CONTROL that makes any movement in B1 attributable to the filter.
+_PINNED_B0_FROM_0801 = {"classifier_1": (221, 487), "classifier_2": (66, 487)}
+
+
+def _artifact(block: dict) -> pd.DataFrame:
+    source = Path(block["source"])
+    return read_probability_matrix(source if source.is_absolute() else _ROOT / source)
+
+
+class TestThreeChurnNumbers:
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("clf,pinned", sorted(_PINNED_FILTERED_TRANSITIONS.items()))
+    def test_track_a_is_unchanged_in_both_routings(self, suffix, clf, pinned):
+        got = _diagnostics(suffix)[clf]["walk_forward_filtered"]["n_transitions"]
+        assert got == pinned, (
+            f"{suffix}/{clf}: Track A moved {pinned} -> {got}. Plan 08-08 changes only what is "
+            "done with the L2 posterior; if state_N moved, something touched L1. That is a BUG, not a result."
+        )
+
+    @pytest.mark.parametrize("clf,pinned", sorted(_PINNED_B0_FROM_0801.items()))
+    def test_b0_the_raw_posterior_churn_is_unchanged_from_0801(self, clf, pinned):
+        block = _diagnostics("l2")[clf]["walk_forward_nowcast"]
+        assert (block["n_changes"], block["n_pairs"]) == pinned, (
+            f"{clf}: B0 moved from 08-01's {pinned} — the nowcaster's output changed, so B1's "
+            "movement can no longer be attributed to the filter."
+        )
+
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_the_degraded_count_is_unchanged_at_100_of_588_for_b0_and_b1(self, clf):
+        """No feature column was added, so _cv_safe_active_features cannot degrade more
+        often. A churn change bought by more degraded steps is not an improvement."""
+        rec = _diagnostics("l2")[clf]
+        assert rec["walk_forward_nowcast"]["n_degraded"] == _PINNED_L2_DEGRADED
+        assert rec["walk_forward_belief"]["n_degraded"] == _PINNED_L2_DEGRADED
+        assert rec["walk_forward_belief"]["n_rows"] + _PINNED_L2_DEGRADED == _PINNED_N_STEPS
+        assert rec["walk_forward_belief"]["index_equals_nowcast_index"] is True
+
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_b1_is_re_derivable_from_its_own_named_artifact(self, clf):
+        block = _diagnostics("l2")[clf]["walk_forward_belief"]
+        assert block["track"].startswith("B1 —")
+        assert "joint_lift_belief_" in block["source"]
+        measured = argmax_churn(_artifact(block))
+        assert measured["n_changes"] == block["n_changes"]
+        assert measured["n_pairs"] == block["n_pairs"]
+        assert measured["rate"] == pytest.approx(block["rate"], abs=1e-12)
+
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_b1_is_not_trivially_b0(self, clf):
+        """A no-op filter would otherwise report a 'result'. Recomputed from the two
+        artifacts, and checked against the record."""
+        rec = _diagnostics("l2")[clf]
+        belief, posterior = _artifact(rec["walk_forward_belief"]), _artifact(rec["walk_forward_nowcast"])
+        assert belief.index.equals(posterior.index)
+        n_mismatched = int((belief.idxmax(axis=1) != posterior.idxmax(axis=1)).sum())
+        assert n_mismatched > 0
+        assert n_mismatched == rec["walk_forward_belief"]["n_mismatched_months_vs_posterior"]
+
+    @pytest.mark.parametrize("clf", ["classifier_1", "classifier_2"])
+    def test_under_l1only_there_is_no_belief_by_design(self, clf):
+        # diagnostics_l1only.json is the decision-bearing record and is not regenerated
+        # by plan 08-08; when it is, its belief block must say "not applicable".
+        block = _diagnostics("l1only")[clf].get("walk_forward_belief", {"applicable": False})
+        assert block["applicable"] is False
+        assert not (_JOINT / f"joint_lift_belief_{clf[-1]}_l1only.parquet").exists()
+
+
+def _churn_target_assertions(source: str) -> list[str]:
+    """Assertions that compare B1's churn against a fixed number or against B0.
+
+    B1 = any expression mentioning ``walk_forward_belief`` together with
+    ``n_changes`` or ``rate``. A violation is a comparison whose other side is a
+    numeric literal or mentions ``walk_forward_nowcast`` (a direction against B0).
+    Comparisons against a value RE-DERIVED from an artifact are not targets.
+    """
+    import ast
+
+    tree = ast.parse(source)
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assert):
+            continue
+        for cmp in [n for n in ast.walk(node.test) if isinstance(n, ast.Compare)]:
+            sides = [cmp.left, *cmp.comparators]
+            texts = [ast.unparse(side) for side in sides]
+            is_b1 = [("walk_forward_belief" in t and ("n_changes" in t or "rate" in t)) for t in texts]
+            if not any(is_b1):
+                continue
+            for side, text, b1 in zip(sides, texts, is_b1):
+                if b1:
+                    continue
+                if (isinstance(side, ast.Constant) and isinstance(side.value, (int, float))) or (
+                    "walk_forward_nowcast" in text
+                ):
+                    found.append(ast.unparse(cmp))
+    return found
+
+
+class TestNoChurnTargetIsAsserted:
+    def test_the_detector_fires_on_a_target_and_on_a_direction(self):
+        """The check must be able to fail: shown on two violating snippets."""
+        target = "assert rec['walk_forward_belief']['n_changes'] < 200\n"
+        direction = "assert rec['walk_forward_belief']['rate'] < rec['walk_forward_nowcast']['rate']\n"
+        rederived = "assert measured['n_changes'] == block_walk_forward_belief_n_changes\n"
+        assert _churn_target_assertions(target)
+        assert _churn_target_assertions(direction)
+        assert not _churn_target_assertions(rederived)
+
+    @pytest.mark.parametrize("name", ["test_platform_joint_diagnostics_record.py", "test_platform_nowcaster_recursion.py"])
+    def test_no_module_asserts_a_b1_target_or_direction(self, name):
+        text = (_TESTS_UNIT / name).read_text()
+        # The detector's own demonstration snippets live in string literals, which
+        # ast.parse does not treat as assertions.
+        assert _churn_target_assertions(text) == [], name

@@ -44,8 +44,13 @@ from trading_crab_lib.platform.evaluation.churn import (
     read_probability_matrix,
 )
 from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
-from trading_crab_lib.platform.evaluation.sojourn_lag import compute_sojourn_lag_headline
+from trading_crab_lib.platform.evaluation.sojourn_lag import (
+    classify_negative_offsets,
+    compute_signed_detection_offsets,
+    compute_sojourn_lag_headline,
+)
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+from trading_crab_lib.platform.prediction.nowcaster import transition_window_accuracy
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +68,63 @@ TRACK_A = (
 TRACK_B = (
     "B — argmax of the L2 nowcaster's calibrated posterior; the object design §5.1 changes"
 )
+#: Plan 08-08: Track B splits in two. B0 (``walk_forward_nowcast``) is the RAW
+#: posterior's argmax churn — the CONTROL: the nowcaster is untouched, so it must
+#: not move, and that invariance is what makes any movement in B1 attributable to
+#: the filter. B1 is the argmax of the FILTERED BELIEF the allocator now consumes.
+TRACK_B1 = (
+    "B1 — argmax of the Bayes-filtered belief (regime_filter over the L2 posterior); "
+    "what the allocator consumes under l2. Compare against B0 (walk_forward_nowcast), the control"
+)
+
+
+def _max_prob_distribution(matrix: pd.DataFrame, act_threshold: float) -> dict[str, Any]:
+    """Row-max distribution — the direct measurement that replaces F-2's derived bound."""
+    row_max = matrix.max(axis=1)
+    quantiles = row_max.quantile([0.0, 0.10, 0.25, 0.50, 0.75, 0.90, 1.0])
+    return {
+        "n_rows": int(len(row_max)),
+        "n_below_act_threshold": int((row_max < act_threshold).sum()),
+        "act_threshold": act_threshold,
+        "quantiles": {f"q{int(round(q * 100)):02d}": float(v) for q, v in quantiles.items()},
+    }
+
+
+def _persistence_readings(
+    full_dev: pd.Series, matrix: pd.DataFrame, act_threshold: float
+) -> dict[str, Any]:
+    """S-3 readings (reported, never gated) and the S-1 signed offsets for one matrix."""
+    headline = compute_sojourn_lag_headline(full_dev, matrix, act_threshold=act_threshold)
+    offsets = compute_signed_detection_offsets(full_dev, matrix, act_threshold=act_threshold)
+    classified = classify_negative_offsets(full_dev, matrix, offsets, act_threshold)
+    y_true = full_dev.reindex(matrix.index)
+    keep = y_true.notna()
+    accuracy = transition_window_accuracy(
+        y_true[keep].astype(int), matrix.idxmax(axis=1)[keep].astype(int)
+    )
+    return {
+        "sojourn_lag": {k: headline[k] for k in ("median_sojourn", "median_lag", "ratio", "n_transitions", "n_resolved")},
+        "transition_window_accuracy": accuracy,
+        "max_prob": _max_prob_distribution(matrix, act_threshold),
+        "signed_offsets": {
+            "min_offset": offsets["min_offset"],
+            "median_offset": offsets["median_offset"],
+            "n_transitions": offsets["n_transitions"],
+            "n_resolved": offsets["n_resolved"],
+            "n_negative": offsets["n_negative"],
+            "n_zero_or_negative": offsets["n_zero_or_negative"],
+        },
+        "negative_offset_classification": {
+            "n_lead": classified["n_lead"],
+            "n_held_through_miss": classified["n_held_through_miss"],
+            "lead_positions": classified["lead_positions"],
+            "held_through_miss_positions": classified["held_through_miss_positions"],
+            "details": [
+                {**d, "date": str(pd.Timestamp(d["date"]).date()), "preceding_run": list(d["preceding_run"])}
+                for d in classified["details"]
+            ],
+        },
+    }
 
 
 def _as_states(frame: pd.DataFrame | pd.Series) -> pd.Series:
@@ -184,6 +246,61 @@ def diagnose(curves_dir: Path, *, suffix: str) -> dict[str, Any]:
             "probs_source": str(probs_path),
         }
 
+        # ── Track B1 (plan 08-08): the filtered belief, read from ITS artifact ──
+        #
+        # Present only where the filter ran (the l2 routing). Under l1only the filter
+        # is never applied, and the block says so rather than borrowing another
+        # series. Under l2 a missing artifact raises, exactly like Track B's.
+        belief_path = curves_dir / f"joint_lift_belief_{clf}_{suffix}.parquet"
+        if suffix == "l1only":
+            belief_block: dict[str, Any] = {
+                "track": TRACK_B1,
+                "applicable": False,
+                "reason": "the Bayes filter is not applied under ROUTING_L1_ONLY (a one-hot is not a likelihood)",
+            }
+        else:
+            if not belief_path.is_file():
+                raise FileNotFoundError(
+                    f"{belief_path} is missing. Track B1 (the filtered belief's argmax churn) is "
+                    "computed ONLY from the persisted belief matrix; there is no fallback. "
+                    "Produce it with:\n    python scripts/run_joint_lift.py --routing l2 "
+                    "--dump-curves outputs/reports/platform/joint_lift"
+                )
+            belief_matrix = read_probability_matrix(belief_path)
+            belief = argmax_churn(belief_matrix)
+            common = belief_matrix.index.intersection(nowcast_matrix.index)
+            belief_argmax = belief_matrix.loc[common].idxmax(axis=1).astype(int)
+            posterior_argmax = nowcast_matrix.loc[common].idxmax(axis=1).astype(int)
+            belief_block = {
+                "track": TRACK_B1,
+                "applicable": True,
+                "n_changes": belief["n_changes"],
+                "n_rows": belief["n_rows"],
+                "n_pairs": belief["n_pairs"],
+                "rate": belief["rate"],
+                "n_degraded": int(len(joint) - len(belief_matrix)),
+                "first_date": belief["first_date"],
+                "last_date": belief["last_date"],
+                "source": str(belief_path),
+                "index_equals_nowcast_index": bool(belief_matrix.index.equals(nowcast_matrix.index)),
+                "n_mismatched_months_vs_posterior": int((belief_argmax != posterior_argmax).sum()),
+                "n_compared_vs_posterior": int(len(common)),
+            }
+            # S-3 readings and the S-1 real-data guard, for BOTH the raw posterior
+            # (the "before" object on this routing) and the belief (the "after").
+            # Reported, never gated here; the gate is the test suite's.
+            out.setdefault("persistence_readings", {})[tag] = {
+                "s1_status": (
+                    "OBSERVATIONAL since the 2026-09-23 ruling (08-08-PLAN.md): causal invariance is the "
+                    "governing leakage guard; every negative offset is adjudicated by a truncation cut "
+                    "recorded in s1_truncation_invariance.json"
+                ),
+                "act_threshold": act_threshold,
+                "reference": f"{checkpoint} split at {DEFAULT_HOLDOUT_CUTOFF}",
+                "raw_posterior": _persistence_readings(full_dev, nowcast_matrix, act_threshold),
+                "belief": _persistence_readings(full_dev, belief_matrix, act_threshold),
+            }
+
         rate = n_label_transitions / n_months if n_months else float("nan")
         out[tag] = {
             "full_sample": {
@@ -219,6 +336,7 @@ def diagnose(curves_dir: Path, *, suffix: str) -> dict[str, Any]:
                 "last_date": nowcast["last_date"],
                 "source": str(probs_path),
             },
+            "walk_forward_belief": belief_block,
             "sojourn_lag": {
                 k: v for k, v in soj.items() if k not in ("per_state_lags", "lags")
             },
