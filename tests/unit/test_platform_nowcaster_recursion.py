@@ -355,3 +355,124 @@ def test_real_data_s1_counts_are_pinned_as_measured(clf, checkpoint):
     )
     assert classified["n_lead"] + classified["n_held_through_miss"] == offsets["n_negative"]
 
+
+
+# ── Plan 08-08 RULING (2026-09-23): the GOVERNING guard — causal invariance ──────
+#
+# The belief at every month <= T must be bit-identical whether the inputs stop at T
+# or run on. It tests the property itself (no post-T data reaches a belief value at or
+# before T), with no parameters. Cut at EVERY month, not at a few: a smoothing leak
+# breaks invariance only near ambiguous stretches, so a handful of convenient cuts
+# would pass a leaking belief (Arm 2 is invariant at cut 30 — pinned below — so the
+# reason for the exhaustive sweep lives here, not only in the plan).
+#
+# A and the class prior are supplied ONCE, fixed (from the full synthetic ``states``).
+# ``_run_filter`` re-derives the prior from whatever series it is handed, so truncation
+# would move the prior and break invariance for the honest filter for a reason that is
+# not a leak — and raise outright while a state has not yet appeared (pinned below).
+# The production drivers build A and the prior per step from in-window labels
+# (``train_index``, months < t), which is causal.
+
+
+def _fixed_inputs():
+    states, evidence, transitions, led = _world()
+    a = transition_matrix_for(states, state_index=IDX)
+    prior = unconditional_belief(states, state_index=IDX)
+    return states, evidence, transitions, led, a, prior
+
+
+def _honest_path(evidence: np.ndarray, a: pd.DataFrame, prior: pd.Series) -> np.ndarray:
+    belief, rows = prior.copy(), []
+    for posterior in _causal_posteriors(evidence, prior):
+        belief = filter_step(belief, a, posterior, prior)
+        rows.append(belief.to_numpy())
+    return np.array(rows)
+
+
+def _smoothed_path(evidence: np.ndarray, a: pd.DataFrame, prior: pd.Series) -> np.ndarray:
+    return np.eye(len(IDX))[_viterbi(evidence, a, prior)]
+
+
+def _lookahead_path(evidence: np.ndarray, a: pd.DataFrame, prior: pd.Series) -> np.ndarray:
+    """A structural read-ahead leak: month t's update uses month t+1's evidence when it exists."""
+    shifted = np.vstack([evidence[1:], evidence[-1:]]) if len(evidence) > 1 else evidence
+    return _honest_path(shifted, a, prior)
+
+
+def _breaks(path_fn) -> dict[int, int]:
+    """cut T -> number of belief rows <= T that differ between the truncated and full runs."""
+    _, evidence, _, _, a, prior = _fixed_inputs()
+    full = path_fn(evidence, a, prior)
+    out = {}
+    for cut in range(len(evidence)):
+        truncated = path_fn(evidence[: cut + 1], a, prior)
+        n = int((truncated != full[: cut + 1]).any(axis=1).sum())
+        if n:
+            out[cut] = n
+    return out
+
+
+#: Arm 2's every-month sweep, measured 2026-09-23 (plan 08-08). The prototype recorded in
+#: the plan's ruling reported "breaks exactly at {13, 44, 68}"; that is exactly this
+#: sweep restricted to the p-1 cut family (asserted below). Under the every-month sweep
+#: the ruling requires, the smoothed decode also breaks in the run-up to each led turn
+#: and by one row at every turn month itself.
+_ARM2_EVERY_MONTH_BREAKS = {
+    11: 1, 12: 2, 13: 3, 14: 4, 24: 1, 36: 1, 42: 1, 43: 2, 44: 3, 45: 4,
+    56: 1, 57: 2, 66: 1, 67: 2, 68: 3, 69: 4, 79: 1, 80: 2, 88: 1, 100: 1,
+}
+
+
+def test_governing_invariance_honest_filter_is_bit_identical_at_EVERY_cut():
+    states, *_ = _fixed_inputs()
+    assert _breaks(_honest_path) == {}, "the honest filter's belief moved under truncation — post-T data reached it"
+    assert len(states) == 111  # every one of 111 cuts was checked
+
+
+def test_governing_invariance_arm2_smoothed_decode_BREAKS():
+    """The discriminating arm: the D-03 substitution must fail the governing guard."""
+    breaks = _breaks(_smoothed_path)
+    assert len(breaks) >= 1
+    assert breaks == _ARM2_EVERY_MONTH_BREAKS
+    # ...and it is invariant at arbitrary cuts — why the sweep must be exhaustive.
+    for cut in (30, 60, 90, 110):
+        assert cut not in breaks, cut
+
+
+def test_arm2_at_the_p_minus_1_cut_family_breaks_exactly_at_13_44_68():
+    """The prototype's recorded result, reproduced under its evident cut family (the
+    month before each reference transition), and what that family misses."""
+    states, evidence, transitions, led, a, prior = _fixed_inputs()
+    breaks = _breaks(_smoothed_path)
+    p_minus_1 = {p - 1: breaks.get(p - 1, 0) for p in transitions}
+    assert {c: n for c, n in p_minus_1.items() if n} == {13: 3, 44: 3, 68: 3}
+    assert [p - 1 for p in led] == [13, 44, 68]
+    # The turn month itself breaks for every transition — non-led ones by one row — which
+    # no p-1 cut can see. Real-data adjudication cuts at p-1 because a NEGATIVE offset
+    # means the belief crossed before p; this is a limit of that family, stated.
+    assert all(breaks.get(p, 0) >= 1 for p in transitions)
+
+
+def test_governing_invariance_catches_a_structural_read_ahead_wherever_the_future_differs():
+    """A one-month read-ahead breaks invariance at exactly the cuts where month T+1's
+    evidence differs from month T's — and at NO steady cut, where the peeked month looks
+    like the present. Even a structural leak is invisible to a convenient cut: another
+    reason the sweep is exhaustive."""
+    _, evidence, *_ = _fixed_inputs()
+    breaks = _breaks(_lookahead_path)
+    changing = {t for t in range(len(evidence) - 1) if not np.array_equal(evidence[t + 1], evidence[t])}
+    assert set(breaks) == changing
+    assert len(changing) >= 9 and 30 not in breaks
+
+
+def test_why_A_and_the_prior_are_fixed_rederiving_them_breaks_the_HONEST_filter():
+    """Not a leak — a harness artefact the governing test must not be built on."""
+    states, evidence, *_ = _fixed_inputs()
+    full = _run_filter(states, evidence, transition_matrix_for(states, state_index=IDX)).to_numpy()
+    early = states.iloc[:14]  # states 1 and 2 have not appeared by month 13
+    with pytest.raises(ValueError):
+        _run_filter(early, evidence[:14], transition_matrix_for(early, state_index=IDX))
+    cut = 50
+    s = states.iloc[: cut + 1]
+    rederived = _run_filter(s, evidence[: cut + 1], transition_matrix_for(s, state_index=IDX)).to_numpy()
+    assert not np.array_equal(rederived, full[: cut + 1])
