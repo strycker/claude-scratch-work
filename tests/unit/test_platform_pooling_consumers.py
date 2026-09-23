@@ -361,6 +361,11 @@ class TestWeeklyConsumer:
         monkeypatch.setattr(weekly, "load_full_span", lambda name: _synthetic_asset_returns())
         monkeypatch.setattr(weekly, "load_active_regime", lambda cm: None)
         monkeypatch.setattr(weekly, "save_active_regime", lambda regime, cm: None)
+        # 08-08 made weekly.py persist a filtered belief beside the active regime. Stubbed for
+        # the same reason as the two lines above: this fake raises KeyError where the real
+        # manager raises FileNotFoundError. Harness only — no G6 assertion is touched.
+        monkeypatch.setattr(weekly, "load_regime_belief", lambda cm=None: None)
+        monkeypatch.setattr(weekly, "save_regime_belief", lambda belief, cm=None, *, as_of=None: None)
 
         cfg = {"allocation": {"target_vol_annual": 0.10, "ewma_halflife_months": 6, "portfolio_vol_min_obs": 3}}
         weekly._build_report_inputs(cfg, cm=_FakeCheckpointManager(unpooled, asset_returns))
