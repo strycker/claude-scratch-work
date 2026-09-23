@@ -464,3 +464,202 @@ class TestInputValidation:
     def test_blend_weight_outside_the_unit_interval_raises(self, tmp_path):
         with pytest.raises(ValueError, match=r"\[0, 1\]"):
             _run(1.5, tmp_path=None, tag="t")
+
+
+# ── the Bayes filter (plan 08-08): l2 only, belief carried, l1only pinned bit-for-bit ──
+#
+# The default _frames() fixture degrades EVERY l2 step (a single class survives the
+# embargo), so it cannot exercise the filter. This fixture is a square wave with six
+# cycles over 96 months: under min_train=36 it yields 60 steps, 8 early degraded, and
+# the rest carry real two-class posteriors.
+
+L2_N_MONTHS = 96
+L2_MIN_TRAIN = 36
+
+
+def _l2_frames(seed: int = 7) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series]:
+    rng = np.random.default_rng(seed)
+    n = L2_N_MONTHS
+    idx = pd.date_range("2000-01-31", periods=n, freq="ME")
+    drift = np.sign(np.sin(np.linspace(0, 6 * 2 * np.pi, n)))
+    features_1 = pd.DataFrame({c: drift + rng.normal(0, 0.5, n) for c in C1_COLS}, index=idx)
+    features_2 = pd.DataFrame({c: -drift + rng.normal(0, 0.5, n) for c in C2_COLS}, index=idx)
+    asset_returns = pd.DataFrame(
+        {
+            "SPY": rng.normal(0.006, 0.03, n) + 0.01 * drift,
+            "TLT": rng.normal(0.001, 0.02, n) - 0.005 * drift,
+            "GLD": rng.normal(0.002, 0.04, n),
+        },
+        index=idx,
+    )
+    cash_returns = pd.Series(rng.normal(0.002, 0.0005, n), index=idx)
+    return features_1, features_2, asset_returns, cash_returns
+
+
+def _l2_run(*, routing: str, use_regime_filter: bool):
+    f1, f2, ar, cash = _l2_frames()
+    return jd.run_joint_backtest(
+        f1, ar, _cfg(min_train=L2_MIN_TRAIN), blend_weight_1=0.5, features_2=f2,
+        frozen_features_1=C1_COLS, frozen_features_2=C2_COLS, cash_returns=cash,
+        registry_path=NO_REGISTRY, trial_tag="t", routing=routing, use_regime_filter=use_regime_filter,
+    )
+
+
+class _Spy:
+    """Wrap a module attribute, record every call's args and return value."""
+
+    def __init__(self, monkeypatch, module, name):
+        self.calls: list[tuple[tuple, dict, object]] = []
+        real = getattr(module, name)
+
+        def wrapper(*args, **kwargs):
+            out = real(*args, **kwargs)
+            self.calls.append((args, kwargs, out))
+            return out
+
+        monkeypatch.setattr(module, name, wrapper)
+
+
+def _first_diff_date(a: pd.DataFrame, b: pd.DataFrame, cols: list[str]):
+    for date in a.index:
+        if not a.loc[date, cols].equals(b.loc[date, cols]):
+            return date
+    return None
+
+
+@pytest.fixture(scope="module")
+def l1only_runs():
+    on = _l2_run(routing=jd.ROUTING_L1_ONLY, use_regime_filter=True)
+    off = _l2_run(routing=jd.ROUTING_L1_ONLY, use_regime_filter=False)
+    return on, off
+
+
+@pytest.fixture(scope="module")
+def l2_off():
+    return _l2_run(routing=jd.ROUTING_L2_NOWCAST, use_regime_filter=False)
+
+
+@pytest.fixture(scope="module")
+def l2_on_spied():
+    """One filter-on l2 run with spies on the tilt, the hysteresis, the filter and the cold start."""
+    mp = pytest.MonkeyPatch()
+    try:
+        tilt = _Spy(mp, jd, "blend_regime_tilts")
+        hyst = _Spy(mp, jd, "update_active_regime")
+        filt = _Spy(mp, jd, "filter_step")
+        cold = _Spy(mp, jd, "unconditional_belief")
+        curve, meta = _l2_run(routing=jd.ROUTING_L2_NOWCAST, use_regime_filter=True)
+    finally:
+        mp.undo()
+    return curve, meta, tilt, hyst, filt, cold
+
+
+class TestRegimeFilterWiring:
+    def test_l1only_curve_is_bit_identical_with_the_filter_on_and_off(self, l1only_runs):
+        """The decision-bearing pin. Fails the moment the filter leaks into ROUTING_L1_ONLY."""
+        (on, meta_on), (off, _meta_off) = l1only_runs
+        pd.testing.assert_frame_equal(on, off, check_exact=True)
+        for col in ("active_regime", "scale", "turnover", "return"):
+            assert on[col].equals(off[col]), col
+        # ...and the filter never ran on that routing.
+        assert meta_on["use_regime_filter"] is False
+        assert meta_on["per_step_belief_1"]["dates"] == [] and meta_on["per_step_belief_2"]["dates"] == []
+
+    def test_l2_curve_differs_with_the_filter_on(self, l2_on_spied, l2_off):
+        """Without this, a filter that silently no-ops would pass the l1only pin above."""
+        on, meta_on = l2_on_spied[0], l2_on_spied[1]
+        off, _ = l2_off
+        assert on.index.equals(off.index)
+        cols = ["return", "turnover", "scale", "active_regime"]
+        first = _first_diff_date(on, off, cols)
+        assert first is not None, "the l2 curve is identical with the filter on and off — the filter no-ops"
+        assert not on["return"].equals(off["return"]), f"returns identical; first differing date {first}"
+        assert meta_on["use_regime_filter"] is True
+        # The degraded set is unchanged by the filter: no feature column was added.
+        assert on["degraded"].equals(off["degraded"])
+
+    def test_the_tilt_and_the_hysteresis_receive_the_belief_not_the_raw_posterior(self, l2_on_spied):
+        _curve, meta, tilt, hyst, _filt, _cold = l2_on_spied
+        beliefs_1 = meta["per_step_belief_1"]["proba"]
+        beliefs_2 = meta["per_step_belief_2"]["proba"]
+        raws_1 = meta["per_step_metrics_1"]["proba"]
+        assert len(tilt.calls) == len(beliefs_1) == len(raws_1) == len(hyst.calls) > 0
+        n_differ = 0
+        for (args, _kw, _out), (h_args, _hkw, _hout), b1, b2, r1 in zip(
+            tilt.calls, hyst.calls, beliefs_1, beliefs_2, raws_1
+        ):
+            np.testing.assert_array_equal(args[0].to_numpy(), b1)   # tilt's probs_1 IS the belief
+            np.testing.assert_array_equal(args[2].to_numpy(), b2)   # tilt's probs_2 IS the belief
+            np.testing.assert_array_equal(h_args[0].to_numpy(), b1)  # hysteresis sees the belief too
+            raw = pd.Series(r1, index=meta["per_step_metrics_1"]["classes"][0]).reindex(args[0].index, fill_value=0.0)
+            if float(np.max(np.abs(raw.to_numpy() - b1))) > 1e-6:
+                n_differ += 1
+        assert n_differ >= 1, "belief never differed from the raw posterior by more than 1e-6"
+
+    def test_cold_start_is_unconditional_belief_on_the_steps_own_labels(self, l2_on_spied):
+        """The first non-degraded step's prior is unconditional_belief(states_1) exactly —
+        not uniform 1/K, not a dropped row."""
+        _curve, _meta, _tilt, _hyst, filt, cold = l2_on_spied
+        (f_args, _fkw, _fout) = filt.calls[0]
+        start, _a, _posterior, class_prior = f_args
+        (c_args, c_kw, c_out) = cold.calls[0]
+        pd.testing.assert_series_equal(start, class_prior)
+        pd.testing.assert_series_equal(start, c_out)
+        from trading_crab_lib.platform.prediction.regime_filter import unconditional_belief as ub
+        pd.testing.assert_series_equal(start, ub(c_args[0], **c_kw))
+        k = len(start)
+        assert not np.allclose(start.to_numpy(), 1.0 / k), "cold start is uniform; the fixture cannot discriminate"
+        # The next classifier-#1 filter call starts from the carried belief, not the prior again.
+        (f2_args, _k2, _o2) = filt.calls[2]
+        pd.testing.assert_series_equal(f2_args[0], filt.calls[0][2])
+
+    def test_a_degraded_step_advances_the_belief_by_predict_only_not_a_hold(self, monkeypatch):
+        """Force classifier #1's L2 to degrade at one mid-run step k. The belief that
+        enters step k+1 must be predict_only_step(belief_{k-1}, A_k) and must differ from
+        belief_{k-1}. Fails if the missing-observation rule was implemented as a hold."""
+        real_l2 = jd._refit_l2
+        n = {"calls": 0, "forced": None}
+        # Classifier #1 is the odd call on each non-degraded step; the fixture's first
+        # 8 steps degrade in classifier #1's L2 already, so count successes.
+        forced_after = 6
+
+        def l2(train, states, row, cfg):
+            n["calls"] += 1
+            out = real_l2(train, states, row, cfg)  # raises on the fixture's own early degrades
+            if n["forced"] is None and n["calls"] > 8 and (n["calls"] - 8) == 2 * forced_after + 1:
+                n["forced"] = row.index[0]
+                raise ValueError("forced L2 degrade for the missing-observation test")
+            return out
+
+        monkeypatch.setattr(jd, "_refit_l2", l2)
+        filt = _Spy(monkeypatch, jd, "filter_step")
+        pred = _Spy(monkeypatch, jd, "predict_only_step")
+        tm = _Spy(monkeypatch, jd, "transition_matrix_for")
+        curve, meta = _l2_run(routing=jd.ROUTING_L2_NOWCAST, use_regime_filter=True)
+
+        forced = n["forced"]
+        assert forced is not None and bool(curve.loc[forced, "degraded"]) is True
+        assert len(pred.calls) >= 2, "no predict-only step on the forced degrade"
+        (p_args, _pkw, p_out) = pred.calls[0]  # classifier #1, forced step
+        belief_before, a_k = p_args
+        # belief_{k-1}: the last classifier-#1 filter output before the forced step.
+        dates = meta["per_step_belief_1"]["dates"]
+        last_before = max(i for i, d in enumerate(dates) if d < forced)
+        np.testing.assert_array_equal(belief_before.to_numpy(), meta["per_step_belief_1"]["proba"][last_before])
+        # A_k is this step's own transition matrix (the last one built before predict-only).
+        assert any(out is a_k for _a, _k, out in tm.calls)
+        from trading_crab_lib.platform.prediction.regime_filter import predict_only_step as pos
+        pd.testing.assert_series_equal(p_out, pos(belief_before, a_k))
+        assert not np.allclose(p_out.to_numpy(), belief_before.to_numpy()), "predict-only equals a hold here"
+        # ...and it is what the NEXT classifier-#1 filter step starts from.
+        next_c1 = [args for args, _kw, _o in filt.calls if args[0] is p_out]
+        assert len(next_c1) == 1
+
+
+def test_filter_is_gated_on_the_l2_routing_in_code_not_by_data():
+    import re
+    from pathlib import Path
+
+    src = Path(jd.__file__).read_text()
+    code = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
+    assert re.search(r"if\s+routing\s*==\s*ROUTING_L2_NOWCAST[^:]*use_regime_filter", code)

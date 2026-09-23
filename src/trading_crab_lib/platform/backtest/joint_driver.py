@@ -59,6 +59,40 @@ it composes the same public helpers, and
 pins that it reproduces ``_refit_l1`` exactly on classifier #1's own inputs — so
 it is a seam, not a fork.
 
+**The Bayes filter (plan 08-08, ROADMAP criterion 1) applies to the l2 routing
+ONLY.** Under :data:`ROUTING_L2_NOWCAST` (and ``use_regime_filter=True``) each
+classifier's raw nowcaster posterior is filtered into a belief —
+``prediction/regime_filter.py``'s ``π_t ∝ [π_{t−1} A] · L_t`` — carried across
+steps as a LOOP VARIABLE (``prev_belief_1`` / ``prev_belief_2``), and the
+**belief**, never the raw posterior, is what ``update_active_regime`` and
+``blend_regime_tilts`` consume. ``A`` and the class prior come from the step's own
+in-window labels (``states_N``, ``train_index`` only); the cold start is
+``unconditional_belief`` on those same labels — the one rule ``driver.py`` and
+``report/weekly.py`` also use. A degraded step has no observation: the belief
+advances by ``predict_only_step`` (``π A``) when that step's labels exist, and is
+held with a WARNING when they do not. The raw posterior is still accumulated into
+``per_step_metrics_N`` (so raw-posterior churn stays measurable as a control); the
+belief goes into ``per_step_belief_N``. Under the decision-bearing
+:data:`ROUTING_L1_ONLY` the filter is **not applied**: there ``probs`` is
+``_last_state_one_hot(states)`` — a label, not a likelihood — and filtering it
+would fabricate a posterior the routing declares does not exist and would move the
+decision-bearing leg for a wiring reason. The gate is a literal
+``routing == ROUTING_L2_NOWCAST`` test in code, not a property of the data; the
+l1only curve is pinned bit-for-bit with the filter on and off.
+
+A known approximation, stated rather than absorbed (found in plan 08-06): the
+class prior that inverts the posterior into a likelihood is the distribution of
+the WHOLE in-window label series, whereas the nowcaster trains on the D-01
+embargoed subset (trailing ``embargo_months`` dropped, non-finite rows dropped).
+The superset cannot fire the zero-prior raise on a state the nowcaster saw; the
+two priors differ slightly all the same.
+
+A third inconsistency, recorded here and left for plan 08-09 (which owns the §5.3
+wiring): ``update_active_regime`` receives classifier #1's probabilities ALONE
+while ``blend_regime_tilts`` trades BOTH classifiers — the hysteresis tracks one
+classifier while the tilt blends two. It is left unchanged here so this plan's
+before/after comparison stays clean.
+
 **Plausibility bands.** The band constants below are ``07-BANDS.md`` §8's
 confirmed dispositions (Glenn, 2026-09-18), recorded before any joint-lift number
 existed. Two tiers, and only one governs a verdict: a **universal/arithmetic**
@@ -113,6 +147,12 @@ from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
     fit_jump_model,
     standardize_features,
+)
+from trading_crab_lib.platform.prediction.regime_filter import (
+    filter_step,
+    predict_only_step,
+    transition_matrix_for,
+    unconditional_belief,
 )
 
 log = logging.getLogger(__name__)
@@ -263,6 +303,50 @@ def _occupancy(states: pd.Series) -> pd.Series:
     return states.value_counts(normalize=True).astype(float)
 
 
+def _filtered_belief(
+    prev_belief: pd.Series | None,
+    states: pd.Series,
+    posterior: pd.Series,
+    *,
+    state_index: list[int],
+) -> pd.Series:
+    """One l2 filter step for one classifier, from this step's own in-window labels.
+
+    ``A`` and the class prior are built from ``states`` (``train_index`` only). The
+    cold start — no previous belief — is ``unconditional_belief`` on the same labels,
+    i.e. the class prior itself: the one rule shared with ``driver.py`` and
+    ``report/weekly.py``.
+    """
+    prior = unconditional_belief(states, state_index=state_index)
+    transition = transition_matrix_for(states, state_index=state_index)
+    start = prior if prev_belief is None else prev_belief
+    return filter_step(start, transition, posterior, prior)
+
+
+def _advance_without_observation(
+    prev_belief: pd.Series | None,
+    states: pd.Series,
+    *,
+    state_index: list[int],
+    t: Any,
+    which: int,
+) -> pd.Series | None:
+    """The degraded-step rule: ``predict_only_step`` when labels exist, else hold.
+
+    Weights are held either way; this only sets the NEXT step's prior. ``None``
+    stays ``None`` — there is nothing to advance before the first observation.
+    """
+    if prev_belief is None:
+        return None
+    if states is None or len(states.dropna()) < 2:
+        log.warning(
+            "Step %s: classifier #%d has no in-window labels on this degraded step — "
+            "holding its filtered belief unchanged (no A to advance by)", t, which,
+        )
+        return prev_belief
+    return predict_only_step(prev_belief, transition_matrix_for(states, state_index=state_index))
+
+
 def _classifier2_params(cfg: dict[str, Any]) -> dict[str, Any]:
     """``classifier2_config`` with a defensive fallback for synthetic test configs."""
     return classifier2_config(cfg)
@@ -278,6 +362,7 @@ def run_joint_backtest(
     frozen_features_1: list[str] | None = None,
     frozen_features_2: list[str] | None = None,
     routing: str = ROUTING_L1_ONLY,
+    use_regime_filter: bool = True,
     min_train: int | None = None,
     cash_returns: pd.Series | None = None,
     registry_path: Any = None,
@@ -312,6 +397,9 @@ def run_joint_backtest(
         routing: :data:`ROUTING_L1_ONLY` (decision-bearing) or
             :data:`ROUTING_L2_NOWCAST` (observational; MUST be paired with
             ``registry_path=registry.NO_REGISTRY``).
+        use_regime_filter: apply the Bayes filter under :data:`ROUTING_L2_NOWCAST`
+            (plan 08-08). Has no effect under :data:`ROUTING_L1_ONLY`, where the
+            filter is never applied. ``False`` reproduces the pre-08-08 l2 leg.
         min_train: overrides ``cfg["backtest"]["min_train_months"]``.
         cash_returns: the cash sleeve's own return series (review F4).
         registry_path: ledger path, or ``registry.NO_REGISTRY`` for zero rows.
@@ -324,8 +412,9 @@ def run_joint_backtest(
         date with ``driver.py``'s columns plus ``state_1``/``state_2``.
         ``metadata`` carries ``routing``, ``blend_weight_1``, ``n_steps``,
         ``n_degraded``, ``n_degraded_classifier_1``, ``n_degraded_classifier_2``,
-        ``first_date``, ``last_date``, ``records``, and each classifier's
-        ``per_step_metrics``.
+        ``first_date``, ``last_date``, ``records``, each classifier's
+        ``per_step_metrics`` (the RAW posterior) and ``per_step_belief`` (the
+        filtered belief; empty unless the filter ran).
     """
     if routing not in _ROUTINGS:
         raise ValueError(
@@ -371,6 +460,13 @@ def run_joint_backtest(
     records: list[JointStepRecord] = []
     per_step_1: dict[str, list] = {"dates": [], "proba": [], "classes": []}
     per_step_2: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    per_step_belief_1: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    per_step_belief_2: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    # The filter's recursion state — a LOOP VARIABLE, not a feature (plan 08-08).
+    prev_belief_1: pd.Series | None = None
+    prev_belief_2: pd.Series | None = None
+    state_index_1 = list(range(int(cfg.get("labeling", {}).get("K", 5))))
+    state_index_2 = list(range(int(c2["K"])))
 
     prev_weights: pd.Series = pd.Series(dtype=float)
     prev_active_regime: int | None = None
@@ -457,6 +553,23 @@ def run_joint_backtest(
                         degraded = True
                         n_degraded_2 += 1
 
+        # What the allocator consumes. Under l1only this is the one-hot, untouched.
+        belief_1, belief_2 = probs_1, probs_2
+        filtered = False
+        if routing == ROUTING_L2_NOWCAST and use_regime_filter:
+            if degraded:
+                prev_belief_1 = _advance_without_observation(
+                    prev_belief_1, states_1, state_index=state_index_1, t=t, which=1
+                )
+                prev_belief_2 = _advance_without_observation(
+                    prev_belief_2, states_2, state_index=state_index_2, t=t, which=2
+                )
+            else:
+                belief_1 = _filtered_belief(prev_belief_1, states_1, probs_1, state_index=state_index_1)
+                belief_2 = _filtered_belief(prev_belief_2, states_2, probs_2, state_index=state_index_2)
+                prev_belief_1, prev_belief_2 = belief_1, belief_2
+                filtered = True
+
         if degraded:
             new_weights = prev_weights
             new_active_regime = prev_active_regime
@@ -466,12 +579,12 @@ def run_joint_backtest(
             stats_1 = returns_by_regime_stats(train_returns, states_1)
             stats_2 = returns_by_regime_stats(train_returns, states_2)
             new_active_regime = update_active_regime(
-                probs_1, prev_active_regime,
+                belief_1, prev_active_regime,
                 act_threshold=act_threshold, unwind_threshold=unwind_threshold,
             )
             tilt = blend_regime_tilts(
-                probs_1, stats_1,
-                probs_2, stats_2,
+                belief_1, stats_1,
+                belief_2, stats_2,
                 train_returns,
                 weight_1=blend_weight_1,
                 target_vol_annual=target_vol_annual,
@@ -509,6 +622,11 @@ def run_joint_backtest(
                 bucket["dates"].append(t)
                 bucket["proba"].append(probs.values)
                 bucket["classes"].append(list(probs.index))
+            if filtered:
+                for bucket, belief in ((per_step_belief_1, belief_1), (per_step_belief_2, belief_2)):
+                    bucket["dates"].append(t)
+                    bucket["proba"].append(belief.values)
+                    bucket["classes"].append(list(belief.index))
 
         prev_weights = new_weights
         prev_active_regime = new_active_regime
@@ -567,6 +685,9 @@ def run_joint_backtest(
         "records": records,
         "per_step_metrics_1": per_step_1,
         "per_step_metrics_2": per_step_2,
+        "per_step_belief_1": per_step_belief_1,
+        "per_step_belief_2": per_step_belief_2,
+        "use_regime_filter": bool(use_regime_filter and routing == ROUTING_L2_NOWCAST),
         "frozen_features_1": list(frozen_features_1 or []),
         "frozen_features_2": list(frozen_features_2),
         "registry_row_written": registry_path != registry.NO_REGISTRY,
