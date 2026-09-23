@@ -2,20 +2,20 @@
 phase: 08-regime-persistence-stability
 plan: 08
 created: 2026-09-23
-status: HALTED — S-1 real-data leakage guard found 3 LEADs (classifier #2); T-08-40
+status: complete — halted by S-1 (3 LEADs, #2), ruled 2026-09-23 (causal invariance governs), all 4 negative offsets adjudicated bit-identical, Task 3 finished
 ---
 
-# 08-CHURN — Bayes filter wired; the real-data leakage guard HALTED the measurement
+# 08-CHURN — Bayes filter wired; S-1 halted, the ruling adjudicated, the three churn numbers measured
 
 > **Decision-bearing caveat, first.** The Bayes filter changes nothing on the
 > decision-bearing `ROUTING_L1_ONLY`: there `probs` is a one-hot on the L1 label, which is
 > not a likelihood, and the filter is literally gated off (`if routing == ROUTING_L2_NOWCAST
 > and use_regime_filter:`). Everything below about the belief is on the **observational,
 > firewalled l2 leg**, and per ADR-0002 decision (e) **nothing downstream may change on the
-> basis of it**. That includes the halt: it stops this plan's measurement. It does not move
-> criterion 7, which was re-measured byte-identical (below).
+> basis of it**. That includes the halt and every number in §7–§8. None of it moves criterion 7,
+> which was re-measured byte-identical (§1).
 
-## 0. The halt, in one paragraph
+## 0. The halt, in one paragraph (historical — resolved by §6)
 
 The S-1 signed-offset guard was run on the REAL filtered belief paths
 (`joint_lift_belief_{1,2}_l2.parquet`) against the full-sample reference labels. Every
@@ -30,7 +30,9 @@ instructed:
 - `diagnostics_l2_observational.json` was not regenerated;
 - the rule's three clauses were not touched (T-08-40b).
 
-The finding is recorded below for a human decision.
+The finding is recorded below for a human decision. **Resolved:** Glenn ruled the same day that
+causal invariance governs (§6). All four negative offsets were adjudicated bit-identical, and
+Task 3 then ran to completion (§7, §8).
 
 ## 1. Invariants — all held, all checked before the guard was read
 
@@ -145,39 +147,6 @@ prior slightly different from the one the classifier learned. The plan's rule wa
 superset cannot fire the zero-prior raise on a state the nowcaster saw). The mismatch is
 also stated in `joint_driver.py`'s, `driver.py`'s and `report/weekly.py`'s docstrings.
 
-## 5. What is NOT in this record, and why
-
-- **B1 (argmax churn of the filtered belief): not computed, not recorded.** The
-  instruction on a LEAD is not to record a churn number as a result. The belief artifacts
-  are committed as **evidence of the finding**, not as a result.
-- **S-3 readings on the belief** (sojourn/lag ratio, `transition_window_accuracy`, the
-  belief's max-probability distribution): not computed, for the same reason. The
-  pre-filter S-3 context stands as recorded elsewhere:
-  - l1only headline 9.5 / 4.0 = **2.375** (25 of 25 resolved);
-  - raw-posterior max probability below 0.70 in 355 of 488 rows (#1) and 476 of 488 (#2),
-    per 08-01.
-- **`diagnostics_l2_observational.json`: not regenerated.** Regenerating it would write
-  B1 into a tracked record.
-- **The l2 equity curves with the filter on: not committed.** The tracked
-  `joint_lift_{baseline,joint}_l2.parquet` remain the **pre-filter** observational leg.
-  Their `state_*` and `degraded` columns are identical to the filter-on run's; their
-  return, turnover and scale columns are not.
-
-## 6. No target
-
-No target was pre-declared for either churn metric (08-CONTEXT.md), and none is asserted
-anywhere. The roadmap forbids addressing the number by smoothing it, because design §5.4
-says to report that quantity prominently. No B1 number exists in this record to be framed
-against a target, and none should be framed that way when one exists.
-
-## 7. Reproduce
-
-```bash
-python scripts/run_joint_lift.py --routing l2 --dump-curves <dir>        # NO_REGISTRY, 0 rows
-pytest tests/unit/test_platform_nowcaster_recursion.py -k real_data       # #1 green, #2 RED: 3 LEADs
-pytest tests/unit/test_platform_evaluation_sojourn_lag.py -k HeldThrough  # the rule's synthetic pins
-```
-
 ## 5. Orchestrator investigation of the halt (2026-09-23) — evidence for the ruling, NOT a reclassification
 
 The halt stands. S-1's three clauses are unchanged and its verdict — **3 LEADs on classifier
@@ -244,3 +213,143 @@ sitting in the walk-forward labeler's catch-all state, which happens to carry th
 - **Does not:** relax S-1. Whether S-1 remains the governing leakage guard, is superseded by
   the invariance test, or is scoped to classifiers whose vocabularies align, is the human
   ruling T-08-40b reserves.
+
+## 6. The ruling, and the real-data adjudication under it
+
+**RULING — 2026-09-23 (Glenn), recorded in `08-08-PLAN.md` Task 3 and T-08-40. It was made
+*after* the S-1 guard fired.** Causal invariance is the **governing** leakage guard. S-1 is
+demoted to an **observational** reading. S-1's three clauses are **unchanged**, and T-08-40b
+still forbids changing them.
+
+**Governing guard, unit suite** (`tests/unit/test_platform_nowcaster_recursion.py`). On
+08-06's synthetic world, the belief rows ≤ T are compared between a run truncated at T and
+the full run, for **every** T (all 111 months). A and the class prior are supplied once,
+fixed.
+
+| arm | cuts that break | as measured |
+|---|---|---|
+| honest filter | **none** | bit-identical at all 111 cuts |
+| Arm 2 (smoothed two-sided decode) | **20 cuts**: {11:1, 12:2, 13:3, 14:4, 24:1, 36:1, 42:1, 43:2, 44:3, 45:4, 56:1, 57:2, 66:1, 67:2, 68:3, 69:4, 79:1, 80:2, 88:1, 100:1} (cut: rows differing) | invariant at 30, 60, 90 and 110 |
+| Arm 2 at the p−1 cut family only | exactly **{13, 44, 68}**, 3 rows each | the ruling's recorded prototype result, reproduced |
+| one-month structural read-ahead | exactly the cuts where month T+1's evidence differs from month T's | invisible at every steady cut |
+
+The ruling text said Arm 2 "breaks exactly at {13, 44, 68}". That reproduces exactly for
+cuts at the month before each reference transition. Under the every-month sweep the ruling
+requires, Arm 2 also breaks in the run-up to each led turn, and by one row at every turn
+month itself. Both are pinned as measured. The ruling's point stands, and more strongly:
+a sparse or convenient cut set can miss a smoothing leak and a read-ahead alike.
+
+**Real data: two-stage — S-1 detects, invariance adjudicates.** Every strictly negative
+offset gets a truncation cut at p−1 (`scripts/diagnose_s1_truncation.py`, NO_REGISTRY). Any
+break halts. Persisted to `outputs/reports/platform/joint_lift/s1_truncation_invariance.json`
+and cited by `test_every_real_negative_offset_was_adjudicated_bit_identical`.
+
+| cut T | adjudicates | S-1 verdict | rows ≤ T | classifier #1 | classifier #2 |
+|---|---|---|---|---|---|
+| 1982-08-31 | #2, position 236 (1982-09, −1) | LEAD | 66 | bit-identical | bit-identical |
+| **1988-01-31** | **#1, position 300 (1988-02, −6)** | held-through miss | **123** | **bit-identical** | **bit-identical** |
+| 1995-03-31 | #2, position 387 (1995-04, −12) | LEAD | 209 | bit-identical | bit-identical |
+| 2012-08-31 | #2, position 596 (2012-09, −31) | LEAD | 407 | bit-identical | bit-identical |
+
+The 1988-01-31 cut was run by this plan (98.8 s). The other three were run by the orchestrator
+(08-CHURN.md §5.1). **4 of 4 negative offsets were adjudicated, with 0 breaks**: no
+post-*t* information reached any belief value that produced a negative offset. The S-1
+counts are now pinned as measured (#1: 0 LEADs, 1 miss at 300; #2: 3 LEADs at 236, 387,
+596) and no longer gate. Registry 42 before and after.
+
+## 7. The three churn numbers — before and after
+
+Each cell gives count / adjacent pairs, rate, window and degraded count. "Before" is quoted
+from 08-01-SUMMARY.md, not re-derived.
+
+| | #1 before | #1 after | #2 before | #2 after |
+|---|---|---|---|---|
+| **A** — `state_N` (L1), l1only | 246 / 587 = 41.91%, 588 steps 1972-01-31 → 2020-12-31, 0 degraded | **246 / 587 = 41.91%**, same window, 0 degraded | 24 / 587 = 4.09%, same | **24 / 587 = 4.09%**, same |
+| **A** — `state_N` (L1), l2 | 246 / 587 = 41.91%, 588 steps, 100 degraded | **246 / 587**, 100 degraded | 24 / 587, 100 degraded | **24 / 587**, 100 degraded |
+| **B0** — argmax of the RAW posterior, l2 (the control) | 221 / 487 = 45.38%, 488 rows 1974-02-28 → 2020-12-31, 100 degraded | **221 / 487 = 45.38%**, same window, 100 degraded; matrix byte-identical | 66 / 487 = 13.55%, same | **66 / 487 = 13.55%**, same; byte-identical |
+| **B1** — argmax of the FILTERED belief, l2 | — (did not exist) | **81 / 487 = 16.63%**, 488 rows 1974-02-28 → 2020-12-31, **100 degraded** | — | **30 / 487 = 6.16%**, same window, **100 degraded** |
+
+- **B1 is not B0.** argmax(belief) and argmax(posterior) differ in **273 of 488** months
+  (#1) and **155 of 488** (#2), measured from the two artifacts.
+- **Attribution.** B0 did not move and the degraded count did not move, so the difference
+  between B1 and B0 is the filter's.
+- **Reading.** The numbers are reported, not judged against anything. B1 is lower than B0
+  for both classifiers. Per §8 there is no target, and neither direction was pre-declared.
+  The S-3 readings below are what say whether the lower churn was bought with timing.
+
+## 8. S-3 readings — directions, no thresholds
+
+Reference: full-sample labels split at 2020-12-31. `act_threshold` 0.70. "raw" is the
+posterior (B0's object), "belief" is B1's. Sojourn/lag is design §5.4's ratio.
+
+| reading | #1 raw | #1 belief | #2 raw | #2 belief |
+|---|---|---|---|---|
+| median sojourn | 9.5 | 9.5 | 29.0 | 29.0 |
+| median detection lag (months) | 111.0 (15 of 25 resolved) | **72.5** (20 of 25) | 122.0 (2 of 12) | **44.0** (11 of 12) |
+| sojourn / lag ratio | 0.086 | **0.131** | 0.238 | **0.659** |
+| overall accuracy vs reference | 0.154 | 0.090 | 0.420 | 0.396 |
+| transition-window accuracy (±3 months) | 0.111 | **0.202** | 0.189 | **0.208** |
+| steady-state accuracy | 0.165 | 0.062 | 0.448 | 0.418 |
+| rows with max prob < 0.70 | 355 / 488 | **181 / 488** | 476 / 488 | **73 / 488** |
+| max-prob quantiles q10 / q50 / q90 | 0.348 / 0.572 / 0.763 | 0.498 / 0.773 / 0.964 | 0.352 / 0.458 / 0.613 | 0.633 / 0.948 / 0.999 |
+
+Directions, as measured:
+- **The filter makes the path sharper and more resolvable, not more collapsed.** More
+  transitions resolve (#1 15 → 20, #2 2 → 11). Median lag falls (#1 111 → 72.5, #2 122 → 44).
+  The sojourn/lag ratio **rises** (#1 0.086 → 0.131, #2 0.238 → 0.659). S-3's collapse
+  signature is lag rising toward the sojourn and the ratio falling toward 1 or below; that
+  is **not** what moved. Transition-window accuracy **rises** for both classifiers.
+- **Steady-state and overall accuracy fall for both.** This matters most for #1. Against the
+  full-sample reference, #1's overall accuracy is 0.154 raw and 0.090 filtered, below
+  uniform 1/6.
+- **Caveat.** Every row of this table compares walk-forward output against the full-sample
+  reference. For #2 those two labelings share a vocabulary only 41.3% after the best 1:1
+  relabelling (§5.2), and #1's sub-uniform overall accuracy suggests a vocabulary mismatch
+  there too; that one is unmeasured here. These are readings, not evidence of skill.
+- **F-2's lower bound is replaced by a direct measurement.** 08-RESEARCH derived "at least
+  309 of 488 non-degraded steps below 0.70" for #1. The raw posterior measures 355 / 488
+  (08-01). Under the belief the count is **181 / 488** (#1) and **73 / 488** (#2).
+- **The l1only headline is unchanged:** 9.5 / 4.0 = 2.375, 25 of 25. That object is Track
+  A's one-hot, which the filter does not touch.
+
+## 9. At the halt: what was withheld (historical — superseded by §6–§8)
+
+- **B1 (argmax churn of the filtered belief): not computed, not recorded.** The
+  instruction on a LEAD is not to record a churn number as a result. The belief artifacts
+  are committed as **evidence of the finding**, not as a result.
+- **S-3 readings on the belief** (sojourn/lag ratio, `transition_window_accuracy`, the
+  belief's max-probability distribution): not computed, for the same reason. The
+  pre-filter S-3 context stands as recorded elsewhere:
+  - l1only headline 9.5 / 4.0 = **2.375** (25 of 25 resolved);
+  - raw-posterior max probability below 0.70 in 355 of 488 rows (#1) and 476 of 488 (#2),
+    per 08-01.
+- **`diagnostics_l2_observational.json`: not regenerated.** Regenerating it would write
+  B1 into a tracked record.
+- **Still true after the ruling — the l2 equity curves with the filter on: not committed.** The tracked
+  `joint_lift_{baseline,joint}_l2.parquet` remain the **pre-filter** observational leg.
+  Their `state_*` and `degraded` columns are identical to the filter-on run's; their
+  return, turnover and scale columns are not.
+
+Everything else in this section was produced after the ruling: B1 and S-3 in §7–§8, and the
+regenerated `diagnostics_l2_observational.json`. The l2 equity curves stay pre-filter until 08-10
+regenerates the l2 record.
+
+## 10. No target
+
+No target was pre-declared for either churn metric (08-CONTEXT.md), and none is asserted
+anywhere. The roadmap forbids addressing the number by smoothing it, because design §5.4
+says to report that quantity prominently. B1 (§7) is reported beside B0 and is not framed
+against any target. An AST check in `test_platform_joint_diagnostics_record.py`
+(`TestNoChurnTargetIsAsserted`) fails if any test compares B1 to a fixed number or to B0
+with a direction. The check is shown to fire on two violating snippets.
+
+## 11. Reproduce
+
+```bash
+python scripts/run_joint_lift.py --routing l2 --dump-curves <dir>        # NO_REGISTRY, 0 rows
+pytest tests/unit/test_platform_nowcaster_recursion.py                   # S-1 pin, governing invariance, adjudication
+python scripts/diagnose_s1_truncation.py <T> <dir>                        # one real-data cut (NO_REGISTRY)
+python scripts/joint_lift_diagnostics.py --curves outputs/reports/platform/joint_lift --suffix l2
+pytest tests/unit/test_platform_evaluation_sojourn_lag.py -k HeldThrough  # the rule's synthetic pins
+```
+
