@@ -2,35 +2,35 @@
 phase: 08-regime-persistence-stability
 plan: 08
 subsystem: platform/backtest + platform/report + platform/evaluation
-tags: [criterion-1, criterion-2, PER-02, PER-03, bayes-filter, S-1, leakage-guard, HALTED, honesty-framework]
-status: halted
+tags: [criterion-1, criterion-2, PER-02, PER-03, bayes-filter, causal-invariance, S-1, S-3, honesty-framework]
+status: complete
 requires:
   - "08-06 (prediction/regime_filter.py; compute_signed_detection_offsets; the synthetic arms and _world() fixture)"
   - "08-01 (churn.py; joint_lift_probs_{1,2}_l2.parquet; B0 = 221/487 and 66/487)"
 provides:
-  - "evaluation/sojourn_lag.py::classify_negative_offsets — the pre-registered held-through-return rule, pinned on the synthetic arms"
+  - "evaluation/sojourn_lag.py::classify_negative_offsets — the pre-registered held-through-return rule (S-1, observational since the ruling)"
   - "joint_driver.run_joint_backtest(use_regime_filter=True): belief carried as a loop variable under ROUTING_L2_NOWCAST only"
   - "driver.run_backtest(use_regime_filter=True) and report/weekly.py load/save_regime_belief + advance_regime_belief: one cold-start rule (the same function object)"
-  - "outputs/reports/platform/joint_lift/joint_lift_belief_{1,2}_l2.parquet — committed as EVIDENCE of the halt, not as a result"
-  - ".planning/phases/08-regime-persistence-stability/08-CHURN.md — the halt record"
+  - "the GOVERNING leakage guard: an every-month causal-invariance sweep on 08-06's synthetic world, plus real-data p-1 adjudication (s1_truncation_invariance.json)"
+  - "B1 + S-3 readings in diagnostics_l2_observational.json; joint_lift_belief_{1,2}_l2.parquet"
 affects:
-  - "08-09: must not proceed on the belief until a human rules on the S-1 halt (T-08-40 / T-08-40b)"
-  - "08-10: l1only decision-bearing leg re-confirmed byte-identical on real data, filter on AND off"
-  - "tests/unit/test_platform_pooling_consumers.py::TestWeeklyConsumer is RED (outside scope; see Blockers)"
+  - "08-09: the belief is what the hysteresis/tilt consume under l2; hysteresis sees classifier #1 only while the tilt blends two (recorded in joint_driver's docstring)"
+  - "08-10: l1only decision-bearing leg re-confirmed byte-identical on real data, filter on AND off; the tracked l2 equity curves are still PRE-FILTER until 08-10 regenerates the l2 record"
 decisions:
-  - "Filter literally gated: `if routing == ROUTING_L2_NOWCAST and use_regime_filter:`; under l1only prev_belief stays None and no belief bucket is written"
-  - "joint_driver: on ANY degraded step both classifiers advance by predict_only_step when their labels exist (even if one classifier's L2 succeeded), because the step is excluded from metrics and weights are held"
-  - "run_backtest: L1 and L2 share one try, so a degraded step has no labels and the belief is held with a WARNING (no A to advance by)"
-  - "run_backtest: the filter is never applied on the use_regime_tilt=False ablation (a constant one-state vector is not a posterior)"
-  - "weekly: one filter step per MONTH — the belief is persisted with its as-of month; a same-month re-run reuses it, a k-month gap applies k-1 predict-only steps then one filter step"
-  - "On the S-1 LEAD: nothing registered, no B1 churn computed or recorded, diagnostics_l2_observational.json not regenerated, the rule's clauses untouched"
+  - "Filter literally gated: `if routing == ROUTING_L2_NOWCAST and use_regime_filter:`; under l1only prev_belief stays None and no belief artifact is written"
+  - "joint_driver: on ANY degraded step both classifiers advance by predict_only_step when their labels exist; hold + WARNING only when no labels"
+  - "run_backtest: L1 and L2 share one try, so a degraded step has no labels and the belief is held with a WARNING; the use_regime_tilt=False ablation is never filtered"
+  - "weekly: one filter step per MONTH — as-of dated belief; same-month re-run reuses it; a k-month gap applies k-1 predict-only steps"
+  - "RULING 2026-09-23 (Glenn), after the S-1 halt: causal invariance governs; S-1 is observational; S-1's clauses unchanged (T-08-40b)"
+  - "Real data is two-stage: S-1 detects, a truncation cut at p-1 adjudicates; 4 of 4 negative offsets bit-identical"
 tech-stack:
   added: []
-  patterns: ["literal routing gate + bit-for-bit pin", "golden pre-change curve as exact float hex recovered from git", "spy on the consumer to prove what it receives", "AST detector for target assertions, shown to fire"]
+  patterns: ["literal routing gate + bit-for-bit pin", "golden pre-change curve as exact float hex recovered from git", "exhaustive truncation sweep with fixed A/prior", "two-stage detect/adjudicate on real data", "AST detector for target assertions, shown to fire"]
 key-files:
   created:
     - outputs/reports/platform/joint_lift/joint_lift_belief_1_l2.parquet
     - outputs/reports/platform/joint_lift/joint_lift_belief_2_l2.parquet
+    - outputs/reports/platform/joint_lift/s1_truncation_invariance.json
     - .planning/phases/08-regime-persistence-stability/08-CHURN.md
   modified:
     - src/trading_crab_lib/platform/evaluation/sojourn_lag.py
@@ -38,186 +38,237 @@ key-files:
     - src/trading_crab_lib/platform/backtest/driver.py
     - src/trading_crab_lib/platform/report/weekly.py
     - scripts/run_joint_lift.py
+    - scripts/joint_lift_diagnostics.py
+    - outputs/reports/platform/joint_lift/diagnostics_l2_observational.json
     - tests/unit/test_platform_evaluation_sojourn_lag.py
     - tests/unit/test_platform_backtest_joint_driver.py
     - tests/unit/test_platform_backtest_driver.py
     - tests/unit/test_platform_report_weekly.py
     - tests/unit/test_platform_nowcaster_recursion.py
+    - tests/unit/test_platform_joint_diagnostics_record.py
 metrics:
-  duration: "about 1h (first commit 19:54Z, halt commit 20:47Z), plus the pre-interruption reading"
+  duration: "about 2h across two sessions: 19:54Z to 20:51Z (to the halt), then 21:27Z to about 21:45Z after the ruling"
   completed: 2026-09-23
 actuals:
-  tokens: 17984   # chars/4 over the added lines of the realized diff 6a88638..HEAD, parquets excluded
-  tasks: 3        # Tasks 1 and 2 complete; Task 3 HALTED at the S-1 gate
-  commits: 4
+  tokens: 33561   # chars/4 over the added lines of this plan's ten commits (parquets excluded; orchestrator commits excluded)
+  tasks: 3
+  commits: 11
 ---
 
-# Phase 8 Plan 08: Bayes filter wired at all three call sites; the real-data leakage guard HALTED the measurement
+# Phase 8 Plan 08: Bayes filter wired at three call sites; S-1 halted, the ruling adjudicated, three churn numbers measured
 
-The filter now runs in `joint_driver` (l2 only), `run_backtest` and the weekly serve path.
-All three call sites share one cold start, `regime_filter.unconditional_belief`, the same
-function object. On the decision-bearing leg it is byte-for-byte inert: the real l1only
-curves are identical with the filter on, with it off, and to git. **The S-1 guard on the
-real belief path found 3 LEADs for classifier #2** under the pre-registered
-held-through-return rule. Per instruction the plan stopped there:
-- no B1 churn was computed;
-- nothing was registered;
-- the rule was not touched.
+**What was built.** The filter runs in three places, all sharing one cold start
+(`regime_filter.unconditional_belief`, the same function object):
+- `joint_driver`, on the l2 routing only;
+- `run_backtest`;
+- the weekly serve path.
+
+**The decision-bearing leg is untouched.** The real l1only curves are byte-identical with
+the filter on, with it off, and against git.
+
+**The halt, the ruling, and the adjudication.** The first real-data S-1 run found 3 LEADs
+on classifier #2. As instructed, the plan halted at that point without adjusting anything.
+Glenn then ruled that **causal invariance governs** and that S-1 becomes an observational
+reading.
+- **Governing guard, unit suite:** an every-month truncation sweep on the synthetic world.
+  The honest filter is invariant at all 111 cuts. The smoothed-substitution arm breaks at
+  20 cuts.
+- **Real data:** all 4 negative offsets were adjudicated by a cut at p−1, and all 4 are
+  bit-identical.
+
+**The churn numbers (all l2).** Track A and B0 are unchanged; B1 is new. Each is
+count / 487 adjacent pairs.
+
+| | #1 | #2 |
+|---|---|---|
+| B1 (filtered belief) | **81 / 487** | **30 / 487** |
+| B0 (raw posterior, unchanged) | 221 / 487 | 66 / 487 |
 
 ## Tasks and commits
 
-| task | commit | status |
+| step | commit | what |
 |---|---|---|
-| sub-step: `classify_negative_offsets` + synthetic pins (before any real data) | `4752bba` | done |
-| 1 (tracer): joint_driver l2 wiring, l1only pinned | `a78edc3` | done |
-| 2: run_backtest + weekly, one cold-start rule | `ec354b1` | done |
-| 3: measurement | `2649865` | **HALTED at the S-1 gate**. The halt evidence and 08-CHURN.md are committed |
+| rule pinned before real data | `4752bba` | `classify_negative_offsets` + synthetic pins; the four prototype results reproduce |
+| Task 1 (tracer) | `a78edc3` | joint_driver l2 wiring; l1only pinned on/off |
+| Task 2 | `ec354b1` | `run_backtest` + weekly; one cold-start function object |
+| Task 3 — halt | `2649865` | real-data S-1 arm red on #2 (3 LEADs); belief artifacts as evidence; halt recorded |
+| (summary at halt) | `189fa6c` | superseded by this file |
+| *(orchestrator)* | `94d5283`, `639d56b`, `28bb9ba` | pooling-consumer fake stubbed; halt investigated; **RULING** recorded in the plan |
+| Task 3 — step 1 | `6c33d7f` | S-1 real-data test becomes a pin of the measured counts |
+| Task 3 — step 2 | `57651bd` | governing invariance test, every-month sweep |
+| Task 3 — step 3 | `57467d3` | `s1_truncation_invariance.json` (4 cuts) + the record test citing it |
+| Task 3 — step 4 | `94a9ecf` | B1 + S-3 in the diagnostics record; JSON regenerated (additions only) |
+| Task 3 — record | `4b26cc3` | 08-CHURN.md: ruling, adjudication, three numbers, S-3 |
 
-**Tracer gate** (autonomous, per the orchestrator). The tracer verify was re-run: 34
-passed, and the literal gate regex passed. The real l1only leg was then run end to end
-before any expansion work. It came back byte-identical to git (below).
+**Tracer gate.** The tracer's verify passed (34 tests plus the literal gate regex). The real
+l1only leg was then run end to end before any expansion work, and was byte-identical to git.
 
-## The rule, pinned before real data (`4752bba`)
+## The halt and the ruling
 
-`classify_negative_offsets` implements the plan's three clauses verbatim. `q−1 >= 0` is
-guarded before indexing. NaN belief months never satisfy clause (iii), so missing data
-cannot exempt an offset. All four prototype results reproduced exactly:
+**At the halt.** Under the pre-registered held-through-return rule, #1 had 0 LEADs and 1
+held-through miss, at position 300 (1988-02, −6). #2 had 3 LEADs:
 
-| arm | leads | misses |
+| position | reference transition | offset |
 |---|---|---|
-| caveat (A diag 0.999) | [] | [45] |
-| Arm 2 (smoothed substitution) | [14, 45, 69] | [] |
-| Arm 1 (honest) | no negative offsets | |
-| clause (iii) dropped entirely (monkeypatched) | [14, 69] | [45] |
+| 236 | 1982-09 | −1 |
+| 387 | 1995-04 | −12 |
+| 596 | 2012-09 | −31 |
 
-Clause pins were added for: start-of-series (the wrap guard), a non-return `t→r→s`, early
-re-entry (the belief registers `r`), and a missing month at q−1.
+At that point:
+- nothing was registered;
+- no B1 was computed;
+- the rule was not touched.
 
-## The three churn numbers
+**RULING — 2026-09-23 (Glenn).** Causal invariance is the governing leakage guard. S-1 is
+observational. S-1's clauses are unchanged (T-08-40b).
 
-| | #1 | #2 | window, degraded |
-|---|---|---|---|
-| **A** (`state_N`, both routings) | **246 / 587**, unchanged | **24 / 587**, unchanged | 588 steps 1972-01-31 → 2020-12-31; 0 degraded l1only, 100 l2 |
-| **B0** (raw-posterior argmax, l2) — the control | **221 / 487**, unchanged | **66 / 487**, unchanged | 488 rows 1974-02-28 → 2020-12-31, **100 degraded** |
-| **B1** (filtered-belief argmax, l2) | **not computed**: halted by S-1 | **not computed** | belief matrix: 488 rows, same index as B0, 100 degraded |
+**Step 1 — S-1 becomes a pin.** The S-1 test now pins the counts exactly as measured, so it
+fails if any count moves. It no longer gates.
 
-B0 is stronger than "count unchanged": both raw posterior matrices are **byte-identical**
-to 08-01's committed files (max abs diff 0.0). Track A holds elementwise: the l2 run's
-`state_1`, `state_2` and `degraded` columns equal the tracked l2 curves, in both legs.
+**Step 2 — governing invariance, unit suite.** The sweep cuts at every one of 111 months.
+A and the class prior are supplied once, fixed.
+- The honest filter is bit-identical at every cut.
+- **Arm 2 breaks at 20 cuts:** {11:1, 12:2, 13:3, 14:4, 24:1, 36:1, 42:1, 43:2, 44:3, 45:4,
+  56:1, 57:2, 66:1, 67:2, 68:3, 69:4, 79:1, 80:2, 88:1, 100:1}.
+- Arm 2 is **invariant at 30, 60, 90 and 110**, pinned so the reason for the exhaustive
+  sweep lives in the test.
+- **Deviation, measured and not adjusted:** the ruling's recorded prototype result, "Arm 2
+  breaks exactly at {13, 44, 68}, 3 rows each", reproduces exactly only when restricted to
+  the p−1 cut family (the month before each reference transition). Under the every-month
+  sweep the ruling itself requires, it breaks at 20 cuts. Both are pinned. The same
+  measurement shows that a cut at the turn month p catches every transition (the non-led
+  ones by 1 row), which no p−1 cut can see.
+- **Further pins:**
+  - a one-month structural read-ahead breaks at exactly the cuts where month T+1's
+    evidence differs from month T's, and at no steady cut;
+  - re-deriving the prior per truncation (`_run_filter`) raises at cut 13 and breaks the
+    honest filter at cut 50, which is why A and the prior are fixed.
 
-## l1only byte identity (the decision-bearing pin)
+**Step 3 — real-data adjudication** (`s1_truncation_invariance.json`, 0 breaks):
 
-The real `--routing l1 --dry-run` run was dumped to scratch. Every comparison below came
-back **`cmp`-identical** and `assert_frame_equal` exact:
+| cut T | adjudicates | rows ≤ T | #1 | #2 |
+|---|---|---|---|---|
+| 1982-08-31 | #2 LEAD 236 | 66 | bit-identical | bit-identical |
+| **1988-01-31** | **#1 held-through miss 300** — run by this plan, 98.8 s, NO_REGISTRY | **123** | **bit-identical, max diff 0.0** | **bit-identical, max diff 0.0** |
+| 1995-03-31 | #2 LEAD 387 | 209 | bit-identical | bit-identical |
+| 2012-08-31 | #2 LEAD 596 | 407 | bit-identical | bit-identical |
+
+## The three churn numbers (each count / adjacent pairs, window, degraded count)
+
+| | #1 | #2 |
+|---|---|---|
+| **A** `state_N`, l1only | 246 / 587 (41.91%), unchanged. 588 steps 1972-01-31 → 2020-12-31, 0 degraded | 24 / 587 (4.09%), unchanged |
+| **A** `state_N`, l2 | 246 / 587, unchanged, 100 degraded | 24 / 587, unchanged, 100 degraded |
+| **B0** raw-posterior argmax, l2 (control) | 221 / 487 (45.38%), unchanged. 488 rows 1974-02-28 → 2020-12-31, 100 degraded. Matrix byte-identical to 08-01's | 66 / 487 (13.55%), unchanged; byte-identical |
+| **B1** filtered-belief argmax, l2 | **81 / 487 (16.63%)**, 488 rows 1974-02-28 → 2020-12-31, **100 degraded** | **30 / 487 (6.16%)**, same window, **100 degraded** |
+
+- argmax(belief) and argmax(posterior) differ in **273 / 488** months (#1) and
+  **155 / 488** (#2).
+- No target was pre-declared, and none is asserted. An AST check that is shown to fire
+  forbids one.
+
+## S-3 readings (raw posterior → belief; directions only)
+
+| | #1 | #2 |
+|---|---|---|
+| median lag (resolved) | 111.0 (15/25) → **72.5** (20/25) | 122.0 (2/12) → **44.0** (11/12) |
+| sojourn / lag ratio | 0.086 → **0.131** | 0.238 → **0.659** |
+| transition-window accuracy | 0.111 → 0.202 | 0.189 → 0.208 |
+| steady-state accuracy | 0.165 → 0.062 | 0.448 → 0.418 |
+| overall accuracy | 0.154 → 0.090 | 0.420 → 0.396 |
+| max prob < 0.70 | 355/488 → **181/488** | 476/488 → **73/488** |
+
+- **No collapse signature.** Lag falls and the ratio rises, which is the opposite of S-3's
+  collapse direction.
+- **Steady-state accuracy falls** for both classifiers.
+- **Caveat.** Every row compares walk-forward output with the full-sample reference. For #2
+  the two labelings share a vocabulary only 41.3% after the best 1:1 relabelling (08-CHURN
+  §5.2). #1's overall accuracy is below 1/6, which suggests a mismatch there too; that has
+  not been measured.
+- **Unchanged:** the l1only headline, 9.5 / 4.0 = 2.375.
+
+## l1only byte identity
+
+The real `--routing l1 --dry-run` run was dumped to scratch. Every comparison below was
+`cmp`-identical and `assert_frame_equal` exact:
 - `joint_lift_{baseline,joint}_l1only.parquet` and `joint_lift_probs_{1,2}_l1only.parquet`
-  against `git show 6a88638:<path>`;
+  against `git show 6a88638:`;
 - filter on;
-- filter off (`use_regime_filter=False` injected);
+- filter off;
 - on against off.
 
-Criterion 7 reproduces to the last digit in both runs: `wealth_delta`
-**−0.12343826162064975**, `dd_delta` **+0.02408401236666291**. No belief artifact is
-written under l1only.
+Criterion 7 reproduces exactly: wealth_delta **−0.12343826162064975**, dd_delta
+**+0.02408401236666291**.
 
-## Real-data S-1 guard
+## Evidence each discriminating check can fail
 
-| clf | transitions / resolved | min offset | n_negative | **n_lead** | n_held_through_miss |
-|---|---|---|---|---|---|
-| #1 | 25 / 20 | −6 | 1 | **0** | **1**: position 300, 1988-02-29, −6, into 4, over the state-0 run 1987-10..1988-01 |
-| #2 | 12 / 11 | −31 | 3 | **3** | 0 |
-
-The #2 LEADs:
-- **236**: 1982-09, −1. Fails (ii): `1→0→2` is not a return.
-- **387**: 1995-04, −12. Fails (iii): belief[2] was 0.468 at q−1 = 1994-02.
-- **596**: 2012-09, −31. Fails (ii): `2→3→4` is not a return.
-
-Context recorded in 08-CHURN.md §3. It is not a reclassification:
-- the raw posterior has **no** negative offsets (min +3 / +110);
-- the pre-existing L1-only one-hot for #2 already "leads" at 596 by −264 months;
-- three candidate readings (leak / reference timing / label disagreement) are listed for a
-  human.
-
-## S-3 readings
-
-Not computed on the belief, because of the halt. The pre-filter context stands:
-- l1only 9.5 / 4.0 = 2.375;
-- raw-posterior max probability below 0.70 in 355 / 488 rows (#1) and 476 / 488 (#2), per
-  08-01.
-
-## Evidence that each discriminating check can fail
-
-- **Classifier:** M1 unguarded q−1 → 1 red. M2 clause (ii) always true → 4 red. M3 a
-  NaN-tolerant (iii) → 1 red. M4 (iii) dropped → 3 red. M5 dropping only the `belief[r]`
-  half → **0 red**. That confirms the plan's measured statement that a half-drop arm
-  cannot fail at 0.70, so none was written.
-- **joint_driver:** filter applied under l1only → l1only pin red. A no-op filter on #1 →
-  belief-to-tilt test red. Tilt fed the raw posterior → red. Degraded step implemented as
-  a hold → red. Uniform cold start → red.
-- **driver / weekly:** each of the following turns a test red:
-  - serve tilt fed the raw posterior;
+- **Classifier rule:** the unguarded q−1, a clause (ii) that is always true, a
+  NaN-tolerant (iii), and (iii) dropped each go red. Dropping one half of (iii) gives
+  0 red, as the plan measured, so no arm for it was written.
+- **joint_driver:** each of these goes red:
+  - the filter applied under l1only;
+  - a no-op filter;
+  - the tilt fed the raw posterior;
+  - a degraded step implemented as a hold;
+  - a uniform cold start.
+- **driver / weekly:** 7 mutations, each red:
+  - the serve and driver tilts fed the raw posterior;
   - save before load;
-  - uniform cold start;
+  - a uniform cold start;
   - a same-month re-filter;
-  - a copied `unconditional_belief` (fails the identity-object test);
-  - driver tilt fed the raw posterior;
-  - `use_regime_filter` ignored (the filter-off vs pre-change golden goes red).
-- **The real S-1 gate itself fired** on #2. The check is live on real data.
+  - a copied cold-start helper;
+  - the filter flag ignored (caught against the golden recovered from git).
+- **Governing invariance:** Arm 2 breaks at 20 cuts, and the read-ahead breaks at every
+  changing month, so the honest-invariance assertion would fail on either. Pinning Arm 2's
+  invariance at cut 30 shows that a sparse cut set would pass it.
+- **S-1 pin:** dropping 387, or dropping miss 300, goes red.
+- **Adjudication record:** removing the 1988 cut, or flipping one `bit_identical`, goes red.
+- **Diagnostics record:** each of these goes red:
+  - B0 moved;
+  - Track A moved;
+  - B1's source pointed at the raw posterior (2 red);
+  - B1's degraded count moved.
+- **No-target detector:** fires on a target snippet and on a direction snippet, and passes
+  a value re-derived from the artifact.
 
 ## Deviations from Plan
 
-1. **[HALT, T-08-40] Task 3 stopped at the S-1 gate.** B1, the S-3 readings on the belief,
-   and the regenerated `diagnostics_l2_observational.json` do not exist. The diagnostics
-   extension (`walk_forward_belief` block, S-1/S-3 readings) and its record tests were
-   written and are **uncommitted by design**, because their tests need the regenerated
-   JSON, which would record B1. The patch is saved at
-   `/tmp/claude-0/-home-user-claude-scratch-work/64f0b80b-f0fb-5914-ae2e-935a933024c0/scratchpad/0808-task3-unapplied-diagnostics-and-record-tests.patch`
-   (session scratch; regenerable from the plan). Those two files were restored with
-   `git checkout -- <file>`.
-2. **The real-data gate test is committed RED on classifier #2** (`2649865`). Marking it
-   xfail or weakening it would be adjusting the guard.
-3. **[Rule 1] The driver test fake `_fake_refit_l1` was all-zero** while `_fake_refit_l2`
-   named state 1. With the filter on the default path, `likelihood_ratio` correctly raised
-   on that impossible pairing (8 red). The fake now emits both states. It is in
-   `files_modified`.
-4. **[Rule 2] Weekly cadence vs a monthly filter.** Re-filtering on every weekly run would
-   count the same month's evidence up to 4 times. The belief is now as-of dated: a
-   same-month re-run is reused, and a gap applies predict-only for each unobserved month.
-   Tested.
-5. **The belief artifacts were produced in a scratch run and copied into the tracked dir.**
-   The filter-on l2 equity curves are **not** committed (they are not in
-   `files_modified`), so the tracked l2 curves remain the pre-filter observational leg.
-   Their state and degraded columns are identical to the filter-on run's.
-6. **`classify_negative_offsets` was committed ahead of the wiring**, as its own
-   sub-step, per the orchestrator's instruction.
-7. **The synthetic l2 fixture was new**, because the default `_frames()` degrades every l2
-   step. It uses a 96-month square wave: 60 steps, 8 degraded.
-
-## Blockers / Found, not fixed
-
-- **RED, outside scope:** `tests/unit/test_platform_pooling_consumers.py::TestWeeklyConsumer::test_weekly_tilt_call_receives_the_unpooled_returns_by_regime`.
-  Its `_FakeCheckpointManager.load` raises `KeyError` for any unserved name. The real
-  manager raises `FileNotFoundError`, which `load_regime_belief` handles. The test already
-  monkeypatches `load/save_active_regime` for exactly this reason. The fix is two
-  analogous lines for `load/save_regime_belief`. **Not applied**: the file is outside
-  `files_modified`.
-- **The S-1 halt needs a human ruling** (08-CHURN.md §3). Changing the rule after seeing
-  real data is T-08-40b.
-- The hysteresis sees classifier #1 alone while the tilt blends both classifiers. This is
-  recorded in `joint_driver`'s docstring for 08-09.
+1. **[HALT, then RULING]** Task 3 halted on 3 real-data LEADs. The rule was not adjusted.
+   It was completed after Glenn's ruling, under the ruling's text.
+2. **The ruling's recorded prototype result {13, 44, 68} does not hold under its own
+   every-month sweep.** It holds for the p−1 cut family. Both are pinned as measured
+   (above).
+3. **[Rule 1]** The driver test fake `_fake_refit_l1` returned only state 0 while
+   `_fake_refit_l2` named state 1. The filter correctly raised on that pairing, and the fake
+   now emits both states.
+4. **[Rule 2]** The weekly belief is as-of dated, so that weekly re-runs do not count the
+   same month's evidence twice.
+5. **`diagnostics_l1only.json` was not regenerated** (it is not in `files_modified`). The
+   l1only record test accepts a missing `walk_forward_belief` key as "not applicable".
+6. **The tracked `joint_lift_{baseline,joint}_l2.parquet` equity curves remain PRE-FILTER
+   until 08-10 regenerates the l2 record.** They are not in `files_modified`. Their `state_*`
+   and `degraded` columns are identical to the filter-on run's.
+   `diagnostics_l2_observational.json` reads only those columns, so it is unaffected.
+7. **New synthetic l2 fixture** (a 96-month square wave), because the default fixture
+   degrades every l2 step.
+8. **`classify_negative_offsets` was committed ahead of the wiring** as its own sub-step.
+   The S-1 real-data test was split, so that its adjudication half landed with the JSON it
+   reads.
 
 ## Verification
 
 | check | result |
 |---|---|
-| Task 1 verify (pytest + literal gate regex) | 34 passed; gate found |
-| Task 2 verify (pytest, one-cold-start object check, scope diff) | 47 passed; one rule across all three modules; nowcaster/tilt/hysteresis untouched |
-| Task 3 grep verify on 08-CHURN.md | ok |
-| Task 3 JSON verify | not run: JSON not regenerated (halt) |
-| `total_trial_count()` | **42 before, 42 after** every run |
+| Task 1 verify | 34 passed; literal gate found |
+| Task 2 verify | 47 passed; one cold-start object across driver, joint_driver and weekly; nowcaster/tilt/hysteresis untouched |
+| Task 3 pytest verify | 81 passed (recursion + diagnostics record) |
+| Task 3 JSON verify | `A 246 B0 221 B1 81`; degraded 100 for B0 and B1 |
+| Task 3 CHURN grep verify | ok |
+| `total_trial_count()` | **42 before, 42 after** every run, including the 1988-01-31 cut |
 | legacy-import ratchet | 11 passed, 31 |
-| 2021+ holdout | not read; every artifact ends 2020-12-31; the real-data arm asserts it |
-| ruff + flake8 (E9,F63,F7,F82) | clean on every committed .py, before each commit |
-| `pytest tests/ -q` | **2240 collected: 2238 passed, 2 failed, 0 skipped** (2212 at wave-2 close + 28 new). The 2 failures are the expected ones: the S-1 gate on classifier #2 (the halt) and the out-of-scope `test_platform_pooling_consumers.py::TestWeeklyConsumer` fixture (Blockers) |
+| 2021+ holdout | not read; every artifact and cut ends ≤ 2020-12-31 |
+| ruff + flake8 (E9,F63,F7,F82) | clean on every touched .py, before each commit |
+| `pytest tests/ -q` | **2263 passed, 0 failed, 0 skipped** (2240 at the halt + 23: the S-1 pin, 5 invariance tests, the adjudication test, 16 record tests; the orchestrator's `94d5283` turned the pooling-consumer test green) |
 
 ## Known Stubs
 
@@ -231,6 +282,6 @@ None.
 
 ## Self-Check: PASSED
 
-- FOUND: both belief parquets (tracked), 08-CHURN.md, and every modified source/test file
-- FOUND commits on `claude/keen-galileo-zqcml6-w5`: `4752bba`, `a78edc3`, `ec354b1`, `2649865`. Not pushed.
-- Registry 42. STATE.md, ROADMAP.md and REQUIREMENTS.md not touched (orchestrator instruction).
+- FOUND (tracked): both belief parquets, `s1_truncation_invariance.json`, the regenerated `diagnostics_l2_observational.json`, `08-CHURN.md`
+- FOUND commits on `claude/keen-galileo-zqcml6-w5`: `4752bba`, `a78edc3`, `ec354b1`, `2649865`, `189fa6c`, `6c33d7f`, `57651bd`, `57467d3`, `94a9ecf`, `4b26cc3`, and this summary. Not pushed.
+- Registry 42. STATE.md, ROADMAP.md and REQUIREMENTS.md were not touched (orchestrator instruction).
