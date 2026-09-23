@@ -39,6 +39,12 @@ transition the belief has not already crossed, and walks BACKWARDS through
 the contiguous at-or-above-threshold run only where it has. Both functions
 derive transitions from the same ``_transitions_by_state`` rule.
 
+Plan 08-08 adds ``classify_negative_offsets``: the pre-registered (2026-09-23,
+before any real 08-08 number) rule that splits every strictly negative signed
+offset into a HELD-THROUGH MISS (an honest filter that never registered a short
+``s -> r -> s`` excursion) or a LEAD (proof of post-*t* information). Its three
+clauses are fixed in ``08-08-PLAN.md`` and are not to be edited after real data.
+
 Usage::
 
     from trading_crab_lib.platform.evaluation.sojourn_lag import (
@@ -357,6 +363,128 @@ def compute_signed_detection_offsets(
         "median_offset": float(np.median(resolved)) if resolved else float("nan"),
         "n_negative": sum(1 for o in resolved if o < 0),
         "n_zero_or_negative": sum(1 for o in resolved if o <= 0),
+        "act_threshold": act_threshold,
+    }
+
+
+def _belief_held_through(
+    belief_s: np.ndarray, belief_r: np.ndarray, start: int, stop: int, act_threshold: float
+) -> bool:
+    """Clause (iii): at every month in ``[start, stop]`` (inclusive), ``belief[s] >= act``
+    AND ``belief[r] < act``. NaN satisfies neither comparison, so a missing belief month
+    never exempts — missing data cannot turn a lead into a miss.
+
+    Both halves are kept although they are redundant while ``act_threshold > 0.5``
+    (``belief[s] >= 0.70`` forces ``belief[r] <= 0.30``): plan 08-09 may re-pin the
+    threshold relative to 1/K, possibly below 0.5, where they stop being redundant.
+    Do not simplify one away.
+    """
+    window_s = belief_s[start:stop + 1]
+    window_r = belief_r[start:stop + 1]
+    return bool(np.all(window_s >= act_threshold) and np.all(window_r < act_threshold))
+
+
+def classify_negative_offsets(
+    reference_states: pd.Series,
+    belief: pd.DataFrame,
+    offsets_result: dict,
+    act_threshold: float,
+) -> dict:
+    """Classify every strictly negative signed offset as a LEAD or a HELD-THROUGH MISS.
+
+    **The rule, pre-registered in 08-08-PLAN.md (AMENDED 2026-09-23, before any real
+    08-08 number existed) and not to be changed after real data is seen (T-08-40b).**
+    A strictly negative offset at reference transition position ``p`` into state ``s``
+    is a **HELD-THROUGH MISS** if and only if ALL of:
+
+    (i)   the reference run immediately before ``p`` is a run of some ``r != s``
+          spanning ``[q, p-1]``;
+    (ii)  ``q >= 1`` and the reference was in ``s`` at ``q-1`` — the reference went
+          ``s -> r -> s``, a return. A run beginning at the start of the series has no
+          predecessor, is not a return, and is a LEAD (``q-1 >= 0`` is guarded
+          explicitly: a negative position would silently wrap to the series' end);
+    (iii) at every month in ``[q-1, p-1]``: ``belief[s] >= act_threshold`` AND
+          ``belief[r] < act_threshold`` — the belief held ``s`` straight through the
+          whole ``r`` run and never registered it.
+
+    **Every other strictly negative offset is a LEAD** — proof that post-*t*
+    information reached the belief. Why a leak cannot hide behind (iii): a belief that
+    sees post-*t* information registers the ``r`` run it is looking at and then crosses
+    back into ``s`` early, so ``belief[r]`` reaches the threshold inside ``[q, p-1]``
+    and (iii) fails. The miss is the belief *never leaving* ``s``; the leak is the
+    belief *leaving ``s`` too late and returning too early*.
+
+    Why the rule exists (plan 08-06, measured): an honest causal filter with a sticky
+    ``A`` never registers a short intervening regime, so the reference's return to the
+    prior state reads as a lead of up to -14 months although nothing leaked. The
+    exemption is narrower than "ignore negatives": it covers exactly that pattern.
+
+    Args:
+        reference_states: the full-sample reference labels (the series
+            ``compute_signed_detection_offsets`` read transitions from).
+        belief: the belief path, integer state columns; reindexed onto
+            ``reference_states.index`` (missing months are NaN, which never exempts).
+        offsets_result: ``compute_signed_detection_offsets``' output on the same inputs.
+        act_threshold: must equal ``offsets_result["act_threshold"]``.
+
+    Returns:
+        dict with ``n_negative``, ``n_lead``, ``n_held_through_miss``,
+        ``lead_positions``, ``held_through_miss_positions`` and ``details`` (one
+        mapping per negative offset: position, date, offset, state, verdict, and the
+        preceding run's state and span where one exists).
+
+    Raises:
+        ValueError: if ``act_threshold`` differs from the one the offsets were
+            computed at, or ``belief`` is not integer-keyed (the shared T0.12 guard).
+    """
+    if float(offsets_result["act_threshold"]) != float(act_threshold):
+        raise ValueError(
+            f"classify_negative_offsets: act_threshold {act_threshold} differs from the "
+            f"{offsets_result['act_threshold']} the offsets were computed at"
+        )
+    _require_integer_state_columns(belief, caller="classify_negative_offsets")
+    states_arr = np.asarray(reference_states)
+    aligned = belief.reindex(reference_states.index)
+    nan_col = np.full(len(states_arr), np.nan)
+
+    def column(state: int) -> np.ndarray:
+        return aligned[state].to_numpy(dtype=float) if state in aligned.columns else nan_col
+
+    details: list[dict] = []
+    for p, s, off in zip(offsets_result["positions"], offsets_result["target_states"], offsets_result["offsets"]):
+        if np.isnan(off) or off >= 0:
+            continue
+        p, s = int(p), int(s)
+        # (i) the run immediately before p, of r != s, spanning [q, p-1].
+        r = int(states_arr[p - 1])
+        q = p - 1
+        while q - 1 >= 0 and states_arr[q - 1] == r:
+            q -= 1
+        clause_i = r != s
+        # (ii) a return: q >= 1 guarded BEFORE indexing q-1.
+        clause_ii = clause_i and q >= 1 and int(states_arr[q - 1]) == s
+        # (iii) the belief held s through [q-1, p-1] and never registered r.
+        clause_iii = clause_ii and _belief_held_through(column(s), column(r), q - 1, p - 1, act_threshold)
+        verdict = "held_through_miss" if (clause_i and clause_ii and clause_iii) else "lead"
+        details.append({
+            "position": p,
+            "date": reference_states.index[p],
+            "offset": float(off),
+            "state": s,
+            "preceding_state": r,
+            "preceding_run": (q, p - 1),
+            "verdict": verdict,
+        })
+
+    leads = [d["position"] for d in details if d["verdict"] == "lead"]
+    misses = [d["position"] for d in details if d["verdict"] == "held_through_miss"]
+    return {
+        "n_negative": len(details),
+        "n_lead": len(leads),
+        "n_held_through_miss": len(misses),
+        "lead_positions": leads,
+        "held_through_miss_positions": misses,
+        "details": details,
         "act_threshold": act_threshold,
     }
 

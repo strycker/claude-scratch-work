@@ -22,8 +22,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import trading_crab_lib.platform.evaluation.sojourn_lag as sojourn_lag_module
 from trading_crab_lib.platform.evaluation.sojourn_lag import (
     build_filtered_probs_matrix,
+    classify_negative_offsets,
     compute_signed_detection_offsets,
     compute_sojourn_lag_headline,
 )
@@ -487,3 +489,150 @@ class TestSignedOffsetReusesTheT012Guard:
         probs.columns = ["state_0", "state_1"]
         with pytest.raises(ValueError, match="compute_signed_detection_offsets: .*CANONICAL INTEGER"):
             compute_signed_detection_offsets(states, probs)
+
+
+# ── classify_negative_offsets: the held-through-return rule (plan 08-08, AMENDED 2026-09-23) ──
+#
+# Pinned against 08-06's synthetic arms BEFORE any real data is read. The prototype
+# results recorded in 08-08-PLAN.md (measured 2026-09-23 against 08-06's committed
+# fixtures) are reproduced exactly: caveat -> leads [], misses [45]; Arm 2 -> leads
+# [14, 45, 69], misses []; Arm 1 -> no negative offsets; clause (iii) dropped entirely
+# -> Arm 2 leads [14, 69], misses [45].
+#
+# Clause (iii)'s two halves (belief[s] >= act AND belief[r] < act) are REDUNDANT with
+# each other while act_threshold > 0.5 (belief[s] >= 0.70 forces belief[r] <= 0.30).
+# Both are kept because 08-09 may re-pin the threshold relative to 1/K, possibly below
+# 0.5, where they stop being redundant. Nobody should later "simplify" one away. For
+# the same reason there is deliberately NO mutation arm that drops only one half: at
+# act = 0.70 it cannot misclassify anything (measured 2026-09-23), so such an arm would
+# demand a failure that cannot occur.
+
+
+def _recursion_world():
+    """08-06's fixture and arms, reused rather than re-derived (one world, one set of numbers)."""
+    import test_platform_nowcaster_recursion as rec  # tests/unit is on sys.path under pytest's prepend mode
+
+    return rec
+
+
+def _caveat_arm():
+    rec = _recursion_world()
+    states, evidence, _, _ = rec._world()
+    a_emp = rec.transition_matrix_for(states, state_index=rec.IDX)
+    a_stickier = pd.DataFrame(0.999 * np.eye(len(rec.IDX)), index=rec.IDX, columns=rec.IDX) + 0.001 * a_emp
+    return states, rec._run_filter(states, evidence, a_stickier)
+
+
+def _arm2():
+    rec = _recursion_world()
+    states, evidence, _, _ = rec._world()
+    a = rec.transition_matrix_for(states, state_index=rec.IDX)
+    prior = rec.unconditional_belief(states, state_index=rec.IDX)
+    return states, rec._one_hot(rec._viterbi(evidence, a, prior), states.index)
+
+
+def _arm1():
+    rec = _recursion_world()
+    states, evidence, _, _ = rec._world()
+    a = rec.transition_matrix_for(states, state_index=rec.IDX)
+    return states, rec._run_filter(states, evidence, a)
+
+
+def _classify(states, belief, act=0.70):
+    offsets = compute_signed_detection_offsets(states, belief, act_threshold=act)
+    return offsets, classify_negative_offsets(states, belief, offsets, act)
+
+
+class TestHeldThroughReturnRuleOnTheSyntheticArms:
+    def test_caveat_fixture_honest_miss_is_exempted(self):
+        states, belief = _caveat_arm()
+        offsets, out = _classify(states, belief)
+        assert offsets["n_negative"] == 1
+        assert out["lead_positions"] == []
+        assert out["held_through_miss_positions"] == [45]
+        assert out["n_lead"] == 0 and out["n_held_through_miss"] == 1
+        (d,) = out["details"]
+        assert d["offset"] == -14.0 and d["state"] == 2 and d["preceding_state"] == 0
+        assert d["preceding_run"] == (36, 44)
+
+    def test_arm2_leak_still_halts_three_leads_zero_misses(self):
+        """Without this arm the amendment would be a relaxation with no evidence it
+        left the guard intact."""
+        states, belief = _arm2()
+        _, out = _classify(states, belief)
+        assert out["lead_positions"] == [14, 45, 69]
+        assert out["held_through_miss_positions"] == []
+        assert out["n_lead"] == 3 and out["n_held_through_miss"] == 0
+
+    def test_arm1_honest_filter_has_no_negative_offsets_to_classify(self):
+        states, belief = _arm1()
+        offsets, out = _classify(states, belief)
+        assert offsets["n_negative"] == 0
+        assert out["n_negative"] == 0 and out["n_lead"] == 0 and out["n_held_through_miss"] == 0
+
+    def test_mutation_dropping_clause_iii_entirely_swallows_the_leak_at_45(self, monkeypatch):
+        """Position 45 is the one led turn that is ALSO an s -> r -> s return, so it is
+        exactly the case the exemption must not swallow. With clause (iii) gone it is
+        misclassified as a miss (n_lead 3 -> 2) — proving (iii) is what keeps it a lead."""
+        monkeypatch.setattr(sojourn_lag_module, "_belief_held_through", lambda *a, **k: True)
+        states, belief = _arm2()
+        _, out = _classify(states, belief)
+        assert out["lead_positions"] == [14, 69]
+        assert out["held_through_miss_positions"] == [45]
+        assert out["n_lead"] == 2
+
+
+class TestHeldThroughReturnRuleClauses:
+    @staticmethod
+    def _frame(states: list[int], s_col: list[float], k: int = 3) -> tuple[pd.Series, pd.DataFrame]:
+        idx = pd.date_range("1990-01-31", periods=len(states), freq="ME")
+        cols = {j: [0.0] * len(states) for j in range(k)}
+        cols[states[-1]] = s_col
+        others = [j for j in range(k) if j != states[-1]]
+        for j in others:
+            cols[j] = [(1.0 - v) / len(others) for v in s_col]
+        return pd.Series(states, index=idx), pd.DataFrame(cols, index=idx)
+
+    def test_run_at_the_start_of_the_series_is_a_lead_not_a_return(self):
+        """Clause (ii)'s q-1 >= 0 guard. The series ENDS in s, so an unguarded
+        states[q-1] with q = 0 would wrap to states[-1] == s and call this a return."""
+        states, belief = self._frame([1] * 5 + [2] * 5, [0.9] * 10)
+        offsets, out = _classify(states, belief)
+        assert offsets["offsets"] == [-5.0]
+        assert out["lead_positions"] == [5] and out["held_through_miss_positions"] == []
+
+    def test_a_non_return_t_r_s_is_a_lead(self):
+        states, belief = self._frame([0] * 4 + [1] * 4 + [2] * 4, [0.9] * 12)
+        offsets, out = _classify(states, belief)
+        neg = [p for p, o in zip(offsets["positions"], offsets["offsets"]) if o < 0]
+        assert neg == [8]
+        assert out["lead_positions"] == [8]
+
+    def test_belief_registering_r_inside_the_run_is_a_lead(self):
+        """s -> r -> s where the belief drops below act on s for one month inside r and
+        comes back early: the leak pattern. (iii) fails -> LEAD."""
+        states = [2] * 4 + [0] * 4 + [2] * 4
+        s_col = [0.9] * 5 + [0.05] + [0.9] * 6  # leaves s at position 5, back above act from 6
+        st, belief = self._frame(states, s_col)
+        belief.loc[belief.index[5], 0] = 0.9  # ...and registers r = 0 there
+        belief.loc[belief.index[5], 1] = 0.05
+        offsets, out = _classify(st, belief)
+        by_pos = dict(zip(offsets["positions"], offsets["offsets"]))
+        assert by_pos[8] == -2.0
+        assert out["lead_positions"] == [8] and out["held_through_miss_positions"] == []
+
+    def test_a_missing_belief_month_never_exempts(self):
+        states = [2] * 4 + [0] * 4 + [2] * 4
+        st, belief = self._frame(states, [0.9] * 12)
+        _, full = _classify(st, belief)
+        assert full["held_through_miss_positions"] == [8]
+        _, gappy = _classify(st, belief.iloc[3:])  # belief starts exactly at q-1 = 3: still a miss
+        assert gappy["held_through_miss_positions"] == [8]
+        _, later = _classify(st, belief.iloc[4:])  # q-1 = 3 now unobserved (NaN)
+        assert later["held_through_miss_positions"] == [] and later["lead_positions"] == [8]
+
+    def test_threshold_mismatch_raises(self):
+        states, belief = _caveat_arm()
+        offsets = compute_signed_detection_offsets(states, belief, act_threshold=0.70)
+        with pytest.raises(ValueError, match="act_threshold"):
+            classify_negative_offsets(states, belief, offsets, 0.60)
