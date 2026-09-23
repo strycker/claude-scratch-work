@@ -524,6 +524,13 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
+- **(Phase 8, found in 08-06, NOT fixed — predates the phase) the sojourn/lag headline counts
+  transitions the platform could never have acted on.** `compute_detection_lag`'s forward search
+  has no upper bound, and 3 of the 25 reference transitions (**1970-05, 1970-08, 1971-03**) fall
+  **before the first decision date, 1972-01-31**. They contribute lags of **44, 54 and 28 months**
+  to the committed median of **4.0** (ratio 2.375). The headline is pinned byte-for-byte by
+  08-06 and read by 08-08's S-3, so changing it is a deliberate decision, not a cleanup.
+
 - **(Phase 8, found in 08-01, NOT fixed) `_leg_kpis` carries F-4's off-by-one.**
   `scripts/run_joint_lift.py::_leg_kpis` computes `state_{1,2}_transition_rate` as changes /
   `n_steps` (588), not / pairs (587). It feeds the committed `measurement_*.json`, which still
