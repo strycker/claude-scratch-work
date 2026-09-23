@@ -628,7 +628,7 @@ wave 4.
 
 **Wave 3** *(blocked on 08-06)*
 
-- [ ] 08-08-PLAN.md — Wire the filter into both drivers and the weekly report; report **three** churn numbers (A, B0 the control, B1 the new one) with the l1only curve pinned bit-for-bit *(PER-02, PER-03)*
+- [x] 08-08-PLAN.md — Wire the filter into both drivers and the weekly report; report **three** churn numbers (A, B0 the control, B1 the new one) with the l1only curve pinned bit-for-bit *(PER-02, PER-03)*
 
 **Wave 4** *(blocked on 08-08)*
 
@@ -689,5 +689,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
-| 8. Regime Persistence & Stability | 7/10 | In progress — waves 1-2 complete; A11 answered (b-promote-dsr); Track A edge artefact refuted; §4.4 criterion 3 run | wave 2: 2026-09-23 |
+| 8. Regime Persistence & Stability | 8/10 | In progress — waves 1-3 complete; Bayes filter wired; S-1 halt ruled (causal invariance governs) | wave 3: 2026-09-23 |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

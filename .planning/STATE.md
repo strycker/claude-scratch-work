@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
 status: executing
-stopped_at: Phase 8 waves 1-2 complete (7/10 plans); wave 3 (08-08) next
+stopped_at: Phase 8 waves 1-3 complete (8/10 plans); wave 4 (08-09) awaits two decisions from Glenn
 last_updated: "2026-09-23T00:00:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 54
+  completed_plans: 55
 current_phase: 8
 last_activity: 2026-09-23
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
@@ -29,7 +29,15 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **8 — Regime Persistence & Stability — EXECUTING**
-Status: **WAVES 1-2 COMPLETE (7 of 10 plans).** Wave 2 (2026-09-23): 08-06 built the zero-parameter
+Status: **WAVES 1-3 COMPLETE (8 of 10 plans).** Wave 3 (2026-09-23): 08-08 wired the Bayes filter at
+all three call sites. Its pre-registered S-1 guard HALTED on 3 LEADs (classifier #2); investigation
+showed no leak (beliefs bit-identical under truncation at every negative offset, 4 of 4) and no shared
+vocabulary between #2's walk-forward and reference labelings. **Ruling (Glenn): causal invariance
+governs; S-1 is observational.** B1 = **81/487** (#1, vs B0 221) and **30/487** (#2, vs B0 66), 100
+degraded, 1974-02 → 2020-12. l1only byte-identical; Track A and B0 unchanged. Suite 2263 / 0 / 0.
+PER-02 and PER-03 closed. **Next: wave 4 (08-09) — two checkpoint decisions for Glenn.**
+
+**Waves 1-2 as closed:** **WAVES 1-2 COMPLETE (7 of 10 plans).** Wave 2 (2026-09-23): 08-06 built the zero-parameter
 Bayes filter and the signed detection offset; 08-07 RAN §4.4 criterion 3 for both classifiers
 (PER-06 closed, with a named limitation — see Pending Todos). Suite 2212 passed, 0 skipped.
 Registry 42. Next: wave 3 — `08-08` wires the filter in, under the held-through-return rule
@@ -529,6 +537,24 @@ Recent decisions affecting current work:
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
 
 ### Pending Todos
+
+- **PRIORITY (Phase 8, measured 2026-09-23) — neither classifier's walk-forward labeling shares a
+  state vocabulary with its own full-sample reference.** Terminal-month walk-forward labels (08-02's
+  `c{1,2}_lag1_state`, 588 months) against `regime_labels` / `regime_labels_2`:
+
+  | classifier | raw id agreement | best 1:1 relabel | chance 1/K |
+  |---|---|---|---|
+  | #1 (K=6) | 23.0% | **35.7%** | 16.7% |
+  | #2 (K=5) | 16.7% | **41.3%** | 20.0% |
+
+  #2's walk-forward labeler assigns state 4 to 359 of 361 months from 1990-09. **Every metric that
+  compares walk-forward output to the full-sample reference is measured across two vocabularies** —
+  the sojourn/lag headline (median lag 4.0, ratio 2.375), the §5.4 ratios, S-1, and all of S-3
+  (#1's overall accuracy 0.154 → 0.090 is *below* chance, which this explains). **Not yet checked:**
+  whether any human-facing surface — the weekly report's regime NAME via `regime_labels.yaml`, pinned
+  to full-sample ids — names a walk-forward state with a full-sample label. Allocation itself is
+  internally consistent (each step's tilt is keyed on that step's own in-window labels). Not a leak;
+  a structural L1 finding. Out of Phase 8's scope — needs its own ruling.
 
 - **(Phase 8, found in 08-07 — decision needed) the `evaporated` flag cannot fire under a K-fixed
   refit.** It is built from the subsample state's occupancy, and the refit always repopulates

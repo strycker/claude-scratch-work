@@ -76,11 +76,11 @@ measured by the other's metric.
 - [x] **PER-01**: The per-step probability matrix the walk-forward drivers accumulate
   (`driver.py:530-532`, `joint_driver.py:508-510`) is persisted to disk for both classifiers and
   both routings — the prerequisite that gates PER-02, PER-03 and PER-05 (criterion 0)
-- [ ] **PER-02**: A prior-state belief propagates into the nowcaster's consumed output via an
+- [x] **PER-02**: A prior-state belief propagates into the nowcaster's consumed output via an
   explicit Bayes filter, `π_t ∝ [Σ π_{t−1} A] · L_t`, with zero train/serve skew, zero leakage
   surface and zero free parameters — and a guard test that **fails** on a smoothed substitution
   (criterion 1, reworded 2026-09-21; design §5.1/§4.2)
-- [ ] **PER-03**: Both churn series are reported with their own denominators, windows and degraded
+- [x] **PER-03**: Both churn series are reported with their own denominators, windows and degraded
   counts, and neither can masquerade as the other: Track A (`state_1` changes / 587) and Track B
   (`argmax(regime_probs)`), with no target pre-declared for either (criterion 2)
 - [x] **PER-04**: Track A is diagnosed before it is changed — the zero-trial terminal-month
@@ -239,8 +239,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REG-01 | Phase 7 | **Partial** — criterion 6 (dependence) UNRESOLVED; see ADR-0002 |
 | INV-01 | Phase 7 | Complete |
 | PER-01 | Phase 8 | Complete |
-| PER-02 | Phase 8 | Pending |
-| PER-03 | Phase 8 | Pending |
+| PER-02 | Phase 8 | Complete (leakage governed by causal invariance, ruling 2026-09-23) |
+| PER-03 | Phase 8 | Complete (A, B0, B1 each separately denominated) |
 | PER-04 | Phase 8 | Complete |
 | PER-05 | Phase 8 | Pending |
 | PER-06 | Phase 8 | Complete (named limitation: `evaporated` flag inert under K-fixed refits) |
