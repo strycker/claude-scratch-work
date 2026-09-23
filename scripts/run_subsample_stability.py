@@ -99,6 +99,7 @@ from trading_crab_lib.platform.labeling.classifier2 import (
 from trading_crab_lib.platform.labeling.stability import (
     BLOCK_LENGTH_LADDER,
     DEFAULT_STABILITY_SEED,
+    EVAPORATED_OCCUPANCY_MONTHS,
     StabilityFit,
     _check_frozen_columns,
     fit_for_stability,
@@ -300,8 +301,8 @@ def summarize_subsample(
     null_reps: int,
     null_seed: int,
     extra: dict[str, Any] | None = None,
-) -> tuple[list[dict], np.ndarray]:
-    """One row per reference state, plus the full K x K cost matrix.
+) -> tuple[list[dict], dict[str, np.ndarray]]:
+    """One row per reference state, plus the full K x K cost matrices in both unit spaces.
 
     Occupancy, the split-half null and the episode count are read off the MATCHED
     PARTNER — the subsample state the Hungarian assignment pairs with this
@@ -314,9 +315,28 @@ def summarize_subsample(
     ``partner_overlap_months`` counts those among the partner's months. For a
     degenerate leave-one-episode-out both are 0: whatever the partner is, it is
     built from months the reference never gave this state.
+
+    **Companion distance in reference-SD units (``refscaled_*``).** The primary
+    distance is plan 08-03's, in winsorized feature units, and is reported as
+    built. It is, however, dominated by whichever columns have the largest raw
+    scale — measured on the references: ``oil`` and ``cape_shiller`` carry 98.7%
+    of classifier #1's squared between-centroid distance and ``rs_equities_bonds``
+    100% of classifier #2's — so it is nearly blind to every other frozen column.
+    ``08-RESEARCH.md`` §5.2 chose centroid distance on a benchmark with
+    unit-scale columns. The companion divides BOTH de-standardized centroids (and
+    the null's rows) by ONE common scale, the reference fit's winsorized standard
+    deviation, which restores that premise without refitting anything: the two
+    fits stay independent and only the yardstick is shared. It is a second
+    reading, not a replacement; its own Hungarian assignment is reported beside
+    the primary's, and so is the occupancy of its partner.
     """
     K = reference_fit.K
     match = match_states(reference_fit.centroids_destandardized, sub_fit.centroids_destandardized)
+    ref_scale = reference_fit.params["scale"].reindex(reference_fit.columns)
+    ref_z = reference_fit.centroids_destandardized / ref_scale.to_numpy()
+    sub_z = sub_fit.centroids_destandardized.reindex(columns=reference_fit.columns) / ref_scale.to_numpy()
+    match_z = match_states(ref_z, sub_z)
+    rows_z = sub_fit.rows_destandardized.reindex(columns=reference_fit.columns) / ref_scale.to_numpy()
     sub_states = sub_fit.states.to_numpy(dtype=int)
     ref_in_sub = np.asarray(reference_states_in_subsample, dtype=int)
     if ref_in_sub.shape != sub_states.shape:
@@ -352,6 +372,19 @@ def summarize_subsample(
             degenerate=extra.get("degenerate"),
         )
         row["split_half_null_n_reps"] = int(null["n_reps"])
+        null_z = split_half_null(rows_z.loc[partner_mask], n_reps=null_reps, seed=null_seed)
+        partner_z = int(match_z["assignment"][state])
+        months_z = int(sub_fit.occupancy[partner_z])
+        row["refscaled_matched_distance"] = float(match_z["cost_matrix"][state, partner])
+        row["refscaled_split_half_null_median"] = float(null_z["median"])
+        row["refscaled_split_half_null_p10"] = float(null_z["p10"])
+        row["refscaled_split_half_null_p90"] = float(null_z["p90"])
+        row["refscaled_own_partner"] = partner_z
+        row["refscaled_own_partner_agrees"] = bool(partner_z == partner)
+        row["refscaled_own_is_identity"] = bool(match_z["is_identity"])
+        row["refscaled_own_matched_distance"] = float(match_z["matched_distance"][state])
+        row["refscaled_own_partner_occupancy_months"] = months_z
+        row["refscaled_own_partner_evaporated"] = bool(months_z <= EVAPORATED_OCCUPANCY_MONTHS)
         row["n_subsample_months"] = int(n_sub)
         row["reference_months_in_subsample"] = int((ref_in_sub == state).sum())
         row["partner_overlap_months"] = int(((ref_in_sub == state) & partner_mask).sum())
@@ -360,7 +393,11 @@ def summarize_subsample(
             if key in extra:
                 row[key] = extra[key]
         rows.append(row)
-    return rows, np.asarray(match["cost_matrix"], dtype=float)
+    costs = {
+        "winsorized": np.asarray(match["cost_matrix"], dtype=float),
+        "reference_sd": np.asarray(match_z["cost_matrix"], dtype=float),
+    }
+    return rows, costs
 
 
 # ── scheme construction ──
@@ -432,7 +469,7 @@ def _init_worker(payload: dict[str, Any]) -> None:
     _WORKER.update(payload)
 
 
-def _run_task(task: dict[str, Any]) -> tuple[list[dict], np.ndarray]:
+def _run_task(task: dict[str, Any]) -> tuple[list[dict], dict[str, np.ndarray]]:
     ref = _WORKER["reference"]
     X = ref["X"]
     expected = list(ref["fit"].columns)
@@ -458,7 +495,7 @@ def _run_task(task: dict[str, Any]) -> tuple[list[dict], np.ndarray]:
 
 def run_tasks(
     reference: dict[str, Any], tasks: list[dict[str, Any]], *, null_reps: int, null_seed: int, workers: int
-) -> list[tuple[list[dict], np.ndarray]]:
+) -> list[tuple[list[dict], dict[str, np.ndarray]]]:
     payload = {"reference": reference, "null_reps": null_reps, "null_seed": null_seed}
     if workers <= 1 or len(tasks) <= 1:
         _init_worker(payload)
@@ -511,6 +548,19 @@ def _summary_from_single(row: dict) -> dict:
         "subsample_longest_episode": row["longest_episode"],
         "reference_months_in_subsample": row["reference_months_in_subsample"],
         "partner_overlap_months": row["partner_overlap_months"],
+        "refscaled": {
+            "matched_distance": row["refscaled_matched_distance"],
+            "split_half_null": {
+                "median": row["refscaled_split_half_null_median"], "p10": row["refscaled_split_half_null_p10"],
+                "p90": row["refscaled_split_half_null_p90"], "n": row["split_half_null_n"],
+            },
+            "own_partner": row["refscaled_own_partner"],
+            "own_partner_agrees": row["refscaled_own_partner_agrees"],
+            "own_is_identity": row["refscaled_own_is_identity"],
+            "own_matched_distance": row["refscaled_own_matched_distance"],
+            "own_partner_occupancy_months": row["refscaled_own_partner_occupancy_months"],
+            "own_partner_evaporated": row["refscaled_own_partner_evaporated"],
+        },
     }
     if row["scheme_family"] == "leave_one_episode_out":
         out.update({
@@ -544,6 +594,10 @@ def _summary_from_bootstrap(rows: list[dict]) -> dict:
     partners = [r["matched_partner"] for r in rows]
     identity = np.array([r["is_identity"] for r in rows], dtype=bool)
     episodes = np.array([r["n_episodes"] for r in rows], dtype=float)
+    dist_z = np.array([r["refscaled_matched_distance"] for r in live], dtype=float)
+    null_z = np.array([r["refscaled_split_half_null_median"] for r in live], dtype=float)
+    agree_z = np.array([r["refscaled_own_partner_agrees"] for r in rows], dtype=bool)
+    evap_z = np.array([r["refscaled_own_partner_evaporated"] for r in rows], dtype=bool)
 
     def q(a: np.ndarray, p: float) -> float:
         a = a[np.isfinite(a)]
@@ -583,6 +637,15 @@ def _summary_from_bootstrap(rows: list[dict]) -> dict:
         "n_seams": {"median": float(np.median(seams)), "min": int(seams.min()), "max": int(seams.max())},
         "reference_months_in_subsample": float(np.median([r["reference_months_in_subsample"] for r in rows])),
         "partner_overlap_months": float(np.median([r["partner_overlap_months"] for r in rows])),
+        "refscaled": {
+            "matched_distance": q(dist_z, 0.5),
+            "matched_distance_p10": q(dist_z, 0.10),
+            "matched_distance_p90": q(dist_z, 0.90),
+            "split_half_null": {"median": q(null_z, 0.5), "p10": q(null_z, 0.10), "p90": q(null_z, 0.90),
+                                "n": median_occ},
+            "own_partner_agrees_fraction": float(agree_z.mean()),
+            "own_partner_evaporated_replicates": int(evap_z.sum()),
+        },
     }
 
 
@@ -633,6 +696,23 @@ def build_summary_rows(detail_rows: list[dict]) -> list[dict]:
     return summaries
 
 
+def distance_scale_dominance(fit: StabilityFit) -> dict[str, Any]:
+    """Each column's share of the reference's total squared between-centroid distance.
+
+    In winsorized units (the primary distance) and in reference-SD units (the
+    companion). A column with ~0 share in winsorized units is one the primary
+    distance cannot see.
+    """
+    cols = list(fit.columns)
+    scale = fit.params["scale"].reindex(cols).to_numpy()
+    out: dict[str, Any] = {"reference_winsorized_sd": dict(zip(cols, scale.tolist()))}
+    for units, C in (("winsorized", fit.centroids_destandardized.to_numpy()),
+                     ("reference_sd", fit.centroids_destandardized.to_numpy() / scale)):
+        d2 = ((C[:, None, :] - C[None, :, :]) ** 2).sum(axis=(0, 1))
+        out[f"share_{units}"] = dict(zip(cols, (d2 / d2.sum()).tolist()))
+    return out
+
+
 def full_sample_table(fit: StabilityFit) -> dict[str, Any]:
     """Per-state occupancy and episode spans of the reference labeling."""
     eps = state_episodes(fit.states, n_states=fit.K)
@@ -668,19 +748,20 @@ def _detail_frame(detail_rows: list[dict]) -> pd.DataFrame:
     return df
 
 
-def _cost_frame(entries: list[tuple[int, dict, np.ndarray]]) -> pd.DataFrame:
+def _cost_frame(entries: list[tuple[int, dict, dict[str, np.ndarray]]]) -> pd.DataFrame:
     recs = []
-    for classifier, task, cost in entries:
+    for classifier, task, costs in entries:
         extra = task["extra"]
-        K = cost.shape[0]
-        for i in range(K):
-            for j in range(K):
-                recs.append({
-                    "classifier": classifier, "scheme_family": extra["scheme_family"],
-                    "scheme": task["scheme"], "block_length": extra.get("block_length"),
-                    "replicate": extra.get("replicate"), "reference_state": i,
-                    "subsample_state": j, "distance": float(cost[i, j]),
-                })
+        for units, cost in costs.items():
+            K = cost.shape[0]
+            for i in range(K):
+                for j in range(K):
+                    recs.append({
+                        "classifier": classifier, "scheme_family": extra["scheme_family"],
+                        "scheme": task["scheme"], "block_length": extra.get("block_length"),
+                        "replicate": extra.get("replicate"), "units": units, "reference_state": i,
+                        "subsample_state": j, "distance": float(cost[i, j]),
+                    })
     df = pd.DataFrame(recs)
     for col in ("block_length", "replicate"):
         df[col] = df[col].astype("Int64")
@@ -699,7 +780,7 @@ def _json_clean(o: Any) -> Any:
 
 def _print_rows(summaries: list[dict]) -> None:
     header = (f"{'c':>1} {'scheme':<28} {'st':>2} {'ptr':>3} {'id':>2} {'dist':>7} {'null':>7} "
-              f"{'margin':>6} {'occ':>6} {'eps':>5} {'evap':>5}")
+              f"{'margin':>6} {'occ':>6} {'eps':>5} {'evap':>5} {'rsd':>6} {'rnull':>6}")
     print(header)  # noqa: T201 — CLI run output
     for s in summaries:
         null = s["split_half_null"]["median"]
@@ -708,7 +789,8 @@ def _print_rows(summaries: list[dict]) -> None:
             f"{'Y' if s['is_identity'] else 'N':>2} {s['matched_distance']:>7.3f} "
             f"{(null if null is not None else float('nan')):>7.3f} {s['margin']:>6.3f} "
             f"{s['subsample_occupancy_months']:>6.1f} {s['subsample_episode_count']:>5.1f} "
-            f"{str(s['evaporated']):>5}"
+            f"{str(s['evaporated']):>5} {s['refscaled']['matched_distance']:>6.3f} "
+            f"{(s['refscaled']['split_half_null']['median'] or float('nan')):>6.3f}"
         )
 
 
@@ -741,7 +823,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         identities[c] = assert_reference_matches_checkpoint(references[c], references[c]["checkpoint"])
 
     detail_rows: list[dict] = []
-    cost_entries: list[tuple[int, dict, np.ndarray]] = []
+    cost_entries: list[tuple[int, dict, dict[str, np.ndarray]]] = []
     fit_counts: dict[int, int] = {}
     for c in classifiers:
         ref = references[c]
@@ -783,7 +865,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "registry_trial_count": {"before": trials_before, "after": trials_after},
         "distance": "Euclidean distance between de-standardized (winsorized-unit) centroids",
         "keyed_on": "occupancy, null and episodes are read off the Hungarian-matched partner",
-        "no_verdict_note": (
+        "scope_note": (
             "No persistence cutoff exists in this record and none was invented. The only "
             "pass/fail is §4.4 AMENDMENT condition (i), attached to classifier #1 state 0 rows only."
         ),
@@ -798,6 +880,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "sort_column": ref["sort_column"],
             "reference_identity": identities[c],
             "full_sample": full_sample_table(ref["fit"]),
+            "distance_scale_dominance": distance_scale_dominance(ref["fit"]),
+            "reference_centroids_winsorized": {
+                str(k): dict(zip(ref["fit"].columns, ref["fit"].centroids_destandardized.iloc[k].tolist()))
+                for k in range(ref["K"])
+            },
             "n_subsample_fits": fit_counts.get(c, 0),
         }
     record["classifiers"]["1"]["feature_set_note"] = (

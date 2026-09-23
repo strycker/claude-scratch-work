@@ -17,6 +17,9 @@ Two layers, each written to be able to FAIL:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -165,11 +168,12 @@ class TestPartnerKeying:
         assert ref.occupancy.tolist() == [30, 45, 60], "fixture must give distinct occupancies"
         perm = np.array([2, 0, 1])
         sub = _permuted(ref, perm)
-        rows, cost = summarize_subsample(
+        rows, costs = summarize_subsample(
             ref, sub, reference_states_in_subsample=ref.states.to_numpy(),
             classifier=9, scheme="synthetic", null_reps=50, null_seed=1,
         )
-        assert cost.shape == (3, 3)
+        assert set(costs) == {"winsorized", "reference_sd"}
+        assert all(c.shape == (3, 3) for c in costs.values())
         for s, row in enumerate(rows):
             assert row["matched_partner"] == perm[s]
             assert row["is_identity"] is False
@@ -232,3 +236,228 @@ class TestPartnerKeying:
                     assert np.isnan(o[key]), key
                 else:
                     assert o[key] == value, key
+
+
+class TestReferenceScaledCompanion:
+    def test_primary_distance_is_blind_to_a_small_scale_column_and_the_companion_is_not(self):
+        """The primary (winsorized-unit) distance is dominated by large-scale columns.
+
+        Shift ONLY the small-scale column's centroid by a full reference SD: the
+        primary distance barely moves (the large column dominates it), while the
+        reference-SD companion reads ~1.0. Fails if the companion is computed in
+        the same units as the primary, or not computed at all.
+        """
+        rng = np.random.default_rng(11)
+        n = 120
+        big = np.concatenate([rng.normal(0, 1000, n // 2), rng.normal(5000, 1000, n // 2)])
+        small = np.concatenate([rng.normal(0, 0.01, n // 2), rng.normal(0.05, 0.01, n // 2)])
+        X = pd.DataFrame({"big": big, "trailing_return_1m": small},
+                         index=pd.date_range("2000-01-31", periods=n, freq="ME"))
+        ref = fit_for_stability(X, K=2, lam=1.0, n_restarts=3, sort_column="trailing_return_1m")
+        sd_small = float(ref.params["scale"]["trailing_return_1m"])
+        moved = ref.centroids_destandardized.copy()
+        moved["trailing_return_1m"] = moved["trailing_return_1m"] + sd_small
+        sub = StabilityFit(
+            states=ref.states, centroids_standardized=ref.centroids_standardized,
+            centroids_destandardized=moved, columns=ref.columns, params=ref.params,
+            occupancy=ref.occupancy, rows_destandardized=ref.rows_destandardized, K=2,
+        )
+        rows, costs = summarize_subsample(
+            ref, sub, reference_states_in_subsample=ref.states.to_numpy(),
+            classifier=9, scheme="synthetic", null_reps=50, null_seed=1,
+        )
+        for row in rows:
+            assert row["matched_distance"] == pytest.approx(sd_small, rel=1e-9)
+            assert row["matched_distance"] < 0.1, "primary: a full SD of the small column is ~invisible"
+            assert row["refscaled_matched_distance"] == pytest.approx(1.0, rel=1e-9)
+        assert costs["reference_sd"][0, 0] == pytest.approx(1.0, rel=1e-9)
+
+
+# ── 3. the persisted artifacts ──
+
+ARTIFACT_DIR = Path(__file__).resolve().parents[2] / "outputs" / "reports" / "platform" / "stability"
+LADDER = (6, 12, 24, 48)
+FAMILIES = {"drop_first_decade", "drop_last_decade", "circular_block_bootstrap", "leave_one_episode_out"}
+K_BY_CLASSIFIER = {1: 6, 2: 5}
+
+
+def _require(path: Path) -> Path:
+    if not path.exists():
+        pytest.fail(f"{path} is missing — the criterion-3 artifacts are committed, not optional")
+    return path
+
+
+@pytest.fixture(scope="module")
+def record():
+    return json.loads(_require(ARTIFACT_DIR / "stability_record.json").read_text())
+
+
+@pytest.fixture(scope="module")
+def detail():
+    return pd.read_parquet(_require(ARTIFACT_DIR / "stability_rows.parquet"))
+
+
+@pytest.fixture(scope="module")
+def costs():
+    return pd.read_parquet(_require(ARTIFACT_DIR / "stability_cost_matrices.parquet"))
+
+
+class TestArtifactCoverage:
+    def test_exact_row_count_and_every_combination(self, record):
+        rows = record["rows"]
+        per_classifier_schemes = 2 + len(LADDER) + 1  # two decade drops, the ladder, LOO (own row)
+        expected = sum(K * per_classifier_schemes for K in K_BY_CLASSIFIER.values())
+        assert len(rows) == expected == 77
+        assert {r["scheme"] for r in rows} == FAMILIES
+        seen = {(r["classifier"], r["scheme"], r.get("block_length"), r["reference_state"]) for r in rows}
+        assert len(seen) == len(rows), "duplicate (classifier, scheme, state) rows"
+        for c, K in K_BY_CLASSIFIER.items():
+            for state in range(K):
+                for fam in ("drop_first_decade", "drop_last_decade", "leave_one_episode_out"):
+                    assert (c, fam, None, state) in seen, (c, fam, state)
+                for L in LADDER:
+                    assert (c, "circular_block_bootstrap", L, state) in seen, (c, L, state)
+
+    def test_detail_table_has_every_refit(self, record, detail):
+        B = record["n_bootstrap"]
+        for c, K in K_BY_CLASSIFIER.items():
+            sub = detail[detail["classifier"] == c]
+            n_fits = 2 + len(LADDER) * B + K
+            assert len(sub) == n_fits * K
+            assert record["classifiers"][str(c)]["n_subsample_fits"] == n_fits
+            boot = sub[sub["scheme_family"] == "circular_block_bootstrap"]
+            assert sorted(boot["block_length"].unique().tolist()) == list(LADDER)
+            assert (boot.groupby("block_length")["replicate"].nunique() == B).all()
+
+
+class TestArtifactOccupancyAndEvaporation:
+    def test_every_row_carries_occupancy(self, record, detail):
+        assert all(r.get("subsample_occupancy_months") is not None for r in record["rows"])
+        assert detail["subsample_occupancy_months"].notna().all()
+
+    def test_evaporated_is_exactly_zero_occupancy_on_every_refit(self, detail):
+        # Derived from occupancy ALONE: equality, both directions, on every refit row.
+        assert (detail["evaporated"] == (detail["subsample_occupancy_months"] == 0)).all()
+
+    def test_record_evaporation_is_derived_from_occupancy(self, record):
+        for r in record["rows"]:
+            if r["scheme"] == "circular_block_bootstrap":
+                assert r["evaporated"] is (r["n_replicates_evaporated"] > 0)
+                if r["subsample_occupancy_months"] == 0:
+                    assert r["evaporated"] is True
+            else:
+                assert r["evaporated"] is (r["subsample_occupancy_months"] == 0)
+
+
+class TestArtifactNull:
+    def test_null_n_is_the_rows_own_subsample_count(self, detail):
+        assert (detail["split_half_null_n"] == detail["subsample_occupancy_months"]).all()
+
+    def test_null_is_not_the_full_sample_count(self, record, detail):
+        # Discriminating: the subsample count must differ from the full-sample count
+        # on many rows, so the equality above cannot hold by coincidence.
+        full = {(int(c), int(s)): v["occupancy_months"]
+                for c, cl in record["classifiers"].items() for s, v in cl["full_sample"].items()}
+        full_n = detail.apply(lambda r: full[(int(r["classifier"]), int(r["reference_state"]))], axis=1)
+        assert (detail["split_half_null_n"] != full_n).mean() > 0.5
+
+    def test_null_is_present_and_positive_wherever_a_split_exists(self, record, detail):
+        live = detail[detail["subsample_occupancy_months"] >= 2]
+        assert (live["split_half_null_median"] > 0).all()
+        assert (live["refscaled_split_half_null_median"] > 0).all()
+        dead = detail[detail["subsample_occupancy_months"] < 2]
+        assert dead["split_half_null_median"].isna().all(), "a null with no split must be NaN, not 0"
+        for r in record["rows"]:
+            if r["subsample_occupancy_months"] >= 2 or r["scheme"] == "circular_block_bootstrap":
+                assert r["split_half_null"]["median"] is not None and r["split_half_null"]["median"] > 0
+                assert r["split_half_null"]["n"] == r["subsample_occupancy_months"]
+
+
+class TestArtifactSchemes:
+    def test_classifier1_state2_leave_one_episode_out_is_degenerate(self, record):
+        loo = [r for r in record["rows"] if r["scheme"] == "leave_one_episode_out"
+               and r["classifier"] == 1 and r["reference_state"] == 2]
+        assert len(loo) == 1
+        row = loo[0]
+        assert row["degenerate"] is True
+        assert row["n_months_dropped"] == 71
+        assert row["dropped_span"] == ["1996-07", "2002-05"]
+        assert row["n_episodes_before"] == 1
+        assert row["reference_months_in_subsample"] == 0
+        assert row["partner_overlap_months"] == 0
+
+    def test_full_sample_episode_table_reproduces_research_5_1(self, record):
+        fs = record["classifiers"]["1"]["full_sample"]
+        assert {int(s): v["n_episodes"] for s, v in fs.items()} == {0: 9, 1: 5, 2: 1, 3: 4, 4: 3, 5: 4}
+        assert {int(s): v["occupancy_months"] for s, v in fs.items()} == {0: 40, 1: 228, 2: 71, 3: 200, 4: 84, 5: 72}
+        assert fs["2"]["episodes"] == [{"start": "1996-07", "end": "2002-05", "length": 71}]
+
+    def test_only_one_leave_one_episode_out_is_degenerate_per_one_episode_state(self, record):
+        for r in record["rows"]:
+            if r["scheme"] == "leave_one_episode_out":
+                fs = record["classifiers"][str(r["classifier"])]["full_sample"][str(r["reference_state"])]
+                assert r["degenerate"] is (fs["n_episodes"] == 1)
+                assert r["n_months_dropped"] == fs["longest_episode"]
+
+    def test_bootstrap_rows_carry_positive_seam_counts(self, record, detail):
+        boot = detail[detail["scheme_family"] == "circular_block_bootstrap"]
+        assert boot["n_seams"].notna().all() and (boot["n_seams"] > 0).all()
+        for r in record["rows"]:
+            if r["scheme"] == "circular_block_bootstrap":
+                assert r["n_seams"]["min"] > 0
+
+    def test_decade_drops_remove_exactly_120_months(self, record):
+        for r in record["rows"]:
+            if r["scheme"] in ("drop_first_decade", "drop_last_decade"):
+                ident = record["classifiers"][str(r["classifier"])]["reference_identity"]
+                assert r["n_subsample_months"] == ident["n_months"] - 120
+
+
+class TestArtifactCostMatrices:
+    def test_every_refit_has_a_full_matrix_in_both_units(self, record, detail, costs):
+        assert set(costs["units"].unique()) == {"winsorized", "reference_sd"}
+        for c, K in K_BY_CLASSIFIER.items():
+            sub = costs[costs["classifier"] == c]
+            n_fits = record["classifiers"][str(c)]["n_subsample_fits"]
+            assert len(sub) == n_fits * K * K * 2
+            sizes = sub.groupby(["scheme", "replicate", "units"], dropna=False).size()
+            assert (sizes == K * K).all()
+
+    def test_persisted_matrix_is_the_one_that_produced_each_row(self, detail, costs):
+        w = costs[costs["units"] == "winsorized"]
+        key = ["classifier", "scheme", "replicate", "reference_state"]
+        merged = detail.merge(
+            w.rename(columns={"subsample_state": "matched_partner", "distance": "cost_at_partner"}),
+            on=key + ["matched_partner"], how="left",
+        )
+        assert len(merged) == len(detail) and merged["cost_at_partner"].notna().all()
+        assert np.allclose(merged["cost_at_partner"], merged["matched_distance"], rtol=0, atol=1e-9)
+
+
+class TestArtifactNoThresholdNoSelection:
+    def test_no_threshold_shaped_key(self, record):
+        def keys(o):
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    yield k
+                    yield from keys(v)
+            elif isinstance(o, list):
+                for v in o:
+                    yield from keys(v)
+        bad = [k for k in keys(record) if any(s in k for s in ("threshold", "stable_if", "passes", "verdict"))]
+        assert not bad, bad
+
+    def test_condition_i_appears_on_classifier1_state0_only(self, record):
+        for r in record["rows"]:
+            scoped = r["classifier"] == 1 and r["reference_state"] == 0
+            assert ("amendment_condition_i" in r) is scoped, (r["classifier"], r["scheme"], r["reference_state"])
+            if scoped and r["scheme"] != "circular_block_bootstrap":
+                cond = r["amendment_condition_i"]
+                assert cond["holds"] is (r["subsample_episode_count"] >= 3)
+                assert "three temporally separated episodes" in cond["condition"]
+
+    def test_registry_unchanged_and_references_identical(self, record):
+        assert record["registry_trial_count"]["before"] == record["registry_trial_count"]["after"] == 42
+        for c, n in ((1, 695), (2, 696)):
+            ident = record["classifiers"][str(c)]["reference_identity"]
+            assert ident["mismatches"] == 0 and ident["n_months"] == n and ident["end"] == "2020-12-31"
