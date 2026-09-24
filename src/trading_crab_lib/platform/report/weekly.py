@@ -18,8 +18,9 @@ modified, and never invoked on the default path.
 
 ``main()`` orchestrates the full allocation cycle before assembly: load the
 previous hysteresis state, update it with the current nowcaster
-probabilities, compute target weights via ``vol_targeted_tilt``, and persist
-the new state (load-before-save order, Pitfall 3) — all isolated in
+probabilities, compute target weights via ``vol_targeted_tilt``, pass them
+through the no-trade band, and persist the new state (load-before-save order,
+Pitfall 3) — all isolated in
 ``_build_report_inputs()`` so it can be swapped out in tests without real
 Phase 1/3 checkpoint data on disk.
 
@@ -40,6 +41,19 @@ again), and a gap of several months advances by ``predict_only_step`` for each
 unobserved month. Known approximation (plan 08-06): the class prior is the whole
 label series' distribution, while the nowcaster trains on the D-01 embargoed subset.
 
+**The no-trade band and the active regime at serve (plan 08-09, ``08-A7.md``).** The
+tilt's target passes through ``allocation/hysteresis.py::execute_rebalance`` — the 5pp
+no-trade band, NOT SWEPT, the same function both backtest drivers call — so the weights
+the report shows are the EXECUTED book, not the raw target. ``held`` is the last
+executed book, persisted in the ``executed_weights`` checkpoint (load before save). One
+band step is one MONTH, like the belief: a same-month re-run re-bands this month's
+target against the SAME held book the first run used (the previous month's execution),
+so repeated weekly runs neither compound the band nor drift. No checkpoint yet trades in
+full. ``assemble_weekly_report`` now receives the hysteresis output as
+``active_regime`` instead of recomputing ``probs.idxmax()`` — it no longer narrates a
+state machine whose output it does not show. ``active_regime`` gates no weight: A7
+closed by rewording, and the report says so beside the value.
+
 Usage::
 
     python3 -m trading_crab_lib.platform.report.weekly [--send-email]
@@ -56,7 +70,10 @@ import pandas as pd
 from trading_crab_lib import OUTPUT_DIR
 from trading_crab_lib.email import build_weekly_email_body, load_email_config, send_weekly_email
 from trading_crab_lib.platform.allocation.hysteresis import (
+    execute_rebalance,
+    hysteresis_thresholds,
     load_active_regime,
+    no_trade_band_from_config,
     save_active_regime,
     update_active_regime,
 )
@@ -81,6 +98,7 @@ _DEFAULT_TRADE_THRESHOLD_PCT = 0.03
 _DEFAULT_MIN_OBS_FLAG = 6
 
 _BELIEF_CHECKPOINT = "regime_belief"
+_EXECUTED_CHECKPOINT = "executed_weights"
 
 
 def load_regime_belief(cm=None) -> pd.Series | None:
@@ -119,6 +137,55 @@ def save_regime_belief(belief: pd.Series | None, cm=None, *, as_of: pd.Timestamp
 
 def _months_between(earlier: pd.Timestamp, later: pd.Timestamp) -> int:
     return (later.year - earlier.year) * 12 + (later.month - earlier.month)
+
+
+def _weights_rows(weights: pd.Series | None, basis: str, as_of: pd.Timestamp) -> list[dict]:
+    """Rows for one book. An empty book (all cash) is one null-asset marker row, so it
+    stays distinguishable from "no book" (no rows at all)."""
+    if weights is None:
+        return []
+    if len(weights) == 0:
+        return [{"asset": None, "weight": None, "basis": basis, "as_of": as_of}]
+    return [
+        {"asset": str(a), "weight": float(w), "basis": basis, "as_of": as_of} for a, w in weights.items()
+    ]
+
+
+def load_held_weights(cm=None, *, as_of: pd.Timestamp) -> pd.Series | None:
+    """The ``held`` book the no-trade band compares this month's target against.
+
+    - no checkpoint: None — nothing executed yet, the first execution trades in full;
+    - checkpoint from an EARLIER month: that month's executed book;
+    - checkpoint from THIS month (a weekly re-run): the held book that run used, so the
+      band steps once per month and a re-run reproduces rather than compounds;
+    - checkpoint dated AFTER ``as_of``: WARNING and None, mirroring the belief's rule.
+    """
+    cm = cm or get_platform_checkpoint_manager()
+    try:
+        frame = cm.load(_EXECUTED_CHECKPOINT)
+    except FileNotFoundError:
+        return None
+    if frame.empty:
+        return None
+    saved_as_of = pd.Timestamp(frame["as_of"].iloc[0])
+    gap = _months_between(saved_as_of, as_of)
+    if gap < 0:
+        log.warning("executed_weights checkpoint is dated %s, after this run's %s — no held book", saved_as_of, as_of)
+        return None
+    rows = frame[frame["basis"] == ("executed" if gap > 0 else "held_in")]
+    if rows.empty:
+        return None
+    rows = rows[rows["asset"].notna()]
+    return pd.Series(rows["weight"].to_numpy(dtype=float), index=[str(a) for a in rows["asset"]], dtype=float)
+
+
+def save_executed_weights(
+    executed: pd.Series, held_in: pd.Series | None, cm=None, *, as_of: pd.Timestamp
+) -> None:
+    """Persist this month's executed book and the held book it was banded against."""
+    cm = cm or get_platform_checkpoint_manager()
+    rows = _weights_rows(executed, "executed", as_of) + _weights_rows(held_in, "held_in", as_of)
+    cm.save(pd.DataFrame(rows, columns=["asset", "weight", "basis", "as_of"]), _EXECUTED_CHECKPOINT)
 
 
 def advance_regime_belief(
@@ -202,8 +269,10 @@ def assemble_weekly_report(
     returns_by_regime: pd.DataFrame,
     target_weights: pd.Series,
     accounts: list[str],
+    active_regime: int | None,
     regime_belief: pd.Series | dict | None = None,
     cash: float | None = None,
+    no_trade_band: float | None = None,
     accounts_dir: Path | None = None,
     min_obs_flag: int = _DEFAULT_MIN_OBS_FLAG,
     trade_threshold_pct: float = _DEFAULT_TRADE_THRESHOLD_PCT,
@@ -212,14 +281,19 @@ def assemble_weekly_report(
     pre-computed inputs — a pure function, no I/O beyond the per-account
     holdings YAML reads (``load_account_weights``).
 
-    Sections: (1) current regime distribution, (2) trajectory from the
-    empirical transition matrix, (3) per-asset signals from
-    ``returns_by_regime``, flagging cells with ``n_obs < min_obs_flag`` as
-    low-confidence (D11), (4) target-vs-current + trades implied PER
-    account, each asset annotated with a one-line regime rationale.
+    Sections: (1) current regime distribution, then the hysteresis state
+    machine's OUTPUT (``active_regime``) with the cold-start rule that produced it,
+    (2) trajectory from the empirical transition matrix out of that regime, (3)
+    per-asset signals from ``returns_by_regime``, flagging cells with ``n_obs <
+    min_obs_flag`` as low-confidence (D11), (4) target-vs-current + trades implied
+    PER account, each asset annotated with a one-line regime rationale.
+
+    ``active_regime`` is ``update_active_regime``'s output, passed in — plan 08-09
+    removed the internal ``probs.idxmax()`` recomputation. ``None`` is the neutral
+    posture. ``target_weights`` should be the EXECUTED book (after the no-trade band);
+    ``no_trade_band`` names the band so the report says so.
     """
     probs = pd.Series(regime_probs, dtype=float)
-    active_regime = probs.idxmax() if not probs.empty else None
 
     lines: list[str] = ["# Trading-Crab Platform Weekly Report", ""]
 
@@ -232,11 +306,6 @@ def assemble_weekly_report(
         for regime_id, p in probs.sort_values(ascending=False).items():
             lines.append(f"- regime {regime_id}: {p:.1%}")
     lines.append("")
-    # ponytail: plan 08-08 only SHOWS the filtered belief beside the raw posterior —
-    # the belief is what the hysteresis and the tilt consumed. This section still
-    # recomputes its own probs.idxmax() above and narrates a hysteresis state machine
-    # whose output it does not show; passing the hysteresis output in instead is the
-    # full §5.3 correction and belongs to plan 08-09.
     if regime_belief is not None:
         belief = pd.Series(regime_belief, dtype=float)
         lines.append("## Filtered Regime Belief (what the allocation consumed)")
@@ -245,15 +314,31 @@ def assemble_weekly_report(
             lines.append(f"- regime {regime_id}: {p:.1%}")
         lines.append("")
 
-    # ── 2. Trajectory (empirical transition matrix) ───────────────────────
-    lines.append("## Trajectory (Empirical Transition Matrix)")
+    # The hysteresis OUTPUT, and — adjacent to it — the rule that produced it.
+    lines.append("## Active Regime (hysteresis state machine output)")
+    lines.append("")
+    if active_regime is None:
+        lines.append("- active regime: none (neutral posture)")
+    else:
+        lines.append(f"- active regime: regime {active_regime}")
     lines.append("")
     lines.append(
         "Hysteresis cold-start rule (A1): with no prior active regime, the "
         "platform acts immediately on the highest-probability regime if it "
         "already clears the act threshold; otherwise it stays neutral "
-        "(cash-heavy) until some regime first crosses the act threshold."
+        "until some regime first crosses the act threshold. Once active, a regime "
+        "is held until its own probability falls below the unwind threshold."
     )
+    lines.append("")
+    lines.append(
+        "The active regime is a reported label: it selects the trajectory and "
+        "per-asset rows below and gates no weight (audit item A7, 08-A7.md). "
+        "The weights come from the filtered belief through the no-trade band."
+    )
+    lines.append("")
+
+    # ── 2. Trajectory (empirical transition matrix) ───────────────────────
+    lines.append("## Trajectory (Empirical Transition Matrix)")
     lines.append("")
     if active_regime is not None and active_regime in transition_matrix.index:
         row = transition_matrix.loc[active_regime].sort_values(ascending=False)
@@ -284,6 +369,13 @@ def assemble_weekly_report(
     # ── 4. Target-vs-current + trades implied, per account ────────────────
     lines.append("## Target vs. Current — Trades Implied")
     lines.append("")
+    if no_trade_band is not None:
+        lines.append(
+            f"Targets below are the EXECUTED book after the {no_trade_band:.1%} no-trade band "
+            "(design §5.3 bounded turnover, 08-A7.md): an asset whose target moved by no more "
+            "than the band from its last executed weight keeps that weight."
+        )
+        lines.append("")
     rationale = f"regime {active_regime}" if active_regime is not None else "neutral posture"
     for account in accounts:
         holdings = load_account_weights(account, accounts_dir=accounts_dir)
@@ -334,8 +426,10 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
 
     Returns:
         dict with keys ``regime_probs`` (raw posterior), ``regime_belief``
-        (the filtered belief the allocation consumed), ``transition_matrix``,
-        ``returns_by_regime``, ``target_weights``, ``cash``.
+        (the filtered belief the allocation consumed), ``active_regime`` (the
+        hysteresis output), ``transition_matrix``, ``returns_by_regime``,
+        ``target_weights`` / ``cash`` (the EXECUTED book, after the no-trade band),
+        ``pre_band_target_weights`` (the tilt's target) and ``no_trade_band``.
     """
     cm = cm or get_platform_checkpoint_manager()
 
@@ -353,7 +447,8 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     regime_probs = pd.Series(proba, index=nowcaster.classes_)
 
     allocation_cfg = cfg.get("allocation", {})
-    hysteresis_cfg = allocation_cfg.get("hysteresis", {})
+    act_threshold, unwind_threshold = hysteresis_thresholds(cfg)
+    no_trade_band = no_trade_band_from_config(cfg)
 
     # Bayes filter (plan 08-08): load BEFORE save, immediately before the hysteresis,
     # so the belief the hysteresis sees is this run's.
@@ -369,8 +464,8 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     active_regime = update_active_regime(
         regime_belief,
         prev_active,
-        act_threshold=hysteresis_cfg.get("act_threshold", 0.70),
-        unwind_threshold=hysteresis_cfg.get("unwind_threshold", 0.40),
+        act_threshold=act_threshold,
+        unwind_threshold=unwind_threshold,
     )
     save_active_regime(active_regime, cm)  # save AFTER load
 
@@ -383,13 +478,23 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
     )
 
+    # The no-trade band (plan 08-09): the SAME function the drivers call. Held-book I/O
+    # happens only when a band is configured — with none, the executed book is the target.
+    held = load_held_weights(cm, as_of=as_of) if no_trade_band is not None else None  # load BEFORE save
+    executed = execute_rebalance(tilt["weights"], tilt["cash"], held, band=no_trade_band)
+    if no_trade_band is not None:
+        save_executed_weights(executed["weights"], held, cm, as_of=as_of)  # save AFTER load
+
     return {
         "regime_probs": regime_probs,
         "regime_belief": regime_belief,
+        "active_regime": active_regime,
         "transition_matrix": empirical_transition_matrix(regime_labels),
         "returns_by_regime": returns_by_regime,
-        "target_weights": tilt["weights"],
-        "cash": tilt["cash"],
+        "target_weights": executed["weights"],
+        "cash": executed["cash"],
+        "pre_band_target_weights": tilt["weights"],
+        "no_trade_band": no_trade_band,
     }
 
 
@@ -420,11 +525,13 @@ def main(argv: list[str] | None = None) -> int:
     markdown = assemble_weekly_report(
         regime_probs=inputs["regime_probs"],
         regime_belief=inputs.get("regime_belief"),
+        active_regime=inputs["active_regime"],
         transition_matrix=inputs["transition_matrix"],
         returns_by_regime=inputs["returns_by_regime"],
         target_weights=inputs["target_weights"],
         accounts=accounts,
         cash=inputs["cash"],
+        no_trade_band=inputs.get("no_trade_band"),
         min_obs_flag=report_cfg.get("min_obs_flag", _DEFAULT_MIN_OBS_FLAG),
         trade_threshold_pct=report_cfg.get("trade_threshold_pct", _DEFAULT_TRADE_THRESHOLD_PCT),
     )

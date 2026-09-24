@@ -87,11 +87,22 @@ embargoed subset (trailing ``embargo_months`` dropped, non-finite rows dropped).
 The superset cannot fire the zero-prior raise on a state the nowcaster saw; the
 two priors differ slightly all the same.
 
-A third inconsistency, recorded here and left for plan 08-09 (which owns the §5.3
-wiring): ``update_active_regime`` receives classifier #1's probabilities ALONE
-while ``blend_regime_tilts`` trades BOTH classifiers — the hysteresis tracks one
-classifier while the tilt blends two. It is left unchanged here so this plan's
-before/after comparison stays clean.
+A third inconsistency, ruled on by Glenn 2026-09-24 (plan 08-09, ``08-A7.md``):
+``update_active_regime`` receives classifier #1's belief ALONE while
+``blend_regime_tilts`` trades BOTH classifiers. That mismatch is DECLARED out of the
+state machine's remit, not resolved: classifier #1 has K=6 and #2 K=5 with independent
+state ids, so no "blended belief" exists to feed it. The proper resolution is a joint
+R1 x R2 state space — future work. ``active_regime`` is a reported label and gates no
+weight.
+
+**What does gate the weights (plan 08-09, §5.3's bounded-turnover arm).** The blended
+target passes through ``allocation/hysteresis.py::execute_rebalance`` — the 5pp
+no-trade band read from ``allocation.no_trade_band``, NOT SWEPT — the same function
+``driver.py`` and ``report/weekly.py`` call. ``held`` is the last EXECUTED book; before
+the first non-degraded step nothing has been executed and the first execution trades in
+full. A degraded step holds the executed book and is not banded. With the key absent or
+null the band is off and the curve is byte-identical to the pre-08-09 one — the pin
+that lets plan 08-10 attribute any criterion-7 movement to the band alone.
 
 **Plausibility bands.** The band constants below are ``07-BANDS.md`` §8's
 confirmed dispositions (Glenn, 2026-09-18), recorded before any joint-lift number
@@ -128,7 +139,12 @@ from typing import Any
 
 import pandas as pd
 
-from trading_crab_lib.platform.allocation.hysteresis import update_active_regime
+from trading_crab_lib.platform.allocation.hysteresis import (
+    execute_rebalance,
+    hysteresis_thresholds,
+    no_trade_band_from_config,
+    update_active_regime,
+)
 from trading_crab_lib.platform.allocation.joint_tilt import blend_regime_tilts
 from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.backtest.costs import apply_transaction_cost, compute_turnover
@@ -432,9 +448,9 @@ def run_joint_backtest(
     target_vol_annual = allocation_cfg.get("target_vol_annual", 0.10)
     halflife = allocation_cfg.get("ewma_halflife_months", 6)
     portfolio_vol_min_obs = allocation_cfg.get("portfolio_vol_min_obs", 12)
-    hysteresis_cfg = allocation_cfg.get("hysteresis", {})
-    act_threshold = hysteresis_cfg.get("act_threshold", 0.70)
-    unwind_threshold = hysteresis_cfg.get("unwind_threshold", 0.40)
+    act_threshold, unwind_threshold = hysteresis_thresholds(cfg)
+    # §5.3's bounded-turnover arm (plan 08-09, 08-A7.md): None = no band, byte-identical.
+    no_trade_band = no_trade_band_from_config(cfg)
 
     c2 = _classifier2_params(cfg)
     if frozen_features_2 is None:
@@ -471,6 +487,10 @@ def run_joint_backtest(
     prev_weights: pd.Series = pd.Series(dtype=float)
     prev_active_regime: int | None = None
     prev_cash: float = 1.0
+    # The band's ``held`` is the last EXECUTED book (prev_weights) once anything has been
+    # executed; before the first non-degraded step there is none and the first
+    # execution trades to target in full (08-A7.md).
+    executed_once = False
 
     n_degraded_1 = 0
     n_degraded_2 = 0
@@ -593,8 +613,12 @@ def run_joint_backtest(
                 occupancy_1=_occupancy(states_1),
                 occupancy_2=_occupancy(states_2),
             )
-            new_weights = tilt["weights"]
-            new_cash = tilt["cash"]
+            executed = execute_rebalance(
+                tilt["weights"], tilt["cash"], prev_weights if executed_once else None, band=no_trade_band
+            )
+            new_weights = executed["weights"]
+            new_cash = executed["cash"]
+            executed_once = True
 
         turnover = compute_turnover(prev_weights, new_weights)
         test_date = test_index[0]
@@ -657,6 +681,9 @@ def run_joint_backtest(
         "features_1": list(frozen_features_1) if frozen_features_1 else [],
         "features_2": list(frozen_features_2),
     }
+    if no_trade_band is not None:
+        # Attributable: a banded run is a different configuration (08-A7.md).
+        trial_config["no_trade_band"] = no_trade_band
     if trial_tag is not None:
         trial_config["trial_tag"] = trial_tag
     # EXACTLY ONE append_trial site in this module — run_full_backtest_evaluation's
@@ -688,6 +715,7 @@ def run_joint_backtest(
         "per_step_belief_1": per_step_belief_1,
         "per_step_belief_2": per_step_belief_2,
         "use_regime_filter": bool(use_regime_filter and routing == ROUTING_L2_NOWCAST),
+        "no_trade_band": no_trade_band,
         "frozen_features_1": list(frozen_features_1 or []),
         "frozen_features_2": list(frozen_features_2),
         "registry_row_written": registry_path != registry.NO_REGISTRY,

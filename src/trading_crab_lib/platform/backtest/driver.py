@@ -51,6 +51,16 @@ is not a posterior. Known approximation (plan 08-06): the class prior is the who
 in-window label distribution, while the nowcaster trains on the D-01 embargoed
 subset — slightly different priors, stated rather than absorbed.
 
+**The no-trade band (plan 08-09, design §5.3's bounded-turnover arm, ``08-A7.md``).**
+The tilt's target passes through ``allocation/hysteresis.py::execute_rebalance`` — the
+5pp band from ``allocation.no_trade_band``, NOT SWEPT, the one function
+``joint_driver.py`` and ``report/weekly.py`` also call. ``held`` is the last EXECUTED
+book; the first execution (no ``held`` yet — including after leading degraded steps)
+trades in full; a degraded step holds the executed book unbanded. It applies to the
+``use_regime_tilt=False`` ablation too, which runs the same allocation code. With the key
+absent or null the curve is byte-identical to the pre-08-09 one. ``active_regime`` is
+still computed and recorded; it gates no weight (A7 closed by rewording).
+
 Exactly one registry trial is logged per full run (mirroring, not
 duplicating, ``run_walkforward``'s single-trial convention) — this loop is
 NOT a call to ``run_walkforward`` (A1: the per-step body is new code; only
@@ -84,7 +94,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from trading_crab_lib.platform.allocation.hysteresis import update_active_regime
+from trading_crab_lib.platform.allocation.hysteresis import (
+    execute_rebalance,
+    hysteresis_thresholds,
+    no_trade_band_from_config,
+    update_active_regime,
+)
 from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
 from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.backtest.costs import apply_transaction_cost, compute_turnover
@@ -439,9 +454,9 @@ def run_backtest(
     target_vol_annual = allocation_cfg.get("target_vol_annual", 0.10)
     halflife = allocation_cfg.get("ewma_halflife_months", 6)
     portfolio_vol_min_obs = allocation_cfg.get("portfolio_vol_min_obs", 12)
-    hysteresis_cfg = allocation_cfg.get("hysteresis", {})
-    act_threshold = hysteresis_cfg.get("act_threshold", 0.70)
-    unwind_threshold = hysteresis_cfg.get("unwind_threshold", 0.40)
+    act_threshold, unwind_threshold = hysteresis_thresholds(cfg)
+    # §5.3's bounded-turnover arm (plan 08-09, 08-A7.md): None = no band, byte-identical.
+    no_trade_band = no_trade_band_from_config(cfg)
 
     # T-05-03: apply the holdout boundary BEFORE constructing expanding_steps
     # — no call to the holdout-namespace checkpoint manager getter anywhere in this module,
@@ -461,6 +476,10 @@ def run_backtest(
     prev_weights: pd.Series = pd.Series(dtype=float)
     prev_active_regime: int | None = None
     prev_cash: float = 1.0
+    # The band's ``held`` is the last EXECUTED book (prev_weights) once anything has been
+    # executed; before the first non-degraded step there is none and the first
+    # execution trades to target in full (08-A7.md).
+    executed_once = False
 
     # Materialize the step list so progress can be reported as N/total. Every
     # step refits L1+L2 on an expanding window, so a full run is minutes of
@@ -553,8 +572,12 @@ def run_backtest(
                 halflife=halflife,
                 min_obs=portfolio_vol_min_obs,
             )
-            new_weights = tilt["weights"]
-            new_cash = tilt["cash"]
+            executed = execute_rebalance(
+                tilt["weights"], tilt["cash"], prev_weights if executed_once else None, band=no_trade_band
+            )
+            new_weights = executed["weights"]
+            new_cash = executed["cash"]
+            executed_once = True
 
         turnover = compute_turnover(prev_weights, new_weights)
         test_date = test_index[0]
@@ -607,6 +630,9 @@ def run_backtest(
     # call site itself so the ledger is still self-describing. Phase 7 wave 1's four
     # untagged smoke rows are why: an unattributable row still counts toward D-16.
     trial_config["trial_tag"] = trial_tag if trial_tag is not None else "run_backtest"
+    if no_trade_band is not None:
+        # Attributable: a banded run is a different configuration (08-A7.md).
+        trial_config["no_trade_band"] = no_trade_band
     if trial_tag is not None:
         # 07-01 Task 2: provenance only, never a dedup key — the registry is
         # append-only and does not deduplicate identical configs (confirmed

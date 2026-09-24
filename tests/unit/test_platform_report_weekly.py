@@ -91,6 +91,7 @@ class TestAssembleWeeklyReport:
             returns_by_regime=self._returns_by_regime(),
             target_weights=pd.Series({"SPY": 0.5}),
             accounts=["acct1"],
+            active_regime=0,
             accounts_dir=tmp_path,
             min_obs_flag=6,
         )
@@ -108,6 +109,7 @@ class TestAssembleWeeklyReport:
             returns_by_regime=self._returns_by_regime(),
             target_weights=pd.Series({"SPY": 0.5}),
             accounts=["acct1"],
+            active_regime=0,
             accounts_dir=tmp_path,
         )
         assert "acct1" in markdown
@@ -142,6 +144,7 @@ class TestMainOptInEmail:
             "_build_report_inputs",
             lambda cfg, cm=None: {
                 "regime_probs": pd.Series({0: 1.0}),
+                "active_regime": 0,
                 "transition_matrix": pd.DataFrame({0: [1.0]}, index=[0]),
                 "returns_by_regime": pd.DataFrame(
                     columns=[
@@ -355,6 +358,164 @@ class TestRegimeBeliefAtServe:
             returns_by_regime=pd.DataFrame(),
             target_weights=pd.Series(dtype=float),
             accounts=[],
+            active_regime=0,
         )
         assert "## Filtered Regime Belief" in md
         assert "regime 0: 80.0%" in md
+
+
+# ── plan 08-09: the report shows the hysteresis OUTPUT, and the band gates the book ──
+
+
+def _banded(cfg: dict, band: float | None = 0.05) -> dict:
+    out = {**cfg, "allocation": {**cfg["allocation"]}}
+    out["allocation"]["no_trade_band"] = band
+    return out
+
+
+class TestActiveRegimeIsTheMachinesOutput:
+    def _md(self, active_regime):
+        rbr = pd.DataFrame(
+            {
+                "regime": [0, 1],
+                "asset": ["SPY", "TLT"],
+                "mean_monthly_return": [0.01, 0.002],
+                "sharpe_annualized": [1.1, 0.4],
+                "n_obs": [30, 30],
+            }
+        )
+        return weekly.assemble_weekly_report(
+            regime_probs={0: 0.55, 1: 0.45},     # argmax is regime 0
+            transition_matrix=pd.DataFrame({0: [0.9, 0.2], 1: [0.1, 0.8]}, index=[0, 1]),
+            returns_by_regime=rbr,
+            target_weights=pd.Series(dtype=float),
+            accounts=[],
+            active_regime=active_regime,
+        )
+
+    def test_the_rendered_regime_is_the_hysteresis_output_not_the_argmax(self):
+        """Hysteresis held regime 1 (its own P 0.45 >= unwind 0.40) while 0 is the argmax.
+        Fails on the pre-08-09 behaviour, which recomputed probs.idxmax() = 0."""
+        md = self._md(1)
+        assert "- active regime: regime 1" in md
+        assert "From regime 1, next-regime probabilities:" in md
+        assert "From regime 0" not in md
+        signals = md.split("## Per-Asset Signals")[1].split("##")[0]
+        assert "TLT" in signals and "SPY" not in signals   # rows for the ACTIVE regime only
+
+    def test_neutral_posture_is_rendered_as_such(self):
+        md = self._md(None)
+        assert "- active regime: none (neutral posture)" in md
+        assert "(no trajectory available for the current regime)" in md
+
+    def test_the_cold_start_paragraph_sits_directly_under_the_value_it_explains(self):
+        lines = self._md(1).splitlines()
+        value_at = lines.index("- active regime: regime 1")
+        assert lines[value_at + 1] == ""
+        assert lines[value_at + 2].startswith("Hysteresis cold-start rule (A1)")
+        assert lines.index("## Active Regime (hysteresis state machine output)") == value_at - 2
+        assert "gates no weight" in lines[value_at + 4]
+
+    def test_no_internal_argmax_assignment_remains(self):
+        import re
+        from pathlib import Path
+
+        src = Path(weekly.__file__).read_text()
+        code = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
+        assert not re.findall(r"^\s*active_regime\s*=\s*probs\.idxmax\(\)", code, re.M)
+
+    def test_build_inputs_returns_the_hysteresis_output_and_main_renders_it(self, monkeypatch, tmp_path):
+        """End to end on the serve fixture: the belief's max is 0.45 < 0.70, so the machine
+        is neutral while the argmax is regime 1 — the markdown must say neutral."""
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path)
+        seen = []
+        real_hyst = weekly.update_active_regime
+        monkeypatch.setattr(weekly, "update_active_regime", lambda *a, **k: seen.append(real_hyst(*a, **k)) or seen[-1])
+        inputs = weekly._build_report_inputs(cfg, cm)
+        assert inputs["regime_belief"].idxmax() == 1 and inputs["active_regime"] is None
+        assert len(seen) == 1 and inputs["active_regime"] is seen[0]
+
+        monkeypatch.setattr(weekly, "OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr(weekly, "load_platform_config", lambda: {**cfg, "report": {}})
+        monkeypatch.setattr(weekly, "_build_report_inputs", lambda c, cm=None: inputs)
+        assert weekly.main([]) == 0
+        md = (tmp_path / "reports" / "platform" / "weekly_report.md").read_text(encoding="utf-8")
+        assert "- active regime: none (neutral posture)" in md
+        assert "From regime 1" not in md
+
+
+class TestNoTradeBandAtServe:
+    def test_the_band_is_the_shared_helper(self):
+        from trading_crab_lib.platform.allocation import hysteresis
+
+        assert weekly.execute_rebalance is hysteresis.execute_rebalance
+
+    def test_first_run_trades_in_full_and_persists_the_executed_book(self, monkeypatch, tmp_path):
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path)
+        out = weekly._build_report_inputs(_banded(cfg), cm)
+        pd.testing.assert_series_equal(out["target_weights"], out["pre_band_target_weights"])
+        assert out["no_trade_band"] == 0.05
+        saved = weekly.load_held_weights(cm, as_of=pd.Timestamp("2026-09-30"))
+        pd.testing.assert_series_equal(saved, out["target_weights"], check_names=False)
+
+    def test_the_band_suppresses_one_trade_and_allows_another_at_serve(self, monkeypatch, tmp_path):
+        """Target is SPY 0.284838 / TLT 0.715162. Held SPY 0.26 (2.5pp away -> held) and
+        TLT 0.60 (11.5pp -> traded). The report's weights must be the banded book."""
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        held = pd.Series({"SPY": 0.26, "TLT": 0.60})
+        weekly.save_executed_weights(held, None, cm, as_of=pd.Timestamp("2026-07-31"))
+        out = weekly._build_report_inputs(_banded(cfg), cm)
+        target, executed = out["pre_band_target_weights"], out["target_weights"]
+        assert abs(target["SPY"] - 0.26) <= 0.05 < abs(target["TLT"] - 0.60)   # precondition
+        assert executed["SPY"] == 0.26 and executed["TLT"] == target["TLT"]
+        assert not executed.equals(target), "the band did not change the served book"
+        assert out["cash"] == pytest.approx(1.0 - 0.26 - float(target["TLT"]))
+
+    def test_the_negative_residual_branch_fires_at_serve(self, monkeypatch, tmp_path):
+        """Held SPY 0.32 (3.5pp -> held) + TLT's 0.715 target = 1.035: TLT alone is scaled."""
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        weekly.save_executed_weights(pd.Series({"SPY": 0.32, "TLT": 0.60}), None, cm, as_of=pd.Timestamp("2026-07-31"))
+        out = weekly._build_report_inputs(_banded(cfg), cm)
+        target, executed = out["pre_band_target_weights"], out["target_weights"]
+        assert 0.32 + float(target["TLT"]) > 1.0                                # precondition
+        assert executed["SPY"] == 0.32
+        assert executed["TLT"] == pytest.approx(0.68) and executed["TLT"] < target["TLT"]
+        assert float(executed.sum()) == pytest.approx(1.0) and out["cash"] == pytest.approx(0.0, abs=1e-12)
+
+    def test_a_same_month_rerun_rebands_against_the_same_held_book(self, monkeypatch, tmp_path):
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        held = pd.Series({"SPY": 0.26, "TLT": 0.60})
+        weekly.save_executed_weights(held, None, cm, as_of=pd.Timestamp("2026-07-31"))
+        first = weekly._build_report_inputs(_banded(cfg), cm)["target_weights"]
+        # The held book for a re-run in August is July's execution, not August's.
+        pd.testing.assert_series_equal(
+            weekly.load_held_weights(cm, as_of=pd.Timestamp("2026-08-31")), held, check_names=False
+        )
+        second = weekly._build_report_inputs(_banded(cfg), cm)["target_weights"]
+        pd.testing.assert_series_equal(first, second)
+        # ...and the NEXT month's held book is August's execution.
+        pd.testing.assert_series_equal(
+            weekly.load_held_weights(cm, as_of=pd.Timestamp("2026-09-30")), first, check_names=False
+        )
+
+    def test_an_all_cash_book_is_a_held_book_not_a_cold_start(self, tmp_path):
+        from trading_crab_lib.checkpoints import CheckpointManager
+
+        cm = CheckpointManager(checkpoint_dir=tmp_path / "cp")
+        assert weekly.load_held_weights(cm, as_of=pd.Timestamp("2026-08-31")) is None
+        weekly.save_executed_weights(pd.Series(dtype=float), None, cm, as_of=pd.Timestamp("2026-07-31"))
+        held = weekly.load_held_weights(cm, as_of=pd.Timestamp("2026-08-31"))
+        assert held is not None and held.empty
+
+    def test_band_off_serves_the_target_and_writes_no_held_book(self, monkeypatch, tmp_path):
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path)
+        out = weekly._build_report_inputs(_banded(cfg, None), cm)
+        assert out["target_weights"] is out["pre_band_target_weights"]
+        assert weekly.load_held_weights(cm, as_of=pd.Timestamp("2026-09-30")) is None
+
+    def test_the_report_names_the_band(self):
+        md = weekly.assemble_weekly_report(
+            regime_probs={0: 1.0}, transition_matrix=pd.DataFrame(), returns_by_regime=pd.DataFrame(),
+            target_weights=pd.Series(dtype=float), accounts=[], active_regime=0, no_trade_band=0.05,
+        )
+        assert "EXECUTED book after the 5.0% no-trade band" in md

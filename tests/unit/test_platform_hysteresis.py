@@ -293,3 +293,70 @@ class TestBandAndThresholdConfig:
         cfg = {"allocation": {"hysteresis": {"act_threshold": act, "unwind_threshold": unwind}}}
         with pytest.raises(ValueError, match="act_threshold|unwind|thresholds"):
             hysteresis_thresholds(cfg)
+
+
+# ── the band at the driver.py call site (run_backtest) ──────────────────────
+
+
+def _driver_run(monkeypatch, band, *, degrade_at: int | None = None):
+    """``run_backtest`` on a 36-month synthetic frame with faked L1/L2 refits: states
+    alternate 0/1 and the posterior moves step to step, so the tilt target moves by
+    amounts both inside and outside 5pp."""
+    import numpy as np
+
+    import trading_crab_lib.platform.backtest.driver as driver
+    from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
+
+    rng = np.random.default_rng(3)
+    idx = pd.date_range("2018-01-31", periods=36, freq="ME")
+    features = pd.DataFrame({"x": rng.normal(size=36)}, index=idx)
+    asset_returns = pd.DataFrame(
+        {"SPY": rng.normal(0.008, 0.04, 36), "TLT": rng.normal(0.002, 0.02, 36), "GLD": rng.normal(0.003, 0.05, 36)},
+        index=idx,
+    )
+    cash = pd.Series(0.001, index=idx)
+    monkeypatch.setattr(
+        driver, "_refit_l1",
+        lambda tf, cfg, frozen_features=None: pd.Series([i % 2 for i in range(len(tf))], index=tf.index),
+    )
+
+    def fake_l2(tf, states, row, cfg):
+        if degrade_at is not None and len(tf) == degrade_at:
+            raise ValueError("forced degrade")
+        p = 0.15 + 0.7 * ((len(tf) * 7) % 11) / 10.0
+        return pd.Series({0: p, 1: 1.0 - p})
+
+    monkeypatch.setattr(driver, "_refit_l2", fake_l2)
+    calls = []
+    real = execute_rebalance  # the module's own object, so repeated runs never nest wrappers
+    monkeypatch.setattr(driver, "execute_rebalance", lambda *a, **k: calls.append((a, k, real(*a, **k))) or calls[-1][2])
+    cfg = {
+        "labeling": {"K": 2},
+        "allocation": {"target_vol_annual": 0.10, "ewma_halflife_months": 6, "portfolio_vol_min_obs": 3,
+                       "no_trade_band": band},
+        "backtest": {"cost_bps": 10, "min_train_months": 24},
+    }
+    curve, _ = driver.run_backtest(features, asset_returns, cfg, cash_returns=cash, registry_path=NO_REGISTRY)
+    return curve, calls
+
+
+class TestDriverCallSite:
+    def test_band_off_passes_the_target_through_and_band_on_changes_the_book(self, monkeypatch):
+        off, off_calls = _driver_run(monkeypatch, None)
+        on, on_calls = _driver_run(monkeypatch, 0.05)
+        assert all(k["band"] is None for _a, k, _o in off_calls)
+        assert all(out["weights"] is args[0] for args, _k, out in off_calls)   # band off: target IS the book
+        assert all(k["band"] == 0.05 for _a, k, _o in on_calls)
+        assert any(o["held_assets"] for *_x, o in on_calls), "the band never suppressed a trade"
+        assert any(o["traded_assets"] for *_x, o in on_calls), "the band never allowed a trade"
+        assert not on["return"].equals(off["return"]) and on["turnover"].sum() < off["turnover"].sum()
+        assert on["active_regime"].equals(off["active_regime"])            # gates nothing, untouched
+
+    def test_held_is_the_executed_book_and_a_degraded_step_is_not_banded(self, monkeypatch):
+        curve, calls = _driver_run(monkeypatch, 0.05, degrade_at=30)
+        assert bool(curve["degraded"].iloc[6]) and int(curve["degraded"].sum()) == 1   # precondition
+        assert len(calls) == len(curve) - 1
+        assert calls[0][0][2] is None                                       # first step: no held
+        for (_a0, _k0, prev_out), (args, _k, _o) in zip(calls, calls[1:]):
+            assert args[2] is prev_out["weights"]                           # across the degraded step too
+        assert curve["turnover"].iloc[6] == 0.0                             # the degraded step holds the book

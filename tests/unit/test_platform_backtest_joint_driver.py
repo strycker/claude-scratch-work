@@ -663,3 +663,125 @@ def test_filter_is_gated_on_the_l2_routing_in_code_not_by_data():
     src = Path(jd.__file__).read_text()
     code = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
     assert re.search(r"if\s+routing\s*==\s*ROUTING_L2_NOWCAST[^:]*use_regime_filter", code)
+
+
+# ── plan 08-09: the 5pp no-trade band (design §5.3 bounded turnover, 08-A7.md) ──
+
+#: The ROUTING_L1_ONLY curve on ``_l2_frames()`` (blend 0.5; blend 1.0 is identical on
+#: this fixture), generated at 36bbf28 — BEFORE any 08-09 change — as the sha256 of the
+#: float64 bytes of ``curve[["return", "turnover", "scale"]]``, plus two values in exact
+#: float hex for a readable failure. The band-off path must reproduce it bit for bit:
+#: that is what lets plan 08-10 attribute any criterion-7 movement to the band alone.
+_PRE_0809_L1ONLY_SHA256 = "53f2dbff79260b23910fbb26ad638c056811c15af67f421d6e59c93de61333d0"
+
+
+def _band_run(*, band, routing=jd.ROUTING_L1_ONLY, set_key=True, registry_path=NO_REGISTRY):
+    f1, f2, ar, cash = _l2_frames()
+    cfg = _cfg(min_train=L2_MIN_TRAIN)
+    if set_key:
+        cfg["allocation"]["no_trade_band"] = band
+    return jd.run_joint_backtest(
+        f1, ar, cfg, blend_weight_1=0.5, features_2=f2, frozen_features_1=C1_COLS,
+        frozen_features_2=C2_COLS, cash_returns=cash, registry_path=registry_path, trial_tag="t",
+        routing=routing,
+    )
+
+
+def _curve_sha(curve: pd.DataFrame) -> str:
+    import hashlib
+
+    return hashlib.sha256(curve[["return", "turnover", "scale"]].to_numpy(dtype=float).tobytes()).hexdigest()
+
+
+@pytest.fixture(scope="module")
+def band_on_spied():
+    mp = pytest.MonkeyPatch()
+    calls: list[tuple[tuple, dict, dict]] = []
+    real = jd.execute_rebalance
+    try:
+        mp.setattr(jd, "execute_rebalance", lambda *a, **k: calls.append((a, k, real(*a, **k))) or calls[-1][2])
+        curve, meta = _band_run(band=0.05)
+    finally:
+        mp.undo()
+    return curve, meta, calls
+
+
+class TestNoTradeBand:
+    @pytest.mark.parametrize("set_key", [False, True], ids=["key-absent", "key-null"])
+    def test_band_off_l1only_curve_is_the_pre_0809_curve_bit_for_bit(self, set_key):
+        curve, meta = _band_run(band=None, set_key=set_key)
+        assert len(curve) == 60 and int(curve["degraded"].sum()) == 0
+        assert float(curve["turnover"].iloc[0]).hex() == "0x1.e24880103f884p-1"
+        assert float(curve["return"].iloc[-1]).hex() == "0x1.26faf1378a7fdp-8"
+        assert _curve_sha(curve) == _PRE_0809_L1ONLY_SHA256
+        assert meta["no_trade_band"] is None
+
+    def test_band_on_moves_the_decision_bearing_l1only_curve(self, band_on_spied):
+        """Both halves: the band-off pin above could be satisfied by a band that is never
+        applied. With it on, the l1only weights — and so returns and turnover — move."""
+        on, meta, _calls = band_on_spied
+        off, _ = _band_run(band=None)
+        assert _curve_sha(on) != _PRE_0809_L1ONLY_SHA256
+        assert not on["return"].equals(off["return"]) and not on["turnover"].equals(off["turnover"])
+        assert on["turnover"].sum() < off["turnover"].sum()
+        # active_regime gates nothing and the band does not touch it (A7, reworded).
+        assert on["active_regime"].equals(off["active_regime"])
+        assert meta["no_trade_band"] == 0.05
+
+    def test_within_one_run_the_band_suppresses_allows_and_scales(self, band_on_spied):
+        _curve, _meta, calls = band_on_spied
+        assert len(calls) == 60
+        assert all(k["band"] == 0.05 for _a, k, _o in calls)
+        assert sum(1 for *_x, o in calls if o["held_assets"]) >= 1, "the band never suppressed a trade"
+        assert sum(1 for *_x, o in calls if o["traded_assets"]) >= 1, "the band never allowed a trade"
+        assert sum(1 for *_x, o in calls if o["scale_down"] < 1.0) >= 1, "negative-residual branch unexercised"
+
+    def test_held_is_the_previous_executed_book_and_the_first_step_has_none(self, band_on_spied):
+        curve, _meta, calls = band_on_spied
+        assert calls[0][0][2] is None
+        for (_a0, _k0, prev_out), (args, _k, _o) in zip(calls, calls[1:]):
+            assert args[2] is prev_out["weights"], "held must be the last EXECUTED book"
+        # ...and the executed book is what the curve traded: turnover is book-to-book.
+        from trading_crab_lib.platform.backtest.costs import compute_turnover
+
+        books = [o["weights"] for *_x, o in calls]
+        expected = [compute_turnover(pd.Series(dtype=float), books[0])] + [
+            compute_turnover(a, b) for a, b in zip(books, books[1:])
+        ]
+        np.testing.assert_array_equal(curve["turnover"].to_numpy(), np.array(expected))
+
+    def test_leading_degraded_steps_leave_no_held_book(self, monkeypatch):
+        """l2 on this fixture degrades its first 8 steps. Nothing was executed during them,
+        so the first execution has no ``held`` and trades in full (08-A7.md)."""
+        calls = []
+        real = jd.execute_rebalance
+        monkeypatch.setattr(jd, "execute_rebalance", lambda *a, **k: calls.append(a) or real(*a, **k))
+        curve, _ = _band_run(band=0.05, routing=jd.ROUTING_L2_NOWCAST)
+        first_live = int(np.argmax(~curve["degraded"].to_numpy()))
+        assert first_live >= 1 and bool(curve["degraded"].iloc[0])        # precondition
+        assert calls[0][2] is None
+        assert len(calls) == int((~curve["degraded"]).sum())             # degraded steps are not banded
+
+    def test_a_banded_run_is_attributable_in_the_registry(self, tmp_path):
+        from trading_crab_lib.platform.honesty.registry import read_trials
+
+        path = tmp_path / "trials.jsonl"
+        _band_run(band=0.05, registry_path=path)
+        _band_run(band=None, registry_path=path)
+        rows = read_trials(path)
+        assert len(rows) == 2
+        assert rows.iloc[0]["config"]["no_trade_band"] == 0.05
+        assert "no_trade_band" not in rows.iloc[1]["config"]
+
+
+def test_all_three_call_sites_resolve_the_one_band_helper():
+    """By resolved function object — a grep would pass on three copies of the arithmetic,
+    which is how report/weekly.py diverged and audit item A7 came to exist."""
+    import trading_crab_lib.platform.backtest.driver as d
+    from trading_crab_lib.platform.allocation import hysteresis
+    from trading_crab_lib.platform.report import weekly
+
+    for module in (d, jd, weekly):
+        assert module.execute_rebalance is hysteresis.execute_rebalance, module.__name__
+        assert module.no_trade_band_from_config is hysteresis.no_trade_band_from_config, module.__name__
+        assert module.hysteresis_thresholds is hysteresis.hysteresis_thresholds, module.__name__
