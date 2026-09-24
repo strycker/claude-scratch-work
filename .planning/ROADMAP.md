@@ -532,6 +532,12 @@ run length is **1.0 month**; 136 of 247 runs are a single month.
 > **B — L2 flat posteriors.** Under `l2` routing `active_regime` changes **462/587 (78.7%)** and
 > is all-cash in **387/588** months, implying **≥309/488** non-degraded steps had max calibrated
 > probability below the 0.70 act threshold. 0.70 is **4.2× uniform at K=6**. §5.1 addresses this.
+>
+> **CORRECTED 2026-09-24 (found in 08-09, verified by the orchestrator).** "462/587 (78.7%)" counted
+> every consecutive all-cash pair as a change, because `NaN != NaN` evaluates True — **340** of the
+> 462 are None→None. Treating None as a state, `active_regime` changes **122/587 (20.8%)**. The
+> **387/588** all-cash count stands. The orchestrator relayed 462 during Phase 8 scoping using the
+> same comparison; it framed Track B's motivation but bore on no ruling.
 
 **Depends on**: Phase 7
 **Blocks**: Phase 9 (Migration) — per the Phase 7 wave-2 UAT ruling, 2026-09-21
@@ -632,7 +638,7 @@ wave 4.
 
 **Wave 4** *(blocked on 08-08)*
 
-- [ ] 08-09-PLAN.md — §5.3's hysteresis gates allocation and A7 closes, at two blocking decisions whose registry cost is priced before the choice *(PER-05)*
+- [x] 08-09-PLAN.md — §5.3's hysteresis gates allocation and A7 closes, at two blocking decisions whose registry cost is priced before the choice *(PER-05)*
 
 **Wave 5** *(blocked on 08-02, 08-05, 08-07, 08-09)*
 
@@ -689,5 +695,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
-| 8. Regime Persistence & Stability | 8/10 | In progress — waves 1-3 complete; Bayes filter wired; S-1 halt ruled (causal invariance governs) | wave 3: 2026-09-23 |
+| 8. Regime Persistence & Stability | 9/10 | In progress — waves 1-4 complete; 5pp no-trade band wired at all three sites; A7 closed by rewording | wave 4: 2026-09-24 |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

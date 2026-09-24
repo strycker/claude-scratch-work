@@ -86,7 +86,7 @@ measured by the other's metric.
 - [x] **PER-04**: Track A is diagnosed before it is changed — the zero-trial terminal-month
   diagnostic, churning the step-*t* fit's label for months *t−1 … t−6* across steps. A λ sweep is
   **not** authorized (criterion 3)
-- [ ] **PER-05**: §5.3's hysteresis gates allocation, closing audit item A7, evaluated only after
+- [x] **PER-05**: §5.3's hysteresis gates allocation, closing audit item A7, evaluated only after
   the probability vector stops being degenerate; the mechanism and the 0.70/0.40 pair are human
   decisions, not planner choices (criterion 4; design §5.3)
 - [x] **PER-06**: §4.4 criterion 3 is RUN for both classifiers under four subsample schemes —
@@ -242,7 +242,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PER-02 | Phase 8 | Complete (leakage governed by causal invariance, ruling 2026-09-23) |
 | PER-03 | Phase 8 | Complete (A, B0, B1 each separately denominated) |
 | PER-04 | Phase 8 | Complete |
-| PER-05 | Phase 8 | Pending |
+| PER-05 | Phase 8 | Complete (A7 closed by rewording; 5pp no-trade band, ruling 2026-09-24) |
 | PER-06 | Phase 8 | Complete (named limitation: `evaporated` flag inert under K-fixed refits) |
 | PER-07 | Phase 8 | Pending |
 | PER-08 | Phase 8 | Complete |

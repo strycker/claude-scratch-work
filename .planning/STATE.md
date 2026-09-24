@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
 status: executing
-stopped_at: Phase 8 waves 1-3 complete (8/10 plans); wave 4 (08-09) awaits two decisions from Glenn
+stopped_at: Phase 8 waves 1-4 complete (9/10 plans); wave 5 (08-10, the closing measurement) next
 last_updated: "2026-09-23T00:00:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 55
+  completed_plans: 56
 current_phase: 8
 last_activity: 2026-09-23
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
@@ -29,7 +29,16 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **8 — Regime Persistence & Stability — EXECUTING**
-Status: **WAVES 1-3 COMPLETE (8 of 10 plans).** Wave 3 (2026-09-23): 08-08 wired the Bayes filter at
+Status: **WAVES 1-4 COMPLETE (9 of 10 plans).** Wave 4 (2026-09-24): Glenn ruled 08-09 — bounded
+turnover as a **5pp no-trade band** (not swept), hysteresis per-classifier with the blend mismatch
+declared, thresholds kept at 0.70/0.40. One helper (`allocation/hysteresis.py::execute_rebalance`)
+at all three call sites. Band-off l1only byte-identical to git; registry 42 (A7 authorises 2, which
+08-10 consumes). Observational l2 turnover 0.173→0.141 (baseline), 0.107→0.069 (joint), 588 steps,
+100 degraded. Suite 2350 / 0 / 0. PER-05 closed. Two executor readings consistent with the ruling
+(leading degraded steps execute nothing, so the first non-degraded step trades in full; the weekly
+report bands once per month) — open to Glenn's overrule. **Next: 08-10.**
+
+**Waves 1-3 as closed:** **WAVES 1-3 COMPLETE (8 of 10 plans).** Wave 3 (2026-09-23): 08-08 wired the Bayes filter at
 all three call sites. Its pre-registered S-1 guard HALTED on 3 LEADs (classifier #2); investigation
 showed no leak (beliefs bit-identical under truncation at every negative offset, 4 of 4) and no shared
 vocabulary between #2's walk-forward and reference labelings. **Ruling (Glenn): causal invariance
