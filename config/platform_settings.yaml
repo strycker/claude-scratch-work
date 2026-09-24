@@ -449,9 +449,32 @@ allocation:
   # Sweeping this is an unregistered selection dimension — it becomes tunable
   # only at design freeze, at which point the blend earns its own ADR.
   blend_weight_1:      0.50
+  # KEPT 2026-09-24 (Glenn, plan 08-09 Task 2: keep-absolute) for BOTH classifier #1
+  # (K=6) and #2 (K=5). Rule: the design §5.3 values stand unless a K-relative rule is
+  # adopted, and that rule must be stated BEFORE any belief distribution is read.
+  #
+  # The option's own test was met: after the 08-08 Bayes filter the belief clears 0.70
+  # in 307/488 (#1) and 415/488 (#2) non-degraded l2 months (08-CHURN.md §8). No
+  # coefficient, no registry trial. Recorded, not resolved: 0.70 is 4.2x uniform at K=6
+  # and 3.5x at K=5 -- a K-relative rule is the named path, to be adopted BEFORE L2 is
+  # ever decision-bearing. Invariant 0 < unwind <= act <= 1.0 is validated at read
+  # time (hysteresis_thresholds raises on drift); the one-hot identity in 08-A7.md
+  # rests on it. active_regime is a REPORTED label: it gates no weight (A7, reworded).
   hysteresis:
     act_threshold:     0.70  # design §5.3: act when a regime's own P crosses ~0.7
     unwind_threshold:  0.40  # design §5.3: unwind the active regime once its own P < 0.4
+  # RULED 2026-09-24 (Glenn, plan 08-09 Task 1: b-bounded-turnover) -- design §5.3's
+  # "smoothed allocation response with bounded turnover" arm, the only §5.3 mechanism
+  # that moves the decision-bearing l1only leg. A 5-percentage-point no-trade band,
+  # NOT SWEPT. Source: the absolute half of the practitioner "5/25" rebalancing drift
+  # band -- taken from outside this backtest, not chosen by reading its turnover.
+  # Per risky asset: |target - held| <= band -> hold the last EXECUTED weight, else
+  # trade to target; cash is the residual; a negative residual scales the traded
+  # assets down pro rata; the first step trades in full. Identical at driver.py,
+  # joint_driver.py and report/weekly.py (allocation/hysteresis.py::execute_rebalance).
+  # Criterion 7's re-measurement under it (plan 08-10) spends 2 registry rows, 42 -> 44,
+  # the ADR-0002 ceiling. null disables the band (pre-08-09 behaviour, byte-identical).
+  no_trade_band:       0.05
 
 # ── Tripwire (L4-04) — minimal 3-signal daily monitor, OR-logic escalation ──
 # Thresholds are provisional-until-Phase-5-backtest (RESEARCH A3: no

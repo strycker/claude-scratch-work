@@ -13,7 +13,10 @@ import pytest
 
 from trading_crab_lib.checkpoints import CheckpointManager
 from trading_crab_lib.platform.allocation.hysteresis import (
+    execute_rebalance,
+    hysteresis_thresholds,
     load_active_regime,
+    no_trade_band_from_config,
     save_active_regime,
     update_active_regime,
 )
@@ -169,3 +172,124 @@ class TestOneHotIdentity:
         identity rests on, not a formality."""
         probs = pd.Series(_one_hot(3, 6))
         assert update_active_regime(probs, None, act_threshold=1.01, unwind_threshold=0.40) is None
+
+
+# ── the 5pp no-trade band (plan 08-09 Task 1 ruling: b-bounded-turnover) ────
+#
+# Every arm below exhibits BOTH outcomes the band can produce — a suppressed trade and
+# an allowed one — or pins a boundary exactly. A band test that only ever sees
+# suppressed (or only allowed) trades proves nothing about the comparison.
+
+BAND = 0.05
+
+
+def _w(**kw: float) -> pd.Series:
+    return pd.Series(kw, dtype=float)
+
+
+class TestNoTradeBand:
+    def test_suppresses_one_trade_and_allows_another_in_the_same_step(self):
+        held = _w(SPY=0.50, TLT=0.30)
+        target = _w(SPY=0.53, TLT=0.20)          # SPY moves 3pp, TLT moves 10pp
+        out = execute_rebalance(target, 0.27, held, band=BAND)
+        assert out["held_assets"] == ["SPY"] and out["traded_assets"] == ["TLT"]
+        assert out["weights"]["SPY"] == 0.50      # suppressed: last executed weight kept
+        assert out["weights"]["TLT"] == 0.20      # allowed: traded to target
+        assert out["cash"] == pytest.approx(0.30)
+        assert out["scale_down"] == 1.0
+
+    def test_a_move_of_exactly_the_band_is_not_traded_and_just_above_is(self):
+        """``<=``: exactly 5pp holds. 0.05 - 0.0 and 0.05 - 0.10 are exact in binary."""
+        assert (0.05 - 0.0) == BAND and abs(0.05 - 0.10) == BAND
+        up = execute_rebalance(_w(A=0.05), 0.95, _w(B=0.0), band=BAND)
+        assert up["weights"]["A"] == 0.0 and "A" in up["held_assets"]
+        down = execute_rebalance(_w(A=0.05), 0.95, _w(A=0.10), band=BAND)
+        assert down["weights"]["A"] == 0.10 and down["held_assets"] == ["A"]
+        above = execute_rebalance(_w(A=0.0500001), 0.9499999, _w(A=0.0), band=BAND)
+        assert above["weights"]["A"] == 0.0500001 and above["traded_assets"] == ["A"]
+
+    def test_a_zero_target_is_sold_only_above_the_band(self):
+        held = _w(GLD=0.04, TLT=0.20, SPY=0.60)
+        target = _w(SPY=0.62)                    # GLD and TLT absent from the target
+        out = execute_rebalance(target, 0.38, held, band=BAND)
+        assert out["weights"]["GLD"] == 0.04     # 4pp away from 0 -> held
+        assert out["weights"]["TLT"] == 0.0      # 20pp away from 0 -> sold to zero
+        assert out["weights"]["SPY"] == 0.60     # 2pp -> held
+        assert sorted(out["held_assets"]) == ["GLD", "SPY"] and out["traded_assets"] == ["TLT"]
+        assert out["cash"] == pytest.approx(0.36)
+
+    def test_negative_residual_scales_only_the_traded_assets_pro_rata(self):
+        held = _w(A=0.64, B=0.36)
+        target = _w(A=0.60, B=0.20, C=0.20)      # A held at 0.64; B, C traded; 0.64+0.40 = 1.04
+        # Precondition: without the scale-down the book would be over-invested.
+        assert float(held["A"] + target["B"] + target["C"]) > 1.0
+        out = execute_rebalance(target, 0.0, held, band=BAND)
+        w = out["weights"]
+        assert out["held_assets"] == ["A"] and out["traded_assets"] == ["B", "C"]
+        assert w["A"] == 0.64                    # held asset untouched, exactly
+        assert out["scale_down"] == pytest.approx(0.36 / 0.40)
+        assert w["B"] == pytest.approx(0.18) and w["C"] == pytest.approx(0.18)
+        assert w["B"] / w["C"] == pytest.approx(1.0)   # pro rata: the traded ratio survives
+        assert float(w.sum()) == pytest.approx(1.0)
+        assert out["cash"] == pytest.approx(0.0, abs=1e-12)
+
+    def test_no_scale_down_when_the_residual_is_non_negative(self):
+        out = execute_rebalance(_w(A=0.60, B=0.20, C=0.10), 0.10, _w(A=0.64, B=0.36), band=BAND)
+        assert out["scale_down"] == 1.0 and out["weights"]["B"] == 0.20 and out["weights"]["C"] == 0.10
+
+    def test_cash_is_the_residual_and_is_never_banded(self):
+        """Target cash moves 2pp (0.50 -> 0.48); the band never compares cash — it is
+        whatever the risky book leaves."""
+        out = execute_rebalance(_w(A=0.52), 0.48, _w(A=0.50), band=BAND)
+        assert out["weights"]["A"] == 0.50 and out["cash"] == 0.50 and out["cash"] != 0.48
+
+    def test_held_is_the_last_executed_weight_not_the_last_target(self):
+        """Two 3pp steps: 0.50 -> target 0.53 (held), then target 0.56. Against the last
+        EXECUTED 0.50 that is 6pp and trades; against the last TARGET 0.53 it would be 3pp
+        and hold. Fails if the caller carried the target instead of the executed book."""
+        step1 = execute_rebalance(_w(A=0.53), 0.47, _w(A=0.50), band=BAND)
+        assert step1["weights"]["A"] == 0.50
+        step2 = execute_rebalance(_w(A=0.56), 0.44, step1["weights"], band=BAND)
+        assert step2["weights"]["A"] == 0.56 and step2["traded_assets"] == ["A"]
+        wrong = execute_rebalance(_w(A=0.56), 0.44, _w(A=0.53), band=BAND)
+        assert wrong["weights"]["A"] == 0.53
+
+    def test_first_step_with_no_held_trades_in_full(self):
+        target = _w(SPY=0.03, TLT=0.40)          # SPY is inside the band from 0 — still bought
+        out = execute_rebalance(target, 0.57, None, band=BAND)
+        pd.testing.assert_series_equal(out["weights"], target)
+        assert out["cash"] == pytest.approx(0.57) and out["held_assets"] == []
+
+    def test_band_none_returns_the_target_objects_unchanged(self):
+        target = _w(SPY=0.53, TLT=0.20)
+        out = execute_rebalance(target, 0.27, _w(SPY=0.50, TLT=0.30), band=None)
+        assert out["weights"] is target and out["cash"] == 0.27
+
+
+class TestBandAndThresholdConfig:
+    def test_live_config_carries_the_ruled_values(self):
+        from trading_crab_lib.platform.config import load_platform_config
+
+        cfg = load_platform_config()
+        assert no_trade_band_from_config(cfg) == 0.05
+        assert hysteresis_thresholds(cfg) == (0.70, 0.40)
+
+    def test_absent_or_null_band_is_disabled(self):
+        assert no_trade_band_from_config({}) is None
+        assert no_trade_band_from_config({"allocation": {"no_trade_band": None}}) is None
+
+    @pytest.mark.parametrize("bad", [0, 0.0, 1.0, -0.05, 1.5, True, "0.05"])
+    def test_an_invalid_band_raises(self, bad):
+        with pytest.raises(ValueError, match="no_trade_band"):
+            no_trade_band_from_config({"allocation": {"no_trade_band": bad}})
+
+    def test_absent_thresholds_are_the_ruled_pair(self):
+        assert hysteresis_thresholds({}) == (0.70, 0.40)
+
+    @pytest.mark.parametrize(
+        ("act", "unwind"), [(0.40, 0.70), (1.01, 0.40), (0.70, 0.0), (0.70, -0.1), (True, 0.4), ("0.7", 0.4)]
+    )
+    def test_thresholds_that_break_the_invariant_raise(self, act, unwind):
+        cfg = {"allocation": {"hysteresis": {"act_threshold": act, "unwind_threshold": unwind}}}
+        with pytest.raises(ValueError, match="act_threshold|unwind|thresholds"):
+            hysteresis_thresholds(cfg)
