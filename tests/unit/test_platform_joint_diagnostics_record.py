@@ -625,3 +625,167 @@ class TestTheA11QualityTierIsInTheLiftTable:
 
         assert (jd.WEALTH_DELTA_UNIVERSAL, jd.WEALTH_DELTA_DOMAIN) == (15.0, 5.0)
         assert (jd.DD_DELTA_UNIVERSAL, jd.DD_DELTA_DOMAIN) == ((-1.0, 1.0), 0.5)
+
+
+# ── 7. Plan 08-10: criterion 7 re-measured — both legs, one harness, window inline ──
+#
+# The prior decision-bearing value (07-11, band off) was wealth_delta -0.12343826162064975,
+# dd_delta +0.02408401236666291 over 588 steps 1972-01-31 -> 2020-12-31, at 42 trials. It is
+# a COMPARISON POINT, not a target, and no assertion below compares against it: the band
+# (08-A7.md, b-bounded-turnover) is not inert on l1only, so the number is expected to move.
+
+_RECORDS = {"l1only": "measurement_l1only.json", "l2": "measurement_l2_observational.json"}
+_WINDOW = "588 steps, 1972-01-31 -> 2020-12-31"
+#: 08-A7.md / 08-A11.md budget: 42 before 08-10; A7 authorises exactly 2 rows, A11 spends 0.
+_REGISTRY_BEFORE, _REGISTRY_AFTER = 42, 44
+_TAGS_0810 = ("08-10-c1-alone-L1only-notrade5pp", "08-10-joint-c1xc2-L1only-notrade5pp")
+
+
+def _record(suffix: str) -> dict:
+    return json.loads((_JOINT / _RECORDS[suffix]).read_text())
+
+
+class TestCriterion7ReMeasuredIn0810:
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    def test_every_lift_cell_carries_its_window_and_both_legs_share_it(self, suffix):
+        rec = _record(suffix)
+        lift = rec["lift"]
+        assert lift["n_steps"] == lift["n_steps_joint"] == lift["n_steps_baseline"] == _PINNED_N_STEPS
+        assert lift["indexes_identical"] is True
+        assert str(lift["first_date"]).startswith("1972-01-31") and str(lift["last_date"]).startswith("2020-12-31")
+        for leg in ("baseline_leg", "joint_leg"):
+            k = rec[leg]
+            assert (k["n_steps"], k["first_date"], k["last_date"]) == (_PINNED_N_STEPS, "1972-01-31", "2020-12-31")
+        for name in ("baseline", "joint"):
+            assert rec["deflated_sharpe"][name]["window"] == _WINDOW
+
+    def test_the_two_routings_were_measured_on_one_window(self):
+        a, b = _record("l1only")["lift"], _record("l2")["lift"]
+        assert (a["n_steps"], a["first_date"], a["last_date"]) == (b["n_steps"], b["first_date"], b["last_date"])
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    def test_both_records_measure_the_band_on_configuration(self, suffix):
+        """The re-measurement is of the live configuration: the 5pp band (08-A7.md), and
+        the Bayes filter under l2 only (08-08). A record that did not say so could not be
+        told apart from the pre-band one."""
+        rec = _record(suffix)
+        assert rec["no_trade_band"] == 0.05
+        assert rec["use_regime_filter"] is (suffix == "l2")
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    def test_the_record_is_re_derivable_from_its_own_curves(self, suffix):
+        """The committed curves and the committed record must be one run: recompute the
+        lift and the quality tier from the parquet at the record's own trial count."""
+        from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
+
+        rec = _record(suffix)
+        joint, base = _curve(suffix, "joint"), _curve(suffix, "baseline")
+        again = joint_lift_table(
+            joint, base,
+            n_trials=rec["lift"]["quality_tier_n_trials"],
+            sharpe_variance=rec["lift"]["quality_tier_sharpe_variance"],
+        )
+        for key in ("wealth_delta", "dd_delta", "joint_dsr", "baseline_dsr", "quality_tier_hurdle",
+                    "joint_quality_tier_ok", "baseline_quality_tier_ok"):
+            assert again[key] == rec["lift"][key], (suffix, key)
+        assert float(joint["turnover"].mean()) == rec["joint_leg"]["mean_turnover"]
+        assert float(base["turnover"].mean()) == rec["baseline_leg"]["mean_turnover"]
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    def test_the_four_plausibility_band_flags_are_recorded(self, suffix):
+        lift = _record(suffix)["lift"]
+        for flag in ("wealth_delta_universal_ok", "wealth_delta_domain_note",
+                     "dd_delta_universal_ok", "dd_delta_domain_note"):
+            assert isinstance(lift[flag], bool), flag
+        assert lift["wealth_delta_universal_ok"] and lift["dd_delta_universal_ok"], (
+            "a universal breach means the measurement is broken, not that the lift is bad"
+        )
+
+
+class TestF4SecondSiteInTheMeasurementRecords:
+    """F-4's second site (Glenn, 2026-09-23): the measurement records now divide by
+    adjacent PAIRS, like the diagnostics records, for the same 246 and 24 changes."""
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("leg", ["baseline_leg", "joint_leg"])
+    @pytest.mark.parametrize("clf,n", [("1", 246), ("2", 24)])
+    def test_rate_is_pair_denominated_and_rejects_the_month_denominator(self, suffix, leg, clf, n):
+        k = _record(suffix)[leg]
+        assert k[f"n_state_{clf}_transitions"] == n
+        rate = k[f"state_{clf}_transition_rate"]
+        assert rate == pytest.approx(n / 587, abs=1e-12)
+        assert rate != pytest.approx(n / 588, abs=1e-9), "still divides by n_steps (F-4 regression)"
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    def test_measurement_and_diagnostics_records_agree(self, suffix):
+        k = _record(suffix)["joint_leg"]
+        d = _diagnostics(suffix)
+        assert k["state_1_transition_rate"] == d["classifier_1"]["walk_forward_filtered"]["transition_rate"]
+        assert k["state_2_transition_rate"] == d["classifier_2"]["walk_forward_filtered"]["transition_rate"]
+
+
+class TestTheA11GateInTheRecord:
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    def test_the_dsr_block_and_the_lift_agree_and_the_gate_is_the_hurdle(self, suffix):
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
+
+        rec = _record(suffix)
+        lift, q = rec["lift"], rec["quality_tier"]
+        hurdle = expected_max_sharpe(q["n_trials"], q["sharpe_variance"])
+        assert lift["quality_tier_hurdle"] == q["hurdle"] == hurdle
+        assert lift["quality_tier_n_trials"] == q["n_trials"] == rec["registry"]["count_after"]
+        for name in ("baseline", "joint"):
+            block = rec["deflated_sharpe"][name]
+            assert block["dsr"] == lift[f"{name}_dsr"]
+            assert block["observed_sharpe"] == lift[f"{name}_observed_sharpe"] == rec[f"{name}_leg"]["sharpe_annualized"]
+            assert block["quality_tier_ok"] is lift[f"{name}_quality_tier_ok"] is q[f"{name}_ok"]
+            assert block["quality_tier_ok"] is (block["observed_sharpe"] > hurdle) is (block["dsr"] > 0.5)
+
+    def test_the_gate_governs_the_decision_bearing_leg_only(self):
+        l1, l2 = _record("l1only"), _record("l2")
+        assert (l1["decision_bearing"], l1["quality_tier"]["governs"]) == (True, True)
+        assert (l2["decision_bearing"], l2["quality_tier"]["governs"]) == (False, False)
+        assert l2["quality_tier"]["verdict"].startswith("NOT GOVERNING")
+        failing = [n for n in ("baseline", "joint") if not l1["quality_tier"][f"{n}_ok"]]
+        expected = (
+            f"FAILED on {len(failing)} of 2 legs ({', '.join(failing)})" if failing else "PASSED on both legs"
+        )
+        assert l1["quality_tier"]["verdict"] == expected
+
+    def test_the_hurdle_rests_on_the_declared_placeholder(self):
+        """ADR-0002 open item 8, now load-bearing on a gate (08-A11.md §4)."""
+        for suffix in _SUFFIXES:
+            q = _record(suffix)["quality_tier"]
+            assert q["sharpe_variance"] == 1.0 and q["sharpe_variance_is_placeholder"] is True
+
+
+class TestTheDecisionBearingRunSpentExactlyTwoRows:
+    """08-A7.md authorised 2 rows; 08-10 consumed them, once. 42 -> 44, the ceiling."""
+
+    def test_the_l1only_record_moved_the_registry_by_exactly_two(self):
+        reg = _record("l1only")["registry"]
+        assert (reg["count_before"], reg["count_after"], reg["rows_added"]) == (_REGISTRY_BEFORE, _REGISTRY_AFTER, 2)
+        assert reg["count_after"] <= reg["adr_0002_ceiling"] == 44
+        assert (reg["baseline_tag"], reg["joint_tag"]) == _TAGS_0810
+
+    def test_the_l2_record_moved_it_by_zero(self):
+        reg = _record("l2")["registry"]
+        assert reg["rows_added"] == 0
+        assert reg["baseline_tag"] == reg["joint_tag"] == "(NO_REGISTRY)"
+
+    def test_the_tracked_ledger_carries_the_two_rows_the_record_claims(self):
+        """No commit may claim 44 while the ledger reads 42: the ledger is read here."""
+        from trading_crab_lib.platform.honesty.registry import total_trial_count
+
+        assert total_trial_count() == _REGISTRY_AFTER
+        rows = [json.loads(line) for line in (_ROOT / "registry" / "trials.jsonl").read_text().splitlines() if line]
+        rec = _record("l1only")
+        tagged = {r["config"]["trial_tag"]: r for r in rows if r["config"].get("trial_tag") in _TAGS_0810}
+        assert sorted(tagged) == sorted(_TAGS_0810) and [r["config"]["trial_tag"] for r in rows[-2:]] == list(_TAGS_0810)
+        for tag, leg, weight in zip(_TAGS_0810, ("baseline_leg", "joint_leg"), (1.0, 0.5)):
+            row = tagged[tag]
+            assert row["config"]["no_trade_band"] == 0.05
+            assert row["config"]["routing"] == "L1_ONLY_LAST_FILTERED_STATE"
+            assert row["config"]["blend_weight_1"] == weight
+            assert row["metrics"]["n_steps"] == _PINNED_N_STEPS
+            assert row["metrics"]["terminal_log_wealth"] == pytest.approx(rec[leg]["terminal_log_wealth"], abs=1e-12)

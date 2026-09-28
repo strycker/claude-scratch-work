@@ -65,7 +65,7 @@ from trading_crab_lib.platform.backtest.joint_driver import (
 )
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
-from trading_crab_lib.platform.evaluation.churn import write_probability_matrix
+from trading_crab_lib.platform.evaluation.churn import churn_rate, state_change_count, write_probability_matrix
 from trading_crab_lib.platform.evaluation.deflated_sharpe import (
     DEGENERATE_SHARPE_VARIANCE,
     format_dsr_verdict,
@@ -133,8 +133,11 @@ def _leg_kpis(equity_curve: pd.DataFrame, meta: dict[str, Any]) -> dict[str, Any
         "n_degraded_classifier_2": meta["n_degraded_classifier_2"],
         "n_state_1_transitions": _n_transitions(equity_curve["state_1"]),
         "n_state_2_transitions": _n_transitions(equity_curve["state_2"]),
-        "state_1_transition_rate": _n_transitions(equity_curve["state_1"]) / max(1, meta["n_steps"]),
-        "state_2_transition_rate": _n_transitions(equity_curve["state_2"]) / max(1, meta["n_steps"]),
+        # F-4, second site (Glenn 2026-09-23): per adjacent PAIR, through the one rule
+        # plan 08-01 established. Dividing by n_steps recorded 246/588 = 0.418367 here
+        # while the diagnostics records said 246/587 = 0.419080 for the same changes.
+        "state_1_transition_rate": _pair_rate(equity_curve["state_1"]),
+        "state_2_transition_rate": _pair_rate(equity_curve["state_2"]),
         "mean_turnover": float(equity_curve["turnover"].mean()),
         "total_cost": float(equity_curve["cost"].sum()),
         "min_monthly_return": float(returns.min()),
@@ -148,9 +151,16 @@ def _leg_kpis(equity_curve: pd.DataFrame, meta: dict[str, Any]) -> dict[str, Any
 
 
 def _n_transitions(states: pd.Series) -> int:
-    """Run-length changes across the visited decision months (07-BANDS.md band 3b)."""
-    clean = states.dropna()
-    return int((clean != clean.shift()).sum() - 1) if len(clean) else 0
+    """Run-length changes across the visited decision months — ``churn.state_change_count``.
+
+    Kept by name because ``evaluation/churn.py`` cites it as the NaN convention.
+    """
+    return state_change_count(states)
+
+
+def _pair_rate(states: pd.Series) -> float:
+    """``churn.churn_rate`` over the series' own non-null run: changes / (rows - 1)."""
+    return churn_rate(_n_transitions(states), int(states.notna().sum()))
 
 
 def build_inputs(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -352,6 +362,10 @@ def run(routing_flag: str, *, dry_run: bool, dump_dir: str | None = None) -> dic
         "decision_bearing": decision_bearing,
         "dry_run": dry_run,
         "blend_weight_1": blend_weight,
+        # The configuration measured, carried in the record rather than inferred: 08-A7.md's
+        # no-trade band (None = off) and 08-08's filter (applied under l2 only).
+        "no_trade_band": joint_meta["no_trade_band"],
+        "use_regime_filter": joint_meta["use_regime_filter"],
         "K_1": cfg["labeling"]["K"],
         "lambda_1": cfg["labeling"]["lambda"],
         "K_2": c2["K"],
