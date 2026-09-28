@@ -51,21 +51,23 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from trading_crab_lib.platform.assets.returns import compute_monthly_returns
 from trading_crab_lib.platform.backtest.joint_driver import (
+    QUALITY_TIER_RULE,
     ROUTING_L1_ONLY,
     ROUTING_L2_NOWCAST,
+    annualized_sharpe,
     joint_lift_table,
+    quality_tier,
     run_joint_backtest,
 )
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.evaluation.churn import write_probability_matrix
 from trading_crab_lib.platform.evaluation.deflated_sharpe import (
-    deflated_sharpe_ratio,
+    DEGENERATE_SHARPE_VARIANCE,
     format_dsr_verdict,
     registry_sharpe_variance,
 )
@@ -93,17 +95,6 @@ ADR_0002_CEILING = 44
 TERMINAL_LOG_WEALTH_BOUND = 10.0
 
 
-def _annualized_sharpe(returns: pd.Series) -> float:
-    """``assets/returns.py``'s own convention: ``(mean / std) * sqrt(12)``.
-
-    Reused rather than re-derived so the leg-level Sharpe is the same quantity
-    the per-regime tables report.
-    """
-    clean = returns.dropna()
-    sd = float(clean.std())
-    return float((clean.mean() / sd) * np.sqrt(12)) if sd > 0 else float("nan")
-
-
 def _leg_kpis(equity_curve: pd.DataFrame, meta: dict[str, Any]) -> dict[str, Any]:
     """Every leg number, each reported WITH the window it was measured on."""
     returns = equity_curve["return"].dropna()
@@ -123,7 +114,7 @@ def _leg_kpis(equity_curve: pd.DataFrame, meta: dict[str, Any]) -> dict[str, Any
         "terminal_log_wealth": tlw,
         "max_drawdown": dd["max_drawdown"],
         "underwater_duration_months": dd["duration_months"],
-        "sharpe_annualized": _annualized_sharpe(returns),
+        "sharpe_annualized": annualized_sharpe(returns),
         "skew": float(returns.skew()),
         "kurtosis_raw": float(returns.kurtosis() + 3.0),  # pandas reports EXCESS kurtosis
         "n_obs": int(len(returns)),
@@ -303,31 +294,51 @@ def run(routing_flag: str, *, dry_run: bool, dump_dir: str | None = None) -> dic
                     clf, suffix, info["n_rows"], joint_meta["n_steps"], info["path"],
                 )
 
-    lift = joint_lift_table(joint_curve, baseline_curve)
+    # The A11 gate's hurdle is computed at the count read AFTER this run's own rows
+    # landed: a trial spent here raises the bar its own result must clear (08-A11.md §3.1).
+    sharpe_variance = registry_sharpe_variance()
+    lift = joint_lift_table(
+        joint_curve, baseline_curve, n_trials=count_after, sharpe_variance=sharpe_variance
+    )
     baseline_kpis = _leg_kpis(baseline_curve, baseline_meta)
     joint_kpis = _leg_kpis(joint_curve, joint_meta)
 
-    sharpe_variance = registry_sharpe_variance()
     dsr = {}
-    for name, kpis in (("baseline", baseline_kpis), ("joint", joint_kpis)):
-        value = deflated_sharpe_ratio(
-            observed_sharpe=kpis["sharpe_annualized"],
-            n_trials=count_after,
-            sharpe_variance=sharpe_variance,
-            skew=kpis["skew"],
-            kurtosis=kpis["kurtosis_raw"],
-            n_obs=kpis["n_obs"],
-        )
+    for name, curve, kpis in (("baseline", baseline_curve, baseline_kpis), ("joint", joint_curve, joint_kpis)):
+        gate = quality_tier(curve["return"], n_trials=count_after, sharpe_variance=sharpe_variance)
         dsr[name] = {
-            "dsr": value,
-            "verdict": format_dsr_verdict(value),
+            "dsr": gate["dsr"],
+            "verdict": format_dsr_verdict(gate["dsr"]),
             "n_trials": count_after,
             "n_trials_read_at": ts_after,
             "sharpe_variance": sharpe_variance,
-            "observed_sharpe": kpis["sharpe_annualized"],
-            "n_obs": kpis["n_obs"],
+            "observed_sharpe": gate["observed_sharpe"],
+            "n_obs": gate["n_obs"],
+            "hurdle": gate["hurdle"],
+            "quality_tier_ok": gate["ok"],
             "window": f"{kpis['n_steps']} steps, {kpis['first_date']} -> {kpis['last_date']}",
         }
+
+    # 08-A11.md §5.1: the gate GOVERNS a decision-bearing leg only. On the firewalled
+    # l2 routing (and on any dry run) it is reported and never acted on.
+    failing = [name for name in ("baseline", "joint") if not dsr[name]["quality_tier_ok"]]
+    if not decision_bearing:
+        verdict = "NOT GOVERNING - observational or dry run; computed and reported, never acted on"
+    elif failing:
+        verdict = f"FAILED on {len(failing)} of 2 legs ({', '.join(failing)})"
+    else:
+        verdict = "PASSED on both legs"
+    quality = {
+        "rule": QUALITY_TIER_RULE,
+        "governs": decision_bearing,
+        "hurdle": lift["quality_tier_hurdle"],
+        "n_trials": count_after,
+        "sharpe_variance": sharpe_variance,
+        "sharpe_variance_is_placeholder": sharpe_variance == DEGENERATE_SHARPE_VARIANCE,
+        "baseline_ok": dsr["baseline"]["quality_tier_ok"],
+        "joint_ok": dsr["joint"]["quality_tier_ok"],
+        "verdict": verdict,
+    }
 
     return {
         "routing": routing,
@@ -356,6 +367,7 @@ def run(routing_flag: str, *, dry_run: bool, dump_dir: str | None = None) -> dic
         "joint_leg": joint_kpis,
         "lift": lift,
         "deflated_sharpe": dsr,
+        "quality_tier": quality,
     }
 
 

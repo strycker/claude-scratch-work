@@ -113,6 +113,16 @@ breach means the MEASUREMENT is broken (halt; do not report a lift); a
 the old bound was wider than the quantity's own arithmetic range
 (``max_drawdown`` in ``[-1, 0]`` per leg) and could therefore only confirm.
 
+**The quality tier (A11 answered, Glenn 2026-09-21, ``08-A11.md`` / ADR-0003).** The
+bands above assert a number is *possible*; none can fail on a bad-but-working model.
+:func:`joint_lift_table` therefore also reports, per leg, the one gate that can: the
+leg PASSES iff ``observed_sharpe > expected_max_sharpe(total_trial_count(),
+sharpe_variance)`` — identically ``deflated_sharpe_ratio(...) > 0.5``. Both hurdle
+arguments are read live unless the caller passes the values it read itself; neither
+is ever a literal. The gate GOVERNS only a decision-bearing leg; on the
+observational l2 routing it is computed and reported, never acted on. The four
+plausibility bands are unchanged and remain plausibility-only.
+
 Usage::
 
     from trading_crab_lib.platform.backtest.joint_driver import (
@@ -137,6 +147,7 @@ import logging
 import time
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from trading_crab_lib.platform.allocation.hysteresis import (
@@ -153,6 +164,12 @@ from trading_crab_lib.platform.backtest.driver import (
     _realized_return,
     _refit_l1,
     _refit_l2,
+)
+from trading_crab_lib.platform.evaluation.deflated_sharpe import (
+    _VERDICT_HURDLE,
+    deflated_sharpe_ratio,
+    expected_max_sharpe,
+    registry_sharpe_variance,
 )
 from trading_crab_lib.platform.evaluation.kpis import max_drawdown_and_duration, terminal_log_wealth
 from trading_crab_lib.platform.honesty import registry
@@ -197,7 +214,8 @@ _ROUTINGS = (ROUTING_L1_ONLY, ROUTING_L2_NOWCAST)
 WEALTH_DELTA_UNIVERSAL: float = 15.0
 
 #: Domain / ADVISORY trigger on ``wealth_delta``. A breach is a recorded note;
-#: criterion 7 still reports (D-07; A11 stays open by design).
+#: criterion 7 still reports (D-07). A11 is ANSWERED (08-A11.md), but not by this
+#: band: the quality gate is the deflated-Sharpe hurdle in :func:`quality_tier`.
 WEALTH_DELTA_DOMAIN: float = 5.0
 
 #: Universal / GOVERNING bound on ``dd_delta`` (fraction of peak). REVISED from
@@ -723,7 +741,76 @@ def run_joint_backtest(
     return equity_curve, metadata
 
 
-def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) -> dict[str, Any]:
+#: ADR-0003's gate, as a string carried in every record that reports it.
+QUALITY_TIER_RULE: str = (
+    "observed_sharpe > expected_max_sharpe(total_trial_count(), sharpe_variance) "
+    "<=> deflated_sharpe_ratio > 0.5 (ADR-0003; 08-A11.md b-promote-dsr)"
+)
+
+
+def annualized_sharpe(returns: pd.Series) -> float:
+    """``assets/returns.py``'s convention: ``(mean / std) * sqrt(12)`` over non-null months.
+
+    ``NaN`` when the standard deviation is zero — a constant series has no Sharpe.
+    """
+    clean = returns.dropna()
+    sd = float(clean.std())
+    return float((clean.mean() / sd) * np.sqrt(12)) if sd > 0 else float("nan")
+
+
+def quality_tier(returns: pd.Series, *, n_trials: int, sharpe_variance: float) -> dict[str, Any]:
+    """The A11 gate for ONE leg: does its Sharpe clear the multiple-testing hurdle?
+
+    PASSES iff ``deflated_sharpe_ratio(...) > _VERDICT_HURDLE`` (0.5), which is the
+    same statement as ``observed_sharpe > expected_max_sharpe(n_trials,
+    sharpe_variance)``. ``_VERDICT_HURDLE`` is imported, never re-declared.
+
+    A leg without a defined Sharpe (fewer than two months, or zero variance) or
+    with a non-finite DSR does NOT pass: a hurdle cannot be cleared by a number
+    that does not exist. It is reported with ``defined: False`` so the reason is
+    visible rather than folded into a plain ``False``.
+
+    Raises:
+        ValueError: propagated from ``deflated_sharpe_ratio`` when the leg's own
+            moments give a non-positive PSR denominator — a broken measurement,
+            not a verdict.
+    """
+    clean = returns.dropna()
+    hurdle = expected_max_sharpe(n_trials, sharpe_variance)
+    sharpe = annualized_sharpe(clean)
+    out: dict[str, Any] = {
+        "observed_sharpe": sharpe,
+        "hurdle": hurdle,
+        "n_trials": int(n_trials),
+        "sharpe_variance": float(sharpe_variance),
+        "n_obs": int(len(clean)),
+        "dsr": float("nan"),
+        "ok": False,
+        "defined": False,
+    }
+    if len(clean) < 2 or not np.isfinite(sharpe):
+        return out
+    dsr = deflated_sharpe_ratio(
+        observed_sharpe=sharpe,
+        n_trials=n_trials,
+        sharpe_variance=sharpe_variance,
+        skew=float(clean.skew()),
+        kurtosis=float(clean.kurtosis() + 3.0),  # pandas reports EXCESS kurtosis
+        n_obs=int(len(clean)),
+    )
+    if not np.isfinite(dsr):
+        return out
+    out.update(dsr=dsr, ok=bool(dsr > _VERDICT_HURDLE), defined=True)
+    return out
+
+
+def joint_lift_table(
+    joint_curve: pd.DataFrame,
+    baseline_curve: pd.DataFrame,
+    *,
+    n_trials: int | None = None,
+    sharpe_variance: float | None = None,
+) -> dict[str, Any]:
     """Both criterion-7 axes, each inseparable from the window it was measured on.
 
     The deltas are computed over the INTERSECTION of the two curves' indexes, and
@@ -741,8 +828,12 @@ def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) ->
         dict with ``wealth_delta``, ``dd_delta``, each leg's own
         ``terminal_log_wealth`` / ``max_drawdown`` / ``duration_months``, the
         window (``n_steps``, ``first_date``, ``last_date``, ``n_steps_joint``,
-        ``n_steps_baseline``, ``indexes_identical``), and the ``07-BANDS.md`` §8
-        verdicts (``*_universal_ok`` governs; ``*_domain_note`` is advisory).
+        ``n_steps_baseline``, ``indexes_identical``), the ``07-BANDS.md`` §8
+        verdicts (``*_universal_ok`` governs; ``*_domain_note`` is advisory), and
+        the A11 quality tier per leg (``*_quality_tier_ok``, ``*_dsr``,
+        ``*_observed_sharpe``) against ``quality_tier_hurdle``, computed at
+        ``quality_tier_n_trials`` / ``quality_tier_sharpe_variance`` — read live
+        from the registry when the caller does not pass them.
     """
     j_index = joint_curve.index
     b_index = baseline_curve.index
@@ -768,6 +859,14 @@ def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) ->
     wealth_delta = float(j_tlw - b_tlw)
     dd_delta = float(j_dd["max_drawdown"] - b_dd["max_drawdown"])
 
+    # Read live unless the caller passes the counts it read itself (never a literal).
+    if n_trials is None:
+        n_trials = registry.total_trial_count()
+    if sharpe_variance is None:
+        sharpe_variance = registry_sharpe_variance()
+    j_q = quality_tier(j_ret, n_trials=n_trials, sharpe_variance=sharpe_variance)
+    b_q = quality_tier(b_ret, n_trials=n_trials, sharpe_variance=sharpe_variance)
+
     return {
         # the numbers
         "wealth_delta": wealth_delta,
@@ -790,4 +889,15 @@ def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) ->
         "wealth_delta_domain_note": bool(abs(wealth_delta) >= WEALTH_DELTA_DOMAIN),
         "dd_delta_universal_ok": bool(DD_DELTA_UNIVERSAL[0] <= dd_delta <= DD_DELTA_UNIVERSAL[1]),
         "dd_delta_domain_note": bool(abs(dd_delta) >= DD_DELTA_DOMAIN),
+        # A11 quality tier (ADR-0003): the one gate that fails a bad-but-working leg
+        "quality_tier_rule": QUALITY_TIER_RULE,
+        "quality_tier_n_trials": int(n_trials),
+        "quality_tier_sharpe_variance": float(sharpe_variance),
+        "quality_tier_hurdle": j_q["hurdle"],
+        "joint_observed_sharpe": j_q["observed_sharpe"],
+        "baseline_observed_sharpe": b_q["observed_sharpe"],
+        "joint_dsr": j_q["dsr"],
+        "baseline_dsr": b_q["dsr"],
+        "joint_quality_tier_ok": j_q["ok"],
+        "baseline_quality_tier_ok": b_q["ok"],
     }

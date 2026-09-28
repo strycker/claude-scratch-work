@@ -544,3 +544,84 @@ class TestNoChurnTargetIsAsserted:
         # The detector's own demonstration snippets live in string literals, which
         # ast.parse does not treat as assertions.
         assert _churn_target_assertions(text) == [], name
+
+
+# ── 6. Plan 08-10: the A11 quality tier inside joint_lift_table ─────────────
+#
+# 08-A11.md (Glenn, 2026-09-21, option b-promote-dsr) promoted the deflated-Sharpe
+# hurdle to the one gate that can fail a bad-but-working model. Its code consequence
+# was handed to plan 08-10, to land BEFORE criterion 7 is re-measured. These arms are
+# synthetic on purpose: they must hold whatever the re-measured record says.
+
+
+def _gate_curve(mean: float, sd: float, n: int = 240, seed: int = 7) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("1990-01-31", periods=n, freq="ME")
+    return pd.DataFrame({"return": rng.normal(mean, sd, n)}, index=idx)
+
+
+class TestTheA11QualityTierIsInTheLiftTable:
+    def test_a_sharpe_above_the_hurdle_passes_and_one_below_fails(self):
+        """Both sides of the gate, in one table: without the passing arm the gate could
+        be a constant False; without the failing arm, a constant True."""
+        from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
+
+        strong, weak = _gate_curve(0.05, 0.02), _gate_curve(0.005, 0.04)
+        out = joint_lift_table(strong, weak, n_trials=44, sharpe_variance=1.0)
+        assert out["joint_observed_sharpe"] > out["quality_tier_hurdle"] > out["baseline_observed_sharpe"]
+        assert out["joint_quality_tier_ok"] is True
+        assert out["baseline_quality_tier_ok"] is False
+        assert out["joint_dsr"] > 0.5 > out["baseline_dsr"]
+
+    @pytest.mark.parametrize("n_trials", [2, 42, 44, 1000])
+    def test_the_hurdle_is_expected_max_sharpe_at_the_count_passed(self, n_trials):
+        from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
+
+        out = joint_lift_table(_gate_curve(0.01, 0.03), _gate_curve(0.01, 0.03, seed=8), n_trials=n_trials,
+                               sharpe_variance=1.0)
+        assert out["quality_tier_hurdle"] == expected_max_sharpe(n_trials, 1.0)
+        assert out["quality_tier_n_trials"] == n_trials
+        for leg in ("joint", "baseline"):
+            assert out[f"{leg}_quality_tier_ok"] is (
+                out[f"{leg}_observed_sharpe"] > out["quality_tier_hurdle"]
+            ), "dsr > 0.5 and observed_sharpe > hurdle are one statement (08-A11.md §3.1)"
+
+    def test_without_counts_the_hurdle_is_read_live_not_from_a_literal(self, monkeypatch):
+        """08-A11.md §5.3: 'The hurdle may not be written as a literal'. A patched
+        registry count must move the hurdle; a frozen 2.208694 would not."""
+        from trading_crab_lib.platform.backtest import joint_driver as jd
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
+
+        curve = _gate_curve(0.01, 0.03)
+        monkeypatch.setattr(jd.registry, "total_trial_count", lambda *a, **k: 1000)
+        monkeypatch.setattr(jd, "registry_sharpe_variance", lambda *a, **k: 1.0)
+        out = jd.joint_lift_table(curve, curve)
+        assert out["quality_tier_n_trials"] == 1000
+        assert out["quality_tier_hurdle"] == expected_max_sharpe(1000, 1.0)
+        assert out["quality_tier_hurdle"] > expected_max_sharpe(44, 1.0)
+
+    def test_the_boundary_is_exclusive(self, monkeypatch):
+        """A DSR of exactly 0.5 is a Sharpe EQUAL to the hurdle: equalling the bar is
+        not clearing it. Mutating ``>`` to ``>=`` turns this red."""
+        from trading_crab_lib.platform.backtest import joint_driver as jd
+
+        monkeypatch.setattr(jd, "deflated_sharpe_ratio", lambda **kw: 0.5)
+        assert jd.quality_tier(_gate_curve(0.05, 0.02)["return"], n_trials=44, sharpe_variance=1.0)["ok"] is False
+
+    def test_a_leg_with_no_sharpe_does_not_pass(self):
+        """A constant leg has no Sharpe; it is reported undefined, and a hurdle cannot
+        be cleared by a number that does not exist."""
+        from trading_crab_lib.platform.backtest.joint_driver import quality_tier
+
+        idx = pd.date_range("1990-01-31", periods=24, freq="ME")
+        q = quality_tier(pd.Series(0.01, index=idx), n_trials=44, sharpe_variance=1.0)
+        assert q["defined"] is False and q["ok"] is False
+        assert np.isnan(q["dsr"])
+
+    def test_the_four_plausibility_bands_were_not_retuned(self):
+        """A11 promoted the DSR hurdle and ruled NO band change (08-A11.md §5.3)."""
+        from trading_crab_lib.platform.backtest import joint_driver as jd
+
+        assert (jd.WEALTH_DELTA_UNIVERSAL, jd.WEALTH_DELTA_DOMAIN) == (15.0, 5.0)
+        assert (jd.DD_DELTA_UNIVERSAL, jd.DD_DELTA_DOMAIN) == ((-1.0, 1.0), 0.5)
