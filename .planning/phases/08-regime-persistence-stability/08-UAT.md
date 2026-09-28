@@ -3,21 +3,19 @@ status: testing
 phase: 08-regime-persistence-stability
 source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-05-SUMMARY.md, 08-06-SUMMARY.md, 08-07-SUMMARY.md, 08-08-SUMMARY.md, 08-09-SUMMARY.md, 08-10-SUMMARY.md]
 started: 2026-09-28T15:48:37Z
-updated: 2026-09-28T17:44:58Z
+updated: 2026-09-28T19:18:01Z
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-number: 2
-name: Weekly report — the trading surface shows the band and the rewording
+number: 3
+name: Registry at the ADR-0002 ceiling, rows correctly marked
 expected: |
-  `python -m trading_crab_lib.platform.report.weekly` (no --send-email) completes.
-  The markdown shows "active regime: regime N" (or "none (neutral posture)"), the
-  sentence "The active regime is a reported label ... gates no weight (audit item A7,
-  08-A7.md)", and above the trades "Targets below are the EXECUTED book after the 5.0%
-  no-trade band". Running it a second time in the same month gives the same targets —
-  the band does not compound.
+  `python -c "from trading_crab_lib.platform.honesty.registry import total_trial_count as t; print(t())"`
+  prints 44. `registry/trials.jsonl` has 7 lines; the last two are tagged
+  08-10-c1-alone-L1only-notrade5pp and 08-10-joint-c1xc2-L1only-notrade5pp, each with
+  "independent_trial": false and sharpe 0.896446 / 0.899378.
 awaiting: user response
 
 ## Tests
@@ -30,7 +28,9 @@ severity: blocker
 
 ### 2. Weekly report — the trading surface shows the band and the rewording
 expected: `python -m trading_crab_lib.platform.report.weekly` (no --send-email) completes. The markdown shows "active regime: regime N" (or "none (neutral posture)"), the sentence "The active regime is a reported label ... gates no weight (audit item A7, 08-A7.md)", and above the trades "Targets below are the EXECUTED book after the 5.0% no-trade band". Running it a second time in the same month gives the same targets — the band does not compound.
-result: [pending]
+result: issue
+reported: "this doesn't work at all, even after re-installing the packages ... running python scripts/build_platform_data.py, running python -m trading_crab_lib.platform.evaluation.report --smoke, etc. — FileNotFoundError: Model checkpoint not found: .../data/checkpoints/platform/nowcaster.pkl"
+severity: blocker
 
 ### 3. Registry at the ADR-0002 ceiling, rows correctly marked
 expected: `python -c "from trading_crab_lib.platform.honesty.registry import total_trial_count as t; print(t())"` prints 44. `registry/trials.jsonl` has 7 lines; the last two are tagged 08-10-c1-alone-L1only-notrade5pp and 08-10-joint-c1xc2-L1only-notrade5pp, each with "independent_trial": false and sharpe 0.896446 / 0.899378.
@@ -134,8 +134,8 @@ coverage_id: 08-07-D3
 
 total: 21
 passed: 11
-issues: 1
-pending: 9
+issues: 2
+pending: 8
 skipped: 0
 blocked: 0
 
@@ -154,4 +154,25 @@ blocked: 0
   missing:
     - "Compare floats with pytest.approx(rel=1e-9) — relative, so the ~1e-13 DSR values are held to the same standard as wealth_delta — and keep booleans exact"
     - "Prove the tolerance still discriminates: the band-off record must FAIL against the band-on curves"
+  debug_session: ""
+
+- gap_id: G-08-2
+  truth: "The weekly report — the surface Glenn trades from — runs end to end from supported commands."
+  status: failed
+  reason: "User reported: FileNotFoundError: Model checkpoint not found: data/checkpoints/platform/nowcaster.pkl, after reinstalling, build_platform_data.py, and evaluation.report --smoke"
+  severity: blocker
+  test: 2
+  root_cause: "Three compounding defects, verified 2026-09-28. (1) No supported command creates nowcaster.pkl: the only writer is prediction/nowcaster.py::evaluate_nowcaster, which no script or CLI calls (Phase 6 notebooks deliberately avoid it; evaluation.report has no save_model). (2) weekly.py:448 scores nowcaster.predict_proba(monthly_features.iloc[[-1]]) on ALL 55 columns, but 543 of 708 months carry a NaN and the logistic nowcaster rejects NaN — fitting evaluate_nowcaster on the full frame with NO_REGISTRY fails 'Input X contains NaN' (registry stayed 44, nothing written). (3) Train/serve skew: the backtest's L2 (driver._refit_l2) fits only _cv_safe_active_features (>= feature_min_history 120 months) and scores the row on those same columns, so the serving path does not mirror the evaluated one. Every weekly test uses _FakeNowcaster / a fake checkpoint manager, so none of this was caught — including 08-09, which changed weekly.py. A test that can only confirm, at integration level. evaluate_nowcaster also appends a registry row by default and logs IN-SAMPLE accuracy; a tagged evaluation.report run would breach the ADR-0002 ceiling (44/44) and still not create the model."
+  artifacts:
+    - path: "src/trading_crab_lib/platform/report/weekly.py"
+      issue: "loads a model nothing produces; predicts on the full feature row rather than the model's own columns"
+    - path: "src/trading_crab_lib/platform/prediction/nowcaster.py"
+      issue: "evaluate_nowcaster couples serving-model production to a registry append and in-sample metrics"
+    - path: "tests/unit/test_platform_report_weekly.py"
+      issue: "every weekly test uses a fake nowcaster; no end-to-end test against a real fitted model"
+  missing:
+    - "A supported command that builds the SERVING nowcaster with the backtest's own recipe (active-feature rule, embargo, calibrated LR) on full labelled history, saving the model's column list"
+    - "weekly.py scores the model's own columns (feature_names_in_), not the whole row"
+    - "Ruling: the serving fit is NOT a registry trial (NO_REGISTRY) — needs Glenn's approval"
+    - "An end-to-end test of weekly.main against a real fitted model"
   debug_session: ""
