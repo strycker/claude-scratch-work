@@ -61,4 +61,6 @@ document it amends.
 | # | Slug | Decision | Status |
 |---|------|----------|--------|
 | 0001 | `l1-feature-policy` | Freeze the walk-forward driver's L1 labeler to the same ten-column feature space the evaluation's smoothed reference already computes (resolves audit item A13) | Accepted, 2026-09-15 |
-| 0002 | `l1-second-classifier` | Add classifier #2, a second L1 labeler on a disjoint leadership/relative feature set, with its feature list, K, λ, ordering column, criterion-7 measurement routing and blend weight all pinned before the first fit | Proposed, 2026-09-17 |
+| 0002 | `l1-second-classifier` | Add classifier #2, a second L1 labeler on a disjoint leadership/relative feature set, with its feature list, K, λ, ordering column, criterion-7 measurement routing and blend weight all pinned before the first fit | Accepted, 2026-09-21 (§ Trial ceiling amended by 0004) |
+| 0003 | `quality-gate-tier` | Promote exactly one threshold — the deflated-Sharpe hurdle — to a governing quality tier; no plausibility band is promoted (closes audit item A11) | Accepted, 2026-09-21 |
+| 0004 | `trial-budgeting-policy` | Per-phase trial budgets, declared before the runs and amendable only in advance, replace reading ADR-0002's 44 as a standing cap; the whole-registry DSR denominator is unchanged | Accepted, 2026-09-28 |

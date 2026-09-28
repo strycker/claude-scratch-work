@@ -5,11 +5,11 @@ milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
 status: verifying
 stopped_at: Phase 8 EXECUTED (10/10 plans); awaiting phase verification and UAT
-last_updated: "2026-09-23T00:00:00.000Z"
+last_updated: "2026-09-28T22:08:59.471Z"
 progress:
-  total_phases: 9
+  total_phases: 8
   completed_phases: 7
-  total_plans: 57
+  total_plans: 58
   completed_plans: 57
 current_phase: 8
 last_activity: 2026-09-23
@@ -79,6 +79,7 @@ PER-10 (08-01 did the F-4 half; 08-10 pins the suite count).
   DSR 2.28e-12 (baseline) and 1.47e-11 (joint) against hurdle 2.208694. ADR-0003 Accepted.
   The gate is decided and tested but **not yet wired**: 08-10 must add it to `joint_lift_table`
   before re-measuring criterion 7.
+
 - **Track A's terminal-month edge artefact is REFUTED** by criterion 3's pre-registered rule.
   Classifier #1 churn is flat in k: **246 / 242 / 245 / 248 / 247 / 249** of 587 pairs for
   k = 1…6 (1972-01-31 → 2020-12-31); #2 is 24–25. k=1 anchored to `state_1` at 0/588
@@ -86,15 +87,18 @@ PER-10 (08-01 did the F-4 half; 08-10 pins the suite count).
   is not authorized** — so classifier #1's churn is not fixable in this phase, and **08-09's
   bounded turnover is the only mechanism left that can move the decision-bearing leg.**
   Not ruled out: edge effects longer than 6 months; λ/d not isolated from K, features and d.
+
 - **Both churn series exist and are separately denominated** (08-01). l1only: Track A ≡ Track B
   (identity pinned True). l2: #1 Track B **221/487 = 45.38%**, #2 **66/487 = 13.55%** (100
   degraded), identity pinned False. Max posterior < 0.70 in **355/488** rows for #1.
+
 - **l1only is bit-reproducible** — curves byte-identical to HEAD; criterion 7 reproduces to the
   last digit. 08-10's 1e-12 reproduction gate is safe.
 
 ---
 
 ### Previously: Phase 7 — Regime Representation — CLOSED 2026-09-21
+
 Status: **PHASE CLOSED.** 12 of 12 plans executed. ADR-0002 **Accepted 2026-09-21**; all eight
 probe edges resolved with a named test each; legacy-import ratchet re-measured at **31**
 (unchanged, constant untouched); full suite **1983 passed, 0 skipped, 0 xfailed**.
@@ -105,6 +109,7 @@ probe edges resolved with a named test each; legacy-import ratchet re-measured a
   § Requirement coverage). Claimed at the strength of the evidence and no further: the era
   screen was *survived*; a PC1 loading of exactly 1/√2 on two standardized candidates is an
   arithmetic identity, not by itself evidence of five-decade economic stability.
+
 - **REG-01 — DELIVERED PARTIALLY.** The open item is **named, not folded in: criterion 6's
   dependence verdict is UNRESOLVED.** The pre-registered block-permutation control returned
   **INCONCLUSIVE** — NMI **0.464088** at the **96.60th percentile** against p95 **0.449202** and
@@ -726,6 +731,7 @@ Recent decisions affecting current work:
 | 260911-kkj | add a PyPI token-presence guard: fails the job before any build/upload when the leg's API token secret is absent or empty, naming the exact secret and noting that a dynamic secrets[...] lookup yields an empty string on a name mismatch rather than erroring | 2026-09-11 | 118bd06 | [260911-kkj-add-a-token-presence-guard-to-the-pypi-p](./quick/260911-kkj-add-a-token-presence-guard-to-the-pypi-p/) |
 | 260911-la3 | fix trading-crab-lib's blank PyPI page (wired real README into pyproject readme key, twine check --strict WARNING -> PASSED), add a twine check --strict gate before every upload, add a workflow_dispatch target input (testpypi default) for a TestPyPI dry-run path with target-aware secret selection, write docs/RELEASING.md | 2026-09-11 | c25cbc6 + beabc63 + e97c8a5 + ca837cd | [260911-la3-harden-the-release-procedure-twine-check](./quick/260911-la3-harden-the-release-procedure-twine-check/) |
 | 260911-nt7 | fix the empty trading-crab-lib wheel (0.1.0–0.1.4 shipped zero Python modules): explicit package-dir + enumerated packages list, install-and-import smoke gate, --no-deps so parallel matrix legs cannot couple; bumped both packages to 0.1.5 | 2026-09-11 | f204de3 + 926ef21 | [260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins](./quick/260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins/) |
+| 15 | ADR-0004 trial budgeting policy: per-phase pre-registered budgets replace reading ADR-0002's 44 as a standing cap | 2026-09-28 | 6e445fc | — |
 
 ## Deferred Items
 

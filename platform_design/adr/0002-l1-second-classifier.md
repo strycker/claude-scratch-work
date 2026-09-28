@@ -356,6 +356,10 @@ search" pattern `07-RESEARCH.md` names as this project's closest analog to a sec
 
 ## Trial ceiling
 
+> **Amended 2026-09-28 by [ADR-0004](0004-trial-budgeting-policy.md).** The 44 below is this
+> phase's budget, closed and fully spent (42 → 44 by plan 08-10). It is not a standing project-wide
+> cap. Future phases declare their own budgets under ADR-0004. The text below is kept verbatim.
+
 **Stated as arithmetic, in three separately-named components — never as one conflated number.**
 
 **Component 1 — the INV-01 invariant screen (already spent).**

@@ -262,6 +262,7 @@ Statistical self-defense for a solo researcher (no skeptical risk committee; the
 2. **Point-in-time data.** ALFRED vintages for agency series; publication-lag alignment (a value enters the feature matrix only after its publication date); market-observed features preferred (never revised). One-sided filters only in causal features — no centered/zero-phase (filtfilt-style) smoothing.
 3. **Purged & embargoed CV** for all supervised components with overlapping labels.
 4. **Trial registry.** Log every configuration evaluated (features, K, λ, model class, hyperparameters, resulting metrics). This is the multiple-testing denominator: the best of N noise strategies has a computable inflated Sharpe. Treat it as a pre-registration ledger.
+   *Trial budgeting (per-phase budgets declared before the runs): see [ADR-0004](adr/0004-trial-budgeting-policy.md).*
 5. **Holdout.** All data from **2021-01-01 onward** untouched during development; evaluated **once** at design freeze (= the declared end of iteration; evaluating on it more than once contaminates it, exactly like tuning on a test set).
 6. **Deflated Sharpe ratio** (Bailey–López de Prado) for headline performance — corrects for number of trials, non-normality, track length. Calibration for skepticism: Harvey–Liu–Zhu argue t ≈ 3, not 2, for a newly discovered signal.
 7. **Brutal baselines.** Buy-and-hold SPY; 60/40; static risk parity; historical-mean return forecast (Goyal–Welch: it beats most published predictors OOS); no-regime versions of every regime-conditional model (the regime layer must pay rent).
