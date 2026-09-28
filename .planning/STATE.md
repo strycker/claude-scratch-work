@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
-status: executing
-stopped_at: Phase 8 waves 1-4 complete (9/10 plans); wave 5 (08-10, the closing measurement) next
+status: verifying
+stopped_at: Phase 8 EXECUTED (10/10 plans); awaiting phase verification and UAT
 last_updated: "2026-09-23T00:00:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 56
+  completed_plans: 57
 current_phase: 8
 last_activity: 2026-09-23
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
@@ -29,7 +29,17 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: **8 — Regime Persistence & Stability — EXECUTING**
-Status: **WAVES 1-4 COMPLETE (9 of 10 plans).** Wave 4 (2026-09-24): Glenn ruled 08-09 — bounded
+Status: **PHASE 8 EXECUTED — 10 of 10 plans (2026-09-28). Awaiting verification and UAT.**
+Closing record: `08-MEASUREMENTS.md`. **Registry 42 → 44, the ADR-0002 ceiling exactly — zero
+headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
+1972-01-31 → 2020-12-31: l1only `wealth_delta` **−0.125307** (was −0.123438), `dd_delta`
+**+0.026164** (was +0.024084); mean turnover #1-alone **0.127** (was 0.163), joint **0.081** (was
+0.120). The band cut turnover and did not improve the lift. **A11 gate FAILED 2 of 2** — DSR
+1.82e-13 and 4.13e-12 against hurdle **2.226891** at 44 trials. F-4 rates 246/587 = 0.419080 on
+both records. Suite **2392 passed, 0 skipped**; recorded counts pinned to a live collection.
+All ten PER requirements closed.
+
+**Wave 4 as closed:** **WAVES 1-4 COMPLETE (9 of 10 plans).** Wave 4 (2026-09-24): Glenn ruled 08-09 — bounded
 turnover as a **5pp no-trade band** (not swept), hysteresis per-classifier with the blend mismatch
 declared, thresholds kept at 0.70/0.40. One helper (`allocation/hysteresis.py::execute_rebalance`)
 at all three call sites. Band-off l1only byte-identical to git; registry 42 (A7 authorises 2, which
@@ -547,6 +557,17 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
+- **(Phase 8, found at close, verified) the joint driver's `append_trial` never writes `sharpe` or
+  `independent_trial`.** Phase 7 added both to the 07-11 rows by amending the ledger after the run
+  (`42161dd`, `230c91c`); the fix never reached the code. So 08-10's two rows — two arms of ONE
+  ablation, exactly what `independent_trial: False` exists to exclude — went in without the flag
+  and without a Sharpe. **No DSR number is affected today** (rows without `sharpe` are skipped by
+  `registry_sharpe_variance`, and the 20-row minimum holds). The risk is latent: backfilling a
+  Sharpe the way Phase 7 did would silently count them as independent — the category error that
+  once collapsed the hurdle 2.2087 → 0.003389. Fix: write both fields at `joint_driver.py:709`, and
+  decide whether to backfill the two 08-10 rows as Phase 7 did. **Needs Glenn's ruling** — it edits
+  the append-only ledger.
+
 - **PRIORITY (Phase 8, measured 2026-09-23) — neither classifier's walk-forward labeling shares a
   state vocabulary with its own full-sample reference.** Terminal-month walk-forward labels (08-02's
   `c{1,2}_lag1_state`, 588 months) against `regime_labels` / `regime_labels_2`:
@@ -600,7 +621,7 @@ Recent decisions affecting current work:
 - **(Phase 8, found in 08-01, NOT fixed) `_leg_kpis` carries F-4's off-by-one.**
   `scripts/run_joint_lift.py::_leg_kpis` computes `state_{1,2}_transition_rate` as changes /
   `n_steps` (588), not / pairs (587). It feeds the committed `measurement_*.json`, which still
-  say **0.418367** while `diagnostics_*.json` now say **0.418980** — two records, same 246 changes,
+  say **0.418367** while `diagnostics_*.json` now say **0.419080** — two records, same 246 changes,
   different rates. **Folded into 08-10 Task 1 — approved by Glenn 2026-09-23.** Source fix and
   record regeneration land in one commit; a verify accepts /587 and rejects /588 (fails today).
 

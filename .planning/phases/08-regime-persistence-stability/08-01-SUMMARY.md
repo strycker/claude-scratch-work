@@ -100,7 +100,7 @@ How to read the table:
 
 | classifier | before (÷588 months) | after (÷587 pairs) |
 |---|---|---|
-| #1 | 0.418367 (41.84%) | **0.418980 (41.91%)** |
+| #1 | 0.418367 (41.84%) | **0.419080 (41.91%)** |
 | #2 | 0.040816 (4.08%) | **0.040886 (4.09%)** |
 
 The counts are unchanged (246 and 24). The JSON diff is `n_pairs` and `transition_rate` only.

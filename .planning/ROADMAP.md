@@ -538,6 +538,12 @@ run length is **1.0 month**; 136 of 247 runs are a single month.
 > 462 are None→None. Treating None as a state, `active_regime` changes **122/587 (20.8%)**. The
 > **387/588** all-cash count stands. The orchestrator relayed 462 during Phase 8 scoping using the
 > same comparison; it framed Track B's motivation but bore on no ruling.
+>
+> **REFUTED 2026-09-23 by criterion 3's own pre-registered rule (08-02).** Churn is flat in k:
+> classifier #1 changes 246 / 242 / 245 / 248 / 247 / 249 of 587 pairs for k = 1…6, so the
+> terminal-month edge artefact described above is not the cause. The 41.91% is the labeler's own
+> path. Not ruled out: edge effects longer than 6 months; λ/d is not isolated from K, features
+> and d. See `08-TRACK-A.md`.
 
 **Depends on**: Phase 7
 **Blocks**: Phase 9 (Migration) — per the Phase 7 wave-2 UAT ruling, 2026-09-21
@@ -642,7 +648,7 @@ wave 4.
 
 **Wave 5** *(blocked on 08-02, 08-05, 08-07, 08-09)*
 
-- [ ] 08-10-PLAN.md — Criterion 7 re-measured (both legs, one harness, window inline), recorded counts corrected against a live collection, and the phase's closing measurement record *(PER-07, PER-10)*
+- [x] 08-10-PLAN.md — Criterion 7 re-measured (both legs, one harness, window inline), recorded counts corrected against a live collection, and the phase's closing measurement record *(PER-07, PER-10)*
 
 **Explicit non-goals**: no λ sweep; no dependence statistic of any kind; no migration work; no
 2021+ holdout use for any selection decision; no re-pin of K or λ; no target pre-declared for
@@ -695,5 +701,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
-| 8. Regime Persistence & Stability | 9/10 | In progress — waves 1-4 complete; 5pp no-trade band wired at all three sites; A7 closed by rewording | wave 4: 2026-09-24 |
+| 8. Regime Persistence & Stability | 10/10 | Executed — all 10 plans; awaiting phase verification / UAT | 2026-09-28 |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

@@ -90,7 +90,7 @@ def churn_rate(n_changes: int, n_rows: int) -> float:
 
     A window of ``n_rows`` months contains ``n_rows - 1`` adjacent pairs, and a
     change is a property of a pair. Dividing by ``n_rows`` is F-4's recorded
-    off-by-one (246/588 = 0.418367 where 246/587 = 0.418980 is the rate).
+    off-by-one (246/588 = 0.418367 where 246/587 = 0.419080 is the rate).
 
     Args:
         n_changes: the count from :func:`state_change_count`.

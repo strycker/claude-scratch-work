@@ -93,14 +93,14 @@ measured by the other's metric.
   drop first decade, drop last decade, circular block bootstrap, and leave-one-episode-out — using
   centroid distance in de-standardized units with Hungarian matching, a within-state split-half
   null at the same n, and subsample occupancy on every row (criterion 5; design §4.4)
-- [ ] **PER-07**: Criterion 7 is re-measured under whatever changed, both legs, one harness,
+- [x] **PER-07**: Criterion 7 is re-measured under whatever changed, both legs, one harness,
   window inline; the prior `wealth_delta` −0.123438 / `dd_delta` +0.024084 is a comparison point,
   not a target (criterion 6)
 - [x] **PER-08**: Audit item A11 — *"no gate fails on a bad model"* — is answered and written as
   the reversal of the 2026-09-18 decision to leave it open (criterion 7)
 - [x] **PER-09**: Validation gap G6 is pinned as the known **non**-compliance: non-joint consumers
   of `vol_targeted_tilt` receive the unpooled per-regime estimate (criterion 8)
-- [ ] **PER-10**: Recorded counts match measured reality — the four documentation sites, and
+- [x] **PER-10**: Recorded counts match measured reality — the four documentation sites, and
   F-4's churn denominator (587 adjacent pairs, not 588 months) with its pin moved in the same
   commit (criterion 9)
 
@@ -244,10 +244,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PER-04 | Phase 8 | Complete |
 | PER-05 | Phase 8 | Complete (A7 closed by rewording; 5pp no-trade band, ruling 2026-09-24) |
 | PER-06 | Phase 8 | Complete (named limitation: `evaporated` flag inert under K-fixed refits) |
-| PER-07 | Phase 8 | Pending |
+| PER-07 | Phase 8 | Complete (criterion 7 re-measured with the 5pp band; A11 gate FAILED 2/2) |
 | PER-08 | Phase 8 | Complete |
 | PER-09 | Phase 8 | Complete |
-| PER-10 | Phase 8 | Pending |
+| PER-10 | Phase 8 | Complete (four doc sites pinned to a live collection, 2392) |
 | MIG-01 | Phase 9 | Pending |
 
 **Coverage:**

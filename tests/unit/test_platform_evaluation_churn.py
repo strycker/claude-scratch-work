@@ -98,7 +98,7 @@ class TestChurnRateIsDenominatedInPairs:
     def test_246_over_588_rows_is_246_over_587(self):
         """The recorded 41.84% divided by MONTHS; 587 adjacent PAIRS exist.
 
-        The two values differ in the 4th decimal (0.418980 vs 0.418367), so an
+        The two values differ in the 4th decimal (0.419080 vs 0.418367), so an
         assertion on the correct one alone would pass under a sloppy tolerance.
         The second assertion rejects the old denominator explicitly.
         """
