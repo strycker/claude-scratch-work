@@ -650,6 +650,13 @@ wave 4.
 
 - [x] 08-10-PLAN.md — Criterion 7 re-measured (both legs, one harness, window inline), recorded counts corrected against a live collection, and the phase's closing measurement record *(PER-07, PER-10)*
 
+**Gap closure — UAT 2026-09-28 (G-08-1, G-08-2)** *(4 plans, 3 waves; 08-12 blocks on two decisions for Glenn, run in parallel with 08-11)*
+
+- [ ] 08-11-PLAN.md — **G-08-1.** The criterion-7 re-derivation compares floats portably (rel 1e-9, abs 0), proven to reject the band-off record, a 1-ppm error in every field and a zeroed DSR; the same defect class is swept suite-wide and listed *(PER-07, PER-10)* — wave 1
+- [ ] 08-12-PLAN.md — **G-08-2 decisions.** Measured facts on the serving recipe, then Glenn rules on the ragged edge (the 2026-08-31 row lacks 3 model columns) and on the input-independent served posterior; recorded in 08-SERVING.md *(PER-02, PER-05)* — wave 1, checkpoint
+- [ ] 08-13-PLAN.md — **G-08-2 build.** `python -m trading_crab_lib.platform.report.serving` builds all three serving artifacts weekly reads (the UAT found one; there are three) through the backtest's own `fit_l2_nowcaster`, under `NO_REGISTRY`; weekly scores the model's own columns; the end-to-end test is proven able to fail *(PER-02, PER-05, PER-10)* — wave 2
+- [ ] 08-14-PLAN.md — **G-08-2 serve.** Glenn's two 08-12 rulings implemented, then the supported sequence run on the real tracked data in scratch directories, with G-08-2's real-data status stated honestly *(PER-02, PER-05, PER-10)* — wave 3
+
 **Explicit non-goals**: no λ sweep; no dependence statistic of any kind; no migration work; no
 2021+ holdout use for any selection decision; no re-pin of K or λ; no target pre-declared for
 either churn metric; `legacy/` and the reference submodules untouched; the legacy-import ratchet
