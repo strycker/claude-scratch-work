@@ -3,21 +3,19 @@ status: testing
 phase: 08-regime-persistence-stability
 source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-05-SUMMARY.md, 08-06-SUMMARY.md, 08-07-SUMMARY.md, 08-08-SUMMARY.md, 08-09-SUMMARY.md, 08-10-SUMMARY.md]
 started: 2026-09-28T15:48:37Z
-updated: 2026-09-28T20:56:38Z
+updated: 2026-09-28T21:01:54Z
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-number: 9
-name: Stability results — your judgment on the recorded picture
+number: 10
+name: Closing record — every criterion, number, window and verdict
 expected: |
-  08-STABILITY.md quotes the 2363752 pre-registered prediction ahead of the results;
-  reports every classifier x scheme x state row against its split-half null with
-  occupancy; records classifier #1 state 2 as DEGENERATE under leave-one-episode-out
-  without calling it a failure; invents no threshold; and states that the evaporated flag
-  fired 0 of 8,883 times while reference_months_in_subsample carries the truth. You judge
-  whether this is an honest record you can act on.
+  08-MEASUREMENTS.md gives each of criteria 0-9 a verdict with its number, denominator and
+  window, none MET on a shape check; separates decision-bearing from observational; states
+  the priority vocabulary finding (35.7% / 41.3% best-aligned) and which numbers it
+  qualifies; and tallies 13 confirm-only checks including the orchestrator's own.
 awaiting: user response
 
 ## Tests
@@ -27,6 +25,7 @@ expected: After `git pull` and reinstalling both packages, `pytest tests/ -q` en
 result: issue
 reported: "FAILED tests/unit/test_platform_joint_diagnostics_record.py::TestCriterion7ReMeasuredIn0810::test_the_record_is_re_derivable_from_its_own_curves[l1only] - AssertionError: ('l1only', 'wealth_delta') / assert -0.12530657740828932 == -0.1253065774082902 / 1 failed, 2392 passed, 5 warnings in 308.46s (0:05:08)"
 severity: blocker
+
 
 
 
@@ -46,9 +45,11 @@ severity: blocker
 
 
 
+
 ### 3. Registry at the ADR-0002 ceiling, rows correctly marked
 expected: `python -c "from trading_crab_lib.platform.honesty.registry import total_trial_count as t; print(t())"` prints 44. `registry/trials.jsonl` has 7 lines; the last two are tagged 08-10-c1-alone-L1only-notrade5pp and 08-10-joint-c1xc2-L1only-notrade5pp, each with "independent_trial": false and sharpe 0.896446 / 0.899378.
 result: pass
+
 
 
 
@@ -66,9 +67,11 @@ result: pass
 
 
 
+
 ### 5. A11 ruling record reads as your decision, as a reversal
 expected: 08-A11.md records your ruling b-promote-dsr, written as a reversal of the 2026-09-18 decision to leave A11 open, with "registry rows spent: 0", the criterion-7 MET -> FAILED consequence accepted in advance, and the sharpe_variance = 1.0 placeholder caveat stated plainly. ADR-0003 is Accepted and names b-promote-dsr.
 result: pass
+
 
 
 
@@ -86,9 +89,11 @@ result: pass
 
 
 
+
 ### 7. S-1 halt and your invariance ruling are recorded honestly
 expected: 08-CHURN.md records the halt as measured (3 LEADs on classifier #2), the four truncation cuts all bit-identical, your 2026-09-23 ruling "causal invariance governs; S-1 is observational", and the orchestrator's two corrected over-claims ("a leak everywhere"; "exactly {13, 44, 68}") marked as corrections, not silently rewritten.
 result: pass
+
 
 
 
@@ -106,9 +111,11 @@ result: pass
 
 
 
+
 ### 9. Stability results — your judgment on the recorded picture
 expected: 08-STABILITY.md quotes the 2363752 pre-registered prediction ahead of the results; reports every classifier x scheme x state row against its split-half null with occupancy; records classifier #1 state 2 as DEGENERATE under leave-one-episode-out without calling it a failure; invents no threshold; and states that the evaporated flag fired 0 of 8,883 times while reference_months_in_subsample carries the truth. You judge whether this is an honest record you can act on.
-result: [pending]
+result: pass
+
 
 
 
@@ -119,6 +126,7 @@ result: [pending]
 ### 10. Closing record — every criterion, number, window and verdict
 expected: 08-MEASUREMENTS.md gives each of criteria 0-9 a verdict with its number, denominator and window, none MET on a shape check; separates decision-bearing from observational; states the priority vocabulary finding (35.7% / 41.3% best-aligned) and which numbers it qualifies; and tallies 13 confirm-only checks including the orchestrator's own.
 result: [pending]
+
 
 
 
@@ -138,11 +146,13 @@ coverage_id: 08-03-D1
 
 
 
+
 ### 12. 08-03 D2 — Trap A test fails on the trap (de-standardized matched distance)
 expected: covered by tests/unit/test_platform_labeling_stability.py
 result: pass
 source: automated
 coverage_id: 08-03-D2
+
 
 
 
@@ -162,11 +172,13 @@ coverage_id: 08-03-D3
 
 
 
+
 ### 14. 08-03 D4 — split-half null non-zero at n=40 and falling with n
 expected: covered by tests/unit/test_platform_labeling_stability.py
 result: pass
 source: automated
 coverage_id: 08-03-D4
+
 
 
 
@@ -186,11 +198,13 @@ coverage_id: 08-03-D5
 
 
 
+
 ### 16. 08-03 D6 — four subsample schemes; circular bootstrap preserves length n
 expected: covered by tests/unit/test_platform_labeling_stability.py
 result: pass
 source: automated
 coverage_id: 08-03-D6
+
 
 
 
@@ -210,11 +224,13 @@ coverage_id: 08-03-D7
 
 
 
+
 ### 18. 08-03 D8 — no threshold constant, verdict field or Wasserstein estimator
 expected: covered by tests/unit/test_platform_labeling_stability.py
 result: pass
 source: automated
 coverage_id: 08-03-D8
+
 
 
 
@@ -234,11 +250,13 @@ coverage_id: 08-07-D1
 
 
 
+
 ### 20. 08-07 D2 — rows keyed on the matched partner
 expected: covered by tests/unit/test_platform_subsample_stability_record.py
 result: pass
 source: automated
 coverage_id: 08-07-D2
+
 
 
 
@@ -255,9 +273,9 @@ coverage_id: 08-07-D3
 ## Summary
 
 total: 21
-passed: 17
+passed: 18
 issues: 2
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 
