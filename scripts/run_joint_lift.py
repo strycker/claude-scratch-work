@@ -85,8 +85,15 @@ from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
 
-BASELINE_TAG = "07-11-c1-alone-L1only"
-JOINT_TAG = "07-11-joint-c1xc2-L1only"
+#: The decision-bearing tags name the phase, the plan and the configuration evaluated.
+#: Plan 07-11 appended the band-less pair (``07-11-c1-alone-L1only`` /
+#: ``07-11-joint-c1xc2-L1only``); plan 08-10 evaluates the same harness under 08-A7.md's
+#: 5pp no-trade band (``allocation.no_trade_band``), a new configuration, so its two
+#: rows carry their own names. A later decision-bearing run of a changed
+#: configuration must rename these again — and needs an ADR-0002 amendment first,
+#: because 08-10's pair takes the ledger to the ceiling.
+BASELINE_TAG = "08-10-c1-alone-L1only-notrade5pp"
+JOINT_TAG = "08-10-joint-c1xc2-L1only-notrade5pp"
 
 #: ADR-0002 § Trial ceiling, stated before the runs it budgets for (D-17).
 ADR_0002_CEILING = 44
