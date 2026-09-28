@@ -165,6 +165,6 @@ blocked: 0
   missing:
     - "A supported command that builds the SERVING nowcaster with the backtest's own recipe (active-feature rule, embargo, calibrated LR) on full labelled history, saving the model's column list"
     - "weekly.py scores the model's own columns (feature_names_in_), not the whole row"
-    - "Ruling: the serving fit is NOT a registry trial (NO_REGISTRY) — needs Glenn's approval"
+    - "Ruling (APPROVED by Glenn 2026-09-28): the serving fit is NOT a registry trial — it is written with the NO_REGISTRY sentinel; it refits an already-evaluated configuration on full history, selects nothing, and leaves total_trial_count() at 44"
     - "An end-to-end test of weekly.main against a real fitted model"
   debug_session: ""
