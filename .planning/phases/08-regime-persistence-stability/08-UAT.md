@@ -3,19 +3,41 @@ status: testing
 phase: 08-regime-persistence-stability
 source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-05-SUMMARY.md, 08-06-SUMMARY.md, 08-07-SUMMARY.md, 08-08-SUMMARY.md, 08-09-SUMMARY.md, 08-10-SUMMARY.md]
 started: 2026-09-28T15:48:37Z
-updated: 2026-09-28T19:18:01Z
+updated: 2026-09-28T19:30:52Z
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-number: 3
-name: Registry at the ADR-0002 ceiling, rows correctly marked
+number: 1
+name: Fresh pull — full suite green at the recorded count
 expected: |
-  `python -c "from trading_crab_lib.platform.honesty.registry import total_trial_count as t; print(t())"`
-  prints 44. `registry/trials.jsonl` has 7 lines; the last two are tagged
+  After `git pull` and reinstalling both packages, `pytest tests/ -q` ends with "2393
+  passed" and 0 failed / 0 skipped / 0 xfailed; README badge and CLAUDE.md both say 2393.
+  result: issue reported: "FAILED tests/unit/test_platform_joint_diagnostics_record.py::Te
+  stCriterion7ReMeasuredIn0810::test_the_record_is_re_derivable_from_its_own_curves[l1only
+  ] - AssertionError: ('l1only', 'wealth_delta') / assert -0.12530657740828932 ==
+  -0.1253065774082902 / 1 failed, 2392 passed, 5 warnings in 308.46s (0:05:08)" severity:
+  blocker  ### 2. Weekly report — the trading surface shows the band and the rewording
+  expected: `python -m trading_crab_lib.platform.report.weekly` (no --send-email)
+  completes. The markdown shows "active regime: regime N" (or "none (neutral posture)"),
+  the sentence "The active regime is a reported label ... gates no weight (audit item A7,
+  08-A7.md)", and above the trades "Targets below are the EXECUTED book after the 5.0% no-
+  trade band". Running it a second time in the same month gives the same targets — the
+  band does not compound. result: issue reported: "this doesn't work at all, even after
+  re-installing the packages ... running python scripts/build_platform_data.py, running
+  python -m trading_crab_lib.platform.evaluation.report --smoke, etc. — FileNotFoundError:
+  Model checkpoint not found: .../data/checkpoints/platform/nowcaster.pkl" severity:
+  blocker  ### 3. Registry at the ADR-0002 ceiling, rows correctly marked expected:
+  `python -c "from trading_crab_lib.platform.honesty.registry import total_trial_count as
+  t; print(t())"` prints 44. `registry/trials.jsonl` has 7 lines; the last two are tagged
   08-10-c1-alone-L1only-notrade5pp and 08-10-joint-c1xc2-L1only-notrade5pp, each with
-  "independent_trial": false and sharpe 0.896446 / 0.899378.
+  "independent_trial": false and sharpe 0.896446 / 0.899378. result: pass  ### 4.
+  Criterion 7 record — band on, A11 gate FAILED as accepted in advance expected:
+  outputs/reports/platform/joint_lift/measurement_l1only.json shows lift.wealth_delta
+  -0.125307, lift.dd_delta +0.026164 over 588 steps; quality_tier.verdict "FAILED on 2 of
+  2 legs (baseline, joint)" at hurdle 2.226891; both legs' state_1_transition_rate
+  0.419080.
 awaiting: user response
 
 ## Tests
@@ -34,7 +56,7 @@ severity: blocker
 
 ### 3. Registry at the ADR-0002 ceiling, rows correctly marked
 expected: `python -c "from trading_crab_lib.platform.honesty.registry import total_trial_count as t; print(t())"` prints 44. `registry/trials.jsonl` has 7 lines; the last two are tagged 08-10-c1-alone-L1only-notrade5pp and 08-10-joint-c1xc2-L1only-notrade5pp, each with "independent_trial": false and sharpe 0.896446 / 0.899378.
-result: [pending]
+result: pass
 
 ### 4. Criterion 7 record — band on, A11 gate FAILED as accepted in advance
 expected: outputs/reports/platform/joint_lift/measurement_l1only.json shows lift.wealth_delta -0.125307, lift.dd_delta +0.026164 over 588 steps; quality_tier.verdict "FAILED on 2 of 2 legs (baseline, joint)" at hurdle 2.226891; both legs' state_1_transition_rate 0.419080.
@@ -133,9 +155,9 @@ coverage_id: 08-07-D3
 ## Summary
 
 total: 21
-passed: 11
+passed: 12
 issues: 2
-pending: 8
+pending: 7
 skipped: 0
 blocked: 0
 
