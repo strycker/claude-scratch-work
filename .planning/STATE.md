@@ -731,7 +731,7 @@ Recent decisions affecting current work:
 | 260911-kkj | add a PyPI token-presence guard: fails the job before any build/upload when the leg's API token secret is absent or empty, naming the exact secret and noting that a dynamic secrets[...] lookup yields an empty string on a name mismatch rather than erroring | 2026-09-11 | 118bd06 | [260911-kkj-add-a-token-presence-guard-to-the-pypi-p](./quick/260911-kkj-add-a-token-presence-guard-to-the-pypi-p/) |
 | 260911-la3 | fix trading-crab-lib's blank PyPI page (wired real README into pyproject readme key, twine check --strict WARNING -> PASSED), add a twine check --strict gate before every upload, add a workflow_dispatch target input (testpypi default) for a TestPyPI dry-run path with target-aware secret selection, write docs/RELEASING.md | 2026-09-11 | c25cbc6 + beabc63 + e97c8a5 + ca837cd | [260911-la3-harden-the-release-procedure-twine-check](./quick/260911-la3-harden-the-release-procedure-twine-check/) |
 | 260911-nt7 | fix the empty trading-crab-lib wheel (0.1.0–0.1.4 shipped zero Python modules): explicit package-dir + enumerated packages list, install-and-import smoke gate, --no-deps so parallel matrix legs cannot couple; bumped both packages to 0.1.5 | 2026-09-11 | f204de3 + 926ef21 | [260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins](./quick/260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins/) |
-| 15 | ADR-0004 trial budgeting policy: per-phase pre-registered budgets replace reading ADR-0002's 44 as a standing cap | 2026-09-28 | 6e445fc | — |
+| 15 | ADR-0004 trial budgeting policy: per-phase pre-registered budgets replace reading ADR-0002's 44 as a standing cap | 2026-09-28 | 1a4df87 | — |
 
 ## Deferred Items
 
