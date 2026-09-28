@@ -3,27 +3,30 @@ status: testing
 phase: 08-regime-persistence-stability
 source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-05-SUMMARY.md, 08-06-SUMMARY.md, 08-07-SUMMARY.md, 08-08-SUMMARY.md, 08-09-SUMMARY.md, 08-10-SUMMARY.md]
 started: 2026-09-28T15:48:37Z
-updated: 2026-09-28T15:48:37Z
+updated: 2026-09-28T17:44:58Z
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-number: 1
-name: Fresh pull — full suite green at the recorded count
+number: 2
+name: Weekly report — the trading surface shows the band and the rewording
 expected: |
-  After `git pull` of claude/keen-galileo-zqcml6-w5 and reinstalling both packages
-  (pip install -e "src/trading_crab_lib/[all,dev]" && pip install -e ".[dev]"),
-  `pytest tests/ -q` ends with "2393 passed" — 0 failed, 0 skipped, 0 xfailed
-  (a handful of third-party warnings is normal). The README badge and CLAUDE.md
-  both say 2393.
+  `python -m trading_crab_lib.platform.report.weekly` (no --send-email) completes.
+  The markdown shows "active regime: regime N" (or "none (neutral posture)"), the
+  sentence "The active regime is a reported label ... gates no weight (audit item A7,
+  08-A7.md)", and above the trades "Targets below are the EXECUTED book after the 5.0%
+  no-trade band". Running it a second time in the same month gives the same targets —
+  the band does not compound.
 awaiting: user response
 
 ## Tests
 
 ### 1. Fresh pull — full suite green at the recorded count
 expected: After `git pull` and reinstalling both packages, `pytest tests/ -q` ends with "2393 passed" and 0 failed / 0 skipped / 0 xfailed; README badge and CLAUDE.md both say 2393.
-result: [pending]
+result: issue
+reported: "FAILED tests/unit/test_platform_joint_diagnostics_record.py::TestCriterion7ReMeasuredIn0810::test_the_record_is_re_derivable_from_its_own_curves[l1only] - AssertionError: ('l1only', 'wealth_delta') / assert -0.12530657740828932 == -0.1253065774082902 / 1 failed, 2392 passed, 5 warnings in 308.46s (0:05:08)"
+severity: blocker
 
 ### 2. Weekly report — the trading surface shows the band and the rewording
 expected: `python -m trading_crab_lib.platform.report.weekly` (no --send-email) completes. The markdown shows "active regime: regime N" (or "none (neutral posture)"), the sentence "The active regime is a reported label ... gates no weight (audit item A7, 08-A7.md)", and above the trades "Targets below are the EXECUTED book after the 5.0% no-trade band". Running it a second time in the same month gives the same targets — the band does not compound.
@@ -131,11 +134,24 @@ coverage_id: 08-07-D3
 
 total: 21
 passed: 11
-issues: 0
-pending: 10
+issues: 1
+pending: 9
 skipped: 0
 blocked: 0
 
 ## Gaps
 
-[none yet]
+- gap_id: G-08-1
+  truth: "The full suite passes on Glenn's Mac as it does on Linux: 2393 passed, 0 failed."
+  status: failed
+  reason: "User reported: 1 failed, 2392 passed — test_the_record_is_re_derivable_from_its_own_curves[l1only] asserts -0.12530657740828932 == -0.1253065774082902"
+  severity: blocker
+  test: 1
+  root_cause: "The test recomputes wealth_delta from the committed parquet curves and compares it to the committed record with exact float ==. The record was produced on Linux; recomputing on macOS gives a value 8.9e-16 away (32 ULP, relative 7.1e-15) because terminal_log_wealth = np.log1p(r).sum() over 588 months differs in its last bits across CPU/libm (Apple Silicon NEON + macOS libm vs x86 + glibc). The curve bytes are identical; the reduction is not bit-portable. Passes on Linux (9/9 in that class). Written by 08-10; the same test also compares mean turnover and both DSRs with ==, which will fail next on macOS once wealth_delta is fixed. A genuine mismatch (record from a different run) differs at ~1e-3 (band-off -0.123438 vs band-on -0.125307), 11 orders of magnitude larger."
+  artifacts:
+    - path: "tests/unit/test_platform_joint_diagnostics_record.py"
+      issue: "test_the_record_is_re_derivable_from_its_own_curves compares recomputed floats with exact == (lines 689-692)"
+  missing:
+    - "Compare floats with pytest.approx(rel=1e-9) — relative, so the ~1e-13 DSR values are held to the same standard as wealth_delta — and keep booleans exact"
+    - "Prove the tolerance still discriminates: the band-off record must FAIL against the band-on curves"
+  debug_session: ""
