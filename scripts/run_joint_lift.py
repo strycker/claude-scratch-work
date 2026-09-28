@@ -24,17 +24,16 @@ wiring verification. Wave 1 appended four untagged wiring rows that permanently
 raised D-16's denominator; that is why a dry run exists as a first-class flag
 rather than as a habit.
 
-**No ``sharpe`` key is written into the registry metrics, deliberately.**
-``evaluation/deflated_sharpe.py::registry_sharpe_variance`` estimates the
-cross-trial Sharpe variance from every row carrying ``metrics["sharpe"]``, and
-falls back to the ``1.0`` placeholder below two observations. Writing these two
-near-identical legs' Sharpes would flip that estimator from the placeholder to a
-sample variance of order 1e-6, collapsing ``expected_max_sharpe`` to roughly zero
-and SILENTLY DISABLING the multiple-testing correction for every future DSR in
-this project — the "systematically under-penalize search" direction
-``07-RESEARCH.md`` names as the closest analog to a security defect here. The
-Sharpes are reported in this script's output and in ``07-JOINT-LIFT.md`` instead.
-Revisiting this is an ADR-0002 amendment, not a script edit.
+**Registry rows carry ``metrics["sharpe"]`` and ``config["independent_trial"] = False``.**
+Both are written at the one append site, ``joint_driver.run_joint_backtest``. This
+reverses 07-11's original "no ``sharpe`` key, deliberately": that rule existed because
+``evaluation/deflated_sharpe.py::registry_sharpe_variance`` then switched off its ``1.0``
+placeholder at just two Sharpe-bearing rows, so these two near-identical legs would have
+collapsed ``expected_max_sharpe`` to roughly zero. ADR-0002 (``07-DSR-ESTIMATOR-NOTE.md``
+§ AMENDMENT, commit ``230c91c``) removed that trap with two independent defences — a
+20-row minimum, and ``independent_trial: False`` rows excluded entirely — and set the
+convention that trial rows carry their Sharpe. Every leg this script runs is an arm of one
+ablation, so it is never an independent trial.
 
 Usage::
 

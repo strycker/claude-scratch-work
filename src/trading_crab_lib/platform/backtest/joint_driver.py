@@ -704,16 +704,29 @@ def run_joint_backtest(
         trial_config["no_trade_band"] = no_trade_band
     if trial_tag is not None:
         trial_config["trial_tag"] = trial_tag
+    # Every run of this harness is one ARM of the joint-lift ablation (a blend weight of
+    # 1.0 is the classifier-#1-alone baseline of the same comparison), never an
+    # independently-tried configuration. ADR-0002 (07-DSR-ESTIMATOR-NOTE, 230c91c): such
+    # rows must say so, because a missing key reads as independent and would feed
+    # registry_sharpe_variance two near-identical Sharpes — the trap that once collapsed
+    # the multiple-testing hurdle 2.2087 -> 0.0034.
+    trial_config["independent_trial"] = False
+    metrics: dict[str, Any] = {
+        "n_steps": int(len(equity_curve)),
+        "terminal_log_wealth": tlw,
+        "n_degraded": n_degraded,
+    }
+    # The same annualized_sharpe the A11 gate reads as observed_sharpe, at the precision of
+    # the existing rows. Omitted when undefined (empty or flat curve), never recorded as NaN.
+    sharpe = annualized_sharpe(equity_curve["return"]) if not equity_curve.empty else float("nan")
+    if np.isfinite(sharpe):
+        metrics["sharpe"] = round(float(sharpe), 6)
     # EXACTLY ONE append_trial site in this module — run_full_backtest_evaluation's
     # factor of two comes from its own two sites and does not apply here.
     registry.append_trial(
         config=trial_config,
         features=list(frozen_features_1 or []) + list(frozen_features_2),
-        metrics={
-            "n_steps": int(len(equity_curve)),
-            "terminal_log_wealth": tlw,
-            "n_degraded": n_degraded,
-        },
+        metrics=metrics,
         path=registry_path,
     )
 

@@ -255,6 +255,17 @@ class TestRegistry:
         assert "n_steps" in row["metrics"]
         assert "terminal_log_wealth" in row["metrics"]
 
+    def test_registry_row_is_marked_a_non_independent_ablation_arm_with_its_sharpe(self, tmp_path):
+        # ADR-0002 / 230c91c: a MISSING independent_trial reads as independent, and
+        # registry_sharpe_variance would then ingest two near-identical ablation-arm Sharpes.
+        # `is False` (not falsy) is exactly the comparison the estimator makes.
+        ledger = tmp_path / "trials.jsonl"
+        curve, _ = _run(1.0, tmp_path=tmp_path, tag="baseline")
+        row = read_trials(ledger).iloc[0]
+        assert row["config"]["independent_trial"] is False
+        # The recorded Sharpe is the gate's observed_sharpe, not a second definition.
+        assert row["metrics"]["sharpe"] == round(jd.annualized_sharpe(curve["return"]), 6)
+
 
 # ── degradation ────────────────────────────────────────────────────────────
 

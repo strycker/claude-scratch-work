@@ -557,16 +557,17 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- **(Phase 8, found at close, verified) the joint driver's `append_trial` never writes `sharpe` or
-  `independent_trial`.** Phase 7 added both to the 07-11 rows by amending the ledger after the run
-  (`42161dd`, `230c91c`); the fix never reached the code. So 08-10's two rows — two arms of ONE
-  ablation, exactly what `independent_trial: False` exists to exclude — went in without the flag
-  and without a Sharpe. **No DSR number is affected today** (rows without `sharpe` are skipped by
-  `registry_sharpe_variance`, and the 20-row minimum holds). The risk is latent: backfilling a
-  Sharpe the way Phase 7 did would silently count them as independent — the category error that
-  once collapsed the hurdle 2.2087 → 0.003389. Fix: write both fields at `joint_driver.py:709`, and
-  decide whether to backfill the two 08-10 rows as Phase 7 did. **Needs Glenn's ruling** — it edits
-  the append-only ledger.
+- ~~**(Phase 8, found at close) the joint driver's `append_trial` never wrote `sharpe` or
+  `independent_trial`.**~~ **RESOLVED 2026-09-28 (Glenn approved).** The append site now writes
+  `independent_trial: False` (every run of the harness is an ablation arm) and `sharpe` =
+  `annualized_sharpe` — the A11 gate's own `observed_sharpe`, verified to reproduce the 07-11 rows'
+  0.917073 / 0.914903 exactly. The two 08-10 rows were backfilled (0.896446 / 0.899378), following
+  230c91c's precedent: as-run `config_hash` kept, only the two keys added, 2 lines changed. DSR state
+  byte-identical before/after (44 trials, variance 1.0, hurdle 2.226891); the estimator now excludes
+  all 4 ablation rows by the flag — without it the 08-10 rows would have been 2 usable observations.
+  Convention made explicit: `config_hash` is the hash of the config **as appended**; post-hoc
+  annotations do not re-hash it. Known, not fixed: the append site hardcodes `"plan": "07-11"`, so
+  the 08-10 rows carry that value; their `trial_tag` identifies them.
 
 - **PRIORITY (Phase 8, measured 2026-09-23) — neither classifier's walk-forward labeling shares a
   state vocabulary with its own full-sample reference.** Terminal-month walk-forward labels (08-02's
