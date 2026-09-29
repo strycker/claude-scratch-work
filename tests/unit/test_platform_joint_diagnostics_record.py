@@ -645,6 +645,87 @@ def _record(suffix: str) -> dict:
     return json.loads((_JOINT / _RECORDS[suffix]).read_text())
 
 
+# ── 7a. Plan 08-11 (G-08-1): one comparison routine, portable across platforms ──
+#
+# The record is a claim; the parquet curves are the evidence. The re-derivation recomputes the
+# claim from the evidence, and that recomputation is a floating-point REDUCTION
+# (``np.log1p(r).sum()`` over 588 months, then norm.cdf / exp / log for the DSR and hurdle).
+# Reductions are not bit-portable: on Apple Silicon (NEON + macOS libm) terminal log wealth lands
+# 32 ULP away from the x86-glibc value that wrote the record -- relative 7.1e-15 (UAT test 1:
+# -0.12530657740828932 recomputed vs -0.1253065774082902 recorded). A GENUINE mismatch (the
+# band-off 07-11 record against the band-on 08-10 curves) differs at ~1.5e-2 relative. The
+# tolerance sits between them, twelve orders of magnitude from each, and the arms in
+# ``TestTheReDerivationToleranceDiscriminates`` prove it does.
+#
+# ``abs=0.0`` is MANDATORY. ``pytest.approx(x, rel=1e-9)`` with no ``abs`` keeps the default
+# absolute floor of 1e-12, and the committed DSRs are ~1.8e-13 and ~4.1e-12 (l1only) and ~1e-35 /
+# ~1e-45 (l2): a rel-only approx accepts ``0.0 == approx(1.8e-13, rel=1e-9)`` (measured True, pytest
+# 9.1.1). That would be a check that can only confirm.
+_PORTABLE_REL = 1e-9
+
+_FLOAT_KEYS = ("wealth_delta", "dd_delta", "joint_dsr", "baseline_dsr", "quality_tier_hurdle",
+               "joint_mean_turnover", "baseline_mean_turnover")
+_BOOL_KEYS = ("joint_quality_tier_ok", "baseline_quality_tier_ok")
+
+#: The band-off l1only record: commit d5c3ac9 (plan 07-11, before the 08-A7 5pp no-trade band),
+#: ``outputs/reports/platform/joint_lift/measurement_l1only.json``. Pinned rather than read from
+#: git at test time -- a shallow clone or an sdist has no history. It predates A11, so it has no
+#: DSR or hurdle fields. 08-11 Task 1's verify re-read git once and asserted this pin equals it.
+_BAND_OFF_L1ONLY = {
+    "wealth_delta": -0.12343826162064975,
+    "dd_delta": 0.02408401236666291,
+    "joint_mean_turnover": 0.11978772920573971,
+    "baseline_mean_turnover": 0.16325097728262197,
+}
+
+
+def _rederived(suffix: str) -> tuple[dict, dict]:
+    """``(recomputed, recorded)`` for the nine criterion-7 keys of one routing.
+
+    ``recomputed`` is the lift + quality tier re-run from the committed curves at the record's own
+    trial count and variance, plus each leg's mean turnover from its own ``turnover`` column.
+    ``recorded`` is the same nine keys read from the committed record.
+    """
+    from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
+
+    rec = _record(suffix)
+    joint, base = _curve(suffix, "joint"), _curve(suffix, "baseline")
+    again = joint_lift_table(
+        joint, base,
+        n_trials=rec["lift"]["quality_tier_n_trials"],
+        sharpe_variance=rec["lift"]["quality_tier_sharpe_variance"],
+    )
+    lift_keys = [k for k in (*_FLOAT_KEYS, *_BOOL_KEYS) if not k.endswith("_mean_turnover")]
+    recomputed = {k: again[k] for k in lift_keys}
+    recomputed["joint_mean_turnover"] = float(joint["turnover"].mean())
+    recomputed["baseline_mean_turnover"] = float(base["turnover"].mean())
+    recorded = {k: rec["lift"][k] for k in lift_keys}
+    recorded["joint_mean_turnover"] = rec["joint_leg"]["mean_turnover"]
+    recorded["baseline_mean_turnover"] = rec["baseline_leg"]["mean_turnover"]
+    return recomputed, recorded
+
+
+def _record_mismatches(recomputed: dict, recorded: dict) -> list[str]:
+    """Sorted keys of ``recorded`` whose recomputed value does not match. THE comparison routine:
+    the gating re-derivation and every discrimination arm go through it. A key missing from
+    ``recomputed`` is a mismatch, never a skip."""
+    bad = []
+    for key, want in recorded.items():
+        if key not in recomputed:
+            bad.append(key)
+            continue
+        got = recomputed[key]
+        if isinstance(want, bool):
+            ok = got is want
+        elif isinstance(want, (int, str)):
+            ok = got == want
+        else:
+            ok = got == want
+        if not ok:
+            bad.append(key)
+    return sorted(bad)
+
+
 class TestCriterion7ReMeasuredIn0810:
     @pytest.mark.parametrize("suffix", _SUFFIXES)
     def test_every_lift_cell_carries_its_window_and_both_legs_share_it(self, suffix):
@@ -675,21 +756,11 @@ class TestCriterion7ReMeasuredIn0810:
     @pytest.mark.parametrize("suffix", _SUFFIXES)
     def test_the_record_is_re_derivable_from_its_own_curves(self, suffix):
         """The committed curves and the committed record must be one run: recompute the
-        lift and the quality tier from the parquet at the record's own trial count."""
-        from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
-
-        rec = _record(suffix)
-        joint, base = _curve(suffix, "joint"), _curve(suffix, "baseline")
-        again = joint_lift_table(
-            joint, base,
-            n_trials=rec["lift"]["quality_tier_n_trials"],
-            sharpe_variance=rec["lift"]["quality_tier_sharpe_variance"],
-        )
-        for key in ("wealth_delta", "dd_delta", "joint_dsr", "baseline_dsr", "quality_tier_hurdle",
-                    "joint_quality_tier_ok", "baseline_quality_tier_ok"):
-            assert again[key] == rec["lift"][key], (suffix, key)
-        assert float(joint["turnover"].mean()) == rec["joint_leg"]["mean_turnover"]
-        assert float(base["turnover"].mean()) == rec["baseline_leg"]["mean_turnover"]
+        lift and the quality tier from the parquet at the record's own trial count.
+        Floats are compared relatively (1e-9) with a zero absolute floor: the recomputation is a
+        588-month reduction that is not bit-portable across libm/SIMD (G-08-1), while a record
+        from a different run is off by ~1e-2 and a zero floor keeps a ~1e-13 DSR from matching 0."""
+        assert _record_mismatches(*_rederived(suffix)) == [], suffix
 
     @pytest.mark.parametrize("suffix", _SUFFIXES)
     def test_the_four_plausibility_band_flags_are_recorded(self, suffix):
@@ -700,6 +771,65 @@ class TestCriterion7ReMeasuredIn0810:
         assert lift["wealth_delta_universal_ok"] and lift["dd_delta_universal_ok"], (
             "a universal breach means the measurement is broken, not that the lift is bad"
         )
+
+
+class TestTheReDerivationToleranceDiscriminates:
+    """Plan 08-11 (G-08-1): the tolerance must ABSORB last-bit platform noise and still REJECT a
+    record from another run. Every arm goes through ``_record_mismatches`` -- the routine the
+    gating re-derivation uses -- so an arm proves something about the check that gates."""
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("key", _FLOAT_KEYS)
+    def test_cross_platform_last_bit_noise_is_absorbed(self, suffix, key):
+        """Catches a float rule that reverted to exact equality (or was tightened below ~1e-13):
+        1e-13 relative is 14x the 7.1e-15 macOS divergence G-08-1 measured."""
+        recomputed, recorded = _rederived(suffix)
+        recomputed[key] = recomputed[key] * (1 + 1e-13)
+        assert _record_mismatches(recomputed, recorded) == []
+
+    def test_the_uat_macos_pair_is_not_a_mismatch(self):
+        """Catches exact equality: the verbatim UAT test 1 pair (08-UAT.md, G-08-1), recomputed on
+        Apple Silicon vs recorded on Linux. RED under ``==`` -- the Linux suite reproduces G-08-1."""
+        assert _record_mismatches(
+            {"wealth_delta": -0.12530657740828932}, {"wealth_delta": -0.1253065774082902}
+        ) == []
+
+    def test_the_band_off_record_fails_against_the_band_on_curves(self):
+        """Catches a tolerance loosened far enough (e.g. rel 1e-2, or an absolute floor) to accept
+        the 07-11 record against the 08-10 curves, and any of the four fields dropping out of the
+        comparison: the EXACT four-key list is asserted, not "non-empty"."""
+        recomputed, recorded = _rederived("l1only")
+        recorded.update(_BAND_OFF_L1ONLY)
+        assert _record_mismatches(recomputed, recorded) == [
+            "baseline_mean_turnover", "dd_delta", "joint_mean_turnover", "wealth_delta",
+        ]
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("key", _FLOAT_KEYS)
+    def test_a_one_part_per_million_error_is_caught(self, suffix, key):
+        """Catches any single field's tolerance widened above 1e-6, a field dropping out of the
+        comparison, and (on the DSR keys) a dropped ``abs=0.0``: the default 1e-12 floor would
+        swallow a 1.8e-19 difference on a 1.8e-13 DSR."""
+        recomputed, recorded = _rederived(suffix)
+        recorded[key] = recorded[key] * (1 + 1e-6)
+        assert _record_mismatches(recomputed, recorded) == [key]
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("key", ("joint_dsr", "baseline_dsr"))
+    def test_a_dsr_of_zero_is_not_accepted(self, suffix, key):
+        """Catches a dropped ``abs=0.0``: pytest.approx's default floor of 1e-12 accepts 0.0 for a
+        ~1e-13 DSR (the trap measured at plan time)."""
+        recomputed, recorded = _rederived(suffix)
+        recorded[key] = 0.0
+        assert _record_mismatches(recomputed, recorded) == [key]
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    @pytest.mark.parametrize("key", _BOOL_KEYS)
+    def test_a_flipped_quality_gate_is_caught(self, suffix, key):
+        """Catches booleans compared by approx or truthiness instead of identity."""
+        recomputed, recorded = _rederived(suffix)
+        recorded[key] = not recorded[key]
+        assert _record_mismatches(recomputed, recorded) == [key]
 
 
 class TestF4SecondSiteInTheMeasurementRecords:
