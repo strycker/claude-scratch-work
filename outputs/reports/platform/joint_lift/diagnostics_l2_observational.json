@@ -52,59 +52,44 @@
       "belief": {
         "sojourn_lag": {
           "median_sojourn": 9.5,
-          "median_lag": 72.5,
-          "ratio": 0.1310344827586207,
+          "median_lag": 52.0,
+          "ratio": 0.18269230769230768,
           "n_transitions": 25,
-          "n_resolved": 20
+          "n_resolved": 18
         },
         "transition_window_accuracy": {
-          "overall_accuracy": 0.09016393442622951,
-          "transition_accuracy": 0.20202020202020202,
-          "steady_state_accuracy": 0.061696658097686374
+          "overall_accuracy": 0.06557377049180328,
+          "transition_accuracy": 0.18181818181818182,
+          "steady_state_accuracy": 0.03598971722365039
         },
         "max_prob": {
           "n_rows": 488,
-          "n_below_act_threshold": 181,
+          "n_below_act_threshold": 215,
           "act_threshold": 0.7,
           "quantiles": {
-            "q00": 0.2524334827858639,
-            "q10": 0.49821891576728417,
-            "q25": 0.6027935282647838,
-            "q50": 0.7734577068909649,
-            "q75": 0.9036402074743553,
-            "q90": 0.9639330114371903,
-            "q100": 0.9999654191603855
+            "q00": 0.21144410146237705,
+            "q10": 0.4568350578425662,
+            "q25": 0.57315456194702,
+            "q50": 0.7301274494404315,
+            "q75": 0.8540671968924839,
+            "q90": 0.9315512828899246,
+            "q100": 0.987702166603407
           }
         },
         "signed_offsets": {
-          "min_offset": -6.0,
-          "median_offset": 72.5,
+          "min_offset": 0.0,
+          "median_offset": 52.0,
           "n_transitions": 25,
-          "n_resolved": 20,
-          "n_negative": 1,
+          "n_resolved": 18,
+          "n_negative": 0,
           "n_zero_or_negative": 1
         },
         "negative_offset_classification": {
           "n_lead": 0,
-          "n_held_through_miss": 1,
+          "n_held_through_miss": 0,
           "lead_positions": [],
-          "held_through_miss_positions": [
-            300
-          ],
-          "details": [
-            {
-              "position": 300,
-              "date": "1988-02-29",
-              "offset": -6.0,
-              "state": 4,
-              "preceding_state": 0,
-              "preceding_run": [
-                296,
-                299
-              ],
-              "verdict": "held_through_miss"
-            }
-          ]
+          "held_through_miss_positions": [],
+          "details": []
         }
       }
     },
@@ -158,60 +143,47 @@
       "belief": {
         "sojourn_lag": {
           "median_sojourn": 29.0,
-          "median_lag": 44.0,
-          "ratio": 0.6590909090909091,
+          "median_lag": 59.0,
+          "ratio": 0.4915254237288136,
           "n_transitions": 12,
           "n_resolved": 11
         },
         "transition_window_accuracy": {
-          "overall_accuracy": 0.39549180327868855,
-          "transition_accuracy": 0.20754716981132076,
-          "steady_state_accuracy": 0.41839080459770117
+          "overall_accuracy": 0.3237704918032787,
+          "transition_accuracy": 0.18867924528301888,
+          "steady_state_accuracy": 0.34022988505747126
         },
         "max_prob": {
           "n_rows": 488,
-          "n_below_act_threshold": 73,
+          "n_below_act_threshold": 80,
           "act_threshold": 0.7,
           "quantiles": {
-            "q00": 0.29902314994595997,
-            "q10": 0.6326604021612894,
-            "q25": 0.8399201217192265,
-            "q50": 0.9480972460905055,
-            "q75": 0.9856259538684736,
-            "q90": 0.9990243639272938,
-            "q100": 0.9999118640813934
+            "q00": 0.310273515701134,
+            "q10": 0.5915712753839099,
+            "q25": 0.8522324399627994,
+            "q50": 0.9648004242805885,
+            "q75": 0.9982192145229432,
+            "q90": 0.9999946868393746,
+            "q100": 0.9999999992757928
           }
         },
         "signed_offsets": {
-          "min_offset": -31.0,
-          "median_offset": 44.0,
+          "min_offset": -32.0,
+          "median_offset": 59.0,
           "n_transitions": 12,
           "n_resolved": 11,
-          "n_negative": 3,
+          "n_negative": 2,
           "n_zero_or_negative": 3
         },
         "negative_offset_classification": {
-          "n_lead": 3,
+          "n_lead": 2,
           "n_held_through_miss": 0,
           "lead_positions": [
-            236,
             387,
             596
           ],
           "held_through_miss_positions": [],
           "details": [
-            {
-              "position": 236,
-              "date": "1982-09-30",
-              "offset": -1.0,
-              "state": 2,
-              "preceding_state": 0,
-              "preceding_run": [
-                132,
-                235
-              ],
-              "verdict": "lead"
-            },
             {
               "position": 387,
               "date": "1995-04-30",
@@ -227,7 +199,7 @@
             {
               "position": 596,
               "date": "2012-09-30",
-              "offset": -31.0,
+              "offset": -32.0,
               "state": 4,
               "preceding_state": 3,
               "preceding_run": [
@@ -274,16 +246,16 @@
     "walk_forward_belief": {
       "track": "B1 \u2014 argmax of the Bayes-filtered belief (regime_filter over the L2 posterior); what the allocator consumes under l2. Compare against B0 (walk_forward_nowcast), the control",
       "applicable": true,
-      "n_changes": 81,
+      "n_changes": 64,
       "n_rows": 488,
       "n_pairs": 487,
-      "rate": 0.16632443531827515,
+      "rate": 0.13141683778234087,
       "n_degraded": 100,
       "first_date": "1974-02-28",
       "last_date": "2020-12-31",
       "source": "outputs/reports/platform/joint_lift/joint_lift_belief_1_l2.parquet",
       "index_equals_nowcast_index": true,
-      "n_mismatched_months_vs_posterior": 273,
+      "n_mismatched_months_vs_posterior": 380,
       "n_compared_vs_posterior": 488
     },
     "sojourn_lag": {
@@ -338,16 +310,16 @@
     "walk_forward_belief": {
       "track": "B1 \u2014 argmax of the Bayes-filtered belief (regime_filter over the L2 posterior); what the allocator consumes under l2. Compare against B0 (walk_forward_nowcast), the control",
       "applicable": true,
-      "n_changes": 30,
+      "n_changes": 27,
       "n_rows": 488,
       "n_pairs": 487,
-      "rate": 0.061601642710472276,
+      "rate": 0.055441478439425054,
       "n_degraded": 100,
       "first_date": "1974-02-28",
       "last_date": "2020-12-31",
       "source": "outputs/reports/platform/joint_lift/joint_lift_belief_2_l2.parquet",
       "index_equals_nowcast_index": true,
-      "n_mismatched_months_vs_posterior": 155,
+      "n_mismatched_months_vs_posterior": 178,
       "n_compared_vs_posterior": 488
     },
     "sojourn_lag": {

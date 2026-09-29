@@ -312,21 +312,35 @@ def _real_act_threshold() -> float:
     return float(load_platform_config()["allocation"]["hysteresis"]["act_threshold"])
 
 
-#: S-1 on the REAL belief paths, measured 2026-09-23 (plan 08-08) — an OBSERVATIONAL
-#: reading since Glenn's ruling of the same day (08-08-PLAN.md "RULING — 2026-09-23"):
-#: causal invariance is the governing leakage guard; S-1's three clauses are unchanged
-#: (T-08-40b), and its counts are pinned here as measured so that any movement is seen.
-#: Every negative offset below was ADJUDICATED by a truncation cut at p-1
-#: (s1_truncation_invariance.json): bit-identical, i.e. not leakage.
+#: S-1 on the REAL belief paths — an OBSERVATIONAL reading since Glenn's ruling of
+#: 2026-09-23 (08-08-PLAN.md "RULING — 2026-09-23"): causal invariance is the governing
+#: leakage guard; S-1's three clauses are unchanged (T-08-40b), and its counts are pinned
+#: here as measured so that any movement is seen. Every negative offset below was
+#: ADJUDICATED by a truncation cut at p-1 (s1_truncation_invariance.json): bit-identical
+#: by the script's test AND by a NaN-aware exact frame comparison, i.e. not leakage.
+#:
+#: NEW reading, plan 08-19 (2026-09-29). The belief path moved because of CR-01: the
+#: filter's likelihood now divides the posterior by each step fit's TRAINING class prior
+#: (08-16 serve, 08-17 both backtest drivers), not by the in-window label prior. The raw
+#: posterior is unchanged (joint_lift_probs_{1,2}_l2.parquet byte-identical), so only the
+#: belief moved. Cuts at 1995-03-31 and 2012-08-31 (and the standing 1982-08-31 spot-check)
+#: are bit-identical under both comparators.
+#: - #1: 0 negative offsets (the held-through miss at 300 is gone).
+#: - #2: 2 LEADs at 387 (1995-04, -12) and 596 (2012-09, -32), 0 misses (the -1 LEAD at
+#:   236 is gone; 596's offset moved -31 -> -32).
+#:   Classifier #2's walk-forward and reference labelings agree 41.3% after the best 1:1
+#:   relabelling (08-CHURN.md §5.2): S-1 compares two vocabularies there.
+#:
+#: OLD reading, plan 08-08 (2026-09-23), kept verbatim:
 #: - #1: 0 LEADs; 1 held-through miss at 300 (1988-02-29, -6) — a return into state 4
 #:   after the reference's 4-month state-0 run 1987-10..1988-01 that the belief held
 #:   state 4 straight through.
 #: - #2: 3 LEADs at 236 (1982-09, -1), 387 (1995-04, -12), 596 (2012-09, -31), 0 misses.
-#:   Classifier #2's walk-forward and reference labelings agree 41.3% after the best 1:1
-#:   relabelling (08-CHURN.md §5.2): S-1 compares two vocabularies there.
+#: i.e. {1: {"n_negative": 1, "lead_positions": [], "held_through_miss_positions": [300]},
+#:       2: {"n_negative": 3, "lead_positions": [236, 387, 596], "held_through_miss_positions": []}}
 _MEASURED_S1 = {
-    1: {"n_negative": 1, "lead_positions": [], "held_through_miss_positions": [300]},
-    2: {"n_negative": 3, "lead_positions": [236, 387, 596], "held_through_miss_positions": []},
+    1: {"n_negative": 0, "lead_positions": [], "held_through_miss_positions": []},
+    2: {"n_negative": 2, "lead_positions": [387, 596], "held_through_miss_positions": []},
 }
 
 
