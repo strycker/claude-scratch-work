@@ -867,7 +867,10 @@ class TestTheA11GateInTheRecord:
         rec = _record(suffix)
         lift, q = rec["lift"], rec["quality_tier"]
         hurdle = expected_max_sharpe(q["n_trials"], q["sharpe_variance"])
-        assert lift["quality_tier_hurdle"] == q["hurdle"] == hurdle
+        # Record-vs-record is one run, so exact. Live-vs-record is norm.ppf/exp/log recomputed on
+        # this machine against a float written on another (08-11 sweep, rule IN): the one float rule.
+        assert lift["quality_tier_hurdle"] == q["hurdle"]
+        assert _record_mismatches({"hurdle": hurdle}, {"hurdle": q["hurdle"]}) == []
         assert lift["quality_tier_n_trials"] == q["n_trials"] == rec["registry"]["count_after"]
         for name in ("baseline", "joint"):
             block = rec["deflated_sharpe"][name]
@@ -875,6 +878,16 @@ class TestTheA11GateInTheRecord:
             assert block["observed_sharpe"] == lift[f"{name}_observed_sharpe"] == rec[f"{name}_leg"]["sharpe_annualized"]
             assert block["quality_tier_ok"] is lift[f"{name}_quality_tier_ok"] is q[f"{name}_ok"]
             assert block["quality_tier_ok"] is (block["observed_sharpe"] > hurdle) is (block["dsr"] > 0.5)
+
+    @pytest.mark.parametrize("suffix", _SUFFIXES)
+    def test_a_one_part_per_million_hurdle_error_is_rejected(self, suffix):
+        """Catches the live-hurdle comparison being loosened above 1e-6 (08-11 Task 2 arm): the same
+        routine the gate above uses must reject a recorded hurdle off by one part per million."""
+        from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
+
+        q = _record(suffix)["quality_tier"]
+        hurdle = expected_max_sharpe(q["n_trials"], q["sharpe_variance"])
+        assert _record_mismatches({"hurdle": hurdle}, {"hurdle": q["hurdle"] * (1 + 1e-6)}) == ["hurdle"]
 
     def test_the_gate_governs_the_decision_bearing_leg_only(self):
         l1, l2 = _record("l1only"), _record("l2")
