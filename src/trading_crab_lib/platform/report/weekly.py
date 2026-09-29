@@ -115,6 +115,14 @@ log = logging.getLogger(__name__)
 _DEFAULT_TRADE_THRESHOLD_PCT = 0.03
 _DEFAULT_MIN_OBS_FLAG = 6
 
+# Plan 08-15: what §3 prints in neutral posture instead of rows. The active regime selects the
+# per-asset rows (the A7 sentence); with none active there is no regime to select, so no rows.
+_NEUTRAL_PER_ASSET_SENTENCE = (
+    "Neutral posture: no regime is active, so no per-asset regime rows are shown (the active "
+    "regime selects them, as stated above). The executed book below is built from the filtered "
+    "belief across all regimes."
+)
+
 # Ruling q1-c (Glenn, 2026-09-29; 08-SERVING.md §2.1): the latest month complete in the model
 # columns may be at most this many month-ends behind the newest monthly_features row. Measured
 # against the data, not the wall clock; exactly 3 behind serves, 4 refuses.
@@ -309,8 +317,10 @@ def assemble_weekly_report(
     Sections: (1) current regime distribution, then the hysteresis state
     machine's OUTPUT (``active_regime``) with the cold-start rule that produced it,
     (2) trajectory from the empirical transition matrix out of that regime, (3)
-    per-asset signals from ``returns_by_regime``, flagging cells with ``n_obs <
-    min_obs_flag`` as low-confidence (D11), (4) target-vs-current + trades implied
+    per-asset signals: the ``returns_by_regime`` rows of ``active_regime`` only, each
+    naming its regime, flagging cells with ``n_obs < min_obs_flag`` as low-confidence
+    (D11); in neutral posture (``active_regime`` None) no rows, one sentence saying why
+    (plan 08-15), (4) target-vs-current + trades implied
     PER account, each asset annotated with a one-line regime rationale.
 
     ``active_regime`` is ``update_active_regime``'s output, passed in — plan 08-09
@@ -388,14 +398,14 @@ def assemble_weekly_report(
     lines.append("")
     if returns_by_regime.empty:
         lines.append("(no returns-by-regime data available)")
+    elif active_regime is None:
+        lines.append(_NEUTRAL_PER_ASSET_SENTENCE)
     else:
-        sub = returns_by_regime
-        if active_regime is not None:
-            sub = returns_by_regime[returns_by_regime["regime"] == active_regime]
+        sub = returns_by_regime[returns_by_regime["regime"] == active_regime]
         for row in sub.itertuples():
             flag = " [LOW-CONFIDENCE — short history, D11]" if row.n_obs < min_obs_flag else ""
             lines.append(
-                f"- {row.asset}: mean={row.mean_monthly_return:.2%} "
+                f"- {row.asset} (regime {row.regime}): mean={row.mean_monthly_return:.2%} "
                 f"sharpe={row.sharpe_annualized:.2f} n_obs={row.n_obs}{flag}"
             )
     lines.append("")
