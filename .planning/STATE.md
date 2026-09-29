@@ -4,15 +4,15 @@ milestone: v1.0
 milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
 status: verifying
-stopped_at: Phase 8 EXECUTED (10/10 plans); awaiting phase verification and UAT
+stopped_at: Phase 8 EXECUTED (10/10 plans → 19/19 with gap closure 08-11..08-19, 2026-09-29); awaiting Mac runs and phase close
 last_updated: "2026-09-29T18:03:17.991Z"
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 62
-  completed_plans: 61
+  total_plans: 71
+  completed_plans: 70
 current_phase: 8
-last_activity: 2026-09-23
+last_activity: 2026-09-29
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
 ---
 
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 7 — Regime Representation (approved, not yet discussed/planned)
+**Current focus:** Phase 8 — all 19 plans executed; re-verification 12/12 human_needed (Mac full suite + Mac build→serving→weekly; neutral-posture display ruling); Phase 08.1 (Point-in-Time Data Audit) inserted, next after Phase 8 closes.
 
 ## Current Position
 
@@ -36,7 +36,7 @@ headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade ban
 **+0.026164** (was +0.024084); mean turnover #1-alone **0.127** (was 0.163), joint **0.081** (was
 0.120). The band cut turnover and did not improve the lift. **A11 gate FAILED 2 of 2** — DSR
 1.82e-13 and 4.13e-12 against hurdle **2.226891** at 44 trials. F-4 rates 246/587 = 0.419080 on
-both records. Suite **2392 passed, 0 skipped**; recorded counts pinned to a live collection.
+both records. Suite **2392 passed, 0 skipped** → 2494 (2026-09-29); recorded counts pinned to a live collection.
 All ten PER requirements closed.
 
 **Wave 4 as closed:** **WAVES 1-4 COMPLETE (9 of 10 plans).** Wave 4 (2026-09-24): Glenn ruled 08-09 — bounded
@@ -52,7 +52,7 @@ report bands once per month) — open to Glenn's overrule. **Next: 08-10.**
 all three call sites. Its pre-registered S-1 guard HALTED on 3 LEADs (classifier #2); investigation
 showed no leak (beliefs bit-identical under truncation at every negative offset, 4 of 4) and no shared
 vocabulary between #2's walk-forward and reference labelings. **Ruling (Glenn): causal invariance
-governs; S-1 is observational.** B1 = **81/487** (#1, vs B0 221) and **30/487** (#2, vs B0 66), 100
+governs; S-1 is observational.** B1 = **81/487** (#1, vs B0 221) and **30/487** (#2, vs B0 66) (→ 64/487, 27/487 after CR-01 fix, 08-MEASUREMENTS §11), 100
 degraded, 1974-02 → 2020-12. l1only byte-identical; Track A and B0 unchanged. Suite 2263 / 0 / 0.
 PER-02 and PER-03 closed. **Next: wave 4 (08-09) — two checkpoint decisions for Glenn.**
 
@@ -572,12 +572,16 @@ Recent decisions affecting current work:
   filter does. Glenn ruled q2-ii (disclose the count on the page). Fixing the recipe is a new
   configuration → a trial budget under ADR-0004 in the phase that schedules it (8.1 discuss-phase).
 
-- **(Phase 8 code review, orchestrator-verified 2026-09-29 — `08-REVIEW.md`)** CR-01 (filter divides by the
+- **(Phase 8 code review, orchestrator-verified 2026-09-29 — `08-REVIEW.md`)** ~~CR-01 (filter divides by the
   whole-label prior, not the nowcaster's training prior — flips live state 3's L from 0.63 to 1.96), CR-05
   (`use_regime_filter` absent from trial config), CR-06 (`run_joint_lift` ceiling assert after the appends)
-  and the neutral-posture Per-Asset Signals display bug → **Phase 8 gap closure (Glenn, 2026-09-29, budget 0)**.
+  and the neutral-posture Per-Asset Signals display bug → **Phase 8 gap closure (Glenn, 2026-09-29, budget 0)**.~~
+  **RESOLVED (08-15..08-18, re-verified 2026-09-29):** CR-01 by 08-16/08-17, CR-05 and CR-06 by 08-18, the
+  neutral-posture display bug by 08-15; measured in 08-MEASUREMENTS §11.
   CR-02 (belief across unaligned refits) and CR-03 (publication-lag look-ahead: M2SL, TOTALSL, div_yield)
   → **Phase 8.1**. CR-04 = the `run_stability` keying item below.
+- **(Phase 08.1)** `classifier2.py` docstrings still describe K=3, λ=4n and `python -m trading_crab_lib.platform.labeling.classifier2` raises ValueError (builds λ=32 against the re-pinned λ=2n rule) — found by Phase 7 wave-2 verification 2026-09-29.
+- **(Phase 08.1)** deflated-Sharpe units undocumented (annualised Sharpe paired with monthly observation counts); verdicts survive every convention but this now drives the ADR-0003 gate.
 - **(Before the next registry row — Phase 8.1's re-runs) migrate the three hard-coded-44 enforcement sites** listed in
   ADR-0004 § Consequences (`test_platform_gate_tiers.py`, `test_platform_joint_diagnostics_record.py`,
   `scripts/run_joint_lift.py`) to check the live count against the open phase's declared ceiling.

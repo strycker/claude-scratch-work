@@ -239,7 +239,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REG-01 | Phase 7 | **Partial** — criterion 6 (dependence) UNRESOLVED; see ADR-0002 |
 | INV-01 | Phase 7 | Complete |
 | PER-01 | Phase 8 | Complete |
-| PER-02 | Phase 8 | Complete (leakage governed by causal invariance, ruling 2026-09-23) |
+| PER-02 | Phase 8 | Complete (leakage governed by causal invariance, ruling 2026-09-23). CR-01 (filter likelihood prior) closed by 08-16/08-17, re-verified 2026-09-29 |
 | PER-03 | Phase 8 | Complete (A, B0, B1 each separately denominated) |
 | PER-04 | Phase 8 | Complete |
 | PER-05 | Phase 8 | Complete (A7 closed by rewording; 5pp no-trade band, ruling 2026-09-24) |
@@ -247,7 +247,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PER-07 | Phase 8 | Complete (criterion 7 re-measured with the 5pp band; A11 gate FAILED 2/2) |
 | PER-08 | Phase 8 | Complete |
 | PER-09 | Phase 8 | Complete |
-| PER-10 | Phase 8 | Complete (four doc sites pinned to a live collection, 2392) |
+| PER-10 | Phase 8 | Complete (four doc sites pinned to a live collection, 2392 as of 08-10; live 2494 as of 2026-09-29 after gap closure 08-11..08-19) |
 | MIG-01 | Phase 9 | Pending |
 
 **Coverage:**

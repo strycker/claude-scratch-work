@@ -428,6 +428,8 @@ executed, 07-09..07-11 executed 2026-09-18..2026-09-21, 07-12 executed 2026-09-2
 > plans below are **entirely inside phase-wave 1**. The `exec-wave N` labels are GSD *execution*
 > ordering within this pass, not the phase's gate. No plan below touches classifier #2.
 
+(Note 2026-09-29: this warning refers to the wave-1 plans 07-01..07-04 only; wave-2 plans 07-05..07-12 follow.)
+
 Plans (all phase-wave 1):
 
 - [x] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test *(exec-wave 1)*
@@ -616,7 +618,7 @@ run length is **1.0 month**; 136 of 247 runs are a single month.
      (`246/587 = 41.91%`, recorded as 41.84%) — the fix breaks an existing pin, so do both in one
      commit.
 
-**Plans**: 10 plans across 5 execution waves, planned 2026-09-21. Two blocking
+**Plans**: 19 plans (10 across 5 execution waves, planned 2026-09-21, plus 9 gap-closure plans 08-11..08-19; the count was 10 until 2026-09-29). Two blocking
 `checkpoint:decision` gates — A11 in wave 1 (deliberately **ahead** of every number, so a gate is
 never chosen after seeing the value it judges) and §5.3's mechanism plus the 0.70/0.40 pair in
 wave 4.
@@ -654,18 +656,18 @@ wave 4.
 
 **Gap closure — UAT 2026-09-28 (G-08-1, G-08-2)** *(4 plans, 3 waves; 08-12 blocks on two decisions for Glenn, run in parallel with 08-11)*
 
-- [ ] 08-11-PLAN.md — **G-08-1.** The criterion-7 re-derivation compares floats portably (rel 1e-9, abs 0), proven to reject the band-off record, a 1-ppm error in every field and a zeroed DSR; the same defect class is swept suite-wide and listed *(PER-07, PER-10)* — wave 1
-- [ ] 08-12-PLAN.md — **G-08-2 decisions.** Measured facts on the serving recipe, then Glenn rules on the ragged edge (the 2026-08-31 row lacks 3 model columns) and on the input-independent served posterior; recorded in 08-SERVING.md *(PER-02, PER-05)* — wave 1, checkpoint
-- [ ] 08-13-PLAN.md — **G-08-2 build.** `python -m trading_crab_lib.platform.report.serving` builds all three serving artifacts weekly reads (the UAT found one; there are three) through the backtest's own `fit_l2_nowcaster`, under `NO_REGISTRY`; weekly scores the model's own columns; the end-to-end test is proven able to fail *(PER-02, PER-05, PER-10)* — wave 2
-- [ ] 08-14-PLAN.md — **G-08-2 serve.** Glenn's two 08-12 rulings implemented, then the supported sequence run on the real tracked data in scratch directories, with G-08-2's real-data status stated honestly *(PER-02, PER-05, PER-10)* — wave 3
+- [x] 08-11-PLAN.md — **G-08-1.** The criterion-7 re-derivation compares floats portably (rel 1e-9, abs 0), proven to reject the band-off record, a 1-ppm error in every field and a zeroed DSR; the same defect class is swept suite-wide and listed *(PER-07, PER-10)* — wave 1
+- [x] 08-12-PLAN.md — **G-08-2 decisions.** Measured facts on the serving recipe, then Glenn rules on the ragged edge (the 2026-08-31 row lacks 3 model columns) and on the input-independent served posterior; recorded in 08-SERVING.md *(PER-02, PER-05)* — wave 1, checkpoint
+- [x] 08-13-PLAN.md — **G-08-2 build.** `python -m trading_crab_lib.platform.report.serving` builds all three serving artifacts weekly reads (the UAT found one; there are three) through the backtest's own `fit_l2_nowcaster`, under `NO_REGISTRY`; weekly scores the model's own columns; the end-to-end test is proven able to fail *(PER-02, PER-05, PER-10)* — wave 2
+- [x] 08-14-PLAN.md — **G-08-2 serve.** Glenn's two 08-12 rulings implemented, then the supported sequence run on the real tracked data in scratch directories, with G-08-2's real-data status stated honestly *(PER-02, PER-05, PER-10)* — wave 3
 
 **Gap closure 2 — code review + verification 2026-09-29 (CR-01, CR-05, CR-06, neutral-posture display)** *(5 plans, 5 sequential waves — every plan moves the recorded test count, so no two share a wave; ADR-0004 budget 0, registry stays 44 byte-identical; Glenn's ruling "fix small ones, then close"; CR-02/CR-03/CR-04 are Phase 8.1)*
 
-- [ ] 08-15-PLAN.md — **Display.** Neutral posture no longer lists every (regime, asset) row unlabelled (24 rows, each asset 6×, since `036ae74`); per-asset rows follow the active regime and name it, as the page's own A7 sentence says *(PER-05, PER-10)* — wave 1
-- [ ] 08-16-PLAN.md — **CR-01 tracer, served path.** `fit_l2_nowcaster` returns the training prior of the rows it fit; serving persists it beside the model; weekly divides by it (π₀ and A stay on the labels, decided and justified); the verified real-data flip (state 3's L 1.96 → 0.63, top belief state 3 → 0) pinned by a test that fails under the old prior *(PER-02, PER-10)* — wave 2
-- [ ] 08-17-PLAN.md — **CR-01 backtest.** Both drivers divide by the same returned prior (`_refit_l2` → posterior + prior); `likelihood_ratio` refuses the whole-window prior shape; l1only bit-for-bit pins unmodified *(PER-02, PER-03, PER-10)* — wave 3
-- [ ] 08-18-PLAN.md — **CR-05 + CR-06.** `run_joint_lift` checks a declared ADR-0004 ceiling (`--declared-ceiling`) before any append, with explicit raises that survive `-O`; registry rows record the effective `use_regime_filter`; the joint row names its harness plan instead of claiming `07-11` *(PER-02, PER-07, PER-10)* — wave 4
-- [ ] 08-19-PLAN.md — **Re-measure and record.** l1only proven byte-unchanged; the l2 leg, B1 and S-1 re-measured under NO_REGISTRY behind controls, every new negative offset adjudicated by truncation; the served belief re-run on real data; old → new amendments in 08-MEASUREMENTS and 08-SERVING, nothing overwritten *(PER-02, PER-03, PER-07, PER-10)* — wave 5
+- [x] 08-15-PLAN.md — **Display.** Neutral posture no longer lists every (regime, asset) row unlabelled (24 rows, each asset 6×, since `036ae74`); per-asset rows follow the active regime and name it, as the page's own A7 sentence says *(PER-05, PER-10)* — wave 1
+- [x] 08-16-PLAN.md — **CR-01 tracer, served path.** `fit_l2_nowcaster` returns the training prior of the rows it fit; serving persists it beside the model; weekly divides by it (π₀ and A stay on the labels, decided and justified); the verified real-data flip (state 3's L 1.96 → 0.63, top belief state 3 → 0) pinned by a test that fails under the old prior *(PER-02, PER-10)* — wave 2
+- [x] 08-17-PLAN.md — **CR-01 backtest.** Both drivers divide by the same returned prior (`_refit_l2` → posterior + prior); `likelihood_ratio` refuses the whole-window prior shape; l1only bit-for-bit pins unmodified *(PER-02, PER-03, PER-10)* — wave 3
+- [x] 08-18-PLAN.md — **CR-05 + CR-06.** `run_joint_lift` checks a declared ADR-0004 ceiling (`--declared-ceiling`) before any append, with explicit raises that survive `-O`; registry rows record the effective `use_regime_filter`; the joint row names its harness plan instead of claiming `07-11` *(PER-02, PER-07, PER-10)* — wave 4
+- [x] 08-19-PLAN.md — **Re-measure and record.** l1only proven byte-unchanged; the l2 leg, B1 and S-1 re-measured under NO_REGISTRY behind controls, every new negative offset adjudicated by truncation; the served belief re-run on real data; old → new amendments in 08-MEASUREMENTS and 08-SERVING, nothing overwritten *(PER-02, PER-03, PER-07, PER-10)* — wave 5
 
 **Explicit non-goals**: no λ sweep; no dependence statistic of any kind; no migration work; no
 2021+ holdout use for any selection decision; no re-pin of K or λ; no target pre-declared for
@@ -684,7 +686,7 @@ every L1 labeling since Phase 1 and both criterion-7 legs are exposed. Scope, to
 discuss-phase: measure every raw series' publication lag; set the shifts; a test that FAILS when a
 feature is used before its publication date; re-run the decision-bearing evaluations under a
 declared ADR-0004 trial budget, with earlier positive results labelled possibly-inflated until then.
-Look-ahead can only flatter, so Phase 7–8's negative verdicts stand in direction.
+Look-ahead can only flatter each leg, so the absolute-performance verdicts (DSR does not clear; A11 FAILED) stand; the SIGN of relative numbers (wealth_delta, dd_delta) and the dependence verdict are NOT guaranteed, because the legs are exposed differently (Phase 7 wave-2 verification, 2026-09-29). Criterion 5 is directly exposed: lagging fred_m2sl by 1 month moves classifier #2's occupancy to 3.45/13.79/22.70/21.84/38.22% — outside the 8–35% band at both ends, 17.82% of months keep their state (a 2-month lag gives 98.13%); orchestrator re-ran the diagnostic 2026-09-29.
 Candidates to schedule at discuss-phase (Phase 8 named blockers): CR-02 (filter belief carried
 across refits whose state ids are not aligned) and the input-independent L2 recipe.
 **Requirements**: TBD

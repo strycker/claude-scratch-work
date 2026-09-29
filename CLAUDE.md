@@ -604,7 +604,7 @@ See `docs/archive/STATE.md` (historical) and `.planning/STATE.md` (live) for a f
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
 **Summary:** all 9 pipeline steps run end-to-end on real data. **2494 tests collected**
-(10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
+(0 skipped with all optional extras installed). All 5 legacy alignment gaps closed.
 Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
 implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
 New modules: diagnostics (RRG), tactics, email/weekly report.  FRED expanded from 7

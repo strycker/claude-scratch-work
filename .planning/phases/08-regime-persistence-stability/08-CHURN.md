@@ -267,7 +267,7 @@ from 08-01-SUMMARY.md, not re-derived.
 | **A** — `state_N` (L1), l1only | 246 / 587 = 41.91%, 588 steps 1972-01-31 → 2020-12-31, 0 degraded | **246 / 587 = 41.91%**, same window, 0 degraded | 24 / 587 = 4.09%, same | **24 / 587 = 4.09%**, same |
 | **A** — `state_N` (L1), l2 | 246 / 587 = 41.91%, 588 steps, 100 degraded | **246 / 587**, 100 degraded | 24 / 587, 100 degraded | **24 / 587**, 100 degraded |
 | **B0** — argmax of the RAW posterior, l2 (the control) | 221 / 487 = 45.38%, 488 rows 1974-02-28 → 2020-12-31, 100 degraded | **221 / 487 = 45.38%**, same window, 100 degraded; matrix byte-identical | 66 / 487 = 13.55%, same | **66 / 487 = 13.55%**, same; byte-identical |
-| **B1** — argmax of the FILTERED belief, l2 | — (did not exist) | **81 / 487 = 16.63%**, 488 rows 1974-02-28 → 2020-12-31, **100 degraded** | — | **30 / 487 = 6.16%**, same window, **100 degraded** |
+| **B1** — argmax of the FILTERED belief, l2 | — (did not exist) | **81 / 487 = 16.63%** *(superseded 2026-09-29 by 08-MEASUREMENTS §11: 64/487 and 27/487 after the CR-01 prior fix; old values kept)*, 488 rows 1974-02-28 → 2020-12-31, **100 degraded** | — | **30 / 487 = 6.16%** *(superseded 2026-09-29 by 08-MEASUREMENTS §11: 64/487 and 27/487 after the CR-01 prior fix; old values kept)*, same window, **100 degraded** |
 
 - **B1 is not B0.** argmax(belief) and argmax(posterior) differ in **273 of 488** months
   (#1) and **155 of 488** (#2), measured from the two artifacts.
