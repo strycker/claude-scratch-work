@@ -22,6 +22,11 @@ then upgraded module by module against frozen interfaces.
 drawdowns** — and is never fooled by its own backtest. The honesty framework is not
 overhead; it is the product. A beautiful but leaky backtest is worthless.
 
+**Working mode (Glenn, 2026-09-29): lean MVP.** Usable weekly product first; one module per phase,
+≤2–3 plans, small PLANs, decisions recorded as rows in `platform_design/DECISIONS.md`; heavy rigor
+(mutation proofs, ruling records, measurement amendments) only for decision-bearing numbers. Build
+order: `REBUILD-FROM-SCRATCH-GUIDE.md`. Phase 08.2 implements this.
+
 ### Constraints
 
 - **Tech stack**: Python 3.10+, existing two-package src layout, config in `settings.yaml`, parquet checkpoints — extend, don't rewrite (design R15)

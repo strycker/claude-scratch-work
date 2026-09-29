@@ -9,6 +9,12 @@
 
 Market regime classification and prediction pipeline.
 
+> **Status (2026-09-29):** the active codebase is the monthly regime-conditional **platform**
+> (`src/trading_crab_lib/platform/`, notebooks in `notebooks/platform/`, weekly report via
+> `python -m trading_crab_lib.platform.report.serving` then `python -m trading_crab_lib.platform.report.weekly`).
+> The quarterly pipeline described below is the frozen legacy reference. Decisions:
+> `platform_design/DECISIONS.md`; build order: `REBUILD-FROM-SCRATCH-GUIDE.md`.
+
 <br>
 
 Predict market conditions, best portfolios, and stock picks.

@@ -3,6 +3,9 @@
 Prioritized backlog of features, data sources, and improvements.
 Updated: July 2026.
 
+> **2026-09-29:** execution status lives in `.planning/ROADMAP.md` (GSD phases 1–9, incl. inserted 8.1/8.2).
+> `platform_design/DECISIONS.md` (one-line decision register, all phases, human-editable) and `REBUILD-FROM-SCRATCH-GUIDE.md` (module map M0–M7, lean build order) were added 2026-09-29.
+
 ---
 
 ## Tier 0 — Platform Redesign (north star)

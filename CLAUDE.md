@@ -1,6 +1,14 @@
 # CLAUDE.md — Project Guide for Claude Code
 
 This file is read automatically by Claude Code at the start of every session.
+
+> **Scope note (2026-09-29).** Most of this file documents the **legacy quarterly pipeline**
+> (frozen reference). Active development is the monthly **platform**
+> (`src/trading_crab_lib/platform/`, `config/platform_settings.yaml`, `notebooks/platform/`):
+> its design is `platform_design/platform_design.md`, its decisions are indexed in
+> `platform_design/DECISIONS.md`, its build order is `REBUILD-FROM-SCRATCH-GUIDE.md`, and its
+> execution status is `.planning/ROADMAP.md` / `.planning/STATE.md`. Working mode is **lean MVP**
+> (Phase 08.2): usable weekly product first, one module per phase, small plans.
 It explains what this project is, how to work in it, and what conventions to follow.
 Architecture decisions, pitfalls, and development history are all in this file —
 no separate ARCHITECTURE.md, DECISIONS.md, or PITFALLS.md exists.

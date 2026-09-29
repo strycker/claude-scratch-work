@@ -5,6 +5,15 @@ distinction between publication-lag *shift* and vintage *correction*, and the
 pre-vintage-era fallback policy — matching the behavior implemented in
 `src/trading_crab_lib/platform/ingestion/alfred.py`.
 
+
+> **Known gap (found 2026-09-29, Phase 8 code review CR-03; owner Phase 08.1 / folded into 08.2).**
+> Publication lag is handled only where `shift: true` is set, and only for FRED series. Measured
+> against `monthly_raw` built 2026-09-21: `fred_m2sl` (~1 month) and `fred_totalsl` (~2 months) carry
+> `shift: false`, and **multpl series have no lag handling at all** — `div_yield`'s last value was
+> 2026-06 on 2026-09-21 (2–3 months), and it is in classifier #1's lean set. Target design: a
+> `publication_lag_months` entry for every raw series plus a test that fails when a feature at date
+> t uses a value published after t (`REBUILD-FROM-SCRATCH-GUIDE.md` §1.3, DECISIONS D-05).
+
 ## D-06 vintage scope
 
 True point-in-time ALFRED vintages are pulled ONLY for the revision-heavy agency

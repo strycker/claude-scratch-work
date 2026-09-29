@@ -58,6 +58,8 @@ document it amends.
 
 ## Index
 
+Smaller decisions that don't warrant an ADR are indexed one-per-line in `../DECISIONS.md`.
+
 | # | Slug | Decision | Status |
 |---|------|----------|--------|
 | 0001 | `l1-feature-policy` | Freeze the walk-forward driver's L1 labeler to the same ten-column feature space the evaluation's smoothed reference already computes (resolves audit item A13) | Accepted, 2026-09-15 |

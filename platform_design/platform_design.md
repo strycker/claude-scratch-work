@@ -4,6 +4,15 @@
 **Owner:** Glenn Strycker. **Origin:** Claude chat discussion, July 2026.
 **Purpose of this file:** portable design record for (a) re-evaluating `trading-crab` / `trading-crab-lib` and (b) building the next iteration. Focus is mathematics and architecture, not code.
 
+> **Status 2026-09-29 (v1.8 pointer, no design content changed here).** Implementation reached GSD
+> Phase 8 (19 plans). Decisions taken during implementation — including every Phase 7–8 ruling — are
+> indexed one-per-line in `platform_design/DECISIONS.md`; ADRs 0001–0004 in `platform_design/adr/`
+> amend §4.3/§4.4 (L1 feature policy, classifier #2), §8 (DSR as the one quality gate, ADR-0003) and
+> the trial-ceiling rule (per-phase budgets, ADR-0004). §14's phase plan is superseded for build order
+> by `REBUILD-FROM-SCRATCH-GUIDE.md` (usable baseline and serving first; regime tilt gated on beating
+> its ablation). Known open defects: CR-02 (state ids not aligned across refits), CR-03 (publication
+> lags missing for fred_m2sl / fred_totalsl / div_yield) — Phase 08.1.
+
 ---
 
 ## 1. Objective & Framing

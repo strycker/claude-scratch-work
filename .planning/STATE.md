@@ -5,12 +5,12 @@ milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
 status: verifying
 stopped_at: Phase 8 EXECUTED (10/10 plans → 19/19 with gap closure 08-11..08-19, 2026-09-29); awaiting Mac runs and phase close
-last_updated: "2026-09-29T18:03:17.991Z"
+last_updated: "2026-09-29T22:47:36.458Z"
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 7
-  total_plans: 71
-  completed_plans: 70
+  total_plans: 67
+  completed_plans: 66
 current_phase: 8
 last_activity: 2026-09-29
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 8 — all 19 plans executed; re-verification 12/12 human_needed (Mac full suite + Mac build→serving→weekly; neutral-posture display ruling); Phase 08.1 (Point-in-Time Data Audit) inserted, next after Phase 8 closes.
+**Current focus:** Phase 8 closing (19/19 executed, re-verified 12/12; awaiting Glenn's Mac runs). Next: Phase 08.2 Lean MVP (inserted 2026-09-29) and Phase 08.1 Point-in-Time Audit — order pending Glenn. Lean-MVP mode adopted; see REBUILD-FROM-SCRATCH-GUIDE.md and platform_design/DECISIONS.md.
 
 ## Current Position
 
@@ -566,6 +566,7 @@ Recent decisions affecting current work:
   The 08-09 keep-absolute ruling cited belief ≥0.70 in 307/488 and 415/488 months; after the CR-01 fix
   those are 273/488 and 408/488 (08-MEASUREMENTS §11). They move again once 8.1 lands CR-02/CR-03; any
   re-tuning is a new configuration under an ADR-0004 budget.
+
 - **(Phase 8.1 candidate — Phase 9 is Migration; found 2026-09-28 while planning G-08-2) the evaluated L2 nowcaster recipe is input-independent at full history.**
   Fit exactly as `driver._refit_l2` fits it on all labelled history, `_cv_safe_active_features` admits all
   55 columns, which truncates training to 153 rows (2007-04-30 → 2019-12-31) holding 3 of 6 regimes
@@ -584,6 +585,7 @@ Recent decisions affecting current work:
   neutral-posture display bug by 08-15; measured in 08-MEASUREMENTS §11.
   CR-02 (belief across unaligned refits) and CR-03 (publication-lag look-ahead: M2SL, TOTALSL, div_yield)
   → **Phase 8.1**. CR-04 = the `run_stability` keying item below.
+
 - **(Phase 08.1)** `classifier2.py` docstrings still describe K=3, λ=4n and `python -m trading_crab_lib.platform.labeling.classifier2` raises ValueError (builds λ=32 against the re-pinned λ=2n rule) — found by Phase 7 wave-2 verification 2026-09-29.
 - **(Phase 08.1)** deflated-Sharpe units undocumented (annualised Sharpe paired with monthly observation counts); verdicts survive every convention but this now drives the ADR-0003 gate.
 - **(Before the next registry row — Phase 8.1's re-runs) migrate the three hard-coded-44 enforcement sites** listed in
@@ -764,6 +766,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 8.1 inserted after Phase 8: Point-in-Time Data Audit — Phase 8 code review CR-03 (verified 2026-09-29): fred_m2sl (~1mo lag), fred_totalsl (~2mo) and div_yield (2-3mo, classifier #1 lean set) enter features at their reference month with no publication-lag shift. Glenn ruled: audit phase before Phase 9. (URGENT)
+- Phase 8.2 inserted after Phase 8: Lean MVP — Simplify, Modularize, Notebook-Gate (Glenn, 2026-09-29): usable weekly product first; module map M0–M7 with a notebook gate each; lean planning; folds the cheap config/test half of 8.1. Recommended before 8.1's re-evaluation half — pending Glenn. (URGENT)
 
 ## Deferred Items
 
