@@ -90,3 +90,131 @@ this record is more precise than the plan is item 7. It changes no ruled fact.
   the fit, or a different calibration. Under ADR-0004 (accepted 2026-09-28) such a change needs its
   own phase's pre-declared trial budget, and Phase 8's gap closure runs at budget 0. It may be
   recorded as an open item. It may not be chosen here.
+
+---
+
+## 2. Rulings
+
+**Who, when, and on what.** Glenn ruled on **2026-09-29**, before plan 08-12 executed, through the
+orchestrator's AskUserQuestion (`08-12-PLAN.md`, Task 2, `<ruling-received>`). He ruled on the
+orchestrator's independently reproduced numbers:
+- the training block: 153 rows, 2007-04-30 → 2019-12-31, classes {0: 11, 3: 137, 4: 5};
+- 1 distinct posterior, {0: 0.418, 3: 0.564, 4: 0.018}, across 231 scorable months, 2007-04-30 →
+  2026-06-30;
+- the latest row: 2026-08-31, missing `fred_m2sl`, `fred_totalsl` and `div_yield`.
+
+§1 re-measured every one of those numbers and **all of them match** (items 5, 6 and 8). The
+rulings therefore stand on the facts as measured, not only on the plan's copies.
+
+Both rulings are options from the plan's own list. **Neither implies a recipe change**, so no
+ADR-0002-amendment item is raised.
+
+### 2.1 Q1 (the ragged edge) → **q1-c**, latest complete month, with a 3-month staleness cap
+
+**Glenn's words, verbatim (the option he chose):**
+
+> "(c) Latest complete month (Recommended) — Score the newest month where every model column is
+> present (2026-06-30 today). The page states the as-of date and names the missing columns. I'd add
+> a staleness cap: fail if the scored month is more than 3 months old. Uses only older data, so no
+> look-ahead."
+
+**The staleness cap is part of the ruling.** Planned implementation, as the orchestrator relayed
+it: raise `ValueError` **before any save** when the scored month is more than 3 month-ends behind
+the newest row of `monthly_features`.
+
+**The orchestrator's interpretation, flagged for Glenn's confirmation.** Glenn wrote "more than 3
+months old". The orchestrator reads that as **"more than 3 month-ends behind the newest
+`monthly_features` row"**, which measures age against the data, **not against the wall clock**.
+- Under this reading today's case is 2026-06-30 against 2026-08-31, which is **2 month-ends**, so
+  the report serves.
+- A wall-clock reading would count from the run date instead. Today's run date is 2026-09-29, and
+  counted in calendar months (September 2026 back to June 2026) that is **3**. That sits exactly at
+  the cap: it serves only because the ruling says "more than 3". On any run after 2026-09-30 it
+  would fail until July's data completes.
+- **Glenn: please confirm the data-relative reading.** If you meant the wall clock, it is a
+  one-line change at the cap's single site in 08-14.
+
+**What this ruling licenses 08-14 to implement:**
+- Score the newest row of `load_full_span("monthly_features")` in which **every** model column
+  (`feature_names_in_`) is observed.
+- Print the scored as-of month prominently, and name the model columns missing from each newer row.
+- Step the belief (`advance_regime_belief`) and the no-trade band on the **scored** month, not the
+  newest row. A re-run within the same scored month then neither double-counts nor compounds.
+- Apply the staleness cap: `ValueError` before any save, naming the scored month, the newest row
+  and the gap.
+
+**What it forbids:**
+- **Imputation** of any kind: forward-fill, interpolation, or a fill from another series. Every
+  scored value must have been observed.
+- **A recipe change**: dropping the lagging columns from the fit, changing the feature rule, or
+  changing the calibration. Those are new configurations under ADR-0004 (budget 0 here).
+- Scoring the newest row when it is incomplete, and scoring an older month silently.
+
+**Consequence on today's data (§1 item 8):**
+- The report scores **2026-06-30**. That is 2 month-ends behind the newest row, 2026-08-31, so it
+  is inside the cap.
+- The page names `div_yield` as missing from 2026-07-31, and `div_yield`, `fred_m2sl` and
+  `fred_totalsl` as missing from 2026-08-31.
+- G-08-2's truth ("the weekly report runs end to end") becomes reachable on real data. 08-14's §3
+  measures whether it is actually met.
+
+**A stated difference between train and serve, not a hidden one.** The evaluated backtest scored
+month *t* with complete month-*t* data and never modelled publication lag. Serving guidance now
+runs on information 2 month-ends older than the backtest assumed (up to 3 under the cap). This is
+a serve-time behaviour the backtest did not evaluate. It selects nothing and costs no trial, but it
+is a known difference. Look-ahead is not possible under it, because only older, observed data is
+scored.
+
+- **registry rows spent: 0**
+
+### 2.2 Q2 (the input-independent posterior) → **q2-ii**, disclose on the page
+
+**Glenn's words, verbatim (the option he chose):**
+
+> "(ii) Disclose on page (Recommended) — The report runs, and under the regime distribution it
+> prints the exact count of distinct outputs ('1 distinct vector across 231 complete months') so
+> the page never passes a constant off as a live signal. The recipe fix is logged as a Phase 9
+> item."
+
+**What this ruling licenses 08-14 to implement:**
+- At serve time, `weekly` computes `np.unique(P, axis=0)` over the posteriors of **every**
+  full-span month complete in the model columns. The comparison is exact, with no rounding and no
+  threshold.
+- It prints the count, the number of complete months and their window **directly under** "Current
+  Regime Distribution".
+- When the count is 1, it says in plain words that the distribution does not depend on the
+  features.
+- This is "looking", not fitting: scoring rows of `load_full_span` with the already-fitted serving
+  model.
+
+**What it forbids:**
+- **Withholding the report** on the count (that is q2-iii, not chosen).
+- **A tolerance or threshold** on "distinct": the count is exact.
+- **Imputation**, and **any recipe change** meant to make the count exceed 1. The recipe fix is a
+  **Phase 9 item**, under that phase's own pre-declared ADR-0004 trial budget.
+
+**Consequence on today's data (§1 items 5 and 6):**
+- The report runs, and shows {0: 0.418, 3: 0.564, 4: 0.018} as the distribution.
+- Directly beneath it, it prints **1 distinct vector across 231 complete months
+  (2007-04-30 → 2026-06-30)**.
+- The disclosure is correct automatically if a future recipe fixes the degeneracy: the count then
+  rises above 1.
+
+**Open item (for STATE, owned by the orchestrator):** Phase 9, the recipe fix for the
+input-independent serving posterior. Its root cause is the 153-row complete block holding 3 of 6
+states ({0: 11, 3: 137, 4: 5}), which is truncated by HYG, UEC and UNG starting 2007-04-30. Any fix
+is a new configuration under ADR-0004.
+
+- **registry rows spent: 0**
+
+### 2.3 Order of implementation
+
+- **08-13** lands the conservative interim behaviour first: fail loudly, naming the missing
+  columns.
+- **08-14** then implements exactly §2.1 and §2.2, and nothing else.
+
+---
+
+## 3. Post-implementation measurement
+
+*(Reserved for 08-14.)*
