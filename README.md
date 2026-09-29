@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-2465%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2472%20passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
@@ -474,7 +474,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ 2465 tests (unit + integration), all passing
+- ✓ 2472 tests (unit + integration), all passing
 - ✓ Exploration notebooks (01–12)
 
 ---
@@ -528,7 +528,8 @@ Three commands, in this order:
 python scripts/build_platform_data.py
 
 # 2. The serving artifacts. Reads the DEV monthly_features and regime_labels (to 2020-12-31)
-#    and monthly_raw; writes nowcaster.pkl, asset_returns and returns_by_regime to
+#    and monthly_raw; writes nowcaster.pkl, nowcaster_class_prior (the model's training
+#    prior, which the weekly filter divides by), asset_returns and returns_by_regime to
 #    data/checkpoints/platform/. Fit by the same function the backtest evaluated. It is NOT a
 #    registry trial: it appends nothing to registry/trials.jsonl.
 python -m trading_crab_lib.platform.report.serving
@@ -540,6 +541,9 @@ python -m trading_crab_lib.platform.report.weekly [--send-email]
 ```
 
 `nowcaster.pkl` is a machine-local joblib pickle and is git-ignored; rebuild it with step 2.
+The weekly filter divides the model's posterior by the class prior of the rows that model was
+trained on (`nowcaster_class_prior`), which step 2 writes beside the model; a prior whose
+states are not the model's classes is refused, so the two are rebuilt together.
 When the newest data row lacks some of the model's columns (a publication lag), step 3 scores
 the latest month observed in every model column, prints "Scored as of <month>" and names what
 each newer row lacks; it refuses when that month is more than 3 month-ends behind the newest
