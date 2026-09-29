@@ -38,8 +38,19 @@ differed between train and serve would itself be train/serve skew. ``A`` is
 carries the as-of date of the feature row it absorbed, a weekly re-run inside the
 same month reuses it unchanged (re-filtering would count the same month's evidence
 again), and a gap of several months advances by ``predict_only_step`` for each
-unobserved month. Known approximation (plan 08-06): the class prior is the whole
-label series' distribution, while the nowcaster trains on the D-01 embargoed subset.
+unobserved month.
+
+**Two roles, two rules (plan 08-16, CR-01).** The likelihood ``L_t(j) = posterior(j) /
+prior(j)`` divides by the served model's TRAINING class prior: the class distribution of
+the rows ``fit_l2_nowcaster`` fit it on, over its ``classes_`` only, built beside the model
+by ``serving.py`` as ``nowcaster_class_prior`` and refused unless its states are the model's
+``classes_``. Bayes: p(x | j) ∝ p(j | x) / p_train(j); only that inversion needs the training
+prior. The cold start π_0 and ``A`` stay on ``regime_labels`` over all K states: they
+describe the L1 regime process, and π_0 is a belief over every state, whereas the training
+prior lives on ``classes_`` alone (3 of 6 at serve, because the model's feature block starts
+2007-04) and would put zero initial mass on the others for a reason that is about the fit's
+rows, not the world. π_0 enters once and decays under ``A``; the likelihood prior enters
+every step.
 
 **The no-trade band and the active regime at serve (plan 08-09, ``08-A7.md``).** The
 tilt's target passes through ``allocation/hysteresis.py::execute_rebalance`` — the 5pp
@@ -68,8 +79,8 @@ Run order::
 
     # 1. the data (FRED key plus network)
     python scripts/build_platform_data.py
-    # 2. the serving artifacts (nowcaster, returns_by_regime, asset_returns) from the
-    #    evaluated recipe; NOT a registry trial
+    # 2. the serving artifacts (nowcaster, nowcaster_class_prior, returns_by_regime,
+    #    asset_returns) from the evaluated recipe; NOT a registry trial
     python -m trading_crab_lib.platform.report.serving
     # 3. the report
     python -m trading_crab_lib.platform.report.weekly [--send-email]
@@ -106,7 +117,7 @@ from trading_crab_lib.platform.prediction.regime_filter import (
 )
 from trading_crab_lib.platform.prediction.transition_matrix import empirical_transition_matrix
 from trading_crab_lib.platform.report.holdings import load_account_weights
-from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND
+from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND, SERVING_CLASS_PRIOR
 
 log = logging.getLogger(__name__)
 
@@ -224,20 +235,25 @@ def advance_regime_belief(
     regime_labels: pd.Series,
     regime_probs: pd.Series,
     *,
+    class_prior: pd.Series,
     state_index: list[int],
     as_of: pd.Timestamp,
 ) -> pd.Series:
     """This run's belief from the loaded one: cold start, same-month reuse, or filter.
 
-    - no previous belief (or its states differ from ``state_index``): cold start from
-      ``unconditional_belief(regime_labels)`` — the drivers' rule — then one filter step;
+    - the likelihood divides the posterior by ``class_prior``, the served model's training
+      prior (CR-01); the cold start π_0 is ``unconditional_belief(regime_labels)`` over all
+      of ``state_index`` (the drivers' rule), and ``A`` is ``transition_matrix_for`` on the
+      same labels — two roles, two rules (module docstring). ``class_prior`` is REQUIRED,
+      with no default: a default would silently re-open CR-01;
+    - no previous belief (or its states differ from ``state_index``): cold start from π_0,
+      then one filter step;
     - previous belief already absorbed ``as_of``: returned unchanged (no double count);
     - otherwise ``predict_only_step`` once per unobserved month in between, then one
       ``filter_step`` with this month's posterior.
     """
-    prior = unconditional_belief(regime_labels, state_index=state_index)
     transition = transition_matrix_for(regime_labels, state_index=state_index)
-    start = prior
+    start = unconditional_belief(regime_labels, state_index=state_index)
     if prev_belief is not None and sorted(int(v) for v in prev_belief.index) == sorted(state_index):
         prev_as_of = prev_belief.name
         if prev_as_of is not None and _months_between(pd.Timestamp(prev_as_of), as_of) == 0:
@@ -257,7 +273,7 @@ def advance_regime_belief(
             "regime_belief checkpoint covers states %s, not %s — cold-starting the filter",
             list(prev_belief.index), state_index,
         )
-    return filter_step(start, transition, regime_probs, prior)
+    return filter_step(start, transition, regime_probs, class_prior)
 
 
 def trades_implied(
@@ -473,6 +489,33 @@ def _load_serving_artifact(cm, name: str, *, model: bool = False):
         ) from exc
 
 
+def _served_class_prior(cm, nowcaster) -> pd.Series:
+    """The served model's training class prior (CR-01), validated against the model.
+
+    Loaded from the ``nowcaster_class_prior`` artifact ``serving.py`` writes beside the
+    model; never recomputed here from ``regime_labels`` or any other frame. Raises
+    ValueError, naming the artifact and the build command, when its states are not
+    ``set(model.classes_)``, when any prior is not > 0, or when it does not sum to 1 within
+    1e-9 — each means the prior and the model are not from the same build.
+    """
+    frame = _load_serving_artifact(cm, SERVING_CLASS_PRIOR)
+    prior = pd.Series(frame["prior"].to_numpy(dtype=float), index=[int(v) for v in frame["state"]])
+    classes = sorted(int(c) for c in nowcaster.classes_)
+    problem = None
+    if sorted(prior.index) != classes:
+        problem = f"covers states {sorted(prior.index)}, but the nowcaster's classes_ are {classes}"
+    elif not (prior > 0.0).all():
+        problem = f"has a non-positive prior: {prior.to_dict()}"
+    elif abs(float(prior.sum()) - 1.0) > 1e-9:
+        problem = f"sums to {float(prior.sum())!r}, not 1"
+    if problem is not None:
+        raise ValueError(
+            f"Serving artifact '{SERVING_CLASS_PRIOR}' {problem}. The model and its training prior "
+            f"must come from the same build; rebuild them together with: {SERVING_BUILD_COMMAND}"
+        )
+    return prior
+
+
 def _model_columns(nowcaster, monthly_features: pd.DataFrame) -> list[str]:
     """The model's own columns (``feature_names_in_``), in its own order.
 
@@ -597,9 +640,12 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     """
     cm = cm or get_platform_checkpoint_manager()
 
-    # The three serving artifacts are built by SERVING_BUILD_COMMAND (report/serving.py);
+    # The four serving artifacts are built by SERVING_BUILD_COMMAND (report/serving.py);
     # a missing one says so.
     nowcaster = _load_serving_artifact(cm, "nowcaster", model=True)
+    # CR-01: the prior the filter's likelihood divides by, validated against this model
+    # before anything is scored and before any state is loaded or saved.
+    class_prior = _served_class_prior(cm, nowcaster)
     # Live scoring is "looking", not "fitting", so it takes the explicit
     # full-span opt-in. The dev checkpoint stops at the 2020-12 holdout
     # boundary; loading it here would silently score December 2020 as "today",
@@ -630,7 +676,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     as_of = pd.Timestamp(row.index[0])
     prev_belief = load_regime_belief(cm)  # load BEFORE save (Pitfall 3)
     regime_belief = advance_regime_belief(
-        prev_belief, regime_labels, regime_probs, state_index=state_index, as_of=as_of
+        prev_belief, regime_labels, regime_probs, class_prior=class_prior, state_index=state_index, as_of=as_of
     )
     save_regime_belief(regime_belief, cm, as_of=as_of)  # save AFTER load
 

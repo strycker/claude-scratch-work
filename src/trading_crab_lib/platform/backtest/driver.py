@@ -304,11 +304,46 @@ def _refit_l1(
     return pd.Series(states, index=X_df.index, name="state")
 
 
+def training_class_prior(y_train: pd.Series, classes: Any) -> pd.Series:
+    """The ONE rule for the likelihood's class prior (CR-01).
+
+    The Bayes filter inverts the nowcaster's posterior into a likelihood,
+    ``L_t(j) = posterior(j) / prior(j)``. That inversion is valid only with the class
+    frequency the calibrated posterior was fit against: the labels of the rows the model
+    was actually trained on (the D-01 embargoed, finite-row block), over its ``classes_``
+    only. Not the whole label series, which can put a different weight on every state.
+    :func:`fit_l2_nowcaster` computes it from its own rows and returns it beside the
+    model, so no consumer re-derives it.
+
+    Args:
+        y_train: the labels of the rows the model was fit on.
+        classes: the model's ``classes_``.
+
+    Returns:
+        pd.Series indexed by ``[int(c) for c in classes]``, float, summing to 1.
+
+    Raises:
+        ValueError: if ``y_train`` is empty, or its label set is not exactly ``classes``
+            (a wiring bug, not a distribution).
+    """
+    idx = [int(c) for c in classes]
+    y = pd.Series(y_train)
+    if y.empty:
+        raise ValueError("training_class_prior: y_train is empty")
+    seen = sorted({int(v) for v in y.unique()})
+    if seen != sorted(idx):
+        raise ValueError(
+            f"training_class_prior: y_train carries classes {seen}, the model's classes are {sorted(idx)}. "
+            "The prior must come from the rows the model was fit on."
+        )
+    return y.astype(int).value_counts(normalize=True).reindex(idx).astype(float).rename("class_prior")
+
+
 def fit_l2_nowcaster(
     train_features: pd.DataFrame,
     train_states: pd.Series,
     cfg: dict[str, Any],
-) -> tuple[CalibratedClassifierCV, list[str]]:
+) -> tuple[CalibratedClassifierCV, list[str], pd.Series]:
     """The ONE L2 fit recipe: embargo -> CV-safe active features -> calibrated fit.
 
     Two callers, and only two:
@@ -324,9 +359,11 @@ def fit_l2_nowcaster(
     the drift this extraction exists to prevent.
 
     Returns:
-        tuple: ``(model, active)`` — the fitted ``CalibratedClassifierCV`` and the
-        column list it was fit on (equal to ``model.feature_names_in_``). Score only
-        ``row[active]``.
+        tuple: ``(model, active, class_prior)`` — the fitted ``CalibratedClassifierCV``,
+        the column list it was fit on (equal to ``model.feature_names_in_``; score only
+        ``row[active]``), and :func:`training_class_prior` of the rows it was fit on,
+        indexed by ``model.classes_``. That prior is what the Bayes filter's likelihood
+        divides by (CR-01); a new return value, not a parameter.
 
     Raises:
         ValueError: propagated from a degenerate fold fit (RESEARCH.md Pitfall 2).
@@ -342,8 +379,13 @@ def fit_l2_nowcaster(
     n_splits = int(cfg.get("backtest", {}).get("nowcaster_cv_splits", 5))
     active = _cv_safe_active_features(X, y, list(X.columns), min_history=min_history, n_splits=n_splits)
     X = X[active]
+    # The same non-finite-row rule fit_nowcaster applies, run first so the fitted rows are
+    # known here (fit_nowcaster's own drop then keeps every row; the fit is unchanged).
+    finite = np.isfinite(X.to_numpy(dtype=float)).all(axis=1)
+    X, y = X.loc[finite], y.loc[finite]
     model = fit_nowcaster(X, y, n_splits=n_splits)
-    return model, active
+    class_prior = training_class_prior(y, model.classes_)
+    return model, active, class_prior
 
 
 def _refit_l2(
@@ -370,7 +412,8 @@ def _refit_l2(
             Pitfall 2) — the caller (``run_backtest``) decides whether to
             degrade gracefully (added in Task 3).
     """
-    model, active = fit_l2_nowcaster(train_features, train_states, cfg)
+    # 08-17 hands the returned class prior to the filter here; this plan changes serving only.
+    model, active, _class_prior = fit_l2_nowcaster(train_features, train_states, cfg)
     proba = model.predict_proba(feature_row[active])
     return pd.Series(proba[0], index=model.classes_)
 

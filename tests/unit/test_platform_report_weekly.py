@@ -232,11 +232,24 @@ class _FakeNowcaster:
         return [[0.30, 0.45, 0.25]]
 
 
-def _serve_env(monkeypatch, tmp_path, *, as_of: str = "2026-08-31"):
+_SERVED_PRIOR = [0.2, 0.3, 0.5]
+
+
+#: Sentinel for ``_serve_env(served_prior=...)``: a served training prior equal to the fixture
+#: labels' own distribution (a served model whose training block had the label frequencies).
+_LABEL_DISTRIBUTION = "label_distribution"
+
+
+def _serve_env(monkeypatch, tmp_path, *, as_of: str = "2026-08-31", served_prior=None):
     """A real CheckpointManager in tmp_path plus in-memory inputs for _build_report_inputs.
 
     ``regime_labels`` is deliberately NON-uniform (state 0 dominates), so the filtered
     belief cannot coincide with the raw posterior by accident of a flat prior.
+
+    ``served_prior`` is the ``nowcaster_class_prior`` artifact (CR-01): by default
+    ``_SERVED_PRIOR``, deliberately NOT the label prior. ``_LABEL_DISTRIBUTION`` serves the
+    labels' own distribution instead: used only by the 08-09 band/hysteresis scenario tests,
+    whose constants were derived on that belief and which test the band, not the prior.
     """
     from trading_crab_lib.checkpoints import CheckpointManager
 
@@ -259,8 +272,16 @@ def _serve_env(monkeypatch, tmp_path, *, as_of: str = "2026-08-31"):
                                       index=pd.date_range("2023-01-31", periods=40, freq="ME")),
         # CR-01: the served model's training prior, built beside it. Deliberately NOT the
         # label prior (about .63 / .21 / .16), so dividing by the wrong one is visible.
-        "nowcaster_class_prior": pd.DataFrame({"state": [0, 1, 2], "prior": [0.2, 0.3, 0.5]}),
+        "nowcaster_class_prior": pd.DataFrame({"state": [0, 1, 2], "prior": _SERVED_PRIOR}),
     }
+    if served_prior is not None:
+        from trading_crab_lib.platform.prediction.regime_filter import unconditional_belief
+
+        values = (
+            list(unconditional_belief(labels, state_index=[0, 1, 2]))
+            if served_prior == _LABEL_DISTRIBUTION else list(served_prior)
+        )
+        frames["nowcaster_class_prior"] = pd.DataFrame({"state": [0, 1, 2], "prior": values})
     real_load = cm.load
 
     def load(name):
@@ -306,7 +327,7 @@ class TestRegimeBeliefAtServe:
         start = unconditional_belief(labels, state_index=[0, 1, 2])
         assert not start.round(9).eq(1 / 3).all(), "fixture prior is uniform; it cannot discriminate"
         # CR-01: pi_0 comes from the labels; L_t divides by the SERVED training prior.
-        served_prior = pd.Series([0.2, 0.3, 0.5], index=[0, 1, 2])
+        served_prior = pd.Series(_SERVED_PRIOR, index=[0, 1, 2])
         assert (served_prior - start).abs().max() > 0.1, "precondition: the served prior is not the label prior"
         expected = filter_step(start, transition_matrix_for(labels, state_index=[0, 1, 2]), raw, served_prior)
         pd.testing.assert_series_equal(belief, expected)
@@ -435,7 +456,7 @@ class TestActiveRegimeIsTheMachinesOutput:
     def test_build_inputs_returns_the_hysteresis_output_and_main_renders_it(self, monkeypatch, tmp_path):
         """End to end on the serve fixture: the belief's max is 0.45 < 0.70, so the machine
         is neutral while the argmax is regime 1 — the markdown must say neutral."""
-        cm, cfg, _ = _serve_env(monkeypatch, tmp_path)
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, served_prior=_LABEL_DISTRIBUTION)
         seen = []
         real_hyst = weekly.update_active_regime
         monkeypatch.setattr(weekly, "update_active_regime", lambda *a, **k: seen.append(real_hyst(*a, **k)) or seen[-1])
@@ -552,7 +573,7 @@ class TestNoTradeBandAtServe:
     def test_the_band_suppresses_one_trade_and_allows_another_at_serve(self, monkeypatch, tmp_path):
         """Target is SPY 0.284838 / TLT 0.715162. Held SPY 0.26 (2.5pp away -> held) and
         TLT 0.60 (11.5pp -> traded). The report's weights must be the banded book."""
-        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31", served_prior=_LABEL_DISTRIBUTION)
         held = pd.Series({"SPY": 0.26, "TLT": 0.60})
         weekly.save_executed_weights(held, None, cm, as_of=pd.Timestamp("2026-07-31"))
         out = weekly._build_report_inputs(_banded(cfg), cm)
@@ -564,7 +585,7 @@ class TestNoTradeBandAtServe:
 
     def test_the_negative_residual_branch_fires_at_serve(self, monkeypatch, tmp_path):
         """Held SPY 0.32 (3.5pp -> held) + TLT's 0.715 target = 1.035: TLT alone is scaled."""
-        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31", served_prior=_LABEL_DISTRIBUTION)
         weekly.save_executed_weights(pd.Series({"SPY": 0.32, "TLT": 0.60}), None, cm, as_of=pd.Timestamp("2026-07-31"))
         out = weekly._build_report_inputs(_banded(cfg), cm)
         target, executed = out["pre_band_target_weights"], out["target_weights"]

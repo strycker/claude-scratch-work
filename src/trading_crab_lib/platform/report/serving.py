@@ -2,14 +2,21 @@
 Serving builder: the artifacts the weekly report reads, built by the evaluated recipe
 (plan 08-13, gap G-08-2).
 
-``report/weekly.py`` loads three platform checkpoints that no supported command produced
+``report/weekly.py`` loads four platform checkpoints that no supported command produced
 before this module existed:
 
 - ``nowcaster`` (``nowcaster.pkl``, joblib): the L2 model the report scores;
+- ``nowcaster_class_prior``: the class distribution of the rows that model was fit on, over
+  its ``classes_`` (plan 08-16, CR-01);
 - ``returns_by_regime``: the per-(regime, asset) table the tilt conditions on;
 - ``asset_returns``: the tradable monthly returns the tilt's live volatility estimate uses.
 
-This module builds all three. The nowcaster is fit by ``backtest/driver.py::fit_l2_nowcaster``,
+The class prior travels with the model because the weekly Bayes filter divides the model's
+posterior by it to get a likelihood, and that inversion is only valid with the prior the model
+was trained against; ``fit_l2_nowcaster`` returns it from its own rows, so it is never
+re-derived. Weekly refuses a prior whose states are not the model's ``classes_``.
+
+This module builds all four. The nowcaster is fit by ``backtest/driver.py::fit_l2_nowcaster``,
 the SAME function the backtest's ``_refit_l2`` calls at every walk-forward step: same
 embargo, same ``_cv_safe_active_features`` rule, same calibrated LR, same label series. One
 function with two callers is the train/serve-skew guarantee. ``asset_returns`` uses
@@ -79,6 +86,10 @@ SERVING_TRIAL_TAG = "serving-nowcaster-refit"
 
 _WEEKLY_COMMAND = "python -m trading_crab_lib.platform.report.weekly"
 
+#: The artifact holding the served model's training class prior (CR-01). ``weekly.py`` loads
+#: it beside the model and divides the posterior by it.
+SERVING_CLASS_PRIOR = "nowcaster_class_prior"
+
 
 def _training_block(
     dev_features: pd.DataFrame, labels: pd.Series, columns: list[str], cfg: dict[str, Any]
@@ -100,7 +111,7 @@ def build_serving_artifacts(
     cm: Any = None,
     output_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Fit the serving nowcaster and write the three artifacts the weekly report reads.
+    """Fit the serving nowcaster and write the four artifacts the weekly report reads.
 
     Args:
         cfg: platform config (``load_platform_config()``).
@@ -112,7 +123,8 @@ def build_serving_artifacts(
 
     Returns:
         dict: the facts of what was built — ``columns``, ``classes``, ``class_counts``,
-        ``n_train_rows``, ``train_first``, ``train_last``, ``n_distinct_posteriors_dev``,
+        ``class_prior`` (``{state: prior}``, the fit's training prior), ``n_train_rows``,
+        ``train_first``, ``train_last``, ``n_distinct_posteriors_dev``,
         ``asset_returns_first`` / ``asset_returns_last`` / ``asset_returns_columns``,
         ``returns_by_regime_rows`` and ``registry_row_written`` (always False).
     """
@@ -123,7 +135,7 @@ def build_serving_artifacts(
     labels = cm.load("regime_labels")["state"]
 
     # 3. The evaluated recipe, by its own function.
-    model, columns = fit_l2_nowcaster(dev_features, labels, cfg)
+    model, columns, class_prior = fit_l2_nowcaster(dev_features, labels, cfg)
 
     # 4. For the record only: the block the fit trained on.
     train_y = _training_block(dev_features, labels, columns, cfg)
@@ -166,6 +178,13 @@ def build_serving_artifacts(
         "wrote nowcaster: %d columns, classes %s, trained on %d rows %s -> %s",
         len(columns), [int(c) for c in model.classes_], len(train_y), train_first.date(), train_last.date(),
     )
+    # 7b. Its training class prior, beside it: the prior the weekly filter divides by (CR-01).
+    prior_facts = {int(k): float(v) for k, v in class_prior.items()}
+    cm.save(
+        pd.DataFrame({"state": list(prior_facts), "prior": list(prior_facts.values())}),
+        SERVING_CLASS_PRIOR,
+    )
+    log.info("wrote %s (the fit's training prior over classes_): %s", SERVING_CLASS_PRIOR, prior_facts)
 
     # 8. Tradable returns over the full monthly_raw span (looking, not fitting).
     returns = compute_monthly_returns(build_core_research_series(cm.load("monthly_raw"), cfg))
@@ -197,6 +216,7 @@ def build_serving_artifacts(
         "columns": list(columns),
         "classes": [int(c) for c in model.classes_],
         "class_counts": class_counts,
+        "class_prior": prior_facts,
         "n_train_rows": len(train_y),
         "train_first": train_first,
         "train_last": train_last,
@@ -214,7 +234,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Build the serving artifacts the platform weekly report reads (nowcaster, "
-            "returns_by_regime, asset_returns) by the evaluated recipe. Not a registry trial."
+            "nowcaster_class_prior, returns_by_regime, asset_returns) by the evaluated recipe. "
+            "Not a registry trial."
         )
     )
     parser.parse_args(argv)
