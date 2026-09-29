@@ -5,12 +5,12 @@ milestone_name: milestone
 current_phase_name: Regime Persistence & Stability
 status: verifying
 stopped_at: Phase 8 EXECUTED (10/10 plans); awaiting phase verification and UAT
-last_updated: "2026-09-28T22:08:59.471Z"
+last_updated: "2026-09-29T18:03:17.991Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 7
-  total_plans: 58
-  completed_plans: 57
+  total_plans: 62
+  completed_plans: 61
 current_phase: 8
 last_activity: 2026-09-23
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
@@ -562,7 +562,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- **(Phase 9, found 2026-09-28 while planning G-08-2) the evaluated L2 nowcaster recipe is input-independent at full history.**
+- **(Phase 8.1 candidate — Phase 9 is Migration; found 2026-09-28 while planning G-08-2) the evaluated L2 nowcaster recipe is input-independent at full history.**
   Fit exactly as `driver._refit_l2` fits it on all labelled history, `_cv_safe_active_features` admits all
   55 columns, which truncates training to 153 rows (2007-04-30 → 2019-12-31) holding 3 of 6 regimes
   ({0:11, 3:137, 4:5}). The sigmoid calibration then flattens a base LR that varies (222–231 distinct
@@ -570,10 +570,18 @@ Recent decisions affecting current work:
   the backtest's last two steps show the same triple. Reproduced independently by the orchestrator.
   Criterion 7 was L1-only routed, so no decision-bearing number rests on L2; the weekly report's
   filter does. Glenn ruled q2-ii (disclose the count on the page). Fixing the recipe is a new
-  configuration → a Phase 9 trial budget under ADR-0004.
-- **(Before Phase 9's first registry row) migrate the three hard-coded-44 enforcement sites** listed in
+  configuration → a trial budget under ADR-0004 in the phase that schedules it (8.1 discuss-phase).
+
+- **(Phase 8 code review, orchestrator-verified 2026-09-29 — `08-REVIEW.md`)** CR-01 (filter divides by the
+  whole-label prior, not the nowcaster's training prior — flips live state 3's L from 0.63 to 1.96), CR-05
+  (`use_regime_filter` absent from trial config), CR-06 (`run_joint_lift` ceiling assert after the appends)
+  and the neutral-posture Per-Asset Signals display bug → **Phase 8 gap closure (Glenn, 2026-09-29, budget 0)**.
+  CR-02 (belief across unaligned refits) and CR-03 (publication-lag look-ahead: M2SL, TOTALSL, div_yield)
+  → **Phase 8.1**. CR-04 = the `run_stability` keying item below.
+- **(Before the next registry row — Phase 8.1's re-runs) migrate the three hard-coded-44 enforcement sites** listed in
   ADR-0004 § Consequences (`test_platform_gate_tiers.py`, `test_platform_joint_diagnostics_record.py`,
   `scripts/run_joint_lift.py`) to check the live count against the open phase's declared ceiling.
+
 - ~~**(Phase 8, found at close) the joint driver's `append_trial` never wrote `sharpe` or
   `independent_trial`.**~~ **RESOLVED 2026-09-28 (Glenn approved).** The append site now writes
   `independent_trial: False` (every run of the harness is an ablation arm) and `sharpe` =
@@ -744,6 +752,10 @@ Recent decisions affecting current work:
 | 260911-la3 | fix trading-crab-lib's blank PyPI page (wired real README into pyproject readme key, twine check --strict WARNING -> PASSED), add a twine check --strict gate before every upload, add a workflow_dispatch target input (testpypi default) for a TestPyPI dry-run path with target-aware secret selection, write docs/RELEASING.md | 2026-09-11 | c25cbc6 + beabc63 + e97c8a5 + ca837cd | [260911-la3-harden-the-release-procedure-twine-check](./quick/260911-la3-harden-the-release-procedure-twine-check/) |
 | 260911-nt7 | fix the empty trading-crab-lib wheel (0.1.0–0.1.4 shipped zero Python modules): explicit package-dir + enumerated packages list, install-and-import smoke gate, --no-deps so parallel matrix legs cannot couple; bumped both packages to 0.1.5 | 2026-09-11 | f204de3 + 926ef21 | [260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins](./quick/260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins/) |
 | 15 | ADR-0004 trial budgeting policy: per-phase pre-registered budgets replace reading ADR-0002's 44 as a standing cap | 2026-09-28 | 1a4df87 | — |
+
+### Roadmap Evolution
+
+- Phase 8.1 inserted after Phase 8: Point-in-Time Data Audit — Phase 8 code review CR-03 (verified 2026-09-29): fred_m2sl (~1mo lag), fred_totalsl (~2mo) and div_yield (2-3mo, classifier #1 lean set) enter features at their reference month with no publication-lag shift. Glenn ruled: audit phase before Phase 9. (URGENT)
 
 ## Deferred Items
 

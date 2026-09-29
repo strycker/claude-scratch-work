@@ -461,6 +461,7 @@ part**:
   candidate registry-logged (2 rows, `total_trial_count()` 38 → 40) and walk-forward assessed,
   survivors `m2_gdp` and `credit_gdp` admitted as **named** features and never anonymous
   principal components (design decision R4).
+
 - **REG-01 — PARTIALLY.** The second-classifier, disjointness and joint-lift clauses are
   satisfied. **The orthogonality clause was measured but its verdict is UNRESOLVED** — the
   pre-registered control returned INCONCLUSIVE (criterion 6 above), and no tie-break is
@@ -569,6 +570,7 @@ run length is **1.0 month**; 136 of 247 runs are a single month.
   2. **Both churn series are reported, and neither can masquerade as the other.**
      - **A's metric:** `state_1` changes / 587. Currently **246 (41.91%)**. A §5.1-style change
        must NOT move it; if it appears to, something is wired wrong.
+
      - **B's metric:** `argmax(regime_probs)` churn — **never measured anywhere**, and the object
        criterion 1 actually changes. Requires criterion 0.
      No target is pre-declared for either. Both are reported with their window.
@@ -663,6 +665,28 @@ either churn metric; `legacy/` and the reference submodules untouched; the legac
 stays at **31** and may only decrease.
 
 ---
+
+### Phase 08.1: Point-in-Time Data Audit (INSERTED)
+
+**Goal:** No feature enters a fit or a score before it could have been published. Found by Phase 8's
+code review (CR-03, orchestrator-verified 2026-09-29 against `monthly_raw` built 2026-09-21):
+`fred_m2sl` (~1 month lag) and `fred_totalsl` (~2 months) carry `shift: false`, and multpl series
+(incl. `div_yield`, 2–3 months, a classifier-#1 lean-set feature) have no lag handling at all — so
+every L1 labeling since Phase 1 and both criterion-7 legs are exposed. Scope, to be fixed at
+discuss-phase: measure every raw series' publication lag; set the shifts; a test that FAILS when a
+feature is used before its publication date; re-run the decision-bearing evaluations under a
+declared ADR-0004 trial budget, with earlier positive results labelled possibly-inflated until then.
+Look-ahead can only flatter, so Phase 7–8's negative verdicts stand in direction.
+Candidates to schedule at discuss-phase (Phase 8 named blockers): CR-02 (filter belief carried
+across refits whose state ids are not aligned) and the input-independent L2 recipe.
+**Requirements**: TBD
+**Depends on:** Phase 8
+**Blocks**: Phase 9 (Migration) — Glenn's ruling, 2026-09-29
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 08.1 to break down)
 
 ### Phase 9: Migration to Public Repo
 

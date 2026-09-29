@@ -131,8 +131,8 @@ months old". The orchestrator reads that as **"more than 3 month-ends behind the
   counted in calendar months (September 2026 back to June 2026) that is **3**. That sits exactly at
   the cap: it serves only because the ruling says "more than 3". On any run after 2026-09-30 it
   would fail until July's data completes.
-- **Glenn: please confirm the data-relative reading.** If you meant the wall clock, it is a
-  one-line change at the cap's single site in 08-14.
+- **CONFIRMED by Glenn, 2026-09-29:** "Behind newest data row" — the data-relative reading stands.
+  He was shown the trade-off: it catches ragged-edge lag, not a stale data build as a whole.
 
 **What this ruling licenses 08-14 to implement:**
 - Score the newest row of `load_full_span("monthly_features")` in which **every** model column
@@ -294,8 +294,8 @@ What this does and does not cover:
   and the distribution does not depend on the features. The recipe fix is the Phase 9 item §2.2
   records, under that phase's own ADR-0004 budget.
 - **The staleness cap uses the data-relative reading** (month-ends behind the newest
-  `monthly_features` row), as the orchestrator relayed it. §2.1's request for Glenn to confirm
-  that reading still stands. Under a wall-clock reading today's run (2026-09-29, scoring June)
+  `monthly_features` row), as the orchestrator relayed it. Glenn confirmed that reading on
+  2026-09-29 (§2.1). Under a wall-clock reading today's run (2026-09-29, scoring June)
   sits exactly at 3 and still serves. From 2026-10-01 it would refuse until July's `div_yield`
   arrives. The cap lives at one site, `weekly.MAX_SCORING_LAG_MONTHS` and its one comparison in
   `_scored_row`.
