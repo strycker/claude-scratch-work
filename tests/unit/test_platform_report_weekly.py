@@ -446,6 +446,89 @@ class TestActiveRegimeIsTheMachinesOutput:
         assert "From regime 1" not in md
 
 
+# ── Per-asset rows follow the active regime (plan 08-15, verification human item 4) ──
+#
+# Before 08-15 a neutral posture (active_regime None) fell through to "no narrowing" and the
+# section printed every (regime, asset) row of returns_by_regime with no regime id — on the
+# 2026-06-30 real-data page, 24 rows, each asset six times.
+
+
+def _per_asset_section(md: str) -> str:
+    return md.split("## Per-Asset Signals")[1].split("\n## ")[0]
+
+
+def _asset_rows(section: str) -> list[str]:
+    return [line for line in section.splitlines() if line.startswith(("- SPY", "- TLT"))]
+
+
+class TestPerAssetSignalsFollowTheActiveRegime:
+    # Two regimes x two assets, distinct numbers everywhere so a leaked row is visible.
+    RBR = pd.DataFrame(
+        {
+            "regime": [0, 0, 1, 1],
+            "asset": ["SPY", "TLT", "SPY", "TLT"],
+            "mean_monthly_return": [0.0123, 0.0045, -0.0321, 0.0167],
+            "sharpe_annualized": [1.11, 0.44, -2.22, 1.66],
+            "n_obs": [30, 30, 30, 30],
+        }
+    )
+
+    def _md(self, active_regime):
+        return weekly.assemble_weekly_report(
+            regime_probs={0: 0.55, 1: 0.45},
+            transition_matrix=pd.DataFrame({0: [0.9, 0.2], 1: [0.1, 0.8]}, index=[0, 1]),
+            returns_by_regime=self.RBR,
+            target_weights=pd.Series(dtype=float),
+            accounts=[],
+            active_regime=active_regime,
+        )
+
+    def test_neutral_posture_prints_no_per_asset_row_and_says_why(self):
+        section = _per_asset_section(self._md(None))
+        assert _asset_rows(section) == []
+        sentence = weekly._NEUTRAL_PER_ASSET_SENTENCE
+        assert "no regime is active" in sentence and "all regimes" in sentence
+        assert sentence in section
+
+    @pytest.mark.parametrize("active_regime", [None, 0, 1])
+    def test_no_asset_appears_twice_in_any_posture(self, active_regime):
+        rows = _asset_rows(_per_asset_section(self._md(active_regime)))
+        for asset in ("SPY", "TLT"):
+            assert sum(r.startswith(f"- {asset}") for r in rows) <= 1, rows
+
+    def test_active_posture_rows_are_that_regimes_and_name_it(self):
+        section = _per_asset_section(self._md(1))
+        assert _asset_rows(section) == [
+            "- SPY (regime 1): mean=-3.21% sharpe=-2.22 n_obs=30",
+            "- TLT (regime 1): mean=1.67% sharpe=1.66 n_obs=30",
+        ]
+        for regime0_number in ("1.23%", "0.45%", "sharpe=1.11", "sharpe=0.44"):
+            assert regime0_number not in section
+        assert weekly._NEUTRAL_PER_ASSET_SENTENCE not in section
+
+    def test_main_writes_the_neutral_sentence_to_the_page(self, monkeypatch, tmp_path):
+        """Tracer: the WRITTEN page, via main(), carries the neutral-posture section."""
+        monkeypatch.setattr(weekly, "OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr(weekly, "load_platform_config", lambda: {"report": {}, "universe": {}})
+        monkeypatch.setattr(
+            weekly,
+            "_build_report_inputs",
+            lambda cfg, cm=None: {
+                "regime_probs": pd.Series({0: 0.55, 1: 0.45}),
+                "active_regime": None,
+                "transition_matrix": pd.DataFrame({0: [0.9, 0.2], 1: [0.1, 0.8]}, index=[0, 1]),
+                "returns_by_regime": self.RBR,
+                "target_weights": pd.Series(dtype=float),
+                "cash": 1.0,
+            },
+        )
+        assert weekly.main([]) == 0
+        md = (tmp_path / "reports" / "platform" / "weekly_report.md").read_text(encoding="utf-8")
+        section = _per_asset_section(md)
+        assert _asset_rows(section) == []
+        assert weekly._NEUTRAL_PER_ASSET_SENTENCE in section
+
+
 class TestNoTradeBandAtServe:
     def test_the_band_is_the_shared_helper(self):
         from trading_crab_lib.platform.allocation import hysteresis
