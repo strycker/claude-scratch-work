@@ -502,7 +502,11 @@ class TestWeeklyScoresTheModelsColumns:
         served = pd.Series(model.predict_proba(dev.iloc[[-1]][cols])[0], index=model.classes_)
         backtest, backtest_prior = driver._refit_l2(dev, labels, dev.iloc[[-1]], world["cfg"])
 
-        pd.testing.assert_series_equal(served, backtest, check_exact=True)
+        # rtol 1e-9, abs 0 — not bit-for-bit: the two fits see identical values in different
+        # memory layouts, and Apple Accelerate's BLAS sums in a different order than OpenBLAS
+        # (1-ULP disagreement seen on macOS, 2026-09-29; the G-08-1 class). A real skew (other
+        # columns, other embargo, other rows) moves these probabilities by ~1e-2 or more.
+        pd.testing.assert_series_equal(served, backtest, check_exact=False, rtol=1e-9, atol=0.0)
         frame = get_platform_checkpoint_manager().load("nowcaster_class_prior")
         persisted = pd.Series(frame["prior"].to_numpy(dtype=float), index=[int(v) for v in frame["state"]])
         assert list(persisted.index) == [int(c) for c in backtest_prior.index]
