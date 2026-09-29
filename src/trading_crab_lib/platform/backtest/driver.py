@@ -93,6 +93,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
 
 from trading_crab_lib.platform.allocation.hysteresis import (
     execute_rebalance,
@@ -303,6 +304,48 @@ def _refit_l1(
     return pd.Series(states, index=X_df.index, name="state")
 
 
+def fit_l2_nowcaster(
+    train_features: pd.DataFrame,
+    train_states: pd.Series,
+    cfg: dict[str, Any],
+) -> tuple[CalibratedClassifierCV, list[str]]:
+    """The ONE L2 fit recipe: embargo -> CV-safe active features -> calibrated fit.
+
+    Two callers, and only two:
+
+    - ``_refit_l2``, at every backtest step, on that step's in-window data;
+    - ``report/serving.py::build_serving_artifacts``, once, on the full DEV history,
+      to build the ``nowcaster`` the weekly report scores (plan 08-13, G-08-2).
+
+    One function, two callers, is the train/serve-skew guarantee: the served model is
+    fit by exactly the code the backtest evaluated (08-CONTEXT amendment, "a rule that
+    differs between train and serve is train/serve skew"). This function must never
+    gain a parameter the backtest does not pass — a serving-only knob would be exactly
+    the drift this extraction exists to prevent.
+
+    Returns:
+        tuple: ``(model, active)`` — the fitted ``CalibratedClassifierCV`` and the
+        column list it was fit on (equal to ``model.feature_names_in_``). Score only
+        ``row[active]``.
+
+    Raises:
+        ValueError: propagated from a degenerate fold fit (RESEARCH.md Pitfall 2).
+    """
+    embargo_months = cfg.get("labeling", {}).get("embargo_months", 12)
+    X, y = build_nowcaster_training_set(train_features, train_states, embargo_months=embargo_months)
+    # Use the features with ≥ feature_min_history months in this window (late
+    # features like VIX enter once they qualify), applied to BOTH the training
+    # matrix and the prediction row so their columns align. fit_nowcaster's own
+    # non-finite-row drop then restricts training to the rectangular block where
+    # every active feature is present. Causal — in-window data only (before t).
+    min_history = int(cfg.get("backtest", {}).get("feature_min_history", 120))
+    n_splits = int(cfg.get("backtest", {}).get("nowcaster_cv_splits", 5))
+    active = _cv_safe_active_features(X, y, list(X.columns), min_history=min_history, n_splits=n_splits)
+    X = X[active]
+    model = fit_nowcaster(X, y, n_splits=n_splits)
+    return model, active
+
+
 def _refit_l2(
     train_features: pd.DataFrame,
     train_states: pd.Series,
@@ -327,18 +370,7 @@ def _refit_l2(
             Pitfall 2) — the caller (``run_backtest``) decides whether to
             degrade gracefully (added in Task 3).
     """
-    embargo_months = cfg.get("labeling", {}).get("embargo_months", 12)
-    X, y = build_nowcaster_training_set(train_features, train_states, embargo_months=embargo_months)
-    # Use the features with ≥ feature_min_history months in this window (late
-    # features like VIX enter once they qualify), applied to BOTH the training
-    # matrix and the prediction row so their columns align. fit_nowcaster's own
-    # non-finite-row drop then restricts training to the rectangular block where
-    # every active feature is present. Causal — in-window data only (before t).
-    min_history = int(cfg.get("backtest", {}).get("feature_min_history", 120))
-    n_splits = int(cfg.get("backtest", {}).get("nowcaster_cv_splits", 5))
-    active = _cv_safe_active_features(X, y, list(X.columns), min_history=min_history, n_splits=n_splits)
-    X = X[active]
-    model = fit_nowcaster(X, y, n_splits=n_splits)
+    model, active = fit_l2_nowcaster(train_features, train_states, cfg)
     proba = model.predict_proba(feature_row[active])
     return pd.Series(proba[0], index=model.classes_)
 
