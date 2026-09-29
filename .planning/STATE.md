@@ -562,6 +562,18 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
+- **(Phase 9, found 2026-09-28 while planning G-08-2) the evaluated L2 nowcaster recipe is input-independent at full history.**
+  Fit exactly as `driver._refit_l2` fits it on all labelled history, `_cv_safe_active_features` admits all
+  55 columns, which truncates training to 153 rows (2007-04-30 → 2019-12-31) holding 3 of 6 regimes
+  ({0:11, 3:137, 4:5}). The sigmoid calibration then flattens a base LR that varies (222–231 distinct
+  outputs) to **1 distinct posterior** {0: 0.418, 3: 0.564, 4: 0.018} across all 231 scorable months;
+  the backtest's last two steps show the same triple. Reproduced independently by the orchestrator.
+  Criterion 7 was L1-only routed, so no decision-bearing number rests on L2; the weekly report's
+  filter does. Glenn ruled q2-ii (disclose the count on the page). Fixing the recipe is a new
+  configuration → a Phase 9 trial budget under ADR-0004.
+- **(Before Phase 9's first registry row) migrate the three hard-coded-44 enforcement sites** listed in
+  ADR-0004 § Consequences (`test_platform_gate_tiers.py`, `test_platform_joint_diagnostics_record.py`,
+  `scripts/run_joint_lift.py`) to check the live count against the open phase's declared ceiling.
 - ~~**(Phase 8, found at close) the joint driver's `append_trial` never wrote `sharpe` or
   `independent_trial`.**~~ **RESOLVED 2026-09-28 (Glenn approved).** The append site now writes
   `independent_trial: False` (every run of the harness is an ablation arm) and `sharpe` =
