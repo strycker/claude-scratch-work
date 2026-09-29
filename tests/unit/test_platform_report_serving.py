@@ -569,6 +569,26 @@ def _install_proxy(monkeypatch, *, constant: bool = False) -> list:
     return holder
 
 
+def _spy_on_every_fit(monkeypatch) -> list:
+    """Record any fit reached after the serving build: the disclosure only LOOKS."""
+    from sklearn.calibration import CalibratedClassifierCV
+
+    import trading_crab_lib.platform.prediction.nowcaster as nowcaster_mod
+
+    calls: list[str] = []
+    real_cal_fit = CalibratedClassifierCV.fit
+
+    def cal_fit(self, *a, **k):
+        calls.append("CalibratedClassifierCV.fit")
+        return real_cal_fit(self, *a, **k)
+
+    monkeypatch.setattr(CalibratedClassifierCV, "fit", cal_fit)
+    for module, name in ((nowcaster_mod, "fit_nowcaster"), (driver, "fit_nowcaster"), (driver, "fit_l2_nowcaster")):
+        real = getattr(module, name)
+        monkeypatch.setattr(module, name, lambda *a, _n=name, _r=real, **k: calls.append(_n) or _r(*a, **k))
+    return calls
+
+
 class TestQ1cLatestCompleteMonth:
     def test_q1c_scores_the_latest_complete_month_and_names_the_lag(self, tmp_path, monkeypatch):
         from trading_crab_lib.platform.report import serving, weekly
@@ -665,3 +685,57 @@ class TestQ1cLatestCompleteMonth:
         assert weekly.main([]) == 0
         assert "Scored as of 2021-03-31" in _report_path(world).read_text()
 
+class TestQ2iiDistinctPosteriorDisclosure:
+    _SENTENCE = "The distribution above does not depend on the features: it is the same every week."
+
+    def test_q2ii_the_page_states_the_distinct_count_and_window(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving, weekly
+
+        # nan_tail=2: the newest two rows are NOT complete, so "only complete rows" bites.
+        world = _serving_world(tmp_path, monkeypatch, nan_tail=2)
+        assert serving.main([]) == 0
+        model = get_platform_checkpoint_manager().load_model("nowcaster")
+        cols = list(model.feature_names_in_)
+        complete = world["full"][cols].dropna(how="any")
+        n = np.unique(model.predict_proba(complete), axis=0).shape[0]
+        assert n > 1, "precondition: the world's posterior varies"
+
+        fits = _spy_on_every_fit(monkeypatch)
+        holder = _install_proxy(monkeypatch)
+        assert weekly.main([]) == 0
+
+        report = _report_path(world).read_text()
+        first, last = complete.index[0].date().isoformat(), complete.index[-1].date().isoformat()
+        line = f"{n} distinct posterior vectors across {len(complete)} complete months ({first} → {last})"
+        assert line in report
+        assert self._SENTENCE not in report
+        assert "does not depend" not in report
+        dist = report.index("## Current Regime Distribution")
+        assert report.index("- regime ", dist) < report.index(line) < report.index("## Filtered Regime Belief")
+
+        counted = [c for c in holder[-1].calls if len(c) > 1]
+        assert len(counted) == 1
+        # check_freq=False: index freq is metadata the parquet round trip sets; values are exact.
+        pd.testing.assert_frame_equal(counted[0], complete, check_exact=True, check_freq=False)
+        assert fits == [], f"the disclosure fitted something: {fits}"
+
+    def test_q2ii_a_constant_posterior_is_disclosed_as_such(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch, nan_tail=2)
+        assert serving.main([]) == 0
+        complete = world["full"][["f_level", "f_slope"]].dropna(how="any")
+
+        fits = _spy_on_every_fit(monkeypatch)
+        holder = _install_proxy(monkeypatch, constant=True)
+        assert weekly.main([]) == 0  # disclosed, NOT withheld (q2-iii was not chosen)
+
+        report = _report_path(world).read_text()
+        first, last = complete.index[0].date().isoformat(), complete.index[-1].date().isoformat()
+        assert f"1 distinct posterior vector across {len(complete)} complete months ({first} → {last})" in report
+        assert self._SENTENCE in report
+        counted = [c for c in holder[-1].calls if len(c) > 1]
+        assert len(counted) == 1
+        assert list(counted[0].index) == list(complete.index)
+        assert fits == [], f"the disclosure fitted something: {fits}"

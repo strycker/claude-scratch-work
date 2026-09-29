@@ -60,7 +60,9 @@ scores the latest month observed in every model column, prints "Scored as of <mo
 the model columns each newer row lacks (a publication lag), steps the belief and the band on
 that month, and refuses (ValueError, before any save) when that month is more than
 ``MAX_SCORING_LAG_MONTHS`` = 3 month-ends behind the newest ``monthly_features`` row. It
-never imputes.
+never imputes. Under ruling q2-ii (§2.2) it prints, directly under the distribution, the exact
+count of distinct posteriors the served model gives across every full-span month complete in
+its columns, and says so in plain words when that count is 1; it never withholds on it.
 
 Run order::
 
@@ -79,6 +81,7 @@ import argparse
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from trading_crab_lib import OUTPUT_DIR
@@ -297,6 +300,7 @@ def assemble_weekly_report(
     min_obs_flag: int = _DEFAULT_MIN_OBS_FLAG,
     trade_threshold_pct: float = _DEFAULT_TRADE_THRESHOLD_PCT,
     scored_as_of_note: str | None = None,
+    input_sensitivity_note: str | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -314,7 +318,8 @@ def assemble_weekly_report(
     posture. ``target_weights`` should be the EXECUTED book (after the no-trade band);
     ``no_trade_band`` names the band so the report says so. ``scored_as_of_note`` (ruling
     q1-c) is rendered directly under the distribution heading: the month scored and the
-    model columns each newer row lacks.
+    model columns each newer row lacks. ``input_sensitivity_note`` (ruling q2-ii) is rendered
+    directly under the distribution: the exact count of distinct posteriors across history.
     """
     probs = pd.Series(regime_probs, dtype=float)
 
@@ -332,6 +337,9 @@ def assemble_weekly_report(
         for regime_id, p in probs.sort_values(ascending=False).items():
             lines.append(f"- regime {regime_id}: {p:.1%}")
     lines.append("")
+    if input_sensitivity_note:
+        lines.append(input_sensitivity_note)
+        lines.append("")
     if regime_belief is not None:
         belief = pd.Series(regime_belief, dtype=float)
         lines.append("## Filtered Regime Belief (what the allocation consumed)")
@@ -529,6 +537,35 @@ def _scored_row(monthly_features: pd.DataFrame, cols: list[str]) -> tuple[pd.Dat
     return complete.iloc[[-1]], note
 
 
+_CONSTANT_POSTERIOR_SENTENCE = (
+    "The distribution above does not depend on the features: it is the same every week."
+)
+
+
+def _input_sensitivity_note(nowcaster, monthly_features: pd.DataFrame, cols: list[str]) -> str:
+    """How many DISTINCT posteriors the served model gives across history (ruling q2-ii).
+
+    Glenn's 08-12 ruling q2-ii (08-SERVING.md §2.2): score every full-span month observed in
+    all model columns with the already-fitted model and count the distinct posterior vectors
+    with ``np.unique(..., axis=0)`` — exact float comparison, no rounding, no threshold. This
+    only LOOKS: nothing is fitted. When the count is 1 the page says in plain words that the
+    distribution does not depend on the features. The report is never withheld on the count
+    (that was q2-iii, not chosen).
+    """
+    frame = monthly_features[cols].dropna(how="any")
+    n_distinct = int(np.unique(np.asarray(nowcaster.predict_proba(frame), dtype=float), axis=0).shape[0])
+    n_months = len(frame)
+    note = (
+        f"{n_distinct} distinct posterior vector{'s' if n_distinct != 1 else ''} across {n_months} complete "
+        f"month{'s' if n_months != 1 else ''} ({pd.Timestamp(frame.index[0]).date().isoformat()} → "
+        f"{pd.Timestamp(frame.index[-1]).date().isoformat()}): the served model scored on every month "
+        f"observed in all {len(cols)} model columns, compared exactly (no rounding, no threshold)."
+    )
+    if n_distinct == 1:
+        note += " " + _CONSTANT_POSTERIOR_SENTENCE
+    return note
+
+
 def _build_report_inputs(cfg: dict, cm=None) -> dict:
     """The full allocation-cycle orchestration (load -> update -> tilt ->
     save, load-before-save order per Pitfall 3): load the previous
@@ -568,6 +605,8 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     row, scored_as_of_note = _scored_row(monthly_features, cols)
     proba = nowcaster.predict_proba(row)[0]
     regime_probs = pd.Series(proba, index=nowcaster.classes_)
+    # Ruling q2-ii: disclose how input-dependent that posterior is (looking, not fitting).
+    input_sensitivity_note = _input_sensitivity_note(nowcaster, monthly_features, cols)
 
     allocation_cfg = cfg.get("allocation", {})
     act_threshold, unwind_threshold = hysteresis_thresholds(cfg)
@@ -621,6 +660,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         "pre_band_target_weights": tilt["weights"],
         "no_trade_band": no_trade_band,
         "scored_as_of_note": scored_as_of_note,
+        "input_sensitivity_note": input_sensitivity_note,
     }
 
 
@@ -661,6 +701,7 @@ def main(argv: list[str] | None = None) -> int:
         min_obs_flag=report_cfg.get("min_obs_flag", _DEFAULT_MIN_OBS_FLAG),
         trade_threshold_pct=report_cfg.get("trade_threshold_pct", _DEFAULT_TRADE_THRESHOLD_PCT),
         scored_as_of_note=inputs.get("scored_as_of_note"),
+        input_sensitivity_note=inputs.get("input_sensitivity_note"),
     )
     report_path = write_weekly_report(markdown)
 
