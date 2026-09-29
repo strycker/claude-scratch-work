@@ -112,9 +112,15 @@ def _fake_refit_l1(train_features: pd.DataFrame, cfg: dict, *, frozen_features: 
     return pd.Series(np.arange(len(train_features.index)) % 2, index=train_features.index)
 
 
-def _fake_refit_l2(train_features: pd.DataFrame, states: pd.Series, feature_row: pd.DataFrame, cfg: dict) -> pd.Series:
-    """Fast, deterministic stand-in for the real L2 nowcaster refit."""
-    return pd.Series({0: 0.6, 1: 0.4})
+def _fake_refit_l2(
+    train_features: pd.DataFrame, states: pd.Series, feature_row: pd.DataFrame, cfg: dict
+) -> tuple[pd.Series, pd.Series]:
+    """Fast, deterministic stand-in for the real L2 nowcaster refit.
+
+    Returns ``(posterior, class_prior)`` like the real ``_refit_l2`` (plan 08-17): the
+    prior is an explicit positive training prior over exactly the posterior's states.
+    """
+    return pd.Series({0: 0.6, 1: 0.4}), pd.Series({0: 0.55, 1: 0.45})
 
 
 # ── TestHoldoutBoundary ──────────────────────────────────────────────────────
@@ -738,10 +744,18 @@ class TestTrialTag:
 # ── the Bayes filter in run_backtest (plan 08-08) ────────────────────────────
 
 
-def _varying_fake_refit_l2(train_features: pd.DataFrame, states: pd.Series, feature_row: pd.DataFrame, cfg: dict) -> pd.Series:
-    """A posterior that moves step to step (a constant one would make the filter trivial)."""
+def _varying_fake_refit_l2(
+    train_features: pd.DataFrame, states: pd.Series, feature_row: pd.DataFrame, cfg: dict
+) -> tuple[pd.Series, pd.Series]:
+    """A posterior that moves step to step (a constant one would make the filter trivial).
+
+    The second value is the fit's training prior over exactly the posterior's states, a
+    NEW object every call, so an identity spy can tell one step's prior from another's.
+    It is deliberately not the window's label distribution (states alternate 0/1, so
+    that is about 0.5/0.5): the filter must divide by what the fit returned.
+    """
     p1 = 0.25 + 0.5 * ((len(train_features) % 5) / 4.0)
-    return pd.Series({0: 1.0 - p1, 1: p1})
+    return pd.Series({0: 1.0 - p1, 1: p1}), pd.Series({0: 0.65, 1: 0.35})
 
 
 #: The PRE-08-08 ``run_backtest`` curve on ``_make_synthetic_frame()`` with
@@ -787,12 +801,12 @@ def _pre_0808_curve() -> pd.DataFrame:
     return frame[["return", "turnover", "cost", "active_regime", "scale", "degraded"]]
 
 
-def _filter_run(monkeypatch, **kwargs):
+def _filter_run(monkeypatch, *, refit_l2=_varying_fake_refit_l2, **kwargs):
     from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
 
     monthly_features, asset_returns, cash_returns = _make_synthetic_frame()
     monkeypatch.setattr(driver, "_refit_l1", _fake_refit_l1)
-    monkeypatch.setattr(driver, "_refit_l2", _varying_fake_refit_l2)
+    monkeypatch.setattr(driver, "_refit_l2", refit_l2)
     return driver.run_backtest(
         monthly_features, asset_returns, _cfg(), cash_returns=cash_returns, registry_path=NO_REGISTRY, **kwargs
     )
@@ -822,17 +836,55 @@ class TestRegimeFilterInRunBacktest:
         assert n_differ >= 1
 
     def test_cold_start_is_the_shared_unconditional_belief(self, monkeypatch):
+        """π_0 is ``unconditional_belief`` on the step's in-window labels, and it is
+        called at the cold start ONLY (plan 08-17 re-derivation: before CR-01 it was also
+        the likelihood's class prior, so it ran once per filtered step; now the class
+        prior is the fit's training prior and ``unconditional_belief`` has one role)."""
         calls = []
         real_ub = driver.unconditional_belief
         monkeypatch.setattr(driver, "unconditional_belief", lambda *a, **k: calls.append(a) or real_ub(*a, **k))
-        starts = []
+        starts, outs = [], []
         real_filter = driver.filter_step
-        monkeypatch.setattr(driver, "filter_step", lambda b, *a: starts.append(b) or real_filter(b, *a))
+
+        def spy_filter(b, *a):
+            starts.append(b)
+            outs.append(real_filter(b, *a))
+            return outs[-1]
+
+        monkeypatch.setattr(driver, "filter_step", spy_filter)
         _filter_run(monkeypatch, use_regime_filter=True)
-        assert len(calls) == len(starts) > 1
+        assert len(calls) == 1 and len(starts) > 1
         pd.testing.assert_series_equal(starts[0], real_ub(calls[0][0], state_index=[0, 1]))
         # ...and from step 2 on, the start is the carried belief, not the prior again.
-        assert not starts[1].equals(real_ub(calls[1][0], state_index=[0, 1]))
+        for prev_out, start in zip(outs, starts[1:]):
+            assert start is prev_out
+
+    def test_the_likelihood_divides_by_the_fits_training_prior(self, monkeypatch):
+        """CR-01 (plan 08-17): at every filtered step ``filter_step``'s 4th argument IS the
+        prior this step's ``_refit_l2`` returned, not a prior computed from the window."""
+        from trading_crab_lib.platform.prediction.regime_filter import unconditional_belief
+
+        returned = []
+
+        def recording_l2(train_features, states, feature_row, cfg):
+            posterior, prior = _varying_fake_refit_l2(train_features, states, feature_row, cfg)
+            returned.append((states, posterior, prior))
+            return posterior, prior
+
+        filter_args = []
+        real_filter = driver.filter_step
+        monkeypatch.setattr(driver, "filter_step", lambda *a: filter_args.append(a) or real_filter(*a))
+        _filter_run(monkeypatch, refit_l2=recording_l2, use_regime_filter=True)
+
+        assert len(filter_args) == len(returned) > 1
+        for (states, posterior, prior), args in zip(returned, filter_args):
+            # Precondition: the old window rule would have passed a different prior here.
+            window = unconditional_belief(states, state_index=[0, 1]).reindex(prior.index)
+            window = window / window.sum()
+            assert float(np.max(np.abs(window.to_numpy() - prior.to_numpy()))) > 1e-6
+            assert args[2] is posterior
+            assert args[3] is prior
+        pd.testing.assert_series_equal(filter_args[0][0], unconditional_belief(returned[0][0], state_index=[0, 1]))
 
     def test_the_tilt_off_ablation_is_never_filtered(self, monkeypatch):
         _, metrics = _filter_run(monkeypatch, use_regime_filter=True, use_regime_tilt=False)

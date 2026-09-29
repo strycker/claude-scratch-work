@@ -324,7 +324,8 @@ def _driver_run(monkeypatch, band, *, degrade_at: int | None = None):
         if degrade_at is not None and len(tf) == degrade_at:
             raise ValueError("forced degrade")
         p = 0.15 + 0.7 * ((len(tf) * 7) % 11) / 10.0
-        return pd.Series({0: p, 1: 1.0 - p})
+        # (posterior, the fit's training prior over its states), as the real _refit_l2 (08-17).
+        return pd.Series({0: p, 1: 1.0 - p}), pd.Series({0: 0.5, 1: 0.5})
 
     monkeypatch.setattr(driver, "_refit_l2", fake_l2)
     calls = []

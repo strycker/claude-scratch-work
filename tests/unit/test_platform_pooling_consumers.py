@@ -192,13 +192,20 @@ def _make_synthetic_frame(
     return monthly_features, asset_returns, cash_returns
 
 
-def _fake_refit_l2(train_features: pd.DataFrame, states: pd.Series, feature_row: pd.DataFrame, cfg: dict) -> pd.Series:
+def _fake_refit_l2(
+    train_features: pd.DataFrame, states: pd.Series, feature_row: pd.DataFrame, cfg: dict
+) -> tuple[pd.Series, pd.Series]:
     """Probabilities over all three regimes, including the sub-floor one.
 
     The sub-floor regime carries real probability mass, so whether its Sharpe is pooled
     genuinely changes the weights — the non-compliance is material, not cosmetic.
+    The second value is the fit's training prior over the same three states (plan
+    08-17); the sub-floor state's ratio is 0.2 / 0.1 = 2, so it keeps its mass.
     """
-    return pd.Series({0: 0.5, 1: 0.3, SUB_FLOOR_REGIME: 0.2})
+    return (
+        pd.Series({0: 0.5, 1: 0.3, SUB_FLOOR_REGIME: 0.2}),
+        pd.Series({0: 0.45, 1: 0.45, SUB_FLOOR_REGIME: 0.10}),
+    )
 
 
 class TestDriverConsumer:

@@ -80,7 +80,7 @@ class TestFitL2IsShared:
         model = fit_nowcaster(X[active], y, n_splits=3)
         expected = pd.Series(model.predict_proba(row[active])[0], index=model.classes_)
 
-        got = driver._refit_l2(features, labels, row, cfg)
+        got, _class_prior = driver._refit_l2(features, labels, row, cfg)
 
         pd.testing.assert_series_equal(got, expected, check_exact=True)
 
@@ -487,7 +487,9 @@ class TestWeeklyScoresTheModelsColumns:
         assert list(model.feature_names_in_) == expected
 
     def test_served_posterior_equals_refit_l2_at_full_dev_history(self, tmp_path, monkeypatch):
-        """No skew: the saved model's posterior equals ``_refit_l2``'s, bit for bit."""
+        """No skew: the saved model's posterior equals ``_refit_l2``'s, bit for bit, and the
+        persisted ``nowcaster_class_prior`` equals the prior ``_refit_l2`` returns, bit for
+        bit (plan 08-17: train/serve parity on the likelihood's prior, not only the posterior)."""
         from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
         from trading_crab_lib.platform.report import serving
 
@@ -498,9 +500,13 @@ class TestWeeklyScoresTheModelsColumns:
         dev, labels = world["dev"], world["labels"]
 
         served = pd.Series(model.predict_proba(dev.iloc[[-1]][cols])[0], index=model.classes_)
-        backtest = driver._refit_l2(dev, labels, dev.iloc[[-1]], world["cfg"])
+        backtest, backtest_prior = driver._refit_l2(dev, labels, dev.iloc[[-1]], world["cfg"])
 
         pd.testing.assert_series_equal(served, backtest, check_exact=True)
+        frame = get_platform_checkpoint_manager().load("nowcaster_class_prior")
+        persisted = pd.Series(frame["prior"].to_numpy(dtype=float), index=[int(v) for v in frame["state"]])
+        assert list(persisted.index) == [int(c) for c in backtest_prior.index]
+        np.testing.assert_array_equal(persisted.to_numpy(), backtest_prior.to_numpy(dtype=float))
 
     @pytest.mark.parametrize(
         "artifact, filename",

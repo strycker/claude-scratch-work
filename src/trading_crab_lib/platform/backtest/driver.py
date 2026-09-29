@@ -34,11 +34,14 @@ plan's ``must_haves``):
 **The Bayes filter (plan 08-08, ROADMAP criterion 1).** With
 ``use_regime_filter=True`` (the default) the nowcaster's raw posterior is filtered
 into a belief — ``prediction/regime_filter.py``'s ``π_t ∝ [π_{t−1} A] · L_t`` —
-carried across steps as a LOOP VARIABLE (``prev_belief``). ``A`` and the class
-prior come from the step's own in-window labels; the cold start is
-``unconditional_belief`` on those labels, the SAME function object
-``joint_driver.py`` and ``report/weekly.py`` use (a cold start that differed
-between train and serve would itself be train/serve skew). The **belief** is what
+carried across steps as a LOOP VARIABLE (``prev_belief``). ``A`` and the cold start
+π_0 come from the step's own in-window labels (``transition_matrix_for`` and
+``unconditional_belief``, the SAME function objects ``joint_driver.py`` and
+``report/weekly.py`` use). ``L_t`` divides the posterior by the step fit's TRAINING
+class prior over ``model.classes_``, the third value ``fit_l2_nowcaster`` returns and
+``_refit_l2`` passes through: the same object serve persists as
+``nowcaster_class_prior`` (CR-01, plan 08-17; one helper, one rule, no train/serve
+skew). No driver computes a likelihood prior from its window labels. The **belief** is what
 ``update_active_regime`` and ``vol_targeted_tilt`` consume. The raw posterior is
 still accumulated into ``per_step_metrics["proba"]`` so raw-posterior churn stays
 measurable as a control; the belief goes into ``per_step_metrics["belief"]`` /
@@ -47,9 +50,7 @@ on a degraded step here (L1 and L2 share one try), so there is no ``A`` to advan
 by and the belief is held with a WARNING (``joint_driver.py``, whose L1 labels
 survive an L2 degrade, advances by ``predict_only_step`` instead). The filter is not
 applied on the ``use_regime_tilt=False`` ablation, whose constant one-state vector
-is not a posterior. Known approximation (plan 08-06): the class prior is the whole
-in-window label distribution, while the nowcaster trains on the D-01 embargoed
-subset — slightly different priors, stated rather than absorbed.
+is not a posterior.
 
 **The no-trade band (plan 08-09, design §5.3's bounded-turnover arm, ``08-A7.md``).**
 The tilt's target passes through ``allocation/hysteresis.py::execute_rebalance`` — the
@@ -393,7 +394,7 @@ def _refit_l2(
     train_states: pd.Series,
     feature_row: pd.DataFrame,
     cfg: dict[str, Any],
-) -> pd.Series:
+) -> tuple[pd.Series, pd.Series]:
     """Refit the L2 nowcaster on ``(train_features, train_states)``, score ``feature_row``.
 
     ``feature_row`` is a single-row DataFrame for the CURRENT decision date
@@ -404,18 +405,21 @@ def _refit_l2(
     ``t``).
 
     Returns:
-        pd.Series: regime_probs indexed by ``model.classes_`` (the class
-        order this step's fit produced).
+        tuple: ``(regime_probs, class_prior)``. ``regime_probs`` is indexed by
+        ``model.classes_`` (the class order this step's fit produced).
+        ``class_prior`` is :func:`training_class_prior` of the rows the fit kept,
+        over the same ``classes_``, exactly as ``fit_l2_nowcaster`` returned it.
+        The Bayes filter's likelihood divides by it (CR-01), in both drivers and
+        at serve.
 
     Raises:
         ValueError: propagated from a degenerate fold fit (RESEARCH.md
             Pitfall 2) — the caller (``run_backtest``) decides whether to
             degrade gracefully (added in Task 3).
     """
-    # 08-17 hands the returned class prior to the filter here; this plan changes serving only.
-    model, active, _class_prior = fit_l2_nowcaster(train_features, train_states, cfg)
+    model, active, class_prior = fit_l2_nowcaster(train_features, train_states, cfg)
     proba = model.predict_proba(feature_row[active])
-    return pd.Series(proba[0], index=model.classes_)
+    return pd.Series(proba[0], index=model.classes_), class_prior
 
 
 def _realized_return(
@@ -599,11 +603,12 @@ def run_backtest(
                     )
             states = pd.Series(0, index=train_index)
             regime_probs = pd.Series({0: 1.0})
+            class_prior = None
         else:
             try:
                 states = _refit_l1(train_features, cfg, frozen_features=frozen_l1_features)
                 feature_row = dev_features.loc[[t]]
-                regime_probs = _refit_l2(train_features, states, feature_row, cfg)
+                regime_probs, class_prior = _refit_l2(train_features, states, feature_row, cfg)
             except _L2_DEGRADE_EXCEPTIONS as exc:
                 log.warning(
                     "Step %s: L2 refit degraded (early small post-embargo window, "
@@ -612,6 +617,7 @@ def run_backtest(
                 degraded = True
                 states = pd.Series(dtype=float)
                 regime_probs = pd.Series(dtype=float)
+                class_prior = None
 
         belief = regime_probs  # what the allocator consumes
         if apply_filter:
@@ -622,9 +628,14 @@ def run_backtest(
                         "belief unchanged (no A to advance by)", t,
                     )
             else:
-                prior = unconditional_belief(states, state_index=state_index)
+                # Two roles, two rules (CR-01): π_0 and A from the in-window labels;
+                # L_t divides by this step fit's training prior, as at serve.
+                if prev_belief is None:
+                    start = unconditional_belief(states, state_index=state_index)
+                else:
+                    start = prev_belief
                 transition = transition_matrix_for(states, state_index=state_index)
-                belief = filter_step(prior if prev_belief is None else prev_belief, transition, regime_probs, prior)
+                belief = filter_step(start, transition, regime_probs, class_prior)
                 prev_belief = belief
 
         if degraded:

@@ -65,10 +65,13 @@ classifier's raw nowcaster posterior is filtered into a belief —
 ``prediction/regime_filter.py``'s ``π_t ∝ [π_{t−1} A] · L_t`` — carried across
 steps as a LOOP VARIABLE (``prev_belief_1`` / ``prev_belief_2``), and the
 **belief**, never the raw posterior, is what ``update_active_regime`` and
-``blend_regime_tilts`` consume. ``A`` and the class prior come from the step's own
-in-window labels (``states_N``, ``train_index`` only); the cold start is
-``unconditional_belief`` on those same labels — the one rule ``driver.py`` and
-``report/weekly.py`` also use. A degraded step has no observation: the belief
+``blend_regime_tilts`` consume. ``A`` and the cold start π_0 come from the step's own
+in-window labels (``states_N``, ``train_index`` only): ``transition_matrix_for`` and
+``unconditional_belief``, the one rule ``driver.py`` and ``report/weekly.py`` also use.
+``L_t`` divides each classifier's posterior by THAT classifier's step-fit training
+class prior over ``model.classes_``, the second value ``_refit_l2`` returns (from
+``driver.fit_l2_nowcaster``, the same object serve persists as
+``nowcaster_class_prior``; CR-01, plan 08-17). A degraded step has no observation: the belief
 advances by ``predict_only_step`` (``π A``) when that step's labels exist, and is
 held with a WARNING when they do not. The raw posterior is still accumulated into
 ``per_step_metrics_N`` (so raw-posterior churn stays measurable as a control); the
@@ -80,12 +83,13 @@ decision-bearing leg for a wiring reason. The gate is a literal
 ``routing == ROUTING_L2_NOWCAST`` test in code, not a property of the data; the
 l1only curve is pinned bit-for-bit with the filter on and off.
 
-A known approximation, stated rather than absorbed (found in plan 08-06): the
-class prior that inverts the posterior into a likelihood is the distribution of
-the WHOLE in-window label series, whereas the nowcaster trains on the D-01
-embargoed subset (trailing ``embargo_months`` dropped, non-finite rows dropped).
-The superset cannot fire the zero-prior raise on a state the nowcaster saw; the
-two priors differ slightly all the same.
+The likelihood's class prior (CR-01, plan 08-17; this replaces the "known
+approximation" first stated in plan 08-06). Inverting a calibrated posterior into
+a likelihood is only valid with the prior of the rows the model was fit on: the
+D-01 embargoed, finite-row block (trailing ``embargo_months`` dropped, non-finite
+rows dropped), over its own ``classes_``. The whole in-window label distribution is
+a different object and can flip a state's evidence, so no driver computes a
+likelihood prior from its window labels, and ``likelihood_ratio`` refuses that shape.
 
 A third inconsistency, ruled on by Glenn 2026-09-24 (plan 08-09, ``08-A7.md``):
 ``update_active_regime`` receives classifier #1's belief ALONE while
@@ -341,20 +345,22 @@ def _filtered_belief(
     prev_belief: pd.Series | None,
     states: pd.Series,
     posterior: pd.Series,
+    class_prior: pd.Series,
     *,
     state_index: list[int],
 ) -> pd.Series:
-    """One l2 filter step for one classifier, from this step's own in-window labels.
+    """One l2 filter step for one classifier.
 
-    ``A`` and the class prior are built from ``states`` (``train_index`` only). The
-    cold start — no previous belief — is ``unconditional_belief`` on the same labels,
-    i.e. the class prior itself: the one rule shared with ``driver.py`` and
-    ``report/weekly.py``.
+    Two roles, two rules (CR-01, as at serve). ``A`` and the cold start π_0 (no
+    previous belief) come from ``states``, this step's in-window labels
+    (``train_index`` only), via ``transition_matrix_for`` and ``unconditional_belief``.
+    The likelihood divides ``posterior`` by ``class_prior``: the training prior this
+    classifier's ``_refit_l2`` returned for this step, over the posterior's own
+    ``classes_``. The rule is shared with ``driver.py`` and ``report/weekly.py``.
     """
-    prior = unconditional_belief(states, state_index=state_index)
     transition = transition_matrix_for(states, state_index=state_index)
-    start = prior if prev_belief is None else prev_belief
-    return filter_step(start, transition, posterior, prior)
+    start = unconditional_belief(states, state_index=state_index) if prev_belief is None else prev_belief
+    return filter_step(start, transition, posterior, class_prior)
 
 
 def _advance_without_observation(
@@ -540,6 +546,8 @@ def run_joint_backtest(
         states_2 = pd.Series(dtype=float)
         probs_1 = pd.Series(dtype=float)
         probs_2 = pd.Series(dtype=float)
+        prior_1: pd.Series | None = None
+        prior_2: pd.Series | None = None
 
         try:
             states_1 = _refit_l1(train_1, cfg, frozen_features=frozen_features_1)
@@ -572,7 +580,7 @@ def run_joint_backtest(
                 # L2 failure against one classifier — a count that reads as
                 # evidence about classifier #2 while measuring something else.
                 try:
-                    probs_1 = _refit_l2(train_1, states_1, dev_features_1.loc[[t]], cfg)
+                    probs_1, prior_1 = _refit_l2(train_1, states_1, dev_features_1.loc[[t]], cfg)
                 except _L2_DEGRADE_EXCEPTIONS as exc:
                     log.warning(
                         "Step %s: classifier #1 L2 refit degraded (RESEARCH Pitfall 2) "
@@ -582,7 +590,7 @@ def run_joint_backtest(
                     n_degraded_1 += 1
                 if not degraded:
                     try:
-                        probs_2 = _refit_l2(train_2, states_2, dev_features_2.loc[[t]], cfg)
+                        probs_2, prior_2 = _refit_l2(train_2, states_2, dev_features_2.loc[[t]], cfg)
                     except _L2_DEGRADE_EXCEPTIONS as exc:
                         log.warning(
                             "Step %s: classifier #2 L2 refit degraded (RESEARCH Pitfall 2) "
@@ -603,8 +611,8 @@ def run_joint_backtest(
                     prev_belief_2, states_2, state_index=state_index_2, t=t, which=2
                 )
             else:
-                belief_1 = _filtered_belief(prev_belief_1, states_1, probs_1, state_index=state_index_1)
-                belief_2 = _filtered_belief(prev_belief_2, states_2, probs_2, state_index=state_index_2)
+                belief_1 = _filtered_belief(prev_belief_1, states_1, probs_1, prior_1, state_index=state_index_1)
+                belief_2 = _filtered_belief(prev_belief_2, states_2, probs_2, prior_2, state_index=state_index_2)
                 prev_belief_1, prev_belief_2 = belief_1, belief_2
                 filtered = True
 

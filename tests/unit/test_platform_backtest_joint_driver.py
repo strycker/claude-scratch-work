@@ -552,17 +552,32 @@ def l2_off():
 
 @pytest.fixture(scope="module")
 def l2_on_spied():
-    """One filter-on l2 run with spies on the tilt, the hysteresis, the filter and the cold start."""
+    """One filter-on l2 run with spies on the tilt, the hysteresis, the filter, the cold
+    start and the REAL ``_refit_l2`` (whose returned priors the filter must divide by)."""
     mp = pytest.MonkeyPatch()
     try:
         tilt = _Spy(mp, jd, "blend_regime_tilts")
         hyst = _Spy(mp, jd, "update_active_regime")
         filt = _Spy(mp, jd, "filter_step")
         cold = _Spy(mp, jd, "unconditional_belief")
+        l2 = _Spy(mp, jd, "_refit_l2")
         curve, meta = _l2_run(routing=jd.ROUTING_L2_NOWCAST, use_regime_filter=True)
     finally:
         mp.undo()
-    return curve, meta, tilt, hyst, filt, cold
+    return curve, meta, tilt, hyst, filt, cold, l2
+
+
+def _filtered_l2_outputs(l2_calls) -> list[tuple[pd.Series, pd.Series, pd.Series]]:
+    """``(states, posterior, class_prior)`` per ``filter_step`` call, in call order.
+
+    A step is filtered only when BOTH classifiers' ``_refit_l2`` returned (a raise is
+    not recorded by ``_Spy``), and then classifier #1 filters before #2. A date with one
+    recorded return is a step where #2 degraded after #1 succeeded: no filter call.
+    """
+    by_date: dict[pd.Timestamp, list] = {}
+    for args, _kw, out in l2_calls:
+        by_date.setdefault(args[2].index[0], []).append((args[1], out[0], out[1]))
+    return [rec for recs in by_date.values() if len(recs) == 2 for rec in recs]
 
 
 class TestRegimeFilterWiring:
@@ -590,7 +605,7 @@ class TestRegimeFilterWiring:
         assert on["degraded"].equals(off["degraded"])
 
     def test_the_tilt_and_the_hysteresis_receive_the_belief_not_the_raw_posterior(self, l2_on_spied):
-        _curve, meta, tilt, hyst, _filt, _cold = l2_on_spied
+        _curve, meta, tilt, hyst, _filt, _cold, _l2 = l2_on_spied
         beliefs_1 = meta["per_step_belief_1"]["proba"]
         beliefs_2 = meta["per_step_belief_2"]["proba"]
         raws_1 = meta["per_step_metrics_1"]["proba"]
@@ -608,14 +623,22 @@ class TestRegimeFilterWiring:
         assert n_differ >= 1, "belief never differed from the raw posterior by more than 1e-6"
 
     def test_cold_start_is_unconditional_belief_on_the_steps_own_labels(self, l2_on_spied):
-        """The first non-degraded step's prior is unconditional_belief(states_1) exactly —
-        not uniform 1/K, not a dropped row."""
-        _curve, _meta, _tilt, _hyst, filt, cold = l2_on_spied
+        """The first non-degraded step's START is unconditional_belief(states_1) exactly —
+        not uniform 1/K, not a dropped row.
+
+        Re-derived in plan 08-17: the old ``start == class_prior`` assertion is gone. Two
+        roles, two rules (08-16's decision, CR-01): π_0 is the in-window label
+        distribution over all K states; the likelihood's class prior is the step fit's
+        TRAINING prior over the posterior's own ``classes_``. They are different objects
+        and need not be equal."""
+        _curve, _meta, _tilt, _hyst, filt, cold, l2 = l2_on_spied
         (f_args, _fkw, _fout) = filt.calls[0]
-        start, _a, _posterior, class_prior = f_args
+        start, _a, posterior, class_prior = f_args
         (c_args, c_kw, c_out) = cold.calls[0]
-        pd.testing.assert_series_equal(start, class_prior)
         pd.testing.assert_series_equal(start, c_out)
+        # The 4th argument is the training prior, indexed exactly by the posterior's classes.
+        assert list(class_prior.index) == list(posterior.index)
+        assert class_prior is _filtered_l2_outputs(l2.calls)[0][2]
         from trading_crab_lib.platform.prediction.regime_filter import unconditional_belief as ub
         pd.testing.assert_series_equal(start, ub(c_args[0], **c_kw))
         k = len(start)
@@ -623,6 +646,27 @@ class TestRegimeFilterWiring:
         # The next classifier-#1 filter call starts from the carried belief, not the prior again.
         (f2_args, _k2, _o2) = filt.calls[2]
         pd.testing.assert_series_equal(f2_args[0], filt.calls[0][2])
+
+    def test_the_likelihood_prior_is_the_step_fits_training_prior(self, l2_on_spied):
+        """CR-01 (plan 08-17), on the REAL ``_refit_l2``: for every filtered step and each
+        classifier, ``filter_step``'s 4th argument IS the prior that classifier's
+        ``_refit_l2`` returned at that step (identity, so #1's prior handed to #2 fails)."""
+        from trading_crab_lib.platform.prediction.regime_filter import unconditional_belief as ub
+
+        _curve, _meta, _tilt, _hyst, filt, _cold, l2 = l2_on_spied
+        expected = _filtered_l2_outputs(l2.calls)
+        assert len(filt.calls) == len(expected) > 2
+        max_gap = 0.0
+        for (f_args, _kw, _out), (states, posterior, prior) in zip(filt.calls, expected):
+            assert f_args[2] is posterior
+            assert f_args[3] is prior
+            assert list(prior.index) == list(posterior.index)
+            seen = sorted({int(v) for v in states.dropna()} | {int(c) for c in prior.index})
+            window = ub(states, state_index=seen).reindex(prior.index)
+            window = window / window.sum()
+            max_gap = max(max_gap, float(np.max(np.abs(window.to_numpy() - prior.to_numpy()))))
+        # Precondition: the window rule would pass a different prior at some step.
+        assert max_gap > 1e-6, f"training prior == restricted window prior everywhere ({max_gap})"
 
     def test_a_degraded_step_advances_the_belief_by_predict_only_not_a_hold(self, monkeypatch):
         """Force classifier #1's L2 to degrade at one mid-run step k. The belief that
