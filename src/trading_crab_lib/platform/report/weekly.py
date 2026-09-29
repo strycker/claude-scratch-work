@@ -54,9 +54,21 @@ full. ``assemble_weekly_report`` now receives the hysteresis output as
 state machine whose output it does not show. ``active_regime`` gates no weight: A7
 closed by rewording, and the report says so beside the value.
 
-Usage::
+**What it scores (plan 08-13).** The nowcaster's own columns (``feature_names_in_``), in
+its own order, from the latest ``monthly_features`` row; never the whole row. When that row
+lacks a model column (a publication lag), the report fails loudly, naming the columns, the
+row's date and the latest month complete in every model column. It does not impute. This is
+the interim behaviour until plan 08-14 applies Glenn's 08-12 ruling.
 
-    python3 -m trading_crab_lib.platform.report.weekly [--send-email]
+Run order::
+
+    # 1. the data (FRED key plus network)
+    python scripts/build_platform_data.py
+    # 2. the serving artifacts (nowcaster, returns_by_regime, asset_returns) from the
+    #    evaluated recipe; NOT a registry trial
+    python -m trading_crab_lib.platform.report.serving
+    # 3. the report
+    python -m trading_crab_lib.platform.report.weekly [--send-email]
 """
 
 from __future__ import annotations
