@@ -192,7 +192,7 @@ def _serving_world(
     *,
     short_hist: bool = False,
     starver: bool = False,
-    nan_in_model_col: bool = False,
+    nan_tail: int = 0,
 ) -> dict:
     """Write synthetic dev + holdout checkpoints into per-test tmp dirs and redirect every
     path the builder and the weekly report touch (checkpoints, holdout, outputs, registry)."""
@@ -244,8 +244,11 @@ def _serving_world(
         start = int(np.flatnonzero(full_idx >= pd.Timestamp("2015-01-31"))[0])
         col.iloc[start:] = mu[states[start:]] + rng.normal(scale=0.6, size=len(full_idx) - start)
         features["starver"] = col
-    if nan_in_model_col:
-        features.iloc[-1, features.columns.get_loc("f_slope")] = np.nan
+    if nan_tail:
+        # A publication lag: the last ``nan_tail`` holdout rows lack the model column f_slope.
+        # Holdout rows only, so the dev fit (and its columns) is unchanged.
+        assert nan_tail <= len(hold_idx)
+        features.iloc[-nan_tail:, features.columns.get_loc("f_slope")] = np.nan
 
     labels = pd.DataFrame({"state": pd.Series(dev_states, index=dev_idx, dtype=int)})
 
@@ -444,23 +447,6 @@ class TestWeeklyScoresTheModelsColumns:
 
         pd.testing.assert_series_equal(served, backtest, check_exact=True)
 
-    def test_a_nan_in_a_model_column_fails_loudly_naming_it(self, tmp_path, monkeypatch):
-        from trading_crab_lib.platform.report import serving, weekly
-
-        world = _serving_world(tmp_path, monkeypatch, nan_in_model_col=True)
-        assert serving.main([]) == 0
-
-        with pytest.raises(ValueError) as excinfo:
-            weekly.main([])
-
-        msg = str(excinfo.value)
-        assert "f_slope" in msg
-        assert "2021-06-30" in msg, "the scored row's date"
-        assert "2021-05-31" in msg, "the latest month complete in every model column"
-        assert not (world["out_dir"] / "reports" / "platform" / "weekly_report.md").exists()
-        for name in ("regime_belief", "hysteresis_state", "executed_weights"):
-            assert not (world["platform_dir"] / f"{name}.parquet").exists(), name
-
     @pytest.mark.parametrize(
         "artifact, filename",
         [
@@ -510,3 +496,172 @@ class TestWeeklyScoresTheModelsColumns:
         pd.testing.assert_frame_equal(first_book, second_book)
         assert _trades_section(first_report) == _trades_section(second_report)
         assert "- SPY:" in _trades_section(first_report) and "- TLT:" in _trades_section(first_report)
+
+
+# ── Glenn's 08-12 rulings at serve (plan 08-14): q1-c and q2-ii ──────────────
+#
+# 08-SERVING.md §2.1 (q1-c): score the newest month observed in EVERY model column, say so on
+# the page, step the belief and the band on that month, and refuse (before any save) when it
+# is more than MAX_SCORING_LAG_MONTHS = 3 month-ends behind the newest monthly_features row.
+# §2.2 (q2-ii): print the exact count of distinct posteriors across every full-span month
+# complete in the model columns, directly under the distribution; never withhold on it.
+
+_SCORED_STATE = ("regime_belief", "hysteresis_state", "executed_weights")
+
+
+def _report_path(world: dict) -> Path:
+    return world["out_dir"] / "reports" / "platform" / "weekly_report.md"
+
+
+def _assert_nothing_written(world: dict) -> None:
+    assert not _report_path(world).exists()
+    for name in _SCORED_STATE:
+        assert not (world["platform_dir"] / f"{name}.parquet").exists(), name
+
+
+class _ScoringProxy:
+    """Delegates to the world's REAL fitted nowcaster and records every frame handed to
+    ``predict_proba``. With ``constant`` set it returns that one vector for every row: a
+    deliberately input-independent model, built by wrapping the real one (the q2 degenerate
+    arm; the real world's posterior varies, which the 08-13 e2e asserts)."""
+
+    def __init__(self, model, constant=None):
+        self._model = model
+        self._constant = constant
+        self.calls: list[pd.DataFrame] = []
+
+    def __getattr__(self, name):
+        return getattr(self._model, name)
+
+    def predict_proba(self, X):
+        self.calls.append(X.copy())
+        proba = self._model.predict_proba(X)
+        if self._constant is None:
+            return proba
+        return np.tile(np.asarray(self._constant, dtype=float), (len(X), 1))
+
+
+def _install_proxy(monkeypatch, *, constant: bool = False) -> list:
+    """Route weekly's nowcaster load through ``_ScoringProxy``; the returned list receives it."""
+    from trading_crab_lib.platform.report import weekly
+
+    real_load = weekly._load_serving_artifact
+    holder: list[_ScoringProxy] = []
+
+    def load(cm, name, *, model=False):
+        obj = real_load(cm, name, model=model)
+        if not model:
+            return obj
+        cols = list(obj.feature_names_in_)
+        fixed = None
+        if constant:
+            first = load_full_span_frame()[cols].dropna(how="any").iloc[[0]]
+            fixed = obj.predict_proba(first)[0]
+        holder.append(_ScoringProxy(obj, constant=fixed))
+        return holder[-1]
+
+    def load_full_span_frame():
+        from trading_crab_lib.platform.honesty.holdout import load_full_span
+
+        return load_full_span("monthly_features")
+
+    monkeypatch.setattr(weekly, "_load_serving_artifact", load)
+    return holder
+
+
+class TestQ1cLatestCompleteMonth:
+    def test_q1c_scores_the_latest_complete_month_and_names_the_lag(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch, nan_tail=2)
+        assert serving.main([]) == 0
+        holder = _install_proxy(monkeypatch)
+        assert weekly.main([]) == 0
+
+        report = _report_path(world).read_text()
+        assert "Scored as of 2021-04-30" in report
+        assert "2021-05-31 lacks f_slope" in report and "2021-06-30 lacks f_slope" in report
+        assert "Nothing is imputed." in report
+        heading = report.index("## Current Regime Distribution")
+        assert heading < report.index("Scored as of") < report.index("- regime ")
+
+        # The spy: the one scored row IS the observed row, value for value. An imputation, a
+        # forward-fill or the wrong row all fail here.
+        proxy = holder[-1]
+        cols = list(proxy.feature_names_in_)
+        assert pd.isna(world["full"].iloc[-1]["f_slope"]), "precondition: the newest row is ragged"
+        scored = [c for c in proxy.calls if len(c) == 1]
+        assert len(scored) == 1
+        pd.testing.assert_frame_equal(
+            scored[0], world["full"].loc[[pd.Timestamp("2021-04-30")], cols], check_exact=True
+        )
+
+    @pytest.mark.parametrize("nan_tail, as_of", [(2, "2021-04-30"), (0, "2021-06-30")])
+    def test_q1c_belief_and_band_step_on_the_scored_month(self, tmp_path, monkeypatch, nan_tail, as_of):
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving, weekly
+
+        _serving_world(tmp_path, monkeypatch, nan_tail=nan_tail)
+        assert serving.main([]) == 0
+        assert weekly.main([]) == 0
+
+        cm = get_platform_checkpoint_manager()
+        assert weekly.load_regime_belief(cm).name == pd.Timestamp(as_of)
+        executed = cm.load("executed_weights")
+        assert not executed.empty
+        assert set(pd.to_datetime(executed["as_of"])) == {pd.Timestamp(as_of)}
+
+    def test_q1c_a_complete_latest_row_is_scored_as_itself_with_no_lag(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        assert weekly.main([]) == 0
+
+        report = _report_path(world).read_text()
+        assert "Scored as of 2021-06-30" in report
+        assert " lacks " not in report
+        assert "Nothing is imputed." in report
+
+    def test_q1c_no_complete_month_raises(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        # After the build: every full-span month lacks f_slope, so no month is scorable.
+        ragged = world["full"].copy()
+        ragged["f_slope"] = np.nan
+        monkeypatch.setattr(weekly, "load_full_span", lambda name: ragged)
+
+        with pytest.raises(ValueError) as excinfo:
+            weekly.main([])
+
+        msg = str(excinfo.value)
+        assert "f_slope" in msg and "f_level" in msg, "the message names the model columns"
+        assert "impute" in msg
+        _assert_nothing_written(world)
+
+    def test_q1c_staleness_cap_refuses_a_month_more_than_3_behind(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        assert weekly.MAX_SCORING_LAG_MONTHS == 3
+        world = _serving_world(tmp_path, monkeypatch, nan_tail=4)
+        assert serving.main([]) == 0
+
+        with pytest.raises(ValueError) as excinfo:
+            weekly.main([])
+
+        msg = str(excinfo.value)
+        assert "2021-02-28" in msg, "the latest complete month"
+        assert "2021-06-30" in msg, "the newest row"
+        assert "4 month-ends" in msg and "MAX_SCORING_LAG_MONTHS = 3" in msg
+        _assert_nothing_written(world)
+
+    def test_q1c_staleness_cap_boundary_exactly_3_behind_serves(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch, nan_tail=3)
+        assert serving.main([]) == 0
+        assert weekly.main([]) == 0
+        assert "Scored as of 2021-03-31" in _report_path(world).read_text()
+

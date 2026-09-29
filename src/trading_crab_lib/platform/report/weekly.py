@@ -54,11 +54,13 @@ full. ``assemble_weekly_report`` now receives the hysteresis output as
 state machine whose output it does not show. ``active_regime`` gates no weight: A7
 closed by rewording, and the report says so beside the value.
 
-**What it scores (plan 08-13).** The nowcaster's own columns (``feature_names_in_``), in
-its own order, from the latest ``monthly_features`` row; never the whole row. When that row
-lacks a model column (a publication lag), the report fails loudly, naming the columns, the
-row's date and the latest month complete in every model column. It does not impute. This is
-the interim behaviour until plan 08-14 applies Glenn's 08-12 ruling.
+**What it scores (plans 08-13, 08-14).** The nowcaster's own columns (``feature_names_in_``),
+in its own order; never the whole row. Under Glenn's 08-12 ruling q1-c (08-SERVING.md §2.1) it
+scores the latest month observed in every model column, prints "Scored as of <month>" naming
+the model columns each newer row lacks (a publication lag), steps the belief and the band on
+that month, and refuses (ValueError, before any save) when that month is more than
+``MAX_SCORING_LAG_MONTHS`` = 3 month-ends behind the newest ``monthly_features`` row. It
+never imputes.
 
 Run order::
 
@@ -109,6 +111,11 @@ log = logging.getLogger(__name__)
 # `report:` section) — used only when cfg omits the key (defensive .get() pattern).
 _DEFAULT_TRADE_THRESHOLD_PCT = 0.03
 _DEFAULT_MIN_OBS_FLAG = 6
+
+# Ruling q1-c (Glenn, 2026-09-29; 08-SERVING.md §2.1): the latest month complete in the model
+# columns may be at most this many month-ends behind the newest monthly_features row. Measured
+# against the data, not the wall clock; exactly 3 behind serves, 4 refuses.
+MAX_SCORING_LAG_MONTHS = 3
 
 _BELIEF_CHECKPOINT = "regime_belief"
 _EXECUTED_CHECKPOINT = "executed_weights"
@@ -289,6 +296,7 @@ def assemble_weekly_report(
     accounts_dir: Path | None = None,
     min_obs_flag: int = _DEFAULT_MIN_OBS_FLAG,
     trade_threshold_pct: float = _DEFAULT_TRADE_THRESHOLD_PCT,
+    scored_as_of_note: str | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -304,7 +312,9 @@ def assemble_weekly_report(
     ``active_regime`` is ``update_active_regime``'s output, passed in — plan 08-09
     removed the internal ``probs.idxmax()`` recomputation. ``None`` is the neutral
     posture. ``target_weights`` should be the EXECUTED book (after the no-trade band);
-    ``no_trade_band`` names the band so the report says so.
+    ``no_trade_band`` names the band so the report says so. ``scored_as_of_note`` (ruling
+    q1-c) is rendered directly under the distribution heading: the month scored and the
+    model columns each newer row lacks.
     """
     probs = pd.Series(regime_probs, dtype=float)
 
@@ -313,6 +323,9 @@ def assemble_weekly_report(
     # ── 1. Current regime distribution ────────────────────────────────────
     lines.append("## Current Regime Distribution")
     lines.append("")
+    if scored_as_of_note:
+        lines.append(scored_as_of_note)
+        lines.append("")
     if probs.empty:
         lines.append("(no regime probabilities available)")
     else:
@@ -442,15 +455,13 @@ def _load_serving_artifact(cm, name: str, *, model: bool = False):
         ) from exc
 
 
-def _model_row(nowcaster, monthly_features: pd.DataFrame) -> pd.DataFrame:
-    """The latest row, restricted to the model's own columns in the model's own order.
+def _model_columns(nowcaster, monthly_features: pd.DataFrame) -> list[str]:
+    """The model's own columns (``feature_names_in_``), in its own order.
 
     Never the whole row: the served model is fit on ``fit_l2_nowcaster``'s active columns,
     and a row carrying any other column is not what it was trained on. Raises ValueError,
-    before any state is loaded or saved, when the model declares no columns, when a model
-    column is absent from ``monthly_features``, or when the latest row has a NaN in a model
-    column. The report does not impute. (Interim behaviour for the NaN case: plan 08-14
-    applies Glenn's 08-12 ruling, q1-c.)
+    before any state is loaded or saved, when the model declares no columns or when a model
+    column is absent from ``monthly_features``.
     """
     names = getattr(nowcaster, "feature_names_in_", None)
     if names is None:
@@ -465,18 +476,57 @@ def _model_row(nowcaster, monthly_features: pd.DataFrame) -> pd.DataFrame:
             f"monthly_features lacks {len(absent)} of the nowcaster's {len(cols)} columns: {absent}. "
             f"Rebuild the data and the serving artifacts ({_RUN_ORDER})."
         )
-    row = monthly_features.iloc[[-1]][cols]
-    nan_cols = [c for c in cols if pd.isna(row[c].iloc[0])]
-    if nan_cols:
-        complete = monthly_features[cols].dropna()
-        latest_complete = pd.Timestamp(complete.index[-1]).date().isoformat() if len(complete) else "none"
+    return cols
+
+
+def _scored_row(monthly_features: pd.DataFrame, cols: list[str]) -> tuple[pd.DataFrame, str]:
+    """The row the report scores, and the "Scored as of" note that says which (ruling q1-c).
+
+    Glenn's 08-12 ruling q1-c (08-SERVING.md §2.1): score the NEWEST month observed in
+    every model column, exactly as observed — ``monthly_features[cols].dropna(how="any")``,
+    last row. Nothing is imputed: no forward-fill, no interpolation, no fill from another
+    series. Raises ValueError, before any state is loaded or saved, when no month is complete
+    in the model columns, or when the latest complete month is more than
+    ``MAX_SCORING_LAG_MONTHS`` month-ends behind the newest ``monthly_features`` row (the
+    staleness cap is measured against the data, not the wall clock).
+    """
+    complete = monthly_features[cols].dropna(how="any")
+    if complete.empty:
         raise ValueError(
-            f"The latest monthly_features row ({pd.Timestamp(row.index[0]).date().isoformat()}) has NaN in "
-            f"{len(nan_cols)} of the nowcaster's {len(cols)} model columns: {nan_cols}. The latest month "
-            f"observed in every model column is {latest_complete}. The report does not impute, so it "
-            "refuses to score this row (interim behaviour until plan 08-14 applies the 08-12 ruling)."
+            f"No monthly_features row is observed in all {len(cols)} of the nowcaster's model columns "
+            f"{cols}, so there is no month the report can score. The report does not impute. "
+            f"Rebuild the data ({_RUN_ORDER})."
         )
-    return row
+    as_of = pd.Timestamp(complete.index[-1])
+    newest = pd.Timestamp(monthly_features.index[-1])
+    lag = _months_between(as_of, newest)
+    newer = monthly_features.loc[monthly_features.index > as_of, cols]
+    lacking = [
+        (pd.Timestamp(date).date().isoformat(), [c for c in cols if pd.isna(row[c])])
+        for date, row in newer.iterrows()
+    ]
+    if lag > MAX_SCORING_LAG_MONTHS:
+        detail = "; ".join(f"{d} lacks {', '.join(missing)}" for d, missing in lacking)
+        raise ValueError(
+            f"The latest month observed in every one of the nowcaster's {len(cols)} model columns is "
+            f"{as_of.date().isoformat()}, {lag} month-ends behind the newest monthly_features row "
+            f"({newest.date().isoformat()}). That exceeds the staleness cap, MAX_SCORING_LAG_MONTHS = "
+            f"{MAX_SCORING_LAG_MONTHS} (ruling q1-c, 08-SERVING.md §2.1), so the report refuses to serve "
+            f"guidance this old. Newer rows: {detail}. The report does not impute."
+        )
+    note = (
+        f"Scored as of {as_of.date().isoformat()}, the latest month observed in all {len(cols)} of the "
+        "nowcaster's model columns"
+    )
+    if lacking:
+        note += (
+            f" ({lag} month-end{'s' if lag != 1 else ''} behind the newest row). Newer rows lack model "
+            "columns: " + "; ".join(f"{d} lacks {', '.join(missing)}" for d, missing in lacking) + "."
+        )
+    else:
+        note += " (the newest row)."
+    note += " Nothing is imputed."
+    return complete.iloc[[-1]], note
 
 
 def _build_report_inputs(cfg: dict, cm=None) -> dict:
@@ -512,9 +562,11 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     returns_by_regime = _load_serving_artifact(cm, "returns_by_regime")
     asset_returns = _load_serving_artifact(cm, "asset_returns")
 
-    # Score the model's own columns, never the whole row; validated before any state
-    # load or save, so a refusal writes nothing.
-    proba = nowcaster.predict_proba(_model_row(nowcaster, monthly_features))[0]
+    # Score the model's own columns, never the whole row, on the latest month complete in
+    # them (ruling q1-c); validated before any state load or save, so a refusal writes nothing.
+    cols = _model_columns(nowcaster, monthly_features)
+    row, scored_as_of_note = _scored_row(monthly_features, cols)
+    proba = nowcaster.predict_proba(row)[0]
     regime_probs = pd.Series(proba, index=nowcaster.classes_)
 
     allocation_cfg = cfg.get("allocation", {})
@@ -524,7 +576,9 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     # Bayes filter (plan 08-08): load BEFORE save, immediately before the hysteresis,
     # so the belief the hysteresis sees is this run's.
     state_index = list(range(int(cfg.get("labeling", {}).get("K", 5))))
-    as_of = pd.Timestamp(monthly_features.index[-1])
+    # The SCORED month, not the newest row: the belief and the band step once per scored
+    # month, so a re-run while the newest row stays ragged neither double-counts nor compounds.
+    as_of = pd.Timestamp(row.index[0])
     prev_belief = load_regime_belief(cm)  # load BEFORE save (Pitfall 3)
     regime_belief = advance_regime_belief(
         prev_belief, regime_labels, regime_probs, state_index=state_index, as_of=as_of
@@ -566,6 +620,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         "cash": executed["cash"],
         "pre_band_target_weights": tilt["weights"],
         "no_trade_band": no_trade_band,
+        "scored_as_of_note": scored_as_of_note,
     }
 
 
@@ -605,6 +660,7 @@ def main(argv: list[str] | None = None) -> int:
         no_trade_band=inputs.get("no_trade_band"),
         min_obs_flag=report_cfg.get("min_obs_flag", _DEFAULT_MIN_OBS_FLAG),
         trade_threshold_pct=report_cfg.get("trade_threshold_pct", _DEFAULT_TRADE_THRESHOLD_PCT),
+        scored_as_of_note=inputs.get("scored_as_of_note"),
     )
     report_path = write_weekly_report(markdown)
 
