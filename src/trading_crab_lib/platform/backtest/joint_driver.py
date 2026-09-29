@@ -440,6 +440,11 @@ def run_joint_backtest(
         use_regime_filter: apply the Bayes filter under :data:`ROUTING_L2_NOWCAST`
             (plan 08-08). Has no effect under :data:`ROUTING_L1_ONLY`, where the
             filter is never applied. ``False`` reproduces the pre-08-08 l2 leg.
+            The registry row records the EFFECTIVE flag,
+            ``use_regime_filter and routing == ROUTING_L2_NOWCAST``, as
+            ``config["use_regime_filter"]`` (CR-05). A joint row WITHOUT the key
+            ran unfiltered: every such row is ``ROUTING_L1_ONLY``, where the
+            filter is inert.
         min_train: overrides ``cfg["backtest"]["min_train_months"]``.
         cash_returns: the cash sleeve's own return series (review F4).
         registry_path: ledger path, or ``registry.NO_REGISTRY`` for zero rows.
@@ -694,7 +699,9 @@ def run_joint_backtest(
 
     trial_config = {
         "phase": "07-regime-representation",
-        "plan": "07-11",
+        # The plan that BUILT this harness, true for every row it writes. The run's own
+        # plan is its trial_tag; historical rows carry "plan": "07-11" for this reason.
+        "harness_plan": "07-11",
         "criterion": 7,
         "routing": routing,
         "blend_weight_1": float(blend_weight_1),
@@ -710,6 +717,9 @@ def run_joint_backtest(
     if no_trade_band is not None:
         # Attributable: a banded run is a different configuration (08-A7.md).
         trial_config["no_trade_band"] = no_trade_band
+    # The EFFECTIVE flag, the same expression the metadata carries: the filter acts
+    # under l2 only (CR-05).
+    trial_config["use_regime_filter"] = bool(use_regime_filter and routing == ROUTING_L2_NOWCAST)
     if trial_tag is not None:
         trial_config["trial_tag"] = trial_tag
     # Every run of this harness is one ARM of the joint-lift ablation (a blend weight of

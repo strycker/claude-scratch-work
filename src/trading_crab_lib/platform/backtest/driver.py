@@ -511,7 +511,11 @@ def run_backtest(
             identical ``config`` payload) — the tag is provenance, not a key.
         use_regime_filter: filter the posterior into a belief and hand the
             belief to the hysteresis and the tilt (plan 08-08). ``False``
-            reproduces the pre-08-08 curve exactly.
+            reproduces the pre-08-08 curve exactly. The registry row records
+            the EFFECTIVE flag, ``use_regime_filter and use_regime_tilt``, as
+            ``config["use_regime_filter"]`` (CR-05). A ``run_backtest`` row
+            WITHOUT the key ran unfiltered: every such row in both ledgers
+            predates ec354b1 (2026-09-23T20:10:50Z), when the filter arrived.
 
     Returns:
         tuple[pd.DataFrame, dict[str, list]]: ``(equity_curve, per_step_metrics)``.
@@ -719,6 +723,8 @@ def run_backtest(
     if no_trade_band is not None:
         # Attributable: a banded run is a different configuration (08-A7.md).
         trial_config["no_trade_band"] = no_trade_band
+    # The EFFECTIVE flag: the filter changes the curve only when the tilt is on (CR-05).
+    trial_config["use_regime_filter"] = bool(apply_filter)
     if trial_tag is not None:
         # 07-01 Task 2: provenance only, never a dedup key — the registry is
         # append-only and does not deduplicate identical configs (confirmed
