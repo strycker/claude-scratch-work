@@ -652,6 +652,95 @@ class TestTheServedClassPrior:
         _assert_nothing_written(world)
 
 
+# ── CR-01 on the REAL served model (tracked dev data, session copy, read-only) ──
+#
+# 08-SERVING.md §1 items 3, 5, 6 and 08-VERIFICATION.md gap 1 recorded these numbers. The
+# session fixture in tests/conftest.py serves COPIES of data/checkpoints/platform, so this reads
+# the tracked data without touching it. No holdout path is opened; nothing is saved.
+
+#: 08-SERVING.md §1 item 6: the served posterior on the last complete dev month, exact floats.
+_RECORDED_POSTERIOR = [0.41800356506238856, 0.5639928698752229, 0.018003565062388593]
+#: 08-SERVING.md §1 item 3: dev label counts over 695 months, 1963-02-28 -> 2020-12-31.
+_RECORDED_LABEL_COUNTS = {0: 40, 1: 228, 2: 71, 3: 200, 4: 84, 5: 72}
+#: 08-SERVING.md §1 item 5: the fit's training block, 153 rows, 2007-04-30 -> 2019-12-31.
+_RECORDED_TRAIN_COUNTS = {0: 11, 3: 137, 4: 5}
+
+
+class TestTheServedModelOnTheTrackedData:
+    def test_the_training_prior_flips_state_3s_evidence_and_the_served_belief(self, monkeypatch):
+        import trading_crab_lib.platform.honesty.holdout as holdout_mod
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.config import load_platform_config
+        from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+        from trading_crab_lib.platform.prediction.regime_filter import transition_matrix_for, unconditional_belief
+        from trading_crab_lib.platform.report import serving, weekly
+
+        def poisoned(*_a, **_k):
+            raise AssertionError("the real-data CR-01 test touched a holdout path")
+
+        monkeypatch.setattr(holdout_mod, "get_holdout_checkpoint_manager", poisoned)
+        monkeypatch.setattr(holdout_mod, "load_full_span", poisoned)
+        monkeypatch.setattr(weekly, "load_full_span", poisoned)
+
+        cutoff = pd.Timestamp(DEFAULT_HOLDOUT_CUTOFF)
+        cm = get_platform_checkpoint_manager()
+        dev, _ = split_by_holdout_boundary(cm.load("monthly_features"), cutoff=DEFAULT_HOLDOUT_CUTOFF)
+        label_frame, _ = split_by_holdout_boundary(cm.load("regime_labels"), cutoff=DEFAULT_HOLDOUT_CUTOFF)
+        labels = label_frame["state"]
+        assert dev.index.max() <= cutoff and labels.index.max() <= cutoff
+        cfg = load_platform_config()
+        states = list(range(int(cfg["labeling"]["K"])))
+        assert states == [0, 1, 2, 3, 4, 5]
+
+        # The fit's own training prior: the rows it was fit on, over classes_ [0, 3, 4].
+        model, active, prior = driver.fit_l2_nowcaster(dev, labels, cfg)
+        assert [int(c) for c in model.classes_] == [0, 3, 4]
+        assert list(prior.index) == [0, 3, 4]
+        assert prior.to_dict() == pytest.approx({k: v / 153 for k, v in _RECORDED_TRAIN_COUNTS.items()}, rel=1e-12)
+        block = serving._training_block(dev, labels, active, cfg)
+        assert len(block) == 153
+        assert block.index.min() == pd.Timestamp("2007-04-30") and block.index.max() == pd.Timestamp("2019-12-31")
+
+        # The whole-label prior (the pre-CR-01 rule).
+        assert len(labels) == 695
+        label_prior = unconditional_belief(labels, state_index=states)
+        assert label_prior.to_dict() == pytest.approx({k: v / 695 for k, v in _RECORDED_LABEL_COUNTS.items()}, rel=1e-12)
+
+        # The served posterior on the last dev row complete in the model's columns. A fitted
+        # float: compared by 08-11's portable rule (rel 1e-9, abs 0), never == (G-08-1).
+        row = dev[active].dropna(how="any").iloc[[-1]]
+        post = pd.Series(model.predict_proba(row)[0], index=[int(c) for c in model.classes_])
+        assert list(post) == pytest.approx(_RECORDED_POSTERIOR, rel=1e-9, abs=0)
+
+        # State 3's likelihood ratio: evidence AGAINST under the training prior, FOR under
+        # the label prior.
+        ratio_train = post[3] / prior[3]
+        ratio_label = post[3] / label_prior[3]
+        assert ratio_train < 1.0 and ratio_train == pytest.approx(0.63, abs=5e-3)
+        assert ratio_label > 1.0 and ratio_label == pytest.approx(1.96, abs=5e-3)
+
+        # The new rule, through the served path's own function: cold start, one step.
+        belief = weekly.advance_regime_belief(
+            None, labels, post, class_prior=prior, state_index=states, as_of=labels.index[-1]
+        )
+        assert int(belief.idxmax()) == 0
+        assert belief[0] == pytest.approx(0.300, abs=5e-3)
+        assert belief[1] == pytest.approx(0.293, abs=5e-3)
+        assert belief[3] == pytest.approx(0.163, abs=5e-3)
+
+        # The old rule by explicit arithmetic (not through filter_step): normalize((pi_0 A) x r_old),
+        # r_old = post / label_prior on classes_ and 1.0 elsewhere.
+        pi0 = label_prior.to_numpy(dtype=float)
+        a = transition_matrix_for(labels, state_index=states).to_numpy(dtype=float)
+        r_old = np.ones(len(states))
+        for state in post.index:
+            r_old[state] = post[state] / label_prior[state]
+        old = (pi0 @ a) * r_old
+        old = old / old.sum()
+        assert int(np.argmax(old)) == 3
+        assert old[3] == pytest.approx(0.369, abs=5e-3)
+
+
 # ── Glenn's 08-12 rulings at serve (plan 08-14): q1-c and q2-ii ──────────────
 #
 # 08-SERVING.md §2.1 (q1-c): score the newest month observed in EVERY model column, say so on
