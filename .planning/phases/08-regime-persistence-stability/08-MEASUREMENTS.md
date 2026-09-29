@@ -360,3 +360,102 @@ That recorded-number shape is the one D-07 named. It recurred twice more in this
 - The orchestrator is not exempt from the defect it polices. All five corrections listed in §6
   under "the orchestrator's own over-claims" are to statements the orchestrator made.
 - This record claims no better than that.
+
+## 11. AMENDMENT 2026-09-29 — CR-01: the filter's likelihood prior (plans 08-15..08-19)
+
+§1–§10 above stand as written. Every old number in them was measured on the pre-CR-01 filter.
+This section records, old → new, what the fix moved and what it did not. No old number is
+replaced. Every re-measurement below ran with `NO_REGISTRY`, and **registry rows spent: 0**.
+
+### 11.1 What changed
+
+Before the fix, the Bayes filter turned the L2 nowcaster's posterior into a likelihood by
+dividing it by the **whole in-window label distribution**, restricted to the posterior's classes.
+The posterior is calibrated against the class frequencies of the rows the model was **fit on**,
+which is a different distribution (08-REVIEW CR-01). Now L_t divides by each step fit's
+**training class prior**. `fit_l2_nowcaster` returns that prior (08-16). Serve persists it as
+`nowcaster_class_prior` (08-16), and both backtest drivers pass it to `filter_step` (08-17). π_0
+and A are unchanged: both still come from the in-window labels over all K states. A likelihood
+prior of the old shape (mass on a state the posterior lacks, or not summing to one over the
+posterior's classes) is now **refused**, not renormalized (08-17).
+
+### 11.2 What did NOT change, each with its proof
+
+| quantity | value | proof (plan 08-19, final source) |
+|---|---|---|
+| **the decision-bearing l1only record** | byte-unchanged | Three forms. **(a)** `git diff --quiet b7193fd --` over the six committed l1only files (`measurement_l1only.json`, `diagnostics_l1only.json`, `joint_lift_{baseline,joint}_l1only.parquet`, `joint_lift_probs_{1,2}_l1only.parquet`): clean. **(b)** `run_joint_lift.py --routing l1 --dry-run` (`NO_REGISTRY`) reproduced all four l1only parquets **`cmp`-identical**. **(c)** In the dry-run record, every field equals the committed record exactly: `lift` (28 keys), `baseline_leg` and `joint_leg` (27 keys each), `deflated_sharpe.{baseline,joint}` (9 keys each) and the 11 configuration keys (`use_regime_filter` False). The exceptions are the fields a dry run must differ in by construction, and they are listed rather than hidden: `decision_bearing` True → False; `dry_run` False → True; the `registry` block (42 → 44 with 2 rows and the 08-10 tags → 44 → 44 with 0 rows and "(NO_REGISTRY)"); `quality_tier.governs` True → False and its `verdict`; `n_trials_read_at` (the read time); `registry_row_written` True → False |
+| Track A | **246 / 587** (#1) and **24 / 587** (#2), 588 steps 1972-01-31 → 2020-12-31 | `state_1` and `state_2` in the new l2 curves are identical to the committed ones (`assert_series_equal`, exact); the new record reads 246 and 24 |
+| B0 (raw posterior argmax, l2) | **221 / 487** and **66 / 487**, 488 rows 1974-02-28 → 2020-12-31 | `joint_lift_probs_{1,2}_l2.parquet` from the re-run are `cmp`-identical to the committed files (and value-identical, `check_exact`); the regenerated diagnostics read 221 and 66 |
+| argmax(posterior) ≠ `state_N` (l2 series identity) | **184 / 488** (#1) and **276 / 488** (#2) | unchanged in the regenerated diagnostics (the posterior and the states did not move) |
+| degraded steps | **100 / 588** (87 on #1, 13 on #2) | the `degraded` column in both new l2 curves is identical to the committed one |
+| registry | **44**, sha256 `c957e8fdb360f04cebd36a6ac19f7efe5c036d098152a5b0c1694f2e73c088ad` | read before and after every run in 08-19 |
+
+In the new l2 curves, only `return`, `turnover`, `cost`, `scale` and `active_regime` differ. The
+first differing date is **1974-02-28** for `return`, `turnover`, `cost` and `scale` (the first
+non-degraded l2 step), and **1976-11-30** for `active_regime`.
+
+### 11.3 Old → new
+
+All L2 numbers here are **observational** (`NO_REGISTRY`, firewalled; §3). The curve window is
+**588 steps, 1972-01-31 → 2020-12-31, 100 degraded**. The matrix window is **488 non-degraded
+rows (487 adjacent pairs), 1974-02-28 → 2020-12-31**.
+
+| quantity | old (08-08 / 08-10) | **new (08-19)** | denominator and window |
+|---|---|---|---|
+| B1 (belief argmax churn), #1 | 81 / 487 = 16.63% | **64 / 487 = 13.14%** | 487 pairs, 488 rows, 1974-02-28 → 2020-12-31, 100 degraded |
+| B1, #2 | 30 / 487 = 6.16% | **27 / 487 = 5.54%** | same |
+| argmax(belief) ≠ argmax(posterior), #1 | 273 / 488 | **380 / 488** | 488 rows, same window |
+| argmax(belief) ≠ argmax(posterior), #2 | 155 / 488 | **178 / 488** | same |
+| belief max-prob clearing 0.70, #1 | 307 / 488 | **273 / 488** | 488 rows, same window; act threshold 0.70 |
+| belief max-prob clearing 0.70, #2 | 415 / 488 | **408 / 488** | same |
+| l2 `wealth_delta` (joint − #1-alone, nats) | −0.300608 (−0.30060767886336137) | **−0.296783** (−0.2967834422163289) | 588 steps, 1972-01-31 → 2020-12-31, 100 degraded |
+| l2 `dd_delta` | +0.061011 (+0.06101144035366535) | **+0.063258** (+0.0632580887963281) | same |
+| l2 terminal log wealth, #1-alone / joint | 4.228027 / 3.927420 | **4.262866 / 3.966083** | same |
+| l2 max drawdown, #1-alone / joint | −0.254700 (32 mo) / −0.193688 (68 mo) | **−0.267290 (33 mo) / −0.204032 (33 mo)** | same |
+| l2 mean monthly turnover, #1-alone / joint | 0.141119 / 0.068775 | **0.139896 / 0.070970** | 588 of 588 steps |
+| l2 total cost, #1-alone / joint | 0.082978 / 0.040440 | **0.082259 / 0.041730** | same |
+| l2 annualized Sharpe, #1-alone / joint | 1.263438 / 1.157769 | **1.178896 / 1.159271** | 588 months |
+| l2 DSR, #1-alone | 6.520758e-35, `n_trials` 42, hurdle `expected_max_sharpe(42, 1.0)` = 2.208694 | **3.978469e-46**, `n_trials` 44, hurdle `expected_max_sharpe(44, 1.0)` = 2.226891 | 588 months; `sharpe_variance` 1.0 (placeholder) |
+| l2 DSR, joint | 1.018363e-45, 42, 2.208694 | **3.171019e-48**, 44, 2.226891 | same |
+| S-1, #1 (belief vs full-sample reference) | **1** negative offset: 0 LEADs, 1 held-through miss at 300 (1988-02-29, −6) | **0** negative offsets | 25 reference transitions; belief resolved **20 → 18** of 25 |
+| S-1, #2 | **3** negative offsets, all LEADs: 236 (1982-09-30, −1), 387 (1995-04-30, −12), 596 (2012-09-30, −31) | **2**, both LEADs: 387 (1995-04-30, −12), 596 (2012-09-30, **−32**) | 12 reference transitions; 11 of 12 resolved (unchanged) |
+| S-1 adjudication | 4 of 4 cuts at p−1 bit-identical (08-08: 1982-08-31, 1988-01-31, 1995-03-31, 2012-08-31) | **3 of 3** cuts bit-identical by the script's test **and** by a NaN-aware exact frame comparison: 1995-03-31 and 2012-08-31 (p−1 of the two LEADs) and 1982-08-31 (the standing spot-check). `n_break` 0 | `s1_truncation_invariance.json` (plan 08-19) |
+| S-3 belief `transition_window_accuracy`, #1 overall / transition | 44/488 = 0.0902 / 20/99 = 0.2020 | **32/488 = 0.0656 / 18/99 = 0.1818** | 488 rows; 99 transition-window, 389 steady-state |
+| S-3, #2 overall / transition | 193/488 = 0.3955 / 11/53 = 0.2075 | **158/488 = 0.3238 / 10/53 = 0.1887** | 488 rows; 53 transition-window, 435 steady-state |
+| belief sojourn/lag, #1 (median lag, months) | 72.5 (20 of 25 resolved) | **52.0 (18 of 25)** | median sojourn 9.5, unchanged |
+| belief sojourn/lag, #2 | 44.0 (11 of 12) | **59.0 (11 of 12)** | median sojourn 29.0, unchanged |
+| served belief, top state (real tracked data, cold start, as-of 2026-06-30) | **3** (0.369157) | **0** (0.299992); then 1: 0.292707, 3: 0.163236 | 08-SERVING.md §4 |
+
+**The DSR's registry read moved 42 → 44 for a reason unrelated to the fix.** The 08-10 l2 run
+read the registry at 42, before the two decision-bearing rows landed. The 08-19 re-run read it at
+44. Holding the old read, the new Sharpes give 1.308430e-44 (#1-alone) and 1.151274e-46 (joint)
+at 42. So both the Sharpe change and the hurdle change lowered the DSR. Neither DSR is anywhere
+near 0.5.
+
+**The S-1 counts moved because the belief path moved.** The raw posterior did not move. Each new
+negative offset was adjudicated before its pin moved: `_MEASURED_S1` in
+`test_platform_nowcaster_recursion.py` now holds the new reading, with the 08-08 reading kept
+verbatim beside it.
+
+### 11.4 The firewall
+
+Every l2 number above stays **observational**, and nothing downstream changes on its basis.
+
+One l2 number did inform a ruling. Glenn's `keep-absolute` threshold ruling (08-09 Task 2) cited
+the belief clearing 0.70 in **307 / 488** (#1) and **415 / 488** (#2) months. Those counts are now
+**273 / 488** and **408 / 488**, over the same 488 rows. The ruling kept 0.70/0.40 and changed
+nothing, so no quantity moves.
+
+**Open question for Glenn (not decided here):** does he want to revisit the keep-absolute ruling
+on the new counts?
+
+### 11.5 Standing qualifications
+
+- **CR-02 (Phase 8.1):** the filter carries a belief across walk-forward refits whose state ids
+  are not aligned. Every belief-derived number above (B1, the mismatches, max-prob, S-1, S-3, the
+  l2 lift and Sharpes) is qualified by it.
+- **CR-03 (Phase 8.1):** two L2 model columns have a real publication lag that the backtest does
+  not model. Every L2-routed number above is qualified by it.
+- **The vocabulary finding (§6)** still qualifies S-1 and S-3, which compare walk-forward output
+  to a full-sample reference across two vocabularies.
+- This amendment fixes none of them.

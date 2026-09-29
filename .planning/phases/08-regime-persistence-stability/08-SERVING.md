@@ -306,3 +306,93 @@ What this does and does not cover:
   but is not listed on the page. This predates 08-14 and is recorded, not changed.
 
 - **registry rows spent: 0**
+
+## 4. Amendment — CR-01 (training prior) and the neutral-posture display, re-measured 2026-09-29 (plans 08-15..08-19)
+
+> **Cost first.** **registry rows spent: 0.** `registry/trials.jsonl` had sha256
+> `c957e8fdb360f04cebd36a6ac19f7efe5c036d098152a5b0c1694f2e73c088ad` before and after every run
+> below, and `total_trial_count()` read **44** before and after. The runs wrote only to scratch
+> copies; `git status --porcelain -- data outputs registry` was empty afterwards.
+
+§1–§3 above are the record as measured before these fixes, and they stand unedited. This section
+records what moved, old → new. Two fixes reach the page:
+- **CR-01** (08-16 serve, 08-17 backtest drivers). The filter's likelihood now divides the served
+  posterior by the **training class prior** of the rows the served model was fit on, persisted as
+  `nowcaster_class_prior` beside the model. Before, it divided by the whole-label prior.
+- **The neutral-posture display** (08-15). In neutral posture §3 of the page prints one sentence
+  instead of every (regime, asset) row unlabelled.
+
+### 4.1 Commands run
+
+The same procedure as §3.1: `data/checkpoints` and `data/holdout`, as tracked, copied to a
+scratch directory. This is a cold start (no prior belief, hysteresis or executed-book state).
+
+```bash
+export TC_DATA_DIR=<scratch>/serve2/data TC_OUTPUT_DIR=<scratch>/serve2/out
+python -m trading_crab_lib.platform.report.serving      # exit 0, 4 s
+python -m trading_crab_lib.platform.report.weekly       # exit 0, 2 s (run 1)
+python -m trading_crab_lib.platform.report.weekly       # exit 0, 2 s (run 2, same month)
+```
+
+`scripts/build_platform_data.py` was not run, for the reason §3.1 gives. The scored month is
+unchanged: **2026-06-30**, 2 month-ends behind the newest row, with the same lagging-column
+sentence.
+
+### 4.2 The likelihood, state by state (as-of 2026-06-30)
+
+L_t(s) = posterior(s) / prior(s). The served posterior is unchanged (§1 item 6). Only the divisor
+moved.
+
+| state | served posterior | label prior (old divisor) → ratio | training prior (new divisor) → ratio |
+|---|---|---|---|
+| 0 | 0.418004 | 40/695 = 0.057554 → **7.2628** | 11/153 = 0.071895 → **5.8140** |
+| 3 | 0.563993 | 200/695 = 0.287770 → **1.9599** (evidence FOR 3) | 137/153 = 0.895425 → **0.6299** (evidence AGAINST 3) |
+| 4 | 0.018004 | 84/695 = 0.120863 → **0.1490** | 5/153 = 0.032680 → **0.5509** |
+| 1, 2, 5 | absent from `classes_` | — | — (they keep their prediction share) |
+
+Label prior: the dev labels, 695 months, 1963-02-28 → 2020-12-31. Training prior: the serving
+fit's training block, 153 rows, 2007-04-30 → 2019-12-31, `classes_` [0, 3, 4]. The persisted
+`nowcaster_class_prior` equals {0: 11/153, 3: 137/153, 4: 5/153} exactly (compared as floats).
+
+### 4.3 What moved on the page, old → new
+
+| Measurement | Old (§3.2, 08-14) | **New (08-19)** |
+|---|---|---|
+| Served distribution | 3: 56.4%, 0: 41.8%, 4: 1.8% | **unchanged**: 3: 56.4%, 0: 41.8%, 4: 1.8% |
+| Distinct-posterior count and window | 1 across 231 complete months (2007-04-30 → 2026-06-30) | **unchanged**: 1 across 231 complete months (2007-04-30 → 2026-06-30) |
+| Filtered belief (cold start, one filter step, as-of 2026-06-30) | **3: 36.9%**, 0: 27.2%, 1: 21.3%, 5: 6.7%, 2: 6.7%, 4: 1.2% | **0: 30.0%**, 1: 29.3%, 3: 16.3%, 5: 9.3%, 2: 9.2%, 4: 6.0% |
+| Top belief state | **3** (0.369157) | **0** (0.299992) |
+| Active regime | none (neutral posture) | **unchanged**: none (neutral posture). The top component, 0.300, does not clear the 0.70 act threshold |
+| Executed book (`executed_weights`, basis `executed`, as-of 2026-06-30) | TLT 0.390654, SPY 0.330723, USO 0.144729, IAU 0.133895; cash residual 0.0% | **TLT 0.433693, SPY 0.320510, USO 0.135247, IAU 0.110549**; cash residual 0.0% |
+| Per-Asset Signals section | **24 rows**, 4 assets × 6 regimes, none naming its regime (08-15 before-state) | **0 rows**. The neutral sentence: "Neutral posture: no regime is active, so no per-asset regime rows are shown (the active regime selects them, as stated above). The executed book below is built from the filtered belief across all regimes." |
+
+The new belief, as exact floats: {0: 0.29999237288846065, 1: 0.29270739835551485,
+2: 0.09155165323013899, 3: 0.16323594694900967, 4: 0.059671515442087014, 5: 0.09284111313478884}.
+It **equals 08-16's real-data unit-test value exactly** (`TestTheServedModelOnTheTrackedData`,
+compared as floats, not rounded). So the live path and the unit test agree on the same inputs.
+
+The book moves toward TLT (+4.30 pp) and away from IAU (−2.33 pp), SPY (−1.02 pp) and USO
+(−0.95 pp). On a cold start there is no held book, so the executed book is the target.
+
+### 4.4 Second run, same month
+
+`weekly_report.md` from run 2 is **byte-identical** (`cmp`) to run 1's. The belief was reused
+unchanged (same scored month).
+
+### 4.5 π_0 and the transition matrix did not change
+
+π_0 and A still come from `regime_labels` over all K states: π_0 is a belief over every state and
+enters once, at the cold start. The likelihood's prior is what the L2 posterior was calibrated
+against and enters every step, so it is the training prior over `classes_` (08-16's "two roles,
+two rules").
+
+### 4.6 Standing qualifications
+
+**CR-02 and CR-03 remain open (Phase 8.1), and qualify every belief number above.**
+- **CR-02:** the belief is carried across walk-forward refits whose state ids are not aligned. At
+  serve, the `regime_belief` checkpoint is not fingerprinted to the labels it was computed under.
+- **CR-03:** two L2 model columns have a real publication lag that the backtest does not model.
+
+This amendment fixes neither.
+
+- **registry rows spent: 0**
