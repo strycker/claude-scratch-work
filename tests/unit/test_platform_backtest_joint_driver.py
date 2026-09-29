@@ -829,6 +829,34 @@ class TestNoTradeBand:
         assert "no_trade_band" not in rows.iloc[1]["config"]
 
 
+@pytest.mark.parametrize(
+    ("routing", "use_regime_filter", "expected"),
+    [
+        (jd.ROUTING_L1_ONLY, True, False),  # the filter never acts under l1only
+        (jd.ROUTING_L2_NOWCAST, True, True),
+        (jd.ROUTING_L2_NOWCAST, False, False),
+    ],
+)
+def test_the_row_records_the_effective_filter_flag_and_its_harness_plan(
+    tmp_path, routing, use_regime_filter, expected
+):
+    """CR-05: the row says whether its curve was filtered (the EFFECTIVE flag, the same
+    expression the metadata carries). The row names the plan that BUILT the harness as
+    ``harness_plan``; the run's own plan is its ``trial_tag``, so no ``plan`` key."""
+    ledger = tmp_path / "trials.jsonl"
+    f1, f2, ar, cash = _l2_frames()
+    jd.run_joint_backtest(
+        f1, ar, _cfg(min_train=L2_MIN_TRAIN), blend_weight_1=0.5, features_2=f2,
+        frozen_features_1=C1_COLS, frozen_features_2=C2_COLS, cash_returns=cash,
+        registry_path=ledger, trial_tag="cr05-probe", routing=routing,
+        use_regime_filter=use_regime_filter,
+    )
+    config = read_trials(ledger).iloc[0]["config"]
+    assert config["use_regime_filter"] is expected
+    assert config["harness_plan"] == "07-11"
+    assert "plan" not in config
+
+
 def test_all_three_call_sites_resolve_the_one_band_helper():
     """By resolved function object — a grep would pass on three copies of the arithmetic,
     which is how report/weekly.py diverged and audit item A7 came to exist."""

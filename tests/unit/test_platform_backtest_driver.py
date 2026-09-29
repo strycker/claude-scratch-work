@@ -707,6 +707,32 @@ class TestTrialTag:
         # trial_tag at all, which is precisely what wave 1 wrote four of.
         assert config["trial_tag"] == "run_backtest"
 
+    @pytest.mark.parametrize("use_regime_tilt", [True, False])
+    @pytest.mark.parametrize("use_regime_filter", [True, False])
+    def test_the_row_records_the_effective_filter_flag(
+        self, tmp_path, monkeypatch, use_regime_tilt, use_regime_filter
+    ):
+        """CR-05: the filter changes the curve only when the tilt is on, so the row records
+        the EFFECTIVE flag. Without it two differently evaluated curves share one config."""
+        monthly_features, asset_returns, cash_returns = _make_synthetic_frame()
+        monkeypatch.setattr(driver, "_refit_l1", _fake_refit_l1)
+        monkeypatch.setattr(driver, "_refit_l2", _fake_refit_l2)
+
+        registry_path = tmp_path / "trials.jsonl"
+        driver.run_backtest(
+            monthly_features,
+            asset_returns,
+            _cfg(),
+            cash_returns=cash_returns,
+            registry_path=registry_path,
+            trial_tag="cr05-probe",
+            use_regime_tilt=use_regime_tilt,
+            use_regime_filter=use_regime_filter,
+        )
+
+        config = read_trials(path=registry_path).iloc[0]["config"]
+        assert config["use_regime_filter"] is (use_regime_tilt and use_regime_filter)
+
     def test_one_evaluation_appends_exactly_two_rows(self, tmp_path, monkeypatch):
         from trading_crab_lib.platform.backtest.baselines import no_regime_ablation
 
