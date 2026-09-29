@@ -32,7 +32,7 @@ A_ROTATE = pd.DataFrame(
 UNIFORM3 = pd.Series([1 / 3] * 3, index=IDX3)
 
 
-# ── unconditional_belief: cold start AND class prior ─────────────────────────────
+# ── unconditional_belief: the cold start π_0 (and transition_matrix_for's fallback row) ──
 
 
 class TestUnconditionalBelief:
@@ -104,22 +104,83 @@ class TestAbsentClassRule:
     def test_absent_state_keeps_its_prediction_share_not_zero(self):
         """Posterior over {0, 1, 2} only; state 3 is absent (model.classes_ subset).
 
-        Every row of A equals the class prior c, so the prediction step gives
-        c = [0.3, 0.2, 0.1, 0.4] regardless of the prior belief. Update:
-        [0.3*0.5/0.3, 0.2*0.3/0.2, 0.1*0.2/0.1, 0.4*1.0] = [0.5, 0.3, 0.2, 0.4],
-        mass 1.4 -> state 3's belief is 0.4 / 1.4 = 2/7: its pure prediction value
-        times a likelihood ratio of exactly 1.0, under the common normalization.
-        Zero-filling the absent class would give 0.0.
+        Every row of A equals c = [0.3, 0.2, 0.1, 0.4], so the prediction step gives
+        c regardless of the prior belief. The likelihood divides by the nowcaster's
+        TRAINING prior over {0, 1, 2}: c restricted to them and renormalized,
+        [0.5, 1/3, 1/6]. Update: [0.3*0.5/0.5, 0.2*0.3/(1/3), 0.1*0.2/(1/6), 0.4*1.0]
+        = [0.3, 0.18, 0.12, 0.4], mass 1.0 -> state 3's belief is exactly its
+        prediction share, 0.4. Zero-filling the absent class would give 0.0.
+
+        Re-derived in plan 08-17. The old expected value, 2/7 against a prediction
+        share of 0.4, was CR-01's inflation artefact (08-REVIEW.md): dividing by the
+        whole 4-state prior inflated every present state by 1/0.6, so a posterior
+        carrying no information still pushed mass off the absent state.
         """
         idx = [0, 1, 2, 3]
         c = pd.Series([0.3, 0.2, 0.1, 0.4], index=idx)
         a = pd.DataFrame([c.to_numpy()] * 4, index=idx, columns=idx)
         posterior = pd.Series({0: 0.5, 1: 0.3, 2: 0.2})
+        training_prior = c.loc[[0, 1, 2]] / c.loc[[0, 1, 2]].sum()
 
-        assert likelihood_ratio(posterior, c, state_index=idx).loc[3] == 1.0
-        belief = filter_step(pd.Series([0.25] * 4, index=idx), a, posterior, c)
-        assert belief.loc[3] == pytest.approx(2 / 7, abs=1e-12)
-        np.testing.assert_allclose(belief.to_numpy(), np.array([0.5, 0.3, 0.2, 0.4]) / 1.4, atol=1e-12)
+        assert likelihood_ratio(posterior, training_prior, state_index=idx).loc[3] == 1.0
+        belief = filter_step(pd.Series([0.25] * 4, index=idx), a, posterior, training_prior)
+        assert belief.loc[3] == pytest.approx(0.4, abs=1e-12)
+        np.testing.assert_allclose(belief.to_numpy(), np.array([0.3, 0.18, 0.12, 0.4]), atol=1e-12)
+
+
+class TestTheLikelihoodPriorIsTheTrainingPrior:
+    """CR-01 (plan 08-17): the class prior must be the nowcaster's training prior over
+    the posterior's own states. The old whole-window shape is refused, not repaired."""
+
+    IDX4 = [0, 1, 2, 3]
+    #: A sticky, non-uniform A so normalize(π A) is not π.
+    A4 = pd.DataFrame(
+        [[0.7, 0.1, 0.1, 0.1], [0.1, 0.6, 0.2, 0.1], [0.05, 0.15, 0.7, 0.1], [0.2, 0.2, 0.2, 0.4]],
+        index=IDX4, columns=IDX4,
+    )
+
+    def test_a_posterior_equal_to_the_training_prior_is_no_evidence(self):
+        """A calibrated posterior that just repeats the training prior carries no
+        information: every ratio is 1.0 (present and absent states alike) and the
+        belief is the prediction step alone. Fails if absent states are treated
+        differently from present ones (CR-01's second paragraph)."""
+        training_prior = pd.Series({0: 0.5, 1: 0.3, 2: 0.2})
+        posterior = training_prior.copy()
+        pi = pd.Series([0.1, 0.2, 0.3, 0.4], index=self.IDX4)
+
+        ratio = likelihood_ratio(posterior, training_prior, state_index=self.IDX4)
+        assert ratio.to_dict() == {0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0}
+        predicted = pi.to_numpy() @ self.A4.to_numpy()
+        belief = filter_step(pi, self.A4, posterior, training_prior)
+        np.testing.assert_allclose(belief.to_numpy(), predicted / predicted.sum(), rtol=0, atol=1e-15)
+
+        # The old call shape (a whole-window prior with mass on state 3, which the
+        # posterior lacks) is refused rather than inflating states 0-2 by 1/0.6.
+        window_prior = pd.Series([0.3, 0.18, 0.12, 0.4], index=self.IDX4)
+        with pytest.raises(ValueError):
+            likelihood_ratio(posterior, window_prior, state_index=self.IDX4)
+
+    def test_a_prior_with_mass_on_a_state_the_posterior_lacks_is_refused(self):
+        """The whole-window shape. Fails if it is accepted (the pre-08-17 behaviour) or
+        silently renormalized over the posterior's states."""
+        posterior = pd.Series({0: 0.5, 1: 0.3, 2: 0.2})
+        window_prior = pd.Series([0.3, 0.2, 0.1, 0.4], index=self.IDX4)
+        msg = r"state\(s\) \[3\].*training prior.*fit_l2_nowcaster"
+        with pytest.raises(ValueError, match=msg):
+            likelihood_ratio(posterior, window_prior, state_index=self.IDX4)
+        with pytest.raises(ValueError, match=msg):
+            filter_step(pd.Series([0.25] * 4, index=self.IDX4), self.A4, posterior, window_prior)
+
+    def test_a_prior_that_does_not_sum_to_one_is_refused(self):
+        """Support right, mass wrong: e.g. counts divided by the wrong total. Fails if
+        accepted or renormalized."""
+        posterior = pd.Series({0: 0.5, 1: 0.3, 2: 0.2})
+        for bad in (pd.Series({0: 0.3, 1: 0.2, 2: 0.1}), pd.Series({0: 0.5, 1: 0.3, 2: 0.2 + 1e-6})):
+            with pytest.raises(ValueError, match="sums to"):
+                likelihood_ratio(posterior, bad, state_index=self.IDX4)
+        # Within 1e-9 of 1 is a float-rounding difference, not a wrong prior.
+        ok = pd.Series({0: 0.5, 1: 0.3, 2: 0.2 + 1e-12})
+        assert likelihood_ratio(posterior, ok, state_index=self.IDX4).loc[3] == 1.0
 
 
 class TestZeroPriorWithPresentPosteriorRaises:
@@ -179,7 +240,9 @@ class TestDeterminismAndPurity:
         prior_belief = pd.Series([0.2, 0.5, 0.3], index=IDX3)
         a = A_ROTATE.copy()
         posterior = pd.Series({0: 0.1, 2: 0.9})
-        class_prior = pd.Series([0.4, 0.4, 0.2], index=IDX3)
+        # The training prior over the posterior's classes_ {0, 2} (plan 08-17; was the
+        # 3-state window shape [0.4, 0.4, 0.2], which likelihood_ratio now refuses).
+        class_prior = pd.Series({0: 2 / 3, 2: 1 / 3})
         snapshots = [x.copy() for x in (prior_belief, a, posterior, class_prior)]
 
         first = filter_step(prior_belief, a, posterior, class_prior)
@@ -225,6 +288,10 @@ class TestTransitionMatrixFor:
 
     def test_output_plugs_straight_into_filter_step(self):
         states = pd.Series([0, 0, 1, 1, 0, 2])
-        prior = unconditional_belief(states, state_index=IDX3)
-        belief = filter_step(prior, transition_matrix_for(states, state_index=IDX3), pd.Series({0: 0.2, 1: 0.8}), prior)
+        start = unconditional_belief(states, state_index=IDX3)
+        # The likelihood's prior is the nowcaster's training prior over its classes_ {0, 1}
+        # (plan 08-17), not the window distribution over all three states.
+        training_prior = pd.Series({0: 0.6, 1: 0.4})
+        transition = transition_matrix_for(states, state_index=IDX3)
+        belief = filter_step(start, transition, pd.Series({0: 0.2, 1: 0.8}), training_prior)
         assert abs(belief.sum() - 1.0) < 1e-12

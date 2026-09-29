@@ -7,16 +7,25 @@
 ``A`` is ``prediction/transition_matrix.py::empirical_transition_matrix`` over the
 step's own in-window L1 labels, completed to a full K x K by
 :func:`transition_matrix_for`. ``L_t(j)`` is the nowcaster's calibrated posterior
-divided by the in-window class prior (:func:`likelihood_ratio`) — a Bayes inversion
-from a posterior back to a class-conditional likelihood ratio, so the class prior is
-not counted twice (once inside the posterior, once again through ``A``). ``π_0`` is
-the in-window unconditional class distribution (:func:`unconditional_belief`), and
-the same call supplies the class prior: one rule, used identically wherever a
-filtered run begins, because a cold-start rule that differed between train and
-serve would itself be train/serve skew. There is no training-time analogue of any
-of this, so there is no train/serve skew to have, no leakage surface through a
-feature column, and no free parameter — no λ, no ε, no smoothing constant, nothing
-to register as a trial. Cost: one K x K multiply per step. Design §5.1's first
+divided by the nowcaster's TRAINING class prior over ``model.classes_``
+(:func:`likelihood_ratio`; ``driver.fit_l2_nowcaster`` returns it, serve persists it
+as ``nowcaster_class_prior``) — a Bayes inversion from a posterior back to a
+class-conditional likelihood ratio, so the class prior is not counted twice (once
+inside the posterior, once again through ``A``). The inversion is valid only with
+the prior of the rows the model was fit on (CR-01, 08-REVIEW.md): the D-01
+embargoed, finite-row block, over its own ``classes_``. A whole-window label
+distribution is a different object; on real data it flipped a state's evidence
+from against to for, so :func:`likelihood_ratio` refuses it.
+
+**Two roles, two rules (plan 08-16's decision, applied at all three call sites).**
+``π_0`` is the in-window unconditional class distribution over ALL K states
+(:func:`unconditional_belief`): a belief over every state that enters once, when a
+filtered run begins, and the same rule in ``backtest/driver.py``,
+``backtest/joint_driver.py`` and ``report/weekly.py``. The likelihood's class prior
+is the training prior over ``classes_``: it enters every step, and every call site
+passes the object the fit returned (one helper, one rule, no train/serve skew).
+There is no leakage surface through a feature column, and no free parameter — no λ,
+no ε, no smoothing constant, nothing to register as a trial. Cost: one K x K multiply per step. Design §5.1's first
 sentence names the object: *"A discriminative replacement for the HMM filter."*
 
 **The second catch, stated rather than glossed.** ``A`` is estimated from the
@@ -64,8 +73,9 @@ Usage::
     )
 
     idx = list(range(K))
-    prior = unconditional_belief(states_1, state_index=idx)   # class prior
-    belief = prior.copy()                                     # cold start: the SAME call
+    model, active, prior = fit_l2_nowcaster(features, states_1, cfg)  # prior: over classes_
+    posterior = pd.Series(model.predict_proba(row[active])[0], index=model.classes_)
+    belief = unconditional_belief(states_1, state_index=idx)  # cold start π_0, all K states
     A = transition_matrix_for(states_1, state_index=idx)
     belief = filter_step(belief, A, posterior, prior)         # or predict_only_step(belief, A)
 """
@@ -93,11 +103,13 @@ def _as_state_list(state_index: Sequence[int]) -> list[int]:
 
 
 def unconditional_belief(states: pd.Series, *, state_index: Sequence[int]) -> pd.Series:
-    """The in-window class distribution — BOTH the cold start π_0 and the class prior.
+    """The in-window class distribution over ALL K states: the cold start π_0.
 
-    One helper for both roles, by design: a cold-start rule that differs from the
-    prior rule is a second rule to keep in step, and a rule that differs between
-    train and serve is train/serve skew.
+    Also :func:`transition_matrix_for`'s fallback row. It is NOT the likelihood's class
+    prior (CR-01, plan 08-17): that is the nowcaster's training prior over
+    ``classes_``, returned by ``driver.fit_l2_nowcaster``. Every call site uses this
+    one helper for π_0, because a cold-start rule that differs between train and serve
+    is train/serve skew.
 
     Args:
         states: the window's L1 labels (integer state ids; NaN rows are ignored).
@@ -130,16 +142,25 @@ def likelihood_ratio(
 ) -> pd.Series:
     """``L_t(j) = posterior(j) / class_prior(j)``: the posterior inverted back to a likelihood ratio.
 
-    A state absent from ``posterior.index`` gets **1.0** — "no evidence either way".
-    ``model.classes_`` can be a strict subset of the canonical states when an early
-    training window never saw some state (``driver.py:302-303``); assigning 0.0 to
-    such a state would assert evidence *against* it that the nowcaster never produced.
+    ``class_prior`` is the nowcaster's TRAINING prior over ``model.classes_`` (the third
+    value ``driver.fit_l2_nowcaster`` returns; CR-01). A state absent from
+    ``posterior.index`` gets **1.0** — "no evidence either way". ``model.classes_`` can
+    be a strict subset of the canonical states when an early training window never saw
+    some state; assigning 0.0 to such a state would assert evidence *against* it that
+    the nowcaster never produced. With the training prior, a posterior equal to that
+    prior gives **1.0 for every state**, present or absent: no evidence moves nothing.
+
+    A wrong prior is refused, never repaired (no renormalization).
 
     Raises:
-        ValueError: if ``class_prior(j)`` is 0 (or missing) for a state that IS in
-            ``posterior`` — a state the window never saw cannot have produced a
-            calibrated posterior, so that combination is a wiring bug; also if the
-            posterior names a state outside ``state_index``.
+        ValueError: checked in this order —
+            the posterior names a state outside ``state_index``;
+            ``class_prior(j)`` is 0 (or missing) for a state that IS in ``posterior``
+            (a state the fit never saw cannot have produced a calibrated posterior);
+            ``class_prior``'s support (states with prior > 0) is not the posterior's
+            states, i.e. it puts mass on a state the posterior lacks (the whole-window
+            label prior, not the fit's training prior — CR-01);
+            ``class_prior`` over the posterior's states does not sum to 1 within 1e-9.
     """
     idx = _as_state_list(state_index)
     post = pd.Series(posterior, dtype=float)
@@ -147,11 +168,10 @@ def likelihood_ratio(
     foreign = sorted(set(post.index) - set(idx))
     if foreign:
         raise ValueError(f"likelihood_ratio: posterior states {foreign} are not in state_index {idx}")
-    prior = pd.Series(class_prior, dtype=float)
-    prior.index = [int(s) for s in prior.index]
-    prior = prior.reindex(idx, fill_value=0.0)
+    raw_prior = pd.Series(class_prior, dtype=float)
+    raw_prior.index = [int(s) for s in raw_prior.index]
+    prior = raw_prior.reindex(idx, fill_value=0.0)
 
-    ratio = pd.Series(1.0, index=idx)
     for state in post.index:
         p_prior = float(prior.loc[state])
         if not p_prior > 0.0:
@@ -160,7 +180,32 @@ def likelihood_ratio(
                 f"{float(post.loc[state])} — a state the window never saw cannot have produced a "
                 "calibrated posterior. This is a wiring bug (prior and posterior from different windows?)."
             )
-        ratio.loc[state] = float(post.loc[state]) / p_prior
+    # The prior's support must equal the posterior's states. The zero-prior check above
+    # has already named any posterior state without mass, so what reaches here is mass
+    # on a state the posterior lacks: the whole-window shape.
+    support = {int(s) for s, v in raw_prior.items() if v > 0.0}
+    if support != set(post.index):
+        extra = sorted(support - set(post.index))
+        missing = sorted(set(post.index) - support)
+        problem = f"puts mass on state(s) {extra}, which the posterior (states {sorted(post.index)}) lacks"
+        if missing:
+            problem += f", and none on state(s) {missing}, which it has"
+        raise ValueError(
+            f"likelihood_ratio: the class prior {problem}. That is a whole-window label prior, not the "
+            "fit's training prior (CR-01): the class prior must be the nowcaster's training prior over "
+            "model.classes_, as returned by driver.fit_l2_nowcaster."
+        )
+    total = float(prior.loc[list(post.index)].sum())
+    if abs(total - 1.0) > 1e-9:
+        raise ValueError(
+            f"likelihood_ratio: the class prior over the posterior's states {sorted(post.index)} sums to "
+            f"{total!r}, not 1 (tolerance 1e-9). It must be the nowcaster's training prior over "
+            "model.classes_ (driver.fit_l2_nowcaster); a wrong prior is refused, not renormalized."
+        )
+
+    ratio = pd.Series(1.0, index=idx)
+    for state in post.index:
+        ratio.loc[state] = float(post.loc[state]) / float(prior.loc[state])
     return ratio
 
 
@@ -274,7 +319,12 @@ if __name__ == "__main__":
     # takes the missing-observation rule.
     demo_idx = [0, 1, 2]
     demo_labels = pd.Series([0] * 5 + [1] * 4 + [2] * 3)
-    demo_prior = unconditional_belief(demo_labels, state_index=demo_idx)
+    demo_start = unconditional_belief(demo_labels, state_index=demo_idx)  # π_0 over all states
+    #: The nowcaster's training prior over its classes_ (a stand-in for what
+    #: driver.fit_l2_nowcaster returns: the embargoed block's label frequencies).
+    demo_prior = pd.Series({0: 5 / 9, 1: 3 / 9, 2: 1 / 9})
+    #: Step 10's model never saw state 1: its training prior covers {0, 2} only.
+    demo_prior_02 = pd.Series({0: 5 / 6, 2: 1 / 6})
     demo_a = pd.DataFrame(
         [[0.8, 0.15, 0.05], [0.05, 0.8, 0.15], [0.15, 0.05, 0.8]], index=demo_idx, columns=demo_idx
     )
@@ -292,9 +342,10 @@ if __name__ == "__main__":
         pd.Series({0: 0.1, 2: 0.9}),  # a strict-subset posterior: state 1 gets ratio 1.0
         pd.Series({0: 0.1, 1: 0.1, 2: 0.8}),
     ]
-    belief = demo_prior.copy()  # cold start: the same call as the class prior
+    belief = demo_start.copy()  # cold start: π_0, NOT the likelihood's class prior
     for step, post in enumerate(demo_posteriors):
-        belief = predict_only_step(belief, demo_a) if post is None else filter_step(belief, demo_a, post, demo_prior)
+        step_prior = demo_prior if post is None or set(post.index) == set(demo_idx) else demo_prior_02
+        belief = predict_only_step(belief, demo_a) if post is None else filter_step(belief, demo_a, post, step_prior)
         tag = "predict-only" if post is None else "filter"
         print(  # noqa: T201 — first-class self-check output
             f"step {step:2d} [{tag:12s}] belief={np.round(belief.to_numpy(), 4)} argmax={int(belief.idxmax())}"
