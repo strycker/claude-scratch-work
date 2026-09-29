@@ -318,13 +318,16 @@ class _FakeNowcaster:
 
 
 class _FakeCheckpointManager:
-    """Serves exactly the five artifacts ``_build_report_inputs`` loads."""
+    """Serves exactly the artifacts ``_build_report_inputs`` loads."""
 
     def __init__(self, returns_by_regime: pd.DataFrame, asset_returns: pd.DataFrame) -> None:
         self._payload = {
             "regime_labels": pd.DataFrame({"state": [0, 1, SUB_FLOOR_REGIME, 0, 1, 0]}),
             "returns_by_regime": returns_by_regime,
             "asset_returns": asset_returns,
+            # 08-16 (CR-01): weekly divides by the served model's training prior, built beside
+            # it and checked against classes_. Harness only — no G6 assertion is touched.
+            "nowcaster_class_prior": pd.DataFrame({"state": [0, 1, SUB_FLOOR_REGIME], "prior": [0.5, 0.3, 0.2]}),
         }
 
     def load_model(self, name: str) -> _FakeNowcaster:

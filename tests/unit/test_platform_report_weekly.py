@@ -257,6 +257,9 @@ def _serve_env(monkeypatch, tmp_path, *, as_of: str = "2026-08-31"):
         ),
         "asset_returns": pd.DataFrame({"SPY": [0.01, -0.02] * 20, "TLT": [0.0, 0.01] * 20},
                                       index=pd.date_range("2023-01-31", periods=40, freq="ME")),
+        # CR-01: the served model's training prior, built beside it. Deliberately NOT the
+        # label prior (about .63 / .21 / .16), so dividing by the wrong one is visible.
+        "nowcaster_class_prior": pd.DataFrame({"state": [0, 1, 2], "prior": [0.2, 0.3, 0.5]}),
     }
     real_load = cm.load
 
@@ -300,9 +303,12 @@ class TestRegimeBeliefAtServe:
             unconditional_belief,
         )
 
-        prior = unconditional_belief(labels, state_index=[0, 1, 2])
-        assert not prior.round(9).eq(1 / 3).all(), "fixture prior is uniform; it cannot discriminate"
-        expected = filter_step(prior, transition_matrix_for(labels, state_index=[0, 1, 2]), raw, prior)
+        start = unconditional_belief(labels, state_index=[0, 1, 2])
+        assert not start.round(9).eq(1 / 3).all(), "fixture prior is uniform; it cannot discriminate"
+        # CR-01: pi_0 comes from the labels; L_t divides by the SERVED training prior.
+        served_prior = pd.Series([0.2, 0.3, 0.5], index=[0, 1, 2])
+        assert (served_prior - start).abs().max() > 0.1, "precondition: the served prior is not the label prior"
+        expected = filter_step(start, transition_matrix_for(labels, state_index=[0, 1, 2]), raw, served_prior)
         pd.testing.assert_series_equal(belief, expected)
         assert (belief - raw.reindex(belief.index)).abs().max() > 1e-6, "belief equals the raw posterior"
         assert len(tilt) == 1 and tilt[0] is belief, "vol_targeted_tilt must receive the filtered belief"

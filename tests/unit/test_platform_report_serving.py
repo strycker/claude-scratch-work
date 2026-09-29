@@ -86,7 +86,7 @@ class TestFitL2IsShared:
 
     def test_fit_l2_nowcaster_returns_the_model_and_its_columns(self):
         features, labels, cfg = _pin_frame()
-        model, columns = driver.fit_l2_nowcaster(features, labels, cfg)
+        model, columns, _class_prior = driver.fit_l2_nowcaster(features, labels, cfg)
         assert list(model.feature_names_in_) == columns
         assert columns == ["long", "late"]
 
@@ -99,6 +99,61 @@ class TestFitL2IsShared:
         monkeypatch.setattr(driver, "fit_l2_nowcaster", lambda *a: calls.append(a) or real(*a))
         driver._refit_l2(features, labels, features.iloc[[-1]], cfg)
         assert len(calls) == 1
+
+
+# ── CR-01: the likelihood's class prior is the prior of the rows the model was fit on ──
+
+
+def _restricted_label_prior(labels: pd.Series, classes) -> pd.Series:
+    """The whole-label prior (the pre-CR-01 rule) restricted to ``classes`` and renormalized."""
+    from trading_crab_lib.platform.prediction.regime_filter import unconditional_belief
+
+    states = sorted({int(v) for v in labels.dropna().unique()})
+    full = unconditional_belief(labels, state_index=states)
+    sub = full.reindex([int(c) for c in classes])
+    return sub / sub.sum()
+
+
+class TestTrainingClassPrior:
+    def test_fit_l2_nowcaster_returns_the_prior_of_the_rows_it_fit(self, monkeypatch):
+        features, labels, cfg = _pin_frame()
+        received = []
+        real_fit = driver.fit_nowcaster
+
+        def spy(X, y, **kwargs):
+            received.append((X.copy(), y.copy()))
+            return real_fit(X, y, **kwargs)
+
+        monkeypatch.setattr(driver, "fit_nowcaster", spy)
+
+        model, active, class_prior = driver.fit_l2_nowcaster(features, labels, cfg)
+
+        assert len(received) == 1
+        X_fit, y_fit = received[0]
+        # Every row handed to fit_nowcaster is finite, so its own drop keeps them all.
+        assert np.isfinite(X_fit.to_numpy(dtype=float)).all()
+        expected = y_fit.value_counts(normalize=True).reindex(list(model.classes_))
+        np.testing.assert_array_equal(class_prior.to_numpy(dtype=float), expected.to_numpy(dtype=float))
+        assert [int(s) for s in class_prior.index] == [int(c) for c in model.classes_]
+        assert abs(float(class_prior.sum()) - 1.0) < 1e-12
+
+        # Precondition: the fixture discriminates. The embargo and the late column truncate
+        # the block, so the fit's prior is not the whole-label prior on the same classes.
+        label_prior = _restricted_label_prior(labels, model.classes_)
+        gap = float(np.abs(class_prior.to_numpy(dtype=float) - label_prior.to_numpy(dtype=float)).max())
+        assert gap > 1e-3, f"training prior equals the label prior (max abs gap {gap}); fixture cannot discriminate"
+
+    def test_training_class_prior_refuses_labels_that_are_not_the_models_classes(self):
+        y = pd.Series([0, 0, 1, 2, 2, 2])
+        with pytest.raises(ValueError):
+            driver.training_class_prior(y, [0, 1])  # y carries a class the model does not
+        with pytest.raises(ValueError):
+            driver.training_class_prior(y, [0, 1, 2, 3])  # the model has a class y lacks
+        with pytest.raises(ValueError):
+            driver.training_class_prior(pd.Series([], dtype=int), [0, 1, 2])
+        got = driver.training_class_prior(y, [0, 1, 2])
+        assert list(got.index) == [0, 1, 2]
+        np.testing.assert_array_equal(got.to_numpy(), np.array([2, 1, 3]) / 6)
 
 
 # ── the one research-to-tradable mapping ─────────────────────────────────────
@@ -453,6 +508,7 @@ class TestWeeklyScoresTheModelsColumns:
             ("nowcaster", "nowcaster.pkl"),
             ("returns_by_regime", "returns_by_regime.parquet"),
             ("asset_returns", "asset_returns.parquet"),
+            ("nowcaster_class_prior", "nowcaster_class_prior.parquet"),
         ],
     )
     def test_a_missing_serving_artifact_names_the_command_that_builds_it(
@@ -496,6 +552,104 @@ class TestWeeklyScoresTheModelsColumns:
         pd.testing.assert_frame_equal(first_book, second_book)
         assert _trades_section(first_report) == _trades_section(second_report)
         assert "- SPY:" in _trades_section(first_report) and "- TLT:" in _trades_section(first_report)
+
+
+# ── CR-01 at serve: the fit's training prior travels with the model ──────────
+
+
+class TestTheServedClassPrior:
+    def test_the_builder_persists_the_fits_training_prior_beside_the_model(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch)
+        facts = serving.build_serving_artifacts(world["cfg"])
+        cm = get_platform_checkpoint_manager()
+        model = cm.load_model("nowcaster")
+        frame = cm.load("nowcaster_class_prior")
+        persisted = pd.Series(frame["prior"].to_numpy(dtype=float), index=[int(s) for s in frame["state"]])
+
+        assert list(persisted.index) == [int(c) for c in model.classes_]
+        _, _, fit_prior = driver.fit_l2_nowcaster(world["dev"], world["labels"], world["cfg"])
+        np.testing.assert_array_equal(persisted.to_numpy(), fit_prior.to_numpy(dtype=float))
+        # Cross-check the record's re-derivation (IN-04 stays out of scope; watched here).
+        block = serving._training_block(world["dev"], world["labels"], list(model.feature_names_in_), world["cfg"])
+        np.testing.assert_array_equal(
+            persisted.to_numpy(), block.value_counts(normalize=True).reindex(persisted.index).to_numpy(dtype=float)
+        )
+        assert facts["class_prior"] == {int(k): float(v) for k, v in persisted.items()}
+
+    def test_weekly_divides_by_the_served_training_prior_not_the_label_prior(self, tmp_path, monkeypatch):
+        """The discriminating end-to-end: serving.main, then weekly.main, cold start. The
+        filter's 4th argument is the persisted training prior; its start is the label
+        distribution over all K states (two roles, two rules)."""
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.prediction.regime_filter import (
+            filter_step,
+            transition_matrix_for,
+            unconditional_belief,
+        )
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        cm = get_platform_checkpoint_manager()
+        model = cm.load_model("nowcaster")
+        frame = cm.load("nowcaster_class_prior")
+        served_prior = pd.Series(frame["prior"].to_numpy(dtype=float), index=[int(s) for s in frame["state"]])
+        labels = world["labels"]
+        label_prior = _restricted_label_prior(labels, model.classes_)
+        gap = float((served_prior - label_prior.reindex(served_prior.index)).abs().max())
+        print(f"served training prior vs restricted label prior: max abs diff {gap!r}")
+        assert gap > 1e-6, f"precondition: the two priors differ by only {gap}; the arm cannot discriminate"
+
+        calls = []
+        real_filter = weekly.filter_step
+        monkeypatch.setattr(weekly, "filter_step", lambda *a: calls.append(a) or real_filter(*a))
+        assert weekly.main([]) == 0
+
+        assert len(calls) == 1
+        start, transition, posterior, class_prior = calls[0]
+        states = list(range(_K))
+        pd.testing.assert_series_equal(
+            pd.Series(class_prior, dtype=float), served_prior, check_names=False, check_exact=True
+        )
+        pd.testing.assert_series_equal(start, unconditional_belief(labels, state_index=states), check_exact=True)
+
+        cols = list(model.feature_names_in_)
+        row = world["full"][cols].dropna(how="any").iloc[[-1]]
+        own_posterior = pd.Series(model.predict_proba(row)[0], index=model.classes_)
+        pd.testing.assert_series_equal(posterior, own_posterior, check_exact=True)
+
+        expected = filter_step(
+            unconditional_belief(labels, state_index=states),
+            transition_matrix_for(labels, state_index=states),
+            own_posterior,
+            served_prior,
+        )
+        pd.testing.assert_series_equal(weekly.load_regime_belief(cm), expected, check_names=False, check_exact=True)
+
+    def test_a_class_prior_that_is_not_the_models_classes_is_refused_before_any_save(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving, weekly
+        from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        cm = get_platform_checkpoint_manager()
+        classes = {int(c) for c in cm.load_model("nowcaster").classes_}
+        # A prior from another build: a different state set (a superset, so the filter itself
+        # would silently accept it — only the served-prior check can refuse it).
+        other = sorted(classes | {max(classes) + 1})
+        cm.save(pd.DataFrame({"state": other, "prior": [1.0 / len(other)] * len(other)}), "nowcaster_class_prior")
+
+        with pytest.raises(ValueError) as excinfo:
+            weekly.main([])
+
+        msg = str(excinfo.value)
+        assert SERVING_BUILD_COMMAND in msg
+        assert "nowcaster_class_prior" in msg
+        _assert_nothing_written(world)
 
 
 # ── Glenn's 08-12 rulings at serve (plan 08-14): q1-c and q2-ii ──────────────
