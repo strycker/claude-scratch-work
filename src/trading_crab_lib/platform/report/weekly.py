@@ -89,6 +89,7 @@ from trading_crab_lib.platform.prediction.regime_filter import (
 )
 from trading_crab_lib.platform.prediction.transition_matrix import empirical_transition_matrix
 from trading_crab_lib.platform.report.holdings import load_account_weights
+from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND
 
 log = logging.getLogger(__name__)
 
@@ -412,6 +413,60 @@ def write_weekly_report(markdown: str, *, output_dir: Path | None = None) -> Pat
     return path
 
 
+_RUN_ORDER = (
+    f"python scripts/build_platform_data.py, then {SERVING_BUILD_COMMAND}, "
+    "then python -m trading_crab_lib.platform.report.weekly"
+)
+
+
+def _load_serving_artifact(cm, name: str, *, model: bool = False):
+    """Load one serving artifact; a missing one names the command that builds it."""
+    try:
+        return cm.load_model(name) if model else cm.load(name)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"Serving artifact '{name}' is missing ({exc}). It is built by: {SERVING_BUILD_COMMAND}. "
+            f"Run order: {_RUN_ORDER}."
+        ) from exc
+
+
+def _model_row(nowcaster, monthly_features: pd.DataFrame) -> pd.DataFrame:
+    """The latest row, restricted to the model's own columns in the model's own order.
+
+    Never the whole row: the served model is fit on ``fit_l2_nowcaster``'s active columns,
+    and a row carrying any other column is not what it was trained on. Raises ValueError,
+    before any state is loaded or saved, when the model declares no columns, when a model
+    column is absent from ``monthly_features``, or when the latest row has a NaN in a model
+    column. The report does not impute. (Interim behaviour for the NaN case: plan 08-14
+    applies Glenn's 08-12 ruling, q1-c.)
+    """
+    names = getattr(nowcaster, "feature_names_in_", None)
+    if names is None:
+        raise ValueError(
+            "The loaded nowcaster declares no feature_names_in_, so the report cannot tell "
+            f"which columns it was trained on. Rebuild it with: {SERVING_BUILD_COMMAND}"
+        )
+    cols = [str(c) for c in names]
+    absent = [c for c in cols if c not in monthly_features.columns]
+    if absent:
+        raise ValueError(
+            f"monthly_features lacks {len(absent)} of the nowcaster's {len(cols)} columns: {absent}. "
+            f"Rebuild the data and the serving artifacts ({_RUN_ORDER})."
+        )
+    row = monthly_features.iloc[[-1]][cols]
+    nan_cols = [c for c in cols if pd.isna(row[c].iloc[0])]
+    if nan_cols:
+        complete = monthly_features[cols].dropna()
+        latest_complete = pd.Timestamp(complete.index[-1]).date().isoformat() if len(complete) else "none"
+        raise ValueError(
+            f"The latest monthly_features row ({pd.Timestamp(row.index[0]).date().isoformat()}) has NaN in "
+            f"{len(nan_cols)} of the nowcaster's {len(cols)} model columns: {nan_cols}. The latest month "
+            f"observed in every model column is {latest_complete}. The report does not impute, so it "
+            "refuses to score this row (interim behaviour until plan 08-14 applies the 08-12 ruling)."
+        )
+    return row
+
+
 def _build_report_inputs(cfg: dict, cm=None) -> dict:
     """The full allocation-cycle orchestration (load -> update -> tilt ->
     save, load-before-save order per Pitfall 3): load the previous
@@ -433,17 +488,21 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     """
     cm = cm or get_platform_checkpoint_manager()
 
-    nowcaster = cm.load_model("nowcaster")
+    # The three serving artifacts are built by SERVING_BUILD_COMMAND (report/serving.py);
+    # a missing one says so.
+    nowcaster = _load_serving_artifact(cm, "nowcaster", model=True)
     # Live scoring is "looking", not "fitting", so it takes the explicit
     # full-span opt-in. The dev checkpoint stops at the 2020-12 holdout
     # boundary; loading it here would silently score December 2020 as "today",
     # every week, forever.
     monthly_features = load_full_span("monthly_features")
     regime_labels = cm.load("regime_labels")["state"]
-    returns_by_regime = cm.load("returns_by_regime")
-    asset_returns = cm.load("asset_returns")
+    returns_by_regime = _load_serving_artifact(cm, "returns_by_regime")
+    asset_returns = _load_serving_artifact(cm, "asset_returns")
 
-    proba = nowcaster.predict_proba(monthly_features.iloc[[-1]])[0]
+    # Score the model's own columns, never the whole row; validated before any state
+    # load or save, so a refusal writes nothing.
+    proba = nowcaster.predict_proba(_model_row(nowcaster, monthly_features))[0]
     regime_probs = pd.Series(proba, index=nowcaster.classes_)
 
     allocation_cfg = cfg.get("allocation", {})

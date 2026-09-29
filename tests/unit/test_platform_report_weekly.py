@@ -6,6 +6,7 @@ delivery (04-CONTEXT.md D-02: markdown ALWAYS written, email opt-in behind
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -225,6 +226,7 @@ class TestReuseConventions:
 
 class _FakeNowcaster:
     classes_ = [0, 1, 2]
+    feature_names_in_ = np.array(["x"])
 
     def predict_proba(self, row):
         return [[0.30, 0.45, 0.25]]

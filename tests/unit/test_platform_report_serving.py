@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
 import logging
 import re
 import shutil
@@ -23,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from trading_crab_lib.platform.backtest import driver
 from trading_crab_lib.platform.prediction.nowcaster import build_nowcaster_training_set, fit_nowcaster
@@ -371,3 +373,140 @@ class TestServingEndToEnd:
         assert len(calls) == 1
         assert not [k for k in calls[0]["metrics"] if bad.search(k)]
         assert facts["registry_row_written"] is False
+
+
+# ── weekly scores the model's own columns (Task 2) ───────────────────────────
+
+
+def _trades_section(report: str) -> str:
+    start = report.index("## Target vs. Current — Trades Implied")
+    rest = report[start + 1:]
+    nxt = rest.find("\n## ")
+    return report[start:] if nxt < 0 else report[start: start + 1 + nxt]
+
+
+class TestWeeklyScoresTheModelsColumns:
+    def test_report_scores_the_models_columns_not_the_whole_row(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.honesty.holdout import load_full_span
+        from trading_crab_lib.platform.report import serving, weekly
+
+        _serving_world(tmp_path, monkeypatch, short_hist=True, starver=True)
+        assert serving.main([]) == 0
+        model = get_platform_checkpoint_manager().load_model("nowcaster")
+        cols = list(model.feature_names_in_)
+        full_span = load_full_span("monthly_features")
+
+        # Preconditions that make this fixture discriminating: the latest row carries
+        # columns the model was not fit on, so the pre-fix whole-row scorer raises here.
+        assert "short_hist" not in cols and "starver" not in cols
+        assert {"short_hist", "starver"} <= set(full_span.columns)
+        with pytest.raises(ValueError):
+            model.predict_proba(full_span.iloc[[-1]])
+
+        assert weekly.main([]) == 0
+
+    def test_selected_columns_equal_cv_safe_active_features(self, tmp_path, monkeypatch):
+        """Parity: the builder saves exactly ``_cv_safe_active_features``'s columns, on a
+        fixture where BOTH exclusion mechanisms fire."""
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch, short_hist=True, starver=True)
+        serving.build_serving_artifacts(world["cfg"])
+        model = get_platform_checkpoint_manager().load_model("nowcaster")
+
+        X, y = build_nowcaster_training_set(world["dev"], world["labels"], embargo_months=_EMBARGO)
+        window = driver._window_active_features(X, list(X.columns), min_history=_MIN_HISTORY)
+        assert "short_hist" not in window, "the window (min_history) rule must fire"
+        assert "starver" in window, "starver must be old enough by min_history"
+        expected = driver._cv_safe_active_features(
+            X, y, list(X.columns), min_history=_MIN_HISTORY, n_splits=_N_SPLITS
+        )
+        assert "starver" not in expected, "the CV narrowing must fire"
+        assert expected != list(X.columns)
+
+        assert list(model.feature_names_in_) == expected
+
+    def test_served_posterior_equals_refit_l2_at_full_dev_history(self, tmp_path, monkeypatch):
+        """No skew: the saved model's posterior equals ``_refit_l2``'s, bit for bit."""
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch, short_hist=True, starver=True)
+        serving.build_serving_artifacts(world["cfg"])
+        model = get_platform_checkpoint_manager().load_model("nowcaster")
+        cols = list(model.feature_names_in_)
+        dev, labels = world["dev"], world["labels"]
+
+        served = pd.Series(model.predict_proba(dev.iloc[[-1]][cols])[0], index=model.classes_)
+        backtest = driver._refit_l2(dev, labels, dev.iloc[[-1]], world["cfg"])
+
+        pd.testing.assert_series_equal(served, backtest, check_exact=True)
+
+    def test_a_nan_in_a_model_column_fails_loudly_naming_it(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch, nan_in_model_col=True)
+        assert serving.main([]) == 0
+
+        with pytest.raises(ValueError) as excinfo:
+            weekly.main([])
+
+        msg = str(excinfo.value)
+        assert "f_slope" in msg
+        assert "2021-06-30" in msg, "the scored row's date"
+        assert "2021-05-31" in msg, "the latest month complete in every model column"
+        assert not (world["out_dir"] / "reports" / "platform" / "weekly_report.md").exists()
+        for name in ("regime_belief", "hysteresis_state", "executed_weights"):
+            assert not (world["platform_dir"] / f"{name}.parquet").exists(), name
+
+    @pytest.mark.parametrize(
+        "artifact, filename",
+        [
+            ("nowcaster", "nowcaster.pkl"),
+            ("returns_by_regime", "returns_by_regime.parquet"),
+            ("asset_returns", "asset_returns.parquet"),
+        ],
+    )
+    def test_a_missing_serving_artifact_names_the_command_that_builds_it(
+        self, tmp_path, monkeypatch, artifact, filename
+    ):
+        from trading_crab_lib.platform.report import serving, weekly
+        from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND
+
+        module_path = SERVING_BUILD_COMMAND.split()[-1]
+        assert importlib.util.find_spec(module_path) is not None
+        assert serving.__name__ == module_path
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        (world["platform_dir"] / filename).unlink()
+
+        with pytest.raises(FileNotFoundError) as excinfo:
+            weekly.main([])
+
+        msg = str(excinfo.value)
+        assert SERVING_BUILD_COMMAND in msg
+        assert artifact in msg
+
+    def test_a_same_month_rerun_serves_the_same_targets(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch)
+        # One account with no holdings file (a neutral, all-cash account — never a crash),
+        # so the Trades Implied section carries per-asset rows the comparison can bite on.
+        world["cfg"]["report"]["accounts"] = ["serving_rerun_no_holdings_file"]
+        assert serving.main([]) == 0
+        report_path = world["out_dir"] / "reports" / "platform" / "weekly_report.md"
+        cm = get_platform_checkpoint_manager()
+
+        assert weekly.main([]) == 0
+        first_book, first_report = cm.load("executed_weights"), report_path.read_text()
+        assert weekly.main([]) == 0
+        second_book, second_report = cm.load("executed_weights"), report_path.read_text()
+
+        pd.testing.assert_frame_equal(first_book, second_book)
+        assert _trades_section(first_report) == _trades_section(second_report)
+        assert "- SPY:" in _trades_section(first_report) and "- TLT:" in _trades_section(first_report)
