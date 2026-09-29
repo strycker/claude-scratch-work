@@ -377,6 +377,11 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
   7. Joint (#1 × #2) allocation lift is measured walk-forward against #1 alone, every
      configuration logged to the trial registry, deflated-Sharpe applied for the full count.
 
+     > **RESULT: FAILED — A11 / ADR-0003 quality tier (2026-09-21): neither leg's deflated Sharpe
+     > clears the hurdle.** Recorded here per Glenn's ruling 2026-09-29 ("mark both"; 08-A11.md §3.4).
+     > Re-measured by 08-10 under the 5pp band: −0.125307 / +0.026164. Both legs are exposed to the
+     > CR-03 publication-lag look-ahead; re-run owned by Phase 08.1.
+     >
      > ✅ **MET 2026-09-21 as a measurement. The wealth sign is negative and is stated as
      > measured.** Evidence: `.planning/phases/07-regime-representation/07-JOINT-LIFT.md`.
      > `wealth_delta` = **−0.123438 nats** and `dd_delta` = **+0.024084**, both over **588

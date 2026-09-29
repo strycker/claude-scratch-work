@@ -115,6 +115,12 @@ measured by the other's metric.
   configuration logged to the trial registry. Scope in
   `.planning/PROPOSAL-phase-regime-representation.md`
 
+  > **Status amended 2026-09-29 (Glenn): PARTIAL, pending Phase 08.1.** Criterion 7 is MET as a
+  > measurement and FAILED as a result (A11 / ADR-0003, 2026-09-21). Criterion 5 (classifier #2's
+  > occupancy band) holds only on unlagged M2SL: a 1-month publication lag moves occupancy to
+  > 3.45–38.22%, outside 8–35% (07-VERIFICATION-WAVE2.md, re-run by the orchestrator). Classifier #2
+  > is re-fit and re-judged on point-in-time data in Phase 08.1.
+  >
   > **DELIVERED PARTIALLY — Phase 7, 2026-09-21. The open item is named, not folded in:
   > criterion 6's dependence verdict is UNRESOLVED.** Wave 1 (ADR-0001) satisfied the
   > feature-policy, §5.4-interpretability and ablation-re-measurement clauses. Wave 2 (ADR-0002)
@@ -236,7 +242,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-03 | Phase 5 | Complete |
 | EVAL-04 | Phase 5 | Complete |
 | NB-01 | Phase 6 | Complete |
-| REG-01 | Phase 7 | **Partial** — criterion 6 (dependence) UNRESOLVED; see ADR-0002 |
+| REG-01 | Phase 7 | **Partial, pending Phase 08.1** — criterion 6 (dependence) UNRESOLVED; criterion 7 MET as a measurement, FAILED as a result (A11 / ADR-0003); criterion 5 contingent on the 08.1 point-in-time re-run (a 1-month M2SL lag breaks its occupancy band). Glenn ruling 2026-09-29; see ADR-0002, 07-VERIFICATION-WAVE2.md |
 | INV-01 | Phase 7 | Complete |
 | PER-01 | Phase 8 | Complete |
 | PER-02 | Phase 8 | Complete (leakage governed by causal invariance, ruling 2026-09-23). CR-01 (filter likelihood prior) closed by 08-16/08-17, re-verified 2026-09-29 |

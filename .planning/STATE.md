@@ -562,6 +562,10 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
+- **(Phase 08.1) Hysteresis thresholds 0.70/0.40 — revisit on the final belief (Glenn, 2026-09-29: defer).**
+  The 08-09 keep-absolute ruling cited belief ≥0.70 in 307/488 and 415/488 months; after the CR-01 fix
+  those are 273/488 and 408/488 (08-MEASUREMENTS §11). They move again once 8.1 lands CR-02/CR-03; any
+  re-tuning is a new configuration under an ADR-0004 budget.
 - **(Phase 8.1 candidate — Phase 9 is Migration; found 2026-09-28 while planning G-08-2) the evaluated L2 nowcaster recipe is input-independent at full history.**
   Fit exactly as `driver._refit_l2` fits it on all labelled history, `_cv_safe_active_features` admits all
   55 columns, which truncates training to 153 rows (2007-04-30 → 2019-12-31) holding 3 of 6 regimes

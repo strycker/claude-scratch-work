@@ -361,3 +361,8 @@ re-recorded served belief, and ADR-0004 pricing. **Round 2 delivered each:** Gle
 
 _Verified: 2026-09-29T21:40:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Orchestrator note — 2026-09-29
+
+Human item 3 (neutral-posture display) is **CLOSED**: Glenn ruled "One sentence, no rows" — the
+behaviour 08-15 built stands. Items 1–2 (Mac full suite; Mac build → serving → weekly) remain open.
