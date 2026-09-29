@@ -705,6 +705,11 @@ def _rederived(suffix: str) -> tuple[dict, dict]:
     return recomputed, recorded
 
 
+def _floats_agree(recomputed: float, recorded: float) -> bool:
+    """The one float rule: relative 1e-9 with a ZERO absolute floor (see the block comment above)."""
+    return recomputed == pytest.approx(recorded, rel=_PORTABLE_REL, abs=0.0)
+
+
 def _record_mismatches(recomputed: dict, recorded: dict) -> list[str]:
     """Sorted keys of ``recorded`` whose recomputed value does not match. THE comparison routine:
     the gating re-derivation and every discrimination arm go through it. A key missing from
@@ -720,7 +725,7 @@ def _record_mismatches(recomputed: dict, recorded: dict) -> list[str]:
         elif isinstance(want, (int, str)):
             ok = got == want
         else:
-            ok = got == want
+            ok = _floats_agree(got, want)
         if not ok:
             bad.append(key)
     return sorted(bad)
