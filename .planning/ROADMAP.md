@@ -659,6 +659,14 @@ wave 4.
 - [ ] 08-13-PLAN.md — **G-08-2 build.** `python -m trading_crab_lib.platform.report.serving` builds all three serving artifacts weekly reads (the UAT found one; there are three) through the backtest's own `fit_l2_nowcaster`, under `NO_REGISTRY`; weekly scores the model's own columns; the end-to-end test is proven able to fail *(PER-02, PER-05, PER-10)* — wave 2
 - [ ] 08-14-PLAN.md — **G-08-2 serve.** Glenn's two 08-12 rulings implemented, then the supported sequence run on the real tracked data in scratch directories, with G-08-2's real-data status stated honestly *(PER-02, PER-05, PER-10)* — wave 3
 
+**Gap closure 2 — code review + verification 2026-09-29 (CR-01, CR-05, CR-06, neutral-posture display)** *(5 plans, 5 sequential waves — every plan moves the recorded test count, so no two share a wave; ADR-0004 budget 0, registry stays 44 byte-identical; Glenn's ruling "fix small ones, then close"; CR-02/CR-03/CR-04 are Phase 8.1)*
+
+- [ ] 08-15-PLAN.md — **Display.** Neutral posture no longer lists every (regime, asset) row unlabelled (24 rows, each asset 6×, since `036ae74`); per-asset rows follow the active regime and name it, as the page's own A7 sentence says *(PER-05, PER-10)* — wave 1
+- [ ] 08-16-PLAN.md — **CR-01 tracer, served path.** `fit_l2_nowcaster` returns the training prior of the rows it fit; serving persists it beside the model; weekly divides by it (π₀ and A stay on the labels, decided and justified); the verified real-data flip (state 3's L 1.96 → 0.63, top belief state 3 → 0) pinned by a test that fails under the old prior *(PER-02, PER-10)* — wave 2
+- [ ] 08-17-PLAN.md — **CR-01 backtest.** Both drivers divide by the same returned prior (`_refit_l2` → posterior + prior); `likelihood_ratio` refuses the whole-window prior shape; l1only bit-for-bit pins unmodified *(PER-02, PER-03, PER-10)* — wave 3
+- [ ] 08-18-PLAN.md — **CR-05 + CR-06.** `run_joint_lift` checks a declared ADR-0004 ceiling (`--declared-ceiling`) before any append, with explicit raises that survive `-O`; registry rows record the effective `use_regime_filter`; the joint row names its harness plan instead of claiming `07-11` *(PER-02, PER-07, PER-10)* — wave 4
+- [ ] 08-19-PLAN.md — **Re-measure and record.** l1only proven byte-unchanged; the l2 leg, B1 and S-1 re-measured under NO_REGISTRY behind controls, every new negative offset adjudicated by truncation; the served belief re-run on real data; old → new amendments in 08-MEASUREMENTS and 08-SERVING, nothing overwritten *(PER-02, PER-03, PER-07, PER-10)* — wave 5
+
 **Explicit non-goals**: no λ sweep; no dependence statistic of any kind; no migration work; no
 2021+ holdout use for any selection decision; no re-pin of K or λ; no target pre-declared for
 either churn metric; `legacy/` and the reference submodules untouched; the legacy-import ratchet
