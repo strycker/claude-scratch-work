@@ -308,6 +308,10 @@ class _FakeNowcaster:
     """Minimal ``predict_proba`` stand-in — classes span all three regimes."""
 
     classes_ = np.array([0, 1, SUB_FLOOR_REGIME])
+    # 08-13: weekly scores the model's own columns (feature_names_in_), never the whole
+    # row. These are the columns of the frame this test's load_full_span stub returns.
+    # Harness only — no G6 assertion is touched.
+    feature_names_in_ = np.array(["SPY", "TLT"])
 
     def predict_proba(self, features_row: pd.DataFrame) -> np.ndarray:
         return np.array([[0.5, 0.3, 0.2]])
