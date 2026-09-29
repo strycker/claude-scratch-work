@@ -215,6 +215,94 @@ is a new configuration under ADR-0004.
 
 ---
 
-## 3. Post-implementation measurement
+## 3. Post-implementation measurement, real tracked data (plan 08-14)
 
-*(Reserved for 08-14.)*
+> **Cost first.** **registry rows spent: 0.** `registry/trials.jsonl` had sha256
+> `c957e8fdb360f04cebd36a6ac19f7efe5c036d098152a5b0c1694f2e73c088ad` before and after every run
+> below, and `total_trial_count()` read **44** before and after. The runs wrote only to scratch
+> copies; `git status --porcelain -- data outputs registry` was empty afterwards.
+
+Measured 2026-09-29, with 08-14's two rulings implemented (commits `efbd262` for q1-c and
+`eed8057` for q2-ii). `serving.py` and `driver.py` are unchanged since 08-13, so there is no
+recipe change.
+
+### 3.1 Commands run
+
+`data/checkpoints` and `data/holdout` were copied, as tracked, into a scratch directory
+(`<scratch>/data`), so every checkpoint started exactly as committed. There was no prior belief,
+hysteresis or executed-book state (a cold start).
+
+```bash
+export TC_DATA_DIR=<scratch>/data TC_OUTPUT_DIR=<scratch>/out
+python -m trading_crab_lib.platform.report.serving      # exit 0
+python -m trading_crab_lib.platform.report.weekly       # exit 0 (run 1)
+python -m trading_crab_lib.platform.report.weekly       # exit 0 (run 2, same month)
+```
+
+`python scripts/build_platform_data.py` was **not** run: it needs the network and a FRED key, and
+running it would have measured a different dataset from the one §1 and §2 describe. The
+measurement is therefore on the tracked data as committed. A fresh build on the Mac may move the
+ragged edge (see §3.4).
+
+### 3.2 What the run produced
+
+| Measurement | Value |
+|---|---|
+| Report produced? | **Yes.** Both weekly runs exited 0 and wrote `weekly_report.md`. |
+| As-of month (scored) | **2026-06-30**, 2 month-ends behind the newest row (2026-08-31). Inside the cap `MAX_SCORING_LAG_MONTHS = 3`. |
+| Lagging columns named on the page | 2026-07-31 lacks `div_yield`; 2026-08-31 lacks `fred_m2sl`, `fred_totalsl`, `div_yield`. The same as §1 item 8. |
+| Served distribution | regime 3: 56.4%, regime 0: 41.8%, regime 4: 1.8%. The same as §1 item 6. |
+| Distinct-posterior count and window | **1 distinct posterior vector across 231 complete months (2007-04-30 → 2026-06-30)**, with the does-not-depend sentence. The same as §1 item 6. |
+| Filtered belief (cold start, one filter step, as-of 2026-06-30) | 3: 36.9%, 0: 27.2%, 1: 21.3%, 5: 6.7%, 2: 6.7%, 4: 1.2%. The checkpoint's `as_of` is 2026-06-30. |
+| Active regime | none (neutral posture). No belief component clears the 0.70 act threshold. |
+| Executed book (`executed_weights`, basis `executed`, as-of 2026-06-30) | TLT 0.390654, SPY 0.330723, USO 0.144729, IAU 0.133895; cash residual 0.0%. |
+| Second run, same month | The `executed_weights` frame was equal under `assert_frame_equal`, and `weekly_report.md` was **byte-identical** (`cmp`) to run 1's. The belief was reused unchanged (same scored month), and the band re-banded against the same held book. |
+| Registry | sha256 `c957e8fdb360...` before and after; `total_trial_count()` 44 before and after. |
+
+The real-data report's key lines, verbatim:
+
+> Scored as of 2026-06-30, the latest month observed in all 55 of the nowcaster's model columns (2 month-ends behind the newest row). Newer rows lack model columns: 2026-07-31 lacks div_yield; 2026-08-31 lacks fred_m2sl, fred_totalsl, div_yield. Nothing is imputed.
+
+> 1 distinct posterior vector across 231 complete months (2007-04-30 → 2026-06-30): the served model scored on every month observed in all 55 model columns, compared exactly (no rounding, no threshold). The distribution above does not depend on the features: it is the same every week.
+
+> - active regime: none (neutral posture)
+
+> The active regime is a reported label: it selects the trajectory and per-asset rows below and gates no weight (audit item A7, 08-A7.md). The weights come from the filtered belief through the no-trade band.
+
+> Targets below are the EXECUTED book after the 5.0% no-trade band (design §5.3 bounded turnover, 08-A7.md): an asset whose target moved by no more than the band from its last executed weight keeps that weight.
+
+Each of UAT test 2's expected strings is present: "active regime: ... none (neutral posture)", the
+A7 sentence, and "Targets below are the EXECUTED book after the 5.0% no-trade band". The second
+run in the same month gives the same targets.
+
+### 3.3 Each ruling's stated consequence, answered
+
+- **§2.1 (q1-c).** Predicted: the report scores 2026-06-30, 2 month-ends inside the cap, and names
+  `div_yield` for 2026-07-31 and all three columns for 2026-08-31. **Measured: exactly that.**
+- **§2.2 (q2-ii).** Predicted: the report runs, shows {0: 0.418, 3: 0.564, 4: 0.018}, and prints
+  "1 distinct vector across 231 complete months (2007-04-30 → 2026-06-30)" beneath it.
+  **Measured: exactly that**, with the does-not-depend sentence.
+
+### 3.4 Status
+
+**G-08-2: CLOSED on real data: the supported commands produce the weekly report on the tracked data as of 2026-06-30** (the scored month; the newest row is 2026-08-31, and the run date is 2026-09-29).
+
+What this does and does not cover:
+- It covers steps 2 and 3 of the documented run order on the data as committed. Step 1 was not
+  re-run here (§3.1). The Mac re-test of UAT test 2 runs all three.
+- It does **not** make the guidance input-dependent. The page now says so: 1 distinct vector,
+  and the distribution does not depend on the features. The recipe fix is the Phase 9 item §2.2
+  records, under that phase's own ADR-0004 budget.
+- **The staleness cap uses the data-relative reading** (month-ends behind the newest
+  `monthly_features` row), as the orchestrator relayed it. §2.1's request for Glenn to confirm
+  that reading still stands. Under a wall-clock reading today's run (2026-09-29, scoring June)
+  sits exactly at 3 and still serves. From 2026-10-01 it would refuse until July's `div_yield`
+  arrives. The cap lives at one site, `weekly.MAX_SCORING_LAG_MONTHS` and its one comparison in
+  `_scored_row`.
+- **The train/serve difference §2.1 declared is now live.** Serving guidance runs on 2026-06-30
+  information, 2 month-ends older than the backtest ever assumed.
+- **The page shows no per-account trade rows**, because `config/platform_settings.yaml` configures
+  no `report.accounts`. The executed book is in the `executed_weights` checkpoint (tabled above)
+  but is not listed on the page. This predates 08-14 and is recorded, not changed.
+
+- **registry rows spent: 0**

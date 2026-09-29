@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-2451%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2459%20passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
@@ -474,7 +474,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ 2451 tests (unit + integration), all passing
+- ✓ 2459 tests (unit + integration), all passing
 - ✓ Exploration notebooks (01–12)
 
 ---
@@ -540,8 +540,12 @@ python -m trading_crab_lib.platform.report.weekly [--send-email]
 ```
 
 `nowcaster.pkl` is a machine-local joblib pickle and is git-ignored; rebuild it with step 2.
-If the latest data row lacks one of the model's columns, step 3 fails and names them. It
-does not impute.
+When the newest data row lacks some of the model's columns (a publication lag), step 3 scores
+the latest month observed in every model column, prints "Scored as of <month>" and names what
+each newer row lacks; it refuses when that month is more than 3 month-ends behind the newest
+row, and it never imputes. Under the distribution it prints how many distinct posteriors the
+model gives across history; on today's data that is 1, and the page says the distribution
+does not depend on the features.
 
 ---
 
