@@ -91,6 +91,8 @@ recommendation (2026-09-29) and **not yet ruled on**. Glenn edits it.
 | A-08 | The report prints the **count of distinct posterior vectors** (q2-ii), so a constant model can never pass as a live signal. | Honesty on the trading surface | 08-14 | KEEP |
 | A-09 | Neutral posture (no active regime): the per-asset section prints one sentence and no rows. Rows that do print name their regime. | 24 unlabelled contradictory rows were misleading | 08-15; ruling 2026-09-29 | KEEP |
 | A-10 | Minimal daily tripwire (3 signals). | Crash avoidance is the point | Phase 4 | KEEP |
+| A-11 | The weekly report **always prints the target (executed) allocation**; per-account trades are an extra section. | With no account configured the page never said what to hold (Glenn's 2026-09-30 Mac report) | Glenn 2026-09-30; Phase 08.1 | KEEP, **to build** |
+| A-12 | Staleness is judged **per series against its own publication lag**, replacing A-07's "3 month-ends behind the newest row" rule. | A mostly-empty current-month row put the scored month exactly at the cap | Glenn 2026-09-30; Phase 08.1 | KEEP, **to build** (supersedes A-07's cap once built) |
 
 ## Evaluation
 
@@ -108,4 +110,5 @@ recommendation (2026-09-29) and **not yet ruled on**. Glenn edits it.
 |---|---|---|---|---|
 | G-01 | Human notebooks P1–P6 (one per layer), each with a human sign-off cell in P3. | Human understanding and gating | Phase 6 | KEEP. **Extend**: nothing yet covers classifier #2, the Bayes filter, the no-trade band or serving |
 | G-02 | Plotting lives in `platform/plotting/` and notebooks call it; no inline plotting logic. | Reuse and testability | Phase 6 D-01/D-02 | KEEP |
+| G-04 | Phase order **8.1 → 8.2**: the point-in-time re-measurement of tilt vs ablation comes before the lean MVP, because its answer shapes the MVP's design. | Glenn, 2026-09-30 | ROADMAP | record |
 | G-03 | The planning volume per phase is out of proportion (see the ratio table in `REBUILD-FROM-SCRATCH-GUIDE.md` §1). | Planning had become coding | Glenn, 2026-09-29 | **CHANGE**: Phase 8.2 lean-MVP mode |

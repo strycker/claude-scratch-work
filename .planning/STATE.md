@@ -5,7 +5,7 @@ milestone_name: milestone
 current_phase: 08.1
 current_phase_name: Point-in-Time Data Audit
 status: planning
-stopped_at: Phase 8 COMPLETE 2026-09-30 (19/19 plans, verified 12/12, Mac suite + build→serving→weekly passed); next is 08.2 or 08.1 — order pending Glenn
+stopped_at: Phase 8 COMPLETE 2026-09-30 (19/19 plans, verified 12/12, Mac suite + build→serving→weekly passed); next is 08.1 (order decided by Glenn 2026-09-30), then 08.2
 last_updated: "2026-09-30T15:51:23.038Z"
 progress:
   total_phases: 10
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 8 closing (19/19 executed, re-verified 12/12; awaiting Glenn's Mac runs). Next: Phase 08.2 Lean MVP (inserted 2026-09-29) and Phase 08.1 Point-in-Time Audit — order pending Glenn. Lean-MVP mode adopted; see REBUILD-FROM-SCRATCH-GUIDE.md and platform_design/DECISIONS.md.
+**Current focus:** Phase 8 COMPLETE (2026-09-30). Next: Phase 08.1 Point-in-Time Data Audit — order 8.1 → 8.2 decided by Glenn 2026-09-30; 8.1 also carries two usability fixes (target allocation always printed; staleness cap per series). Lean-MVP mode applies. Starts on a new branch after Glenn merges this branch to main.
 
 ## Current Position
 
 Phase: 08.1 — Point-in-Time Data Audit
-Status: Ready to plan — Glenn to choose 08.2 (Lean MVP, recommended first) vs 08.1 (Point-in-Time Audit)
+Status: Ready to plan — 08.1 next (Glenn, 2026-09-30); scope includes two usability fixes (always print target allocation; per-series staleness cap). Awaiting Glenn's merge to main + new branch before discuss-phase.
 Closing record: `08-MEASUREMENTS.md`. **Registry 42 → 44, the ADR-0002 ceiling exactly — zero
 headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
 1972-01-31 → 2020-12-31: l1only `wealth_delta` **−0.125307** (was −0.123438), `dd_delta`

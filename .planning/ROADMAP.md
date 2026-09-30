@@ -696,6 +696,19 @@ declared ADR-0004 trial budget, with earlier positive results labelled possibly-
 Look-ahead can only flatter each leg, so the absolute-performance verdicts (DSR does not clear; A11 FAILED) stand; the SIGN of relative numbers (wealth_delta, dd_delta) and the dependence verdict are NOT guaranteed, because the legs are exposed differently (Phase 7 wave-2 verification, 2026-09-29). Criterion 5 is directly exposed: lagging fred_m2sl by 1 month moves classifier #2's occupancy to 3.45/13.79/22.70/21.84/38.22% — outside the 8–35% band at both ends, 17.82% of months keep their state (a 2-month lag gives 98.13%); orchestrator re-ran the diagnostic 2026-09-29.
 Candidates to schedule at discuss-phase (Phase 8 named blockers): CR-02 (filter belief carried
 across refits whose state ids are not aligned) and the input-independent L2 recipe.
+**Order decided (Glenn, 2026-09-30): 08.1 runs BEFORE 08.2** — 8.1's re-measured answer to "does the
+regime tilt beat the no-regime ablation on point-in-time data?" shapes 8.2's MVP design.
+**Two usability fixes ride along (Glenn, 2026-09-30)**, found in his 2026-09-30 Mac weekly report:
+  - **Report always prints the target allocation.** Today the target/executed book appears only
+    per configured account; with no account configured the page never says what to hold. Print the
+    executed target book unconditionally; per-account trades stay as an extra section.
+  - **Staleness cap measured per series, not against the newest raw row.** The 2026-09-30 build
+    appended a mostly-empty current-month row (16 series missing), so the scored month (June) sat
+    exactly at the 3-month-end cap and next month's run would likely refuse. Base the cap on the
+    per-series publication-lag table this phase builds (a series is "stale" only if it is later than
+    its own expected lag), so a partial current-month row cannot trip it.
+**Usable output of 8.1:** a weekly page that shows a concrete allocation on point-in-time data and
+runs reliably month to month; the regime tilt remains unproven until 8.1's re-measurement says otherwise.
 **Requirements**: TBD
 **Depends on:** Phase 8
 **Blocks**: Phase 9 (Migration) — Glenn's ruling, 2026-09-29
@@ -729,16 +742,16 @@ mutation proofs / ruling records / amendments only for **decision-bearing** numb
      data with one human sign-off cell — including the gaps today: serving/report (N4), the filtered
      belief, and a "does the regime layer pay rent?" scoreboard (N7).
 
-  4. **Cheap point-in-time fix folded in:** the publication-lag shifts for the three measured series
-     (+ the point-in-time test) — the config/test half of Phase 08.1 — so MVP-1 is not built on
-     look-ahead. The expensive half (re-running decision-bearing evaluations) stays in 08.1.
+  4. **Builds on 08.1** (which now runs first, Glenn 2026-09-30): point-in-time data, the per-series
+     staleness rule and an always-visible target allocation are already in place; 8.1's re-measured
+     tilt-vs-ablation answer decides whether MVP-1 shows the regime view as advisory or weighted.
 
   5. Full suite green on Mac and Linux; no new trial-registry rows (budget 0).
 
 **Requirements**: TBD
 **Depends on:** Phase 8
-**Recommended order (Glenn to confirm):** 08.2 before 08.1's re-evaluation half; 08.2's modules are the
-natural units for Phase 9's module-by-module migration.
+**Order:** after 08.1 (decided by Glenn 2026-09-30). 08.2's modules are the natural units for Phase 9's
+module-by-module migration.
 **Plans:** 0 plans
 
 Plans:
@@ -778,7 +791,7 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 9
-(Recommended 2026-09-29, pending Glenn: 8.2 before 8.1's re-evaluation half — see Phase 08.2.)
+(Order confirmed by Glenn 2026-09-30: 8.1 before 8.2 — 8.1's outcome shapes 8.2's design.)
 (Phase 7 gates internally: wave 2 does not start unless wave 1 passes.)
 
 | Phase | Plans Complete | Status | Completed |
