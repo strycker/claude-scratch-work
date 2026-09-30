@@ -206,6 +206,7 @@ _EMBARGO = 12
 _MIN_HISTORY = 60
 _N_SPLITS = 3
 _DEV_END = pd.Timestamp("2020-12-31")
+_RUN_DATE = "2021-07-08"  # the world's "today": a week into July, after the 06-30 row
 
 
 def _world_cfg() -> dict:
@@ -219,6 +220,9 @@ def _world_cfg() -> dict:
             "portfolio_vol_min_obs": 12,
         },
         "report": {"accounts": []},
+        # 08.1: both world series are real-time (lag 0), so the weekly staleness check judges
+        # them against the run date alone.
+        "publication_lags": {"f_level": 0, "f_slope": 0},
         "splice": {
             "equities": {"research_name": "eq_r", "method": "single_source", "source_col": "px_eq", "tradable": "SPY"},
             "long_duration": {
@@ -272,6 +276,8 @@ def _serving_world(
     cfg = _world_cfg()
     monkeypatch.setattr(serving, "load_platform_config", lambda: cfg)
     monkeypatch.setattr(weekly, "load_platform_config", lambda: cfg)
+    # The world ends 2021-06-30; the wall clock would call every world series years stale.
+    monkeypatch.setattr(weekly, "_run_date", lambda: pd.Timestamp(_RUN_DATE), raising=False)
 
     dev_idx = pd.date_range("1995-01-31", _DEV_END, freq="ME")
     hold_idx = pd.date_range("2021-01-31", "2021-06-30", freq="ME")
@@ -754,8 +760,9 @@ class TestTheServedModelOnTheTrackedData:
 # ── Glenn's 08-12 rulings at serve (plan 08-14): q1-c and q2-ii ──────────────
 #
 # 08-SERVING.md §2.1 (q1-c): score the newest month observed in EVERY model column, say so on
-# the page, step the belief and the band on that month, and refuse (before any save) when it
-# is more than MAX_SCORING_LAG_MONTHS = 3 month-ends behind the newest monthly_features row.
+# the page, and step the belief and the band on that month. Its 3-month-end refusal
+# (MAX_SCORING_LAG_MONTHS) was superseded by DECISIONS A-12 (plan 08.1-02): a series later than
+# the run date allows is named in a STALE DATA banner and the report still writes.
 # §2.2 (q2-ii): print the exact count of distinct posteriors across every full-span month
 # complete in the model columns, directly under the distribution; never withhold on it.
 
@@ -894,6 +901,7 @@ class TestQ1cLatestCompleteMonth:
         report = _report_path(world).read_text()
         assert "Scored as of 2021-06-30" in report
         assert " lacks " not in report
+        assert "STALE DATA" not in report
         assert "Nothing is imputed." in report
 
     def test_q1c_no_complete_month_raises(self, tmp_path, monkeypatch):
@@ -914,21 +922,44 @@ class TestQ1cLatestCompleteMonth:
         assert "impute" in msg
         _assert_nothing_written(world)
 
-    def test_q1c_staleness_cap_refuses_a_month_more_than_3_behind(self, tmp_path, monkeypatch):
+    def test_a12_a_stale_series_is_named_in_a_banner_and_the_report_still_writes(self, tmp_path, monkeypatch):
         from trading_crab_lib.platform.report import serving, weekly
 
-        assert weekly.MAX_SCORING_LAG_MONTHS == 3
         world = _serving_world(tmp_path, monkeypatch, nan_tail=4)
         assert serving.main([]) == 0
+        assert weekly.main([]) == 0  # HEAD raises: 4 month-ends behind
 
-        with pytest.raises(ValueError) as excinfo:
-            weekly.main([])
+        report = _report_path(world).read_text()
+        assert "## STALE DATA" in report
+        h1, banner = report.index("# Trading-Crab Platform Weekly Report"), report.index("## STALE DATA")
+        dist = report.index("## Current Regime Distribution")
+        assert h1 < banner < dist
+        section = report[banner:dist]
+        assert "f_slope: 4 months late" in section
+        assert "last value 2021-02-28" in section and "expected through 2021-06-30" in section
+        assert "f_level" not in section, "a fresh series is never named"
+        assert "imputes nothing" in section
+        assert "Scored as of 2021-02-28" in report
+        assert "Nothing is imputed." in report
+        assert not hasattr(weekly, "MAX_SCORING_LAG_MONTHS"), "A-12 removed the 3-month-end cap"
 
-        msg = str(excinfo.value)
-        assert "2021-02-28" in msg, "the latest complete month"
-        assert "2021-06-30" in msg, "the newest row"
-        assert "4 month-ends" in msg and "MAX_SCORING_LAG_MONTHS = 3" in msg
-        _assert_nothing_written(world)
+    def test_a12_grace_window_a_series_inside_it_is_not_stale(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch, nan_tail=1)  # f_slope ends 2021-05-31
+        assert serving.main([]) == 0
+
+        # Inside the 7-day grace: (07-05 minus 7d) is 06-28, so only May must exist.
+        monkeypatch.setattr(weekly, "_run_date", lambda: pd.Timestamp("2021-07-05"))
+        assert weekly.main([]) == 0
+        assert "STALE DATA" not in _report_path(world).read_text()
+
+        # Past it: (07-08 minus 7d) is 07-01, so June must exist and f_slope lacks it.
+        monkeypatch.setattr(weekly, "_run_date", lambda: pd.Timestamp("2021-07-08"))
+        assert weekly.main([]) == 0
+        report = _report_path(world).read_text()
+        section = report[report.index("## STALE DATA"): report.index("## Current Regime Distribution")]
+        assert "f_slope: 1 month late" in section and "f_level" not in section
 
     def test_q1c_staleness_cap_boundary_exactly_3_behind_serves(self, tmp_path, monkeypatch):
         from trading_crab_lib.platform.report import serving, weekly

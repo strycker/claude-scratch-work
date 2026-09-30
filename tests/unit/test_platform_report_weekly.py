@@ -117,6 +117,68 @@ class TestAssembleWeeklyReport:
         assert "BUY" in markdown  # SPY target 0.5 vs current 0.2 -> BUY
 
 
+# ── stale_series: per-series staleness against the run date (08.1, A-12) ─────
+
+
+class TestStaleSeries:
+    def _frame(self) -> pd.DataFrame:
+        idx = pd.date_range("2021-01-31", "2021-06-30", freq="ME")
+        return pd.DataFrame(
+            {
+                "fresh": 1.0,
+                "two_late": [1.0, 1.0, 1.0, 1.0, np.nan, np.nan],
+                "never": np.nan,
+                "gappy": [np.nan, 1.0, np.nan, 1.0, 1.0, 1.0],  # an interior gap is not staleness
+            },
+            index=idx,
+        )
+
+    def test_names_only_series_whose_last_value_precedes_the_expected_month(self):
+        got = weekly.stale_series(
+            self._frame(), ["fresh", "two_late", "never", "gappy"],
+            run_date=pd.Timestamp("2021-07-08"), grace_days=7,
+        )
+        assert got == {"two_late": 2, "never": None}
+
+    def test_the_grace_window_moves_the_expected_month(self):
+        frame = self._frame().drop(columns=["never"])
+        inside = weekly.stale_series(frame, ["two_late"], run_date=pd.Timestamp("2021-07-05"), grace_days=7)
+        assert inside == {"two_late": 1}  # expected 05-31, last valid 04-30
+        none_needed = weekly.stale_series(frame, ["fresh"], run_date=pd.Timestamp("2021-07-05"), grace_days=7)
+        assert none_needed == {}
+
+    def test_a_month_end_run_date_is_not_yet_due_for_that_month(self):
+        frame = self._frame()[["fresh"]]
+        # 2021-07-07 minus 7 days is 06-30: June is still inside its grace, so expected is 05-31.
+        assert weekly.stale_series(frame.iloc[:-1], ["fresh"], run_date=pd.Timestamp("2021-07-07"),
+                                   grace_days=7) == {}
+        assert weekly.stale_series(frame.iloc[:-1], ["fresh"], run_date=pd.Timestamp("2021-07-08"),
+                                   grace_days=7) == {"fresh": 1}
+
+    def test_does_not_mutate_the_frame_and_ignores_columns_not_listed(self):
+        frame = self._frame()
+        before = frame.copy()
+        assert weekly.stale_series(frame, [], run_date=pd.Timestamp("2021-07-08"), grace_days=7) == {}
+        pd.testing.assert_frame_equal(frame, before)
+
+    def test_the_banner_lines_render_months_and_never_observed(self):
+        md = weekly.assemble_weekly_report(
+            regime_probs={0: 1.0}, transition_matrix=pd.DataFrame(), returns_by_regime=pd.DataFrame(),
+            target_weights=pd.Series(dtype=float), accounts=[], active_regime=0,
+            stale_series={"div_yield": 2, "m2": 1, "gone": None},
+            stale_expected_through=pd.Timestamp("2026-07-31"),
+        )
+        assert md.index("## STALE DATA") < md.index("## Current Regime Distribution")
+        assert "- div_yield: 2 months late (last value 2026-05-31, expected through 2026-07-31)" in md
+        assert "- m2: 1 month late (last value 2026-06-30, expected through 2026-07-31)" in md
+        assert "- gone: no value ever observed (expected through 2026-07-31)" in md
+        clean = weekly.assemble_weekly_report(
+            regime_probs={0: 1.0}, transition_matrix=pd.DataFrame(), returns_by_regime=pd.DataFrame(),
+            target_weights=pd.Series(dtype=float), accounts=[], active_regime=0, stale_series={},
+        )
+        assert "STALE DATA" not in clean
+
+
 # ── write_weekly_report: markdown ALWAYS written (D-02) ──────────────────────
 
 
