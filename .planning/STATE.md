@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08.1
 current_phase_name: Point-in-Time Data Audit
-status: planning
-stopped_at: Phase 8 COMPLETE 2026-09-30 (19/19 plans, verified 12/12, Mac suite + build→serving→weekly passed); next is 08.1 (order decided by Glenn 2026-09-30), then 08.2
+status: planned
+stopped_at: Phase 08.1 PLANNED 2026-09-30 (3 lean plans, checker 0 blockers / 5 warnings fixed); awaiting Glenn approval of rulings 1-3 + yes/no rule before /gsd-execute-phase 8.1
 last_updated: "2026-09-30T16:46:08.466Z"
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 67
   completed_plans: 66
-last_activity: 2026-09-29
-last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
+last_activity: 2026-09-30
+last_activity_desc: "Phase 08.1 planned — research (lag table measured; pre-1991 GDP fallback look-ahead found), 3 plans (01 lags+PIT test+D-12, 02 weekly STALE banner + allocation table, 03 before run → migrate → checkpoint → D-04 44→46). Registry 44."
 ---
 
 # Project State
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.1 — Point-in-Time Data Audit
-Status: Ready to plan — 08.1 next (Glenn, 2026-09-30); scope includes two usability fixes (always print target allocation; per-series staleness cap). Awaiting Glenn's merge to main + new branch before discuss-phase.
+Status: **Planned** (2026-09-30) — 08.1-01/02 wave 1, 08.1-03 wave 2 with a blocking checkpoint before the 2-row D-04 run. Awaiting Glenn approval to execute.
 Closing record: `08-MEASUREMENTS.md`. **Registry 42 → 44, the ADR-0002 ceiling exactly — zero
 headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
 1972-01-31 → 2020-12-31: l1only `wealth_delta` **−0.125307** (was −0.123438), `dd_delta`
