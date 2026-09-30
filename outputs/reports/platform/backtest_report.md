@@ -4,24 +4,24 @@
 
 This is the go/no-go number: median regime sojourn (how long a regime typically lasts) divided by the median real-time detection lag (how long the walk-forward nowcaster took to notice a transition, checked against P(its own target state) — review F1). A high ratio means most of a regime's life is capturable after detection; a ratio near 1 means the lag eats the trade.
 
-- median sojourn (months): 9.5
-- median detection lag (months): 111.0
-- **ratio: 0.08558558558558559**
-- sample: median lag over **15 resolved of 25 transitions** (a transition resolves only when P(target) reaches the 70% action threshold).
+- median sojourn (months): 10.0
+- median detection lag (months): 63.0
+- **ratio: 0.15873015873015872**
+- sample: median lag over **14 resolved of 25 transitions** (a transition resolves only when P(target) reaches the 70% action threshold).
 
 ## Baseline Comparison: Faber 10-Month SMA (§23.1)
 
 The Faber 10-month SMA is design §23.1's STANDING TARGET for the regime strategy to beat on both log wealth AND max drawdown — this is recorded, not a pass/fail gate (D-01a).
 
-- strategy: terminal log wealth=4.1315, max drawdown=-28.32%
-- faber_sma: terminal log wealth=6.3726, max drawdown=-18.94%
+- strategy: terminal log wealth=3.8909, max drawdown=-23.90%
+- faber_sma: terminal log wealth=6.4285, max drawdown=-18.98%
 
 ## No-Regime-Ablation Delta (Does the Regime Layer Pay Rent?)
 
 The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regime tilt disabled (backtest/baselines.py::no_regime_ablation) — never a hand-rolled parallel implementation (D-02).
 
-- terminal log wealth delta (strategy - ablation): +0.0269 (strategy=4.1315, ablation=4.1046)
-- max drawdown delta (strategy - ablation): -7.98% (strategy=-28.32%, ablation=-20.34%)
+- terminal log wealth delta (strategy - ablation): -0.1515 (strategy=3.8909, ablation=4.0424)
+- max drawdown delta (strategy - ablation): -4.07% (strategy=-23.90%, ablation=-19.83%)
 
 ## Feature-Policy Pre/Post Comparison (Wave 1, ADR-0001)
 
@@ -31,17 +31,17 @@ The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regim
 
 | Quantity | Pre-fix (superseded, 9-column, stale checkpoint) | Post-fix (frozen, 10-column policy) |
 |---|---|---|
-| Median regime sojourn (months) | 97.0 | 9.5 |
-| Median detection lag (months) | 164.0 | 111.0 |
-| §5.4 ratio (`n_resolved` of `n_transitions`) | 0.5910 (4 of 6; 1974-02 -> 2020-12) | 0.0856 (15 of 25, resolved within 1974-02 -> 2020-12) |
-| Labeling disagreement (`pct_disagree`, `n_compared`) | 82.77% (389/470; 1974-02 -> 2020-12) | 85.03% (426/501; 1974-02 -> 2020-12) |
-| Multiclass Brier | 0.2087 (n_steps not recorded in the pre-fix source) | 0.1892 (n_steps=501) |
-| `wealth_delta` (no-regime-ablation, terminal log wealth) | +0.3793 | +0.0269 |
-| `dd_delta` (no-regime-ablation, max drawdown) | -1.44% | -7.98% |
-| Strategy terminal log wealth | 4.0265 | 4.1315 |
-| Strategy max drawdown | -21.24% (33 mo) | -28.32% (32 mo) |
-| Ablation terminal log wealth | 3.6472 | 4.1046 |
-| Ablation max drawdown | -19.81% | -20.34% (32 mo) |
+| Median regime sojourn (months) | 97.0 | 10.0 |
+| Median detection lag (months) | 164.0 | 63.0 |
+| §5.4 ratio (`n_resolved` of `n_transitions`) | 0.5910 (4 of 6; 1974-02 -> 2020-12) | 0.1587 (14 of 25, resolved within 1974-02 -> 2020-12) |
+| Labeling disagreement (`pct_disagree`, `n_compared`) | 82.77% (389/470; 1974-02 -> 2020-12) | 83.86% (421/502; 1974-02 -> 2020-12) |
+| Multiclass Brier | 0.2087 (n_steps not recorded in the pre-fix source) | 0.1899 (n_steps=502) |
+| `wealth_delta` (no-regime-ablation, terminal log wealth) | +0.3793 | -0.1515 |
+| `dd_delta` (no-regime-ablation, max drawdown) | -1.44% | -4.07% |
+| Strategy terminal log wealth | 4.0265 | 3.8909 |
+| Strategy max drawdown | -21.24% (33 mo) | -23.90% (33 mo) |
+| Ablation terminal log wealth | 3.6472 | 4.0424 |
+| Ablation max drawdown | -19.81% | -19.83% (32 mo) |
 
 **Frozen L1 feature columns (all 10, the labeler's full admitted set):** `cape_shiller`, `credit_spread_baa_aaa`, `curve_10y3m`, `div_yield`, `oil`, `real_rate_level`, `realized_vol_1m`, `realized_vol_3m`, `trailing_return_1m`, `trailing_return_3m`.
 
@@ -49,31 +49,31 @@ The no-regime ablation (design §8.7) is the SAME L1-L4 code path with the regim
 
 ## Smoothed-vs-Filtered Gap
 
-- gap (smoothed hindsight performance - real-time filtered performance): 0.5276 — the measured hindsight content of the strategy (§5.4). The smoothed reference is ONE full-sample labeler fit; the filtered series is the walk-forward driver's actual per-step decisions — genuinely distinct series (Pitfall 1), never the same object reused.
+- gap (smoothed hindsight performance - real-time filtered performance): 0.6897 — the measured hindsight content of the strategy (§5.4). The smoothed reference is ONE full-sample labeler fit; the filtered series is the walk-forward driver's actual per-step decisions — genuinely distinct series (Pitfall 1), never the same object reused.
 
 ## Baseline Gauntlet
 
 | Leg | Terminal Log Wealth | Max Drawdown |
 |-----|---------------------|--------------|
-| SPY Buy & Hold | 5.6805 | -48.95% |
-| 60/40 | 5.0471 | -26.96% |
-| Faber 10-Month SMA | 6.3726 | -18.94% |
-| Strategy (regime tilt) | 4.1315 | -28.32% |
-| No-Regime Ablation | 4.1046 | -20.34% |
+| SPY Buy & Hold | 5.6882 | -49.17% |
+| 60/40 | 5.0404 | -27.15% |
+| Faber 10-Month SMA | 6.4285 | -18.98% |
+| Strategy (regime tilt) | 3.8909 | -23.90% |
+| No-Regime Ablation | 4.0424 | -19.83% |
 
-- no-regime-ablation delta vs. strategy: +0.0269 terminal log wealth (-7.98% max drawdown) — does the regime layer pay rent?
+- no-regime-ablation delta vs. strategy: -0.1515 terminal log wealth (-4.07% max drawdown) — does the regime layer pay rent?
 
 ## Strategy KPIs
 
-- terminal log wealth: 4.1315
-- max drawdown: -28.32% (32 months underwater)
-- CVaR(5%): -0.0371
-- turnover (mean monthly): 0.1042
+- terminal log wealth: 3.8909
+- max drawdown: -23.90% (33 months underwater)
+- CVaR(5%): -0.0416
+- turnover (mean monthly): 0.1483
 - in-sample crisis capture ratios (down-capture, A6):
-  - 1973-74_oil_shock: -0.27
-  - 1980-82_volcker_recession: 0.71
-  - 2000-02_dotcom_bust: -0.06
-  - 2008-09_gfc: 0.31
+  - 1973-74_oil_shock: -0.36
+  - 1980-82_volcker_recession: 0.69
+  - 2000-02_dotcom_bust: -0.37
+  - 2008-09_gfc: 0.19
 
 ### Conventions
 
