@@ -693,3 +693,129 @@ class TestNoTradeBandAtServe:
             target_weights=pd.Series(dtype=float), accounts=[], active_regime=0, no_trade_band=0.05,
         )
         assert "EXECUTED book after the 5.0% no-trade band" in md
+
+
+# ── the always-printed target allocation table (08.1, D-09 / DECISIONS A-11) ─
+
+_CLASSES = {"SPY": "equities", "TLT": "long_duration", "IAU": "gold", "USO": "oil", "FZFXX": "cash"}
+_TARGET = pd.Series({"SPY": 0.40, "TLT": 0.20, "IAU": 0.10, "USO": 0.05})
+_LAST_WEEK = pd.Series({"SPY": 0.35, "TLT": 0.20, "IAU": 0.10, "USO": 0.05})
+
+
+def _allocation_md(**overrides) -> str:
+    kwargs = dict(
+        regime_probs={0: 1.0}, transition_matrix=pd.DataFrame(), returns_by_regime=pd.DataFrame(),
+        target_weights=_TARGET, cash=0.25, accounts=[], active_regime=0, no_trade_band=0.05,
+        last_week_weights=_LAST_WEEK, asset_classes=_CLASSES,
+    )
+    kwargs.update(overrides)
+    return weekly.assemble_weekly_report(**kwargs)
+
+
+def _table_rows(md: str) -> list[str]:
+    start = md.index("### Target allocation")
+    return [ln for ln in md[start:].splitlines() if ln.startswith("|")]
+
+
+class TestAllocationTable:
+    def test_prints_one_row_per_class_with_target_last_week_and_change(self):
+        rows = _table_rows(_allocation_md())
+        assert rows[0] == "| Class | Ticker | Target % | Last week % | Change |"
+        assert "| equities | SPY | 40.0% | 35.0% | +5.0 pp |" in rows
+        assert "| long_duration | TLT | 20.0% | 20.0% | +0.0 pp |" in rows
+        assert "| gold | IAU | 10.0% | 10.0% | +0.0 pp |" in rows
+        assert "| oil | USO | 5.0% | 5.0% | +0.0 pp |" in rows
+        # cash: target is the residual passed in; last week's cash is 1 - sum(last week's risky).
+        assert "| cash | FZFXX | 25.0% | 30.0% | -5.0 pp |" in rows
+        classes = [r.split("|")[1].strip() for r in rows[2:]]
+        assert classes == ["equities", "long_duration", "gold", "oil", "cash"], "asset_classes order"
+
+    def test_no_last_week_book_reads_na(self):
+        rows = _table_rows(_allocation_md(last_week_weights=None))
+        assert "| equities | SPY | 40.0% | n/a | n/a |" in rows
+        assert "| cash | FZFXX | 25.0% | n/a | n/a |" in rows
+
+    def test_an_absent_target_weight_is_zero_and_an_all_cash_last_week_is_not_na(self):
+        rows = _table_rows(_allocation_md(target_weights=pd.Series({"SPY": 0.5}), cash=0.5,
+                                          last_week_weights=pd.Series(dtype=float)))
+        assert "| long_duration | TLT | 0.0% | 0.0% | +0.0 pp |" in rows
+        assert "| equities | SPY | 50.0% | 0.0% | +50.0 pp |" in rows
+        assert "| cash | FZFXX | 50.0% | 100.0% | -50.0 pp |" in rows
+
+    def test_a_ticker_outside_the_map_gets_its_own_unmapped_row(self):
+        rows = _table_rows(_allocation_md(target_weights=pd.Series({"SPY": 0.4, "ZZZ": 0.1}), cash=0.5))
+        assert "| unmapped | ZZZ | 10.0% | 0.0% | +10.0 pp |" in rows
+
+    def test_a_zero_change_never_prints_a_negative_zero(self):
+        same = pd.Series({"SPY": 0.1 + 0.2, "TLT": 0.7 - 0.4})
+        rows = _table_rows(_allocation_md(target_weights=same, last_week_weights=pd.Series({"SPY": 0.3, "TLT": 0.3}),
+                                          cash=0.4))
+        assert not [r for r in rows if "-0.0 pp" in r]
+
+    def test_prints_without_accounts_above_the_band_sentence_and_the_account_loop(self, tmp_path):
+        (tmp_path / "acct1.yaml").write_text("weights:\n  SPY: 0.2\ncash: 0.8\n", encoding="utf-8")
+        with_account = _allocation_md(accounts=["acct1"], accounts_dir=tmp_path)
+        no_account = _allocation_md()
+        for md in (with_account, no_account):
+            assert md.index("## Target vs. Current — Trades Implied") < md.index("### Target allocation")
+            assert md.index("### Target allocation") < md.index("EXECUTED book after the 5.0% no-trade band")
+        assert with_account.index("### Target allocation") < with_account.index("### Account: acct1")
+        assert "### Account:" not in no_account
+
+    def test_an_empty_target_with_no_classes_still_renders_the_heading(self):
+        md = _allocation_md(target_weights=pd.Series(dtype=float), cash=None, asset_classes=None,
+                            last_week_weights=None)
+        assert "### Target allocation" in md
+
+    def test_the_class_map_is_the_reverse_of_the_splice_config_in_splice_order(self):
+        from trading_crab_lib.platform.config import load_platform_config
+
+        mapping = weekly._class_by_ticker(load_platform_config())
+        assert list(mapping.items()) == [
+            ("SPY", "equities"), ("TLT", "long_duration"), ("IAU", "gold"), ("USO", "oil"), ("FZFXX", "cash"),
+        ]
+
+
+class TestLastWeeksExecutedBook:
+    def test_no_checkpoint_is_none(self, tmp_path):
+        from trading_crab_lib.checkpoints import CheckpointManager
+
+        assert weekly.load_last_executed_weights(CheckpointManager(checkpoint_dir=tmp_path / "cp")) is None
+
+    def test_returns_the_executed_rows_never_the_held_in_rows(self, tmp_path):
+        from trading_crab_lib.checkpoints import CheckpointManager
+
+        cm = CheckpointManager(checkpoint_dir=tmp_path / "cp")
+        weekly.save_executed_weights(
+            pd.Series({"SPY": 0.26, "TLT": 0.60}), pd.Series({"SPY": 0.10}), cm, as_of=pd.Timestamp("2026-07-31")
+        )
+        got = weekly.load_last_executed_weights(cm)
+        pd.testing.assert_series_equal(got, pd.Series({"SPY": 0.26, "TLT": 0.60}), check_names=False)
+        # load_held_weights on a same-month re-run would return the held_in book: not this.
+        held = weekly.load_held_weights(cm, as_of=pd.Timestamp("2026-07-31"))
+        assert float(held["SPY"]) == 0.10
+
+    def test_an_all_cash_book_is_an_empty_series_not_none(self, tmp_path):
+        from trading_crab_lib.checkpoints import CheckpointManager
+
+        cm = CheckpointManager(checkpoint_dir=tmp_path / "cp")
+        weekly.save_executed_weights(pd.Series(dtype=float), None, cm, as_of=pd.Timestamp("2026-07-31"))
+        got = weekly.load_last_executed_weights(cm)
+        assert got is not None and got.empty
+
+    def test_build_inputs_reads_last_weeks_book_before_it_saves_this_weeks(self, monkeypatch, tmp_path):
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path, as_of="2026-08-31")
+        last = pd.Series({"SPY": 0.26, "TLT": 0.60})
+        weekly.save_executed_weights(last, None, cm, as_of=pd.Timestamp("2026-07-31"))
+        out = weekly._build_report_inputs(_banded(cfg), cm)
+        pd.testing.assert_series_equal(out["last_week_weights"], last, check_names=False)
+        assert not out["last_week_weights"].equals(out["target_weights"]), "it must not be this run's own book"
+        # ...and the checkpoint now holds this run's book, so a load AFTER the save would differ.
+        pd.testing.assert_series_equal(
+            weekly.load_last_executed_weights(cm), out["target_weights"], check_names=False
+        )
+
+    def test_band_off_has_no_last_week_book(self, monkeypatch, tmp_path):
+        cm, cfg, _ = _serve_env(monkeypatch, tmp_path)
+        assert weekly._build_report_inputs(_banded(cfg, None), cm)["last_week_weights"] is None
+

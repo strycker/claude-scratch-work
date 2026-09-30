@@ -566,7 +566,15 @@ class TestWeeklyScoresTheModelsColumns:
         second_book, second_report = cm.load("executed_weights"), report_path.read_text()
 
         pd.testing.assert_frame_equal(first_book, second_book)
-        assert _trades_section(first_report) == _trades_section(second_report)
+        # The allocation table's last-week column legitimately differs (n/a, then the book the
+        # first run executed); everything else in the section, and the table's targets, do not.
+        def without_table(section: str) -> str:
+            return "\n".join(ln for ln in section.splitlines() if not ln.startswith("|"))
+
+        assert without_table(_trades_section(first_report)) == without_table(_trades_section(second_report))
+        assert [c[2] for c in _allocation_rows(first_report).values()] == [
+            c[2] for c in _allocation_rows(second_report).values()
+        ]
         assert "- SPY:" in _trades_section(first_report) and "- TLT:" in _trades_section(first_report)
 
 
@@ -1023,3 +1031,49 @@ class TestQ2iiDistinctPosteriorDisclosure:
         assert len(counted) == 1
         assert list(counted[0].index) == list(complete.index)
         assert fits == [], f"the disclosure fitted something: {fits}"
+
+
+# ── the always-printed target allocation table, end to end (08.1, D-09) ──────
+
+
+def _allocation_rows(report: str) -> dict[str, list[str]]:
+    """ticker -> [class, ticker, target, last week, change] from the rendered table."""
+    start = report.index("### Target allocation")
+    lines = [ln for ln in report[start:].splitlines() if ln.startswith("|")][2:]
+    cells = [[c.strip() for c in ln.strip("|").split("|")] for ln in lines]
+    return {row[1]: row for row in cells}
+
+
+class TestAllocationTableEndToEnd:
+    def test_no_account_page_prints_the_table_and_a_same_month_rerun_shows_no_change(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert world["cfg"]["report"]["accounts"] == [], "precondition: no account is configured"
+        assert serving.main([]) == 0
+
+        assert weekly.main([]) == 0
+        first = _report_path(world).read_text()
+        assert "### Target allocation" in first and "### Account:" not in first
+        assert "| Class | Ticker | Target % | Last week % | Change |" in first
+        rows = _allocation_rows(first)
+        assert {"SPY", "TLT"} <= set(rows)
+        for ticker in ("SPY", "TLT"):
+            assert rows[ticker][3:] == ["n/a", "n/a"], rows[ticker]  # no executed book before this run
+        assert rows["SPY"][0] == "equities" and rows["TLT"][0] == "long_duration"
+
+        assert weekly.main([]) == 0
+        second = _report_path(world).read_text()
+        rows = _allocation_rows(second)
+        for cells in rows.values():
+            assert cells[4] == "+0.0 pp", cells
+            assert cells[2] == cells[3], "last week's column is the book this month already executed"
+        # Targets are unchanged by the re-run (same held book, same belief).
+        assert [c[2] for c in _allocation_rows(first).values()] == [c[2] for c in rows.values()]
+        # The executed book (the table's target column) is the saved checkpoint's book.
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+
+        saved = get_platform_checkpoint_manager().load("executed_weights")
+        saved = saved[(saved["basis"] == "executed") & saved["asset"].notna()].set_index("asset")["weight"]
+        assert rows["SPY"][2] == f"{float(saved['SPY']):.1%}"
+

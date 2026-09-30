@@ -285,6 +285,95 @@ def load_held_weights(cm=None, *, as_of: pd.Timestamp) -> pd.Series | None:
     return pd.Series(rows["weight"].to_numpy(dtype=float), index=[str(a) for a in rows["asset"]], dtype=float)
 
 
+def load_last_executed_weights(cm=None) -> pd.Series | None:
+    """The book the PREVIOUS run executed: the ``executed_weights`` checkpoint's
+    ``basis == "executed"`` rows, for the report's "last week" column (D-09).
+
+    Deliberately not ``load_held_weights``: that returns the ``held_in`` book on a same-month
+    re-run, which is what the band compared against, not what was executed. Call this BEFORE
+    ``save_executed_weights`` overwrites the checkpoint (load before save, Pitfall 3).
+    No checkpoint: None. An all-cash book (the null-asset marker row) is an empty Series.
+    """
+    cm = cm or get_platform_checkpoint_manager()
+    try:
+        frame = cm.load(_EXECUTED_CHECKPOINT)
+    except FileNotFoundError:
+        return None
+    rows = frame[frame["basis"] == "executed"] if not frame.empty else frame
+    if rows.empty:
+        return None
+    rows = rows[rows["asset"].notna()]
+    return pd.Series(rows["weight"].to_numpy(dtype=float), index=[str(a) for a in rows["asset"]], dtype=float)
+
+
+def _class_by_ticker(cfg: dict) -> dict[str, str]:
+    """``{tradable ticker: asset class}``: the reverse of ``cfg["splice"]``, in splice order
+    (SPY equities, TLT long_duration, IAU gold, USO oil, FZFXX cash)."""
+    return {
+        str(spec["tradable"]): str(name) for name, spec in cfg.get("splice", {}).items() if spec.get("tradable")
+    }
+
+
+def _pct(value: float) -> str:
+    return f"{0.0 if abs(value) < 1e-12 else value:.1%}"
+
+
+def _change_pp(delta: float) -> str:
+    return f"{round(delta * 100.0, 1) + 0.0:+.1f} pp"  # + 0.0 turns -0.0 into 0.0
+
+
+def _allocation_table(
+    target_weights: pd.Series,
+    cash: float | None,
+    last_week_weights: pd.Series | None,
+    asset_classes: dict[str, str] | None,
+) -> list[str]:
+    """The "### Target allocation" block (D-09): one row per asset class, in ``asset_classes``
+    order, with its tradable ticker, target %, last week's %, and the change in percentage
+    points. Target is the EXECUTED book (``target_weights``, absent = 0.0%); the cash row's
+    target is ``cash`` and its last-week value the residual ``1 - sum(last week's risky
+    weights)``, which is what ``execute_rebalance`` leaves in cash. ``last_week_weights`` None
+    reads n/a. A ticker outside the map gets its own "unmapped" row; the cash row falls back to
+    ticker CASH when the map carries no cash class (a config without one, e.g. a test world).
+    """
+    classes = dict(asset_classes or {})
+    cash_ticker = next((t for t, c in classes.items() if c == "cash"), "CASH")
+    rows = list(classes.items())
+    if cash is not None and cash_ticker not in classes:
+        rows.append((cash_ticker, "cash"))
+    seen = {t for t, _ in rows}
+    known = set(target_weights.index) | (set(last_week_weights.index) if last_week_weights is not None else set())
+    rows.extend((t, "unmapped") for t in sorted(known - seen))
+
+    risky_target = float(target_weights.drop(labels=[cash_ticker], errors="ignore").sum())
+    lines = ["### Target allocation", ""]
+    if not rows:
+        lines.append("(no target allocation available)")
+        lines.append("")
+        return lines
+    lines.append("| Class | Ticker | Target % | Last week % | Change |")
+    lines.append("|---|---|---|---|---|")
+    for ticker, asset_class in rows:
+        if ticker == cash_ticker:
+            target = float(cash) if cash is not None else max(0.0, 1.0 - risky_target)
+            last = (
+                None if last_week_weights is None
+                else 1.0 - float(last_week_weights.drop(labels=[cash_ticker], errors="ignore").sum())
+            )
+        else:
+            target = float(target_weights.get(ticker, 0.0))
+            last = None if last_week_weights is None else float(last_week_weights.get(ticker, 0.0))
+        last_cell, change_cell = ("n/a", "n/a") if last is None else (_pct(last), _change_pp(target - last))
+        lines.append(f"| {asset_class} | {ticker} | {_pct(target)} | {last_cell} | {change_cell} |")
+    lines.append("")
+    lines.append(
+        "Target is the executed book after the no-trade band; last week is the book this report "
+        "executed before this run (n/a when there was none)."
+    )
+    lines.append("")
+    return lines
+
+
 def save_executed_weights(
     executed: pd.Series, held_in: pd.Series | None, cm=None, *, as_of: pd.Timestamp
 ) -> None:
@@ -391,6 +480,8 @@ def assemble_weekly_report(
     input_sensitivity_note: str | None = None,
     stale_series: dict[str, int | None] | None = None,
     stale_expected_through: pd.Timestamp | None = None,
+    last_week_weights: pd.Series | None = None,
+    asset_classes: dict[str, str] | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -415,6 +506,9 @@ def assemble_weekly_report(
     ``stale_series`` (``stale_series()``'s output) puts a STALE DATA banner right after the
     title when non-empty; ``stale_expected_through`` names the month-end those series should
     have covered. The banner warns only: the report is still assembled in full (A-12).
+    Directly under the trades heading, with or without ``accounts``, a "Target allocation" table
+    lists every class in ``asset_classes`` (``{ticker: class}``, in row order) with target %,
+    ``last_week_weights`` (last run's executed book, None = n/a) and the change (D-09, A-11).
     """
     probs = pd.Series(regime_probs, dtype=float)
 
@@ -500,6 +594,7 @@ def assemble_weekly_report(
     # ── 4. Target-vs-current + trades implied, per account ────────────────
     lines.append("## Target vs. Current — Trades Implied")
     lines.append("")
+    lines.extend(_allocation_table(target_weights, cash, last_week_weights, asset_classes))
     if no_trade_band is not None:
         lines.append(
             f"Targets below are the EXECUTED book after the {no_trade_band:.1%} no-trade band "
@@ -699,7 +794,9 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         ``target_weights`` / ``cash`` (the EXECUTED book, after the no-trade band),
         ``pre_band_target_weights`` (the tilt's target), ``no_trade_band``, and
         ``stale_series`` / ``stale_expected_through`` (A-12: series later than the run date
-        allows, for the banner; empty when every watched series is current).
+        allows, for the banner; empty when every watched series is current) and
+        ``last_week_weights`` (the previous run's executed book, read before this run saves
+        its own; None with no band configured or no earlier run).
     """
     cm = cm or get_platform_checkpoint_manager()
 
@@ -774,6 +871,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
 
     # The no-trade band (plan 08-09): the SAME function the drivers call. Held-book I/O
     # happens only when a band is configured — with none, the executed book is the target.
+    last_week = load_last_executed_weights(cm) if no_trade_band is not None else None  # load BEFORE save
     held = load_held_weights(cm, as_of=as_of) if no_trade_band is not None else None  # load BEFORE save
     executed = execute_rebalance(tilt["weights"], tilt["cash"], held, band=no_trade_band)
     if no_trade_band is not None:
@@ -793,6 +891,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         "input_sensitivity_note": input_sensitivity_note,
         "stale_series": late,
         "stale_expected_through": stale_expected_through,
+        "last_week_weights": last_week,
     }
 
 
@@ -836,6 +935,8 @@ def main(argv: list[str] | None = None) -> int:
         input_sensitivity_note=inputs.get("input_sensitivity_note"),
         stale_series=inputs.get("stale_series"),
         stale_expected_through=inputs.get("stale_expected_through"),
+        last_week_weights=inputs.get("last_week_weights"),
+        asset_classes=_class_by_ticker(cfg),
     )
     report_path = write_weekly_report(markdown)
 
