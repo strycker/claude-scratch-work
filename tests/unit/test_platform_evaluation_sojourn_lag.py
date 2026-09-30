@@ -355,6 +355,10 @@ def _real_dev_inputs() -> tuple[pd.Series, pd.DataFrame]:
     return dev["state"], probs
 
 
+# 08.1 (2026-09-30): these verify 08-06/08-10's RECORD (diagnostics_l1only.json), measured on
+# the pre-8.1 unlagged labels, so they read regime_labels as of 06002f9 (pre_pit_platform_dir).
+# On the point-in-time labels the headline moves 9.5/4.0/2.375 -> 10.0/4.0/2.5 (25 of 25).
+@pytest.mark.usefixtures("pre_pit_platform_dir")
 class TestHeadlinePinOnRealDevInputs:
     def test_classifier_1_headline_is_9_5_over_4_0_with_25_of_25(self):
         states, probs = _real_dev_inputs()

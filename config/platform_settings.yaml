@@ -13,39 +13,32 @@ data:
   daily_persist: true          # D-05: store daily raw prices, derive monthly by resample
 
 # ── FRED market/fast-layer series (no ALFRED vintage needed) ──────────────────
-# Market-observed series (rates, spreads, prices) are never revised — plain
-# publication-lag `shift` (false here; none of these have meaningful lag) is
-# sufficient. `daily: true` marks series natively published at daily frequency
+# Market-observed series (rates, spreads, prices) are never revised. Their
+# publication lags live in the top-level `publication_lags` table (08.1), not
+# here: a `shift` key in this block makes the build raise, so nothing is lagged
+# twice. `daily: true` marks series natively published at daily frequency
 # (persisted daily per D-05, then resampled to the monthly spine).
 fred_monthly:
   series:
     GS10:
       name:  "fred_gs10"
-      shift: false
     TB3MS:
       name:  "fred_tb3ms"
-      shift: false
     BAA:
       name:  "fred_baa"
-      shift: false
     AAA:
       name:  "fred_aaa"
-      shift: false
     T10Y3M:
       name:  "fred_t10y3m"
-      shift: false
       daily: true
     T10Y2Y:
       name:  "fred_t10y2y"
-      shift: false
       daily: true
     VIXCLS:
       name:  "fred_vix"
-      shift: false
       daily: true
     WTISPLC:
       name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
-      shift: false
     # D-12/INV-01 (07-regime-representation wave 2): M2SL and TOTALSL feed
     # classifier #2's named invariant ratios (m2_gdp, credit_gdp —
     # platform/features/relative.py::compute_invariant_ratios). Both are
@@ -64,10 +57,8 @@ fred_monthly:
     # at exactly 13 raw columns (D-10's disjointness denominator).
     M2SL:
       name:  "fred_m2sl"
-      shift: false
     TOTALSL:
       name:  "fred_totalsl"
-      shift: false
 
 # ── FRED daily-frequency credit series (L4-04, Phase 4 Pitfall 2) ─────────────
 # BAA/AAA above are monthly-only on FRED; the tripwire's credit-spread-velocity
@@ -133,6 +124,98 @@ macrotrends_monthly:
     - name: wti_crude
       path: "/1369/crude-oil-price-history-chart"
       resample: mean
+
+# ── Publication lags (D-01..D-03, phase 08.1) ─────────────────────────────────
+# When each raw series could first have been known: the value for reference
+# month m is usable at the end of month m + lag. Applied ONCE, in
+# transforms_monthly.build_monthly_spine (platform/ingestion/publication_lags.py),
+# to the ingest frame before the splice — so monthly_raw, monthly_features and
+# every consumer see the lagged series. Top-level (not per source) because
+# multpl_monthly.datasets rows are positional tuples. EVERY emittable column
+# needs an entry: an unlisted column makes the build raise. Evidence per entry:
+# .planning/phases/08.1-point-in-time-data-audit/08.1-RESEARCH.md §1.
+#
+#   int          shift by that many month-ends
+#   derived      splice research series — inherits its inputs' lags; never shifted
+#   {vintage: true, fallback_months: N}
+#                ALFRED vintage-aligned (D-02, no second shift); N is the lag used
+#                only before the series' earliest recorded vintage
+#
+# LOWERING A LAG RE-OPENS LOOK-AHEAD. tests/unit/test_platform_point_in_time.py
+# holds an independent floor and goes red. Changing any lag changes every
+# feature, label and number downstream: delete monthly_raw and rebuild (the
+# publication_lags.json marker refuses a merge onto a different table).
+publication_lags:
+  # FRED monthly averages (H.15 yields, WTISPLC): fully observed at the month's
+  # close, posted 1-2 business days into m+1. Lag 0 per ruling 4 (2026-09-30);
+  # the weekly staleness check gives them report.staleness_grace_days.
+  fred_gs10:    0
+  fred_tb3ms:   0
+  fred_aaa:     0
+  fred_baa:     0
+  wti_fred:     0
+  # FRED daily series resampled to the month-end close — real-time.
+  fred_t10y3m:  0
+  fred_t10y2y:  0
+  fred_vix:     0
+  # Fed H.6, released the 4th Tuesday of m+1 (ALFRED vintages 07-28, 08-25, 09-22).
+  # Timing-correct; revisions are not vintage-corrected (accepted, out of scope).
+  fred_m2sl:    1
+  # Fed G.19, released about the 5th business day of m+2 (vintages 07-08, 08-07, 09-08).
+  fred_totalsl: 2
+  # multpl monthly-average price: observed by the month's close.
+  sp500:        0
+  # multpl dagger rows are estimates (parsed to NaN); finals arrive in quarterly
+  # batches about 1 month after quarter end, so the worst case is m+3.
+  div_yield:    3
+  # multpl Shiller PE: current month published live (lag 0), but E10's latest
+  # ~6 months of earnings are estimated then back-filled — revision-exposed,
+  # an accepted compromise like the ALFRED pre-vintage fallback.
+  cape_shiller: 0
+  # macrotrends month closes (gold) / month means (WTI cross-check): observed prices.
+  gold_spot:    0
+  wti_crude:    0
+  # Universe prices: daily closes resampled to month-end — real-time.
+  SPY:  0
+  QQQ:  0
+  IWM:  0
+  EFA:  0
+  IEF:  0
+  SHY:  0
+  VNQ:  0
+  VYM:  0
+  AGG:  0
+  HYG:  0
+  LQD:  0
+  EEM:  0
+  DBA:  0
+  MCD:  0
+  COST: 0
+  O:    0
+  TSM:  0
+  IAU:  0
+  SLV:  0
+  GDX:  0
+  UNG:  0
+  UEC:  0
+  # Splice research series: lagged through their inputs (equities_tr through
+  # div_yield). Shifting them would double-lag and misalign the P&L.
+  equities_tr:      derived
+  long_duration_tr: derived
+  gold:             derived
+  oil:              derived
+  cash:             derived
+  # ALFRED agency series. GDPC1's earliest vintage is 1991-12-04; before it the
+  # fallback reads a quarterly series forward-filled to monthly, so Q1 (ref Jan)
+  # must wait 3 month-ends (Apr 30) for the ~end-of-April advance estimate.
+  # It was 1 until 08.1, which showed Q1 at Feb 28 (ruling 1, 2026-09-30).
+  fred_gdp:    {vintage: true, fallback_months: 3}
+  # CPI's fallback covers 1962-1972-07 only (mid-month release): 1 is PIT.
+  fred_cpi:    {vintage: true, fallback_months: 1}
+  # UNRATE/INDPRO/PAYEMS vintages cover the whole spine; 1 is never consulted.
+  fred_unrate: {vintage: true, fallback_months: 1}
+  fred_indpro: {vintage: true, fallback_months: 1}
+  fred_payems: {vintage: true, fallback_months: 1}
 
 # ── Splicing rules (D-03/D-04): "Model the index, trade the ETF." ─────────────
 # One spliced research series per asset CLASS, used by all models. The weekly
@@ -499,6 +582,9 @@ report:
   min_obs_flag:        6     # returns-by-regime cells with n_obs below this are flagged
                               # low-confidence in the report rather than suppressed (D11
                               # NULL-tolerance — short-history assets stay visible)
+  staleness_grace_days: 7    # 08.1 ruling 4: FRED posts monthly averages 1-2 business days
+                              # into m+1, so a series is judged late only once the run date is
+                              # more than this many days past the month it should cover.
 
 # ── Backtest & evaluation (EVAL-01..04, D-03) — honest walk-forward 1972-2020 ─
 # Read defensively via cfg.get("backtest", {}) everywhere; deliberately NOT

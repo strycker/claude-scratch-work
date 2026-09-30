@@ -6,13 +6,14 @@ pre-vintage-era fallback policy — matching the behavior implemented in
 `src/trading_crab_lib/platform/ingestion/alfred.py`.
 
 
-> **Known gap (found 2026-09-29, Phase 8 code review CR-03; owner Phase 08.1 / folded into 08.2).**
-> Publication lag is handled only where `shift: true` is set, and only for FRED series. Measured
-> against `monthly_raw` built 2026-09-21: `fred_m2sl` (~1 month) and `fred_totalsl` (~2 months) carry
-> `shift: false`, and **multpl series have no lag handling at all** — `div_yield`'s last value was
-> 2026-06 on 2026-09-21 (2–3 months), and it is in classifier #1's lean set. Target design: a
-> `publication_lag_months` entry for every raw series plus a test that fails when a feature at date
-> t uses a value published after t (`REBUILD-FROM-SCRATCH-GUIDE.md` §1.3, DECISIONS D-05).
+> **Known gap (found 2026-09-29, Phase 8 code review CR-03) — closed in code by 08.1-01.**
+> Publication lag used to be handled only where `shift: true` was set, and only for FRED series:
+> `fred_m2sl` (~1 month) and `fred_totalsl` (~2 months) carried `shift: false`, and multpl
+> `div_yield` (2–3 months, in classifier #1's lean set) had no lag handling at all. Every raw series
+> now has an entry in the top-level `publication_lags` table of `config/platform_settings.yaml`,
+> applied once in `transforms_monthly.build_monthly_spine` (`publication_lags.apply_publication_lags`),
+> and `tests/unit/test_platform_point_in_time.py` fails when a feature at t uses a value published
+> after t. The `shift` flag is gone from `fred_monthly`. The tracked `monthly_raw` is migrated in 08.1-03.
 
 ## D-06 vintage scope
 
@@ -70,6 +71,17 @@ This is stated here explicitly per D-06 ("not silently absorbed"): for the
 pre-vintage era, the D-06 series are only as look-ahead-safe as the ordinary
 shift mechanism — genuine point-in-time correction is unavailable before
 ALFRED's archive begins for that series.
+
+**Fallback lag per series (08.1, ruling 1).** The fallback lag is each series'
+`publication_lags.<name>.fallback_months`, applied on the reference-month grid by
+`transforms_monthly._shift_fallback_series`. Pre-vintage `fred_gdp` now lags **3**:
+GDPC1 is quarterly, dated at the quarter start and forward-filled to monthly, so Q1
+(reference January) must wait until April 30 for the ~end-of-April advance estimate.
+It used to lag 1, which showed Q1 at February 28 — before the quarter had even ended —
+and so made pre-vintage GDP visible about 2 months early before 1991-12 (GDPC1's
+earliest vintage is 1991-12-04). CPI's fallback stays at 1: it covers only 1962 to
+1972-07 and CPI is released mid-following-month. UNRATE, INDPRO and PAYEMS have
+vintages covering the whole spine, so their fallback of 1 is never consulted.
 
 **Per-series earliest-vintage dates are not hardcoded.** RESEARCH Assumption
 A2 flags that per-series ALFRED coverage-start claims (e.g. PAYEMS

@@ -6,8 +6,9 @@ ONE monthly feature table indexed by month-end back to ~1962:
 
   1. Fetch monthly macro/long-history raw data (``macro_monthly.fetch_macro_monthly``).
   2. Fetch daily universe prices + derive a monthly spine (``prices_daily.fetch_universe_prices``).
-  3. Build the 5 core research series via ratio-splice/synthesis
-     (``splice.build_core_research_series``).
+  3. Apply the measured publication lags once (``publication_lags.apply_publication_lags``,
+     D-01), then build the 5 core research series from the lagged frame via
+     ratio-splice/synthesis (``splice.build_core_research_series``).
   4. Point-in-time-align the D-06 agency series (``align_agency_monthly``) — value_as_of
      where ALFRED vintages exist, publication-lag shift fallback before the earliest
      recorded vintage (RESEARCH Pitfall 4: vintage-correction subsumes the shift once
@@ -44,6 +45,13 @@ from trading_crab_lib.platform import splice, taxonomy
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.honesty.holdout import write_monthly_features_split
 from trading_crab_lib.platform.ingestion import alfred, macro_monthly, prices_daily
+from trading_crab_lib.platform.ingestion.publication_lags import (
+    LAG_MARKER_FILENAME,
+    apply_publication_lags,
+    lag_marker_matches,
+    lag_table,
+    write_lag_marker,
+)
 
 log = logging.getLogger(__name__)
 
@@ -52,12 +60,18 @@ log = logging.getLogger(__name__)
 
 
 def _shift_fallback_series(
-    all_releases: pd.DataFrame, monthly_index: pd.DatetimeIndex, monthly_freq: str
+    all_releases: pd.DataFrame, monthly_index: pd.DatetimeIndex, monthly_freq: str, lag: int = 1
 ) -> pd.Series:
     """Build the D-06 pre-vintage-era fallback: each reference period's value
     from the **latest** vintage, resampled onto the monthly spine and shifted
-    by one period (mirrors the incumbent's publication-lag ``shift()``
-    convention — ``ingestion/fred.py`` ADR #7).
+    by *lag* periods on the reference-month grid (the incumbent's
+    publication-lag ``shift()`` convention — ``ingestion/fred.py`` ADR #7).
+
+    *lag* is the series' ``publication_lags.<name>.fallback_months``. For a
+    quarterly series dated at the quarter start it must cover the whole
+    quarter plus the release delay: GDP's Q1 (reference Jan) is released about
+    the end of April, so ``lag=3`` makes it visible at Apr 30. The old
+    hard-coded 1 showed it at Feb 28 (08.1 ruling 1).
 
     Latest vintage, not first-published, and the distinction is the whole
     point. ALFRED's real-time database begins part-way through a series'
@@ -100,7 +114,7 @@ def _shift_fallback_series(
     latest.index = pd.to_datetime(latest.index)
 
     monthly = latest.resample(monthly_freq).last().reindex(monthly_index).ffill()
-    return monthly.shift(1)
+    return monthly.shift(lag)
 
 
 _DISCONTINUITY_RATIO = 1.5
@@ -207,9 +221,19 @@ def align_agency_monthly(
         log.warning("align_agency_monthly: no vintage series fetched")
         return pd.DataFrame(index=monthly_index)
 
+    table = lag_table(cfg)
+    unlisted = [n for n in all_vintages if not isinstance(table.get(n), dict)]
+    if unlisted:
+        raise ValueError(
+            f"align_agency_monthly: {unlisted} need a publication_lags entry "
+            "{vintage: true, fallback_months: N} — the pre-vintage fallback lag is measured, not defaulted."
+        )
+
     columns: dict[str, pd.Series] = {}
     for name, releases in all_vintages.items():
-        shift_series = _shift_fallback_series(releases, monthly_index, monthly_freq)
+        shift_series = _shift_fallback_series(
+            releases, monthly_index, monthly_freq, lag=table[name]["fallback_months"]
+        )
         aligned = alfred.align_with_fallback(releases, monthly_index, shift_series)
         aligned.name = name
         _warn_on_level_discontinuity(aligned, name, kind=_series_kind(cfg, name))
@@ -300,6 +324,34 @@ def tag_feature_columns(features_df: pd.DataFrame, cfg: dict[str, Any]) -> dict[
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 
+def last_complete_month_end(today: date | pd.Timestamp) -> pd.Timestamp:
+    """The last month-end strictly before *today*'s month — the newest month that
+    is complete. On the last day of a month that month is still running (its
+    multpl row is the current price, its daily prints are pre-close), so it is
+    not a row: 2026-09-30 -> 2026-08-31, 2026-10-01 -> 2026-09-30."""
+    return pd.Timestamp(today).normalize() - pd.offsets.MonthEnd(1)
+
+
+def _assert_lag_marker_allows_merge(cm: Any, cfg: dict[str, Any]) -> None:
+    """Refuse to merge onto a monthly_raw built under a different lag table.
+
+    monthly_raw is merge-on-save: saving a lagged frame over an unlagged disk
+    copy would refill the first L rows of every lagged column from disk with
+    their UNLAGGED values (08.1 Pitfall 1)."""
+    if not (cm.dir / "monthly_raw.parquet").exists():
+        return
+    marker = cm.dir / LAG_MARKER_FILENAME
+    if lag_marker_matches(marker, cfg):
+        return
+    state = "missing" if not marker.exists() else "records a different lag table"
+    raise RuntimeError(
+        f"build_monthly_spine: {marker} is {state}, so the on-disk monthly_raw was not built "
+        "under the current publication_lags and merging onto it would reintroduce unlagged values. "
+        "If it predates publication lags, run `python scripts/migrate_publication_lags.py` once. "
+        "If a lag was changed on purpose, delete monthly_raw (and the marker) and rebuild."
+    )
+
+
 def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     """Assemble the monthly feature table (DATA-01, DATA-03 runtime, DATA-04).
 
@@ -313,7 +365,7 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     monthly_freq = cfg["data"].get("monthly_freq", "ME")
     start = cfg["data"]["start_date"]
-    end = cfg["data"]["end_date"] or str(date.today())
+    end = cfg["data"]["end_date"] or last_complete_month_end(date.today())
     monthly_index = pd.date_range(start=start, end=end, freq=monthly_freq)
 
     macro = macro_monthly.fetch_macro_monthly(cfg)
@@ -327,26 +379,35 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     # whatever is available (a class missing its required macro columns then
     # raises its own actionable preflight error, rather than silently
     # skipping the whole splice step).
+    #
+    # Publication lags (D-01) are applied HERE, once, to the whole ingest frame:
+    # the research series and monthly_raw are both built from the lagged frame,
+    # so no consumer can reach an unlagged copy. Agency columns are added
+    # afterwards and never pass through it (D-02: vintage-aligned already).
     splice_input_frames = [f for f in (macro, monthly_prices) if not f.empty]
     if splice_input_frames:
         splice_input = pd.concat(splice_input_frames, axis=1)
-        research = splice.build_core_research_series(splice_input, cfg)
+        lagged = apply_publication_lags(splice_input, cfg)
+        research = splice.build_core_research_series(lagged, cfg)
     else:
+        lagged = pd.DataFrame()
         research = pd.DataFrame()
 
     agency = align_agency_monthly(monthly_index, cfg)
 
-    frames = [f for f in (macro, monthly_prices, research, agency) if not f.empty]
+    frames = [f for f in (lagged, research, agency) if not f.empty]
     monthly_raw = pd.concat(frames, axis=1) if frames else pd.DataFrame(index=monthly_index)
     monthly_raw = monthly_raw.reindex(monthly_index)
     monthly_raw.index.name = "date"
 
     cm = get_platform_checkpoint_manager()
+    _assert_lag_marker_allows_merge(cm, cfg)  # before ANY write
     cm.save(daily, "daily_raw", source="prices_daily.fetch_universe_prices (universe price chain)")
     raw_path = cm.save(
         monthly_raw, "monthly_raw",
         source="build_monthly_spine (combined monthly ingest: macro+prices+research+agency)",
     )
+    write_lag_marker(cm.dir / LAG_MARKER_FILENAME, cfg)
 
     splice_provenance = research.attrs.get("splice_provenance") if not research.empty else None
     if splice_provenance:

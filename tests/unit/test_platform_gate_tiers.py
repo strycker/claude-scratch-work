@@ -77,6 +77,12 @@ PRIOR_ADR = REPO_ROOT / "platform_design" / "adr" / "0002-l1-second-classifier.m
 
 RECORDED_N_TRIALS = 42
 RECORDED_TRIAL_CEILING = 44
+# The LIVE ledger is checked against the currently declared ceiling, not the
+# historical one: phase 08.1 declared a 2-row budget, 44 -> 46 (DECISIONS G-05,
+# ADR-0004 § Consequences). A machine-readable budget file is out of lean scope,
+# so the next budget declaration edits this line. The recorded arithmetic above
+# stays pinned at 44.
+DECLARED_TRIAL_CEILING = 46
 RECORDED_HURDLE = 2.2086935028832686
 
 RECORDED_N_OBS = 588
@@ -191,11 +197,11 @@ class TestTheHurdleIsDerivedFromTheTrialCount:
 
     def test_the_live_trial_count_is_what_feeds_the_hurdle(self):
         """Read live, never copied. The count is a reading of a moment; what is pinned
-        is that the hurdle tracks it and that the ADR-0002 ceiling still binds."""
+        is that the hurdle tracks it and that the declared budget ceiling still binds."""
         live = total_trial_count()
-        assert live <= RECORDED_TRIAL_CEILING, (
-            f"live trial count {live} exceeds ADR-0002's ceiling {RECORDED_TRIAL_CEILING}; "
-            "exceeding it requires an explicit amendment to that ADR"
+        assert live <= DECLARED_TRIAL_CEILING, (
+            f"live trial count {live} exceeds the declared ceiling {DECLARED_TRIAL_CEILING} "
+            "(DECISIONS G-05); exceeding it requires a written budget amendment first (ADR-0004)"
         )
         assert expected_max_sharpe(live, DEGENERATE_SHARPE_VARIANCE) >= RECORDED_HURDLE
 

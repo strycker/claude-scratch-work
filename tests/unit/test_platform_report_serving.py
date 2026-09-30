@@ -206,6 +206,7 @@ _EMBARGO = 12
 _MIN_HISTORY = 60
 _N_SPLITS = 3
 _DEV_END = pd.Timestamp("2020-12-31")
+_RUN_DATE = "2021-07-08"  # the world's "today": a week into July, after the 06-30 row
 
 
 def _world_cfg() -> dict:
@@ -219,6 +220,9 @@ def _world_cfg() -> dict:
             "portfolio_vol_min_obs": 12,
         },
         "report": {"accounts": []},
+        # 08.1: both world series are real-time (lag 0), so the weekly staleness check judges
+        # them against the run date alone.
+        "publication_lags": {"f_level": 0, "f_slope": 0},
         "splice": {
             "equities": {"research_name": "eq_r", "method": "single_source", "source_col": "px_eq", "tradable": "SPY"},
             "long_duration": {
@@ -272,6 +276,8 @@ def _serving_world(
     cfg = _world_cfg()
     monkeypatch.setattr(serving, "load_platform_config", lambda: cfg)
     monkeypatch.setattr(weekly, "load_platform_config", lambda: cfg)
+    # The world ends 2021-06-30; the wall clock would call every world series years stale.
+    monkeypatch.setattr(weekly, "_run_date", lambda: pd.Timestamp(_RUN_DATE), raising=False)
 
     dev_idx = pd.date_range("1995-01-31", _DEV_END, freq="ME")
     hold_idx = pd.date_range("2021-01-31", "2021-06-30", freq="ME")
@@ -560,7 +566,15 @@ class TestWeeklyScoresTheModelsColumns:
         second_book, second_report = cm.load("executed_weights"), report_path.read_text()
 
         pd.testing.assert_frame_equal(first_book, second_book)
-        assert _trades_section(first_report) == _trades_section(second_report)
+        # The allocation table's last-week column legitimately differs (n/a, then the book the
+        # first run executed); everything else in the section, and the table's targets, do not.
+        def without_table(section: str) -> str:
+            return "\n".join(ln for ln in section.splitlines() if not ln.startswith("|"))
+
+        assert without_table(_trades_section(first_report)) == without_table(_trades_section(second_report))
+        assert [c[2] for c in _allocation_rows(first_report).values()] == [
+            c[2] for c in _allocation_rows(second_report).values()
+        ]
         assert "- SPY:" in _trades_section(first_report) and "- TLT:" in _trades_section(first_report)
 
 
@@ -671,7 +685,9 @@ class TestTheServedClassPrior:
 #: 08-SERVING.md §1 item 6: the served posterior on the last complete dev month, exact floats.
 _RECORDED_POSTERIOR = [0.41800356506238856, 0.5639928698752229, 0.018003565062388593]
 #: 08-SERVING.md §1 item 3: dev label counts over 695 months, 1963-02-28 -> 2020-12-31.
-_RECORDED_LABEL_COUNTS = {0: 40, 1: 228, 2: 71, 3: 200, 4: 84, 5: 72}
+#: 08.1 (2026-09-30): {0: 40, 1: 228, ...} -> {0: 41, 1: 227, ...} on the point-in-time labels
+#: (1974-10 moved 5 -> 0 and 1991-04 moved 1 -> 5; the other 693 months are unchanged).
+_RECORDED_LABEL_COUNTS = {0: 41, 1: 227, 2: 71, 3: 200, 4: 84, 5: 72}
 #: 08-SERVING.md §1 item 5: the fit's training block, 153 rows, 2007-04-30 -> 2019-12-31.
 _RECORDED_TRAIN_COUNTS = {0: 11, 3: 137, 4: 5}
 
@@ -733,10 +749,13 @@ class TestTheServedModelOnTheTrackedData:
         belief = weekly.advance_regime_belief(
             None, labels, post, class_prior=prior, state_index=states, as_of=labels.index[-1]
         )
+        # 08.1 (2026-09-30): 0.300 / 0.293 / 0.163 -> 0.306 / 0.290 / 0.162 on the point-in-time
+        # labels (the transition matrix moved; the posterior and the training prior did not).
+        # The CR-01 flip survives: argmax 0 under the new rule, 3 under the old.
         assert int(belief.idxmax()) == 0
-        assert belief[0] == pytest.approx(0.300, abs=5e-3)
-        assert belief[1] == pytest.approx(0.293, abs=5e-3)
-        assert belief[3] == pytest.approx(0.163, abs=5e-3)
+        assert belief[0] == pytest.approx(0.306, abs=5e-3)
+        assert belief[1] == pytest.approx(0.290, abs=5e-3)
+        assert belief[3] == pytest.approx(0.162, abs=5e-3)
 
         # The old rule by explicit arithmetic (not through filter_step): normalize((pi_0 A) x r_old),
         # r_old = post / label_prior on classes_ and 1.0 elsewhere.
@@ -748,14 +767,16 @@ class TestTheServedModelOnTheTrackedData:
         old = (pi0 @ a) * r_old
         old = old / old.sum()
         assert int(np.argmax(old)) == 3
-        assert old[3] == pytest.approx(0.369, abs=5e-3)
+        # 08.1 (2026-09-30): 0.369 -> 0.370 (measured 0.3695) on the point-in-time labels.
+        assert old[3] == pytest.approx(0.370, abs=5e-3)
 
 
 # ── Glenn's 08-12 rulings at serve (plan 08-14): q1-c and q2-ii ──────────────
 #
 # 08-SERVING.md §2.1 (q1-c): score the newest month observed in EVERY model column, say so on
-# the page, step the belief and the band on that month, and refuse (before any save) when it
-# is more than MAX_SCORING_LAG_MONTHS = 3 month-ends behind the newest monthly_features row.
+# the page, and step the belief and the band on that month. Its 3-month-end refusal
+# (MAX_SCORING_LAG_MONTHS) was superseded by DECISIONS A-12 (plan 08.1-02): a series later than
+# the run date allows is named in a STALE DATA banner and the report still writes.
 # §2.2 (q2-ii): print the exact count of distinct posteriors across every full-span month
 # complete in the model columns, directly under the distribution; never withhold on it.
 
@@ -894,6 +915,7 @@ class TestQ1cLatestCompleteMonth:
         report = _report_path(world).read_text()
         assert "Scored as of 2021-06-30" in report
         assert " lacks " not in report
+        assert "STALE DATA" not in report
         assert "Nothing is imputed." in report
 
     def test_q1c_no_complete_month_raises(self, tmp_path, monkeypatch):
@@ -914,21 +936,44 @@ class TestQ1cLatestCompleteMonth:
         assert "impute" in msg
         _assert_nothing_written(world)
 
-    def test_q1c_staleness_cap_refuses_a_month_more_than_3_behind(self, tmp_path, monkeypatch):
+    def test_a12_a_stale_series_is_named_in_a_banner_and_the_report_still_writes(self, tmp_path, monkeypatch):
         from trading_crab_lib.platform.report import serving, weekly
 
-        assert weekly.MAX_SCORING_LAG_MONTHS == 3
         world = _serving_world(tmp_path, monkeypatch, nan_tail=4)
         assert serving.main([]) == 0
+        assert weekly.main([]) == 0  # HEAD raises: 4 month-ends behind
 
-        with pytest.raises(ValueError) as excinfo:
-            weekly.main([])
+        report = _report_path(world).read_text()
+        assert "## STALE DATA" in report
+        h1, banner = report.index("# Trading-Crab Platform Weekly Report"), report.index("## STALE DATA")
+        dist = report.index("## Current Regime Distribution")
+        assert h1 < banner < dist
+        section = report[banner:dist]
+        assert "f_slope: 4 months late" in section
+        assert "last value 2021-02-28" in section and "expected through 2021-06-30" in section
+        assert "f_level" not in section, "a fresh series is never named"
+        assert "imputes nothing" in section
+        assert "Scored as of 2021-02-28" in report
+        assert "Nothing is imputed." in report
+        assert not hasattr(weekly, "MAX_SCORING_LAG_MONTHS"), "A-12 removed the 3-month-end cap"
 
-        msg = str(excinfo.value)
-        assert "2021-02-28" in msg, "the latest complete month"
-        assert "2021-06-30" in msg, "the newest row"
-        assert "4 month-ends" in msg and "MAX_SCORING_LAG_MONTHS = 3" in msg
-        _assert_nothing_written(world)
+    def test_a12_grace_window_a_series_inside_it_is_not_stale(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch, nan_tail=1)  # f_slope ends 2021-05-31
+        assert serving.main([]) == 0
+
+        # Inside the 7-day grace: (07-05 minus 7d) is 06-28, so only May must exist.
+        monkeypatch.setattr(weekly, "_run_date", lambda: pd.Timestamp("2021-07-05"))
+        assert weekly.main([]) == 0
+        assert "STALE DATA" not in _report_path(world).read_text()
+
+        # Past it: (07-08 minus 7d) is 07-01, so June must exist and f_slope lacks it.
+        monkeypatch.setattr(weekly, "_run_date", lambda: pd.Timestamp("2021-07-08"))
+        assert weekly.main([]) == 0
+        report = _report_path(world).read_text()
+        section = report[report.index("## STALE DATA"): report.index("## Current Regime Distribution")]
+        assert "f_slope: 1 month late" in section and "f_level" not in section
 
     def test_q1c_staleness_cap_boundary_exactly_3_behind_serves(self, tmp_path, monkeypatch):
         from trading_crab_lib.platform.report import serving, weekly
@@ -992,3 +1037,49 @@ class TestQ2iiDistinctPosteriorDisclosure:
         assert len(counted) == 1
         assert list(counted[0].index) == list(complete.index)
         assert fits == [], f"the disclosure fitted something: {fits}"
+
+
+# ── the always-printed target allocation table, end to end (08.1, D-09) ──────
+
+
+def _allocation_rows(report: str) -> dict[str, list[str]]:
+    """ticker -> [class, ticker, target, last week, change] from the rendered table."""
+    start = report.index("### Target allocation")
+    lines = [ln for ln in report[start:].splitlines() if ln.startswith("|")][2:]
+    cells = [[c.strip() for c in ln.strip("|").split("|")] for ln in lines]
+    return {row[1]: row for row in cells}
+
+
+class TestAllocationTableEndToEnd:
+    def test_no_account_page_prints_the_table_and_a_same_month_rerun_shows_no_change(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving, weekly
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert world["cfg"]["report"]["accounts"] == [], "precondition: no account is configured"
+        assert serving.main([]) == 0
+
+        assert weekly.main([]) == 0
+        first = _report_path(world).read_text()
+        assert "### Target allocation" in first and "### Account:" not in first
+        assert "| Class | Ticker | Target % | Last week % | Change |" in first
+        rows = _allocation_rows(first)
+        assert {"SPY", "TLT"} <= set(rows)
+        for ticker in ("SPY", "TLT"):
+            assert rows[ticker][3:] == ["n/a", "n/a"], rows[ticker]  # no executed book before this run
+        assert rows["SPY"][0] == "equities" and rows["TLT"][0] == "long_duration"
+
+        assert weekly.main([]) == 0
+        second = _report_path(world).read_text()
+        rows = _allocation_rows(second)
+        for cells in rows.values():
+            assert cells[4] == "+0.0 pp", cells
+            assert cells[2] == cells[3], "last week's column is the book this month already executed"
+        # Targets are unchanged by the re-run (same held book, same belief).
+        assert [c[2] for c in _allocation_rows(first).values()] == [c[2] for c in rows.values()]
+        # The executed book (the table's target column) is the saved checkpoint's book.
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+
+        saved = get_platform_checkpoint_manager().load("executed_weights")
+        saved = saved[(saved["basis"] == "executed") & saved["asset"].notna()].set_index("asset")["weight"]
+        assert rows["SPY"][2] == f"{float(saved['SPY']):.1%}"
+

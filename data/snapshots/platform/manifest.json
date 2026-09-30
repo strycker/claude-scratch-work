@@ -1,31 +1,51 @@
 {
-  "captured_at": "2026-09-08T18:20:00.796892+00:00",
-  "git_commit": "31c3f200f013ef672afd71470943d9fb2a6a0392",
+  "captured_at": "2026-09-30T21:02:22.604178+00:00",
+  "git_commit": "519687b9a55a4d7d1cda97345d470d796581a224",
   "names": {
-    "daily_raw": {
-      "rows": 0,
-      "columns": 0,
-      "col_names": [],
-      "index_start": null,
-      "index_end": null
-    },
     "monthly_raw": {
-      "rows": 775,
-      "columns": 20,
+      "rows": 776,
+      "columns": 47,
       "col_names": [
-        "fred_tb3ms",
-        "fred_baa",
         "fred_gs10",
-        "fred_aaa",
         "wti_fred",
+        "fred_tb3ms",
+        "fred_aaa",
+        "fred_baa",
+        "fred_m2sl",
+        "fred_totalsl",
         "fred_vix",
         "fred_t10y3m",
         "fred_t10y2y",
         "sp500",
         "div_yield",
         "cape_shiller",
+        "gold_spot",
+        "wti_crude",
+        "AGG",
+        "COST",
+        "DBA",
+        "EEM",
+        "EFA",
+        "GDX",
+        "HYG",
+        "IAU",
+        "IEF",
+        "IWM",
+        "LQD",
+        "MCD",
+        "O",
+        "QQQ",
+        "SHY",
+        "SLV",
+        "SPY",
+        "TSM",
+        "UEC",
+        "UNG",
+        "VNQ",
+        "VYM",
         "equities_tr",
         "long_duration_tr",
+        "gold",
         "oil",
         "cash",
         "fred_unrate",
@@ -35,20 +55,46 @@
         "fred_indpro"
       ],
       "index_start": "1962-01-31 00:00:00",
-      "index_end": "2026-07-31 00:00:00"
+      "index_end": "2026-08-31 00:00:00"
     },
     "monthly_features": {
-      "rows": 775,
-      "columns": 28,
+      "rows": 708,
+      "columns": 55,
       "col_names": [
-        "fred_tb3ms",
-        "fred_baa",
         "fred_gs10",
-        "fred_aaa",
         "wti_fred",
+        "fred_tb3ms",
+        "fred_aaa",
+        "fred_baa",
+        "fred_m2sl",
+        "fred_totalsl",
         "fred_t10y3m",
         "fred_t10y2y",
         "sp500",
+        "gold_spot",
+        "wti_crude",
+        "AGG",
+        "COST",
+        "DBA",
+        "EEM",
+        "EFA",
+        "GDX",
+        "HYG",
+        "IAU",
+        "IEF",
+        "IWM",
+        "LQD",
+        "MCD",
+        "O",
+        "QQQ",
+        "SHY",
+        "SLV",
+        "SPY",
+        "TSM",
+        "UEC",
+        "UNG",
+        "VNQ",
+        "VYM",
         "equities_tr",
         "long_duration_tr",
         "cash",
@@ -61,6 +107,7 @@
         "curve_10y2y",
         "credit_spread_baa_aaa",
         "fred_vix",
+        "gold",
         "oil",
         "trailing_return_1m",
         "trailing_return_3m",
@@ -71,7 +118,91 @@
         "real_rate_level"
       ],
       "index_start": "1962-01-31 00:00:00",
-      "index_end": "2026-07-31 00:00:00"
+      "index_end": "2020-12-31 00:00:00"
+    }
+  },
+  "source_provenance": {
+    "captured_at": "2026-09-30T20:59:40.727297+00:00",
+    "provenance": {
+      "equities_tr": {
+        "class_name": "equities",
+        "method": "total_return_from_price_div",
+        "status": "primary",
+        "sources": {
+          "price_col": {
+            "candidates": [
+              "sp500"
+            ],
+            "resolved": "sp500",
+            "position": 1
+          },
+          "div_yield_col": {
+            "candidates": [
+              "div_yield"
+            ],
+            "resolved": "div_yield",
+            "position": 1
+          }
+        }
+      },
+      "long_duration_tr": {
+        "class_name": "long_duration",
+        "method": "cmt_par_bond_repricing",
+        "status": "primary",
+        "sources": {
+          "yield_col": {
+            "candidates": [
+              "fred_gs10"
+            ],
+            "resolved": "fred_gs10",
+            "position": 1
+          }
+        }
+      },
+      "gold": {
+        "class_name": "gold",
+        "method": "single_source",
+        "status": "primary",
+        "sources": {
+          "source_col": {
+            "candidates": [
+              "gold_spot",
+              "IAU"
+            ],
+            "resolved": "gold_spot",
+            "position": 1
+          }
+        }
+      },
+      "oil": {
+        "class_name": "oil",
+        "method": "single_source",
+        "status": "primary",
+        "sources": {
+          "source_col": {
+            "candidates": [
+              "wti_fred",
+              "wti_crude"
+            ],
+            "resolved": "wti_fred",
+            "position": 1
+          }
+        }
+      },
+      "cash": {
+        "class_name": "cash",
+        "method": "yield_as_return",
+        "status": "primary",
+        "sources": {
+          "yield_col": {
+            "candidates": [
+              "fred_tb3ms"
+            ],
+            "resolved": "fred_tb3ms",
+            "position": 1
+          }
+        }
+      }
     }
   }
 }

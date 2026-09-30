@@ -65,13 +65,15 @@ full. ``assemble_weekly_report`` now receives the hysteresis output as
 state machine whose output it does not show. ``active_regime`` gates no weight: A7
 closed by rewording, and the report says so beside the value.
 
-**What it scores (plans 08-13, 08-14).** The nowcaster's own columns (``feature_names_in_``),
-in its own order; never the whole row. Under Glenn's 08-12 ruling q1-c (08-SERVING.md §2.1) it
-scores the latest month observed in every model column, prints "Scored as of <month>" naming
-the model columns each newer row lacks (a publication lag), steps the belief and the band on
-that month, and refuses (ValueError, before any save) when that month is more than
-``MAX_SCORING_LAG_MONTHS`` = 3 month-ends behind the newest ``monthly_features`` row. It
-never imputes. Under ruling q2-ii (§2.2) it prints, directly under the distribution, the exact
+**What it scores (plans 08-13, 08-14, 08.1-02).** The nowcaster's own columns
+(``feature_names_in_``), in its own order; never the whole row. Under Glenn's 08-12 ruling q1-c
+(08-SERVING.md §2.1) it scores the latest month observed in every model column, prints "Scored as
+of <month>" naming the model columns each newer row lacks, and steps the belief and the band on
+that month. It never imputes. Staleness is judged per series (DECISIONS A-12, which supersedes
+A-07's 3-month-end cap): ``stale_series`` compares each ``publication_lags`` series' last value
+with the month the run date allows (``report.staleness_grace_days`` of slack), and the page
+carries a STALE DATA banner naming each late series and its months late; it warns, never
+refuses. Under ruling q2-ii (§2.2) it prints, directly under the distribution, the exact
 count of distinct posteriors the served model gives across every full-span month complete in
 its columns, and says so in plain words when that count is 1; it never withholds on it.
 
@@ -109,6 +111,7 @@ from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty.holdout import load_full_span
+from trading_crab_lib.platform.ingestion.publication_lags import DERIVED
 from trading_crab_lib.platform.prediction.regime_filter import (
     filter_step,
     predict_only_step,
@@ -134,10 +137,10 @@ _NEUTRAL_PER_ASSET_SENTENCE = (
     "belief across all regimes."
 )
 
-# Ruling q1-c (Glenn, 2026-09-29; 08-SERVING.md §2.1): the latest month complete in the model
-# columns may be at most this many month-ends behind the newest monthly_features row. Measured
-# against the data, not the wall clock; exactly 3 behind serves, 4 refuses.
-MAX_SCORING_LAG_MONTHS = 3
+# report.staleness_grace_days default (08.1 ruling 4): FRED posts a month's average 1-2 business
+# days into the next month, so a series is late only once the run date is this many days past
+# the month-end it should cover.
+_DEFAULT_STALENESS_GRACE_DAYS = 7
 
 _BELIEF_CHECKPOINT = "regime_belief"
 _EXECUTED_CHECKPOINT = "executed_weights"
@@ -181,6 +184,67 @@ def _months_between(earlier: pd.Timestamp, later: pd.Timestamp) -> int:
     return (later.year - earlier.year) * 12 + (later.month - earlier.month)
 
 
+def _run_date() -> pd.Timestamp:
+    """Today, midnight. A function so tests can pin the run date (the wall clock is the point)."""
+    return pd.Timestamp.today().normalize()
+
+
+def expected_month_end(run_date: pd.Timestamp, grace_days: int) -> pd.Timestamp:
+    """The newest month-end a current series must already cover on ``run_date``.
+
+    ``(run_date - grace_days)`` is the date the data is judged as of; the month that has fully
+    closed before it is the expected one. On a month-end itself that month is still open, so
+    the expected month is the previous one (``MonthEnd(1)`` steps back from an on-offset date).
+    """
+    judged = (pd.Timestamp(run_date) - pd.Timedelta(days=int(grace_days))).normalize()
+    return judged - pd.offsets.MonthEnd(1)
+
+
+def stale_series(
+    frame: pd.DataFrame, columns: list[str], *, run_date: pd.Timestamp, grace_days: int
+) -> dict[str, int | None]:
+    """The series in ``columns`` whose last value is older than ``run_date`` allows (A-12).
+
+    Returns ``{column: months_late}`` for each stale series, ``None`` for one never observed;
+    fresh series are absent. A publication lag is already absorbed into the data's timestamps
+    (08.1-01), so "within its lag" is simply "has a value at the expected month-end"; an
+    interior gap is not staleness, only the last valid observation counts. Never imputes,
+    never mutates ``frame``.
+    """
+    expected = expected_month_end(run_date, grace_days)
+    late: dict[str, int | None] = {}
+    for column in columns:
+        valid = frame[column].dropna()
+        if valid.empty:
+            late[column] = None
+            continue
+        last = pd.Timestamp(valid.index[-1])
+        if last < expected:
+            late[column] = _months_between(last, expected)
+    return late
+
+
+def _stale_banner(late: dict[str, int | None], expected: pd.Timestamp | None) -> list[str]:
+    """The ``## STALE DATA`` section: one line per late series, worst first, then the A-12 sentence."""
+    lines = ["## STALE DATA", ""]
+    for name, months in sorted(late.items(), key=lambda kv: (-(kv[1] if kv[1] is not None else 10**6), kv[0])):
+        parts: list[str] = []
+        if months is not None and expected is not None:
+            parts.append(f"last value {(expected - pd.offsets.MonthEnd(months)).date().isoformat()}")
+        if expected is not None:
+            parts.append(f"expected through {expected.date().isoformat()}")
+        what = "no value ever observed" if months is None else f"{months} month{'s' if months != 1 else ''} late"
+        lines.append(f"- {name}: {what}" + (f" ({', '.join(parts)})" if parts else ""))
+    lines.append("")
+    lines.append(
+        "The report below scores the latest month complete in the model's columns and imputes "
+        "nothing; guidance that leans on the series above is older than the run date allows "
+        "(DECISIONS A-12)."
+    )
+    lines.append("")
+    return lines
+
+
 def _weights_rows(weights: pd.Series | None, basis: str, as_of: pd.Timestamp) -> list[dict]:
     """Rows for one book. An empty book (all cash) is one null-asset marker row, so it
     stays distinguishable from "no book" (no rows at all)."""
@@ -219,6 +283,95 @@ def load_held_weights(cm=None, *, as_of: pd.Timestamp) -> pd.Series | None:
         return None
     rows = rows[rows["asset"].notna()]
     return pd.Series(rows["weight"].to_numpy(dtype=float), index=[str(a) for a in rows["asset"]], dtype=float)
+
+
+def load_last_executed_weights(cm=None) -> pd.Series | None:
+    """The book the PREVIOUS run executed: the ``executed_weights`` checkpoint's
+    ``basis == "executed"`` rows, for the report's "last week" column (D-09).
+
+    Deliberately not ``load_held_weights``: that returns the ``held_in`` book on a same-month
+    re-run, which is what the band compared against, not what was executed. Call this BEFORE
+    ``save_executed_weights`` overwrites the checkpoint (load before save, Pitfall 3).
+    No checkpoint: None. An all-cash book (the null-asset marker row) is an empty Series.
+    """
+    cm = cm or get_platform_checkpoint_manager()
+    try:
+        frame = cm.load(_EXECUTED_CHECKPOINT)
+    except FileNotFoundError:
+        return None
+    rows = frame[frame["basis"] == "executed"] if not frame.empty else frame
+    if rows.empty:
+        return None
+    rows = rows[rows["asset"].notna()]
+    return pd.Series(rows["weight"].to_numpy(dtype=float), index=[str(a) for a in rows["asset"]], dtype=float)
+
+
+def _class_by_ticker(cfg: dict) -> dict[str, str]:
+    """``{tradable ticker: asset class}``: the reverse of ``cfg["splice"]``, in splice order
+    (SPY equities, TLT long_duration, IAU gold, USO oil, FZFXX cash)."""
+    return {
+        str(spec["tradable"]): str(name) for name, spec in cfg.get("splice", {}).items() if spec.get("tradable")
+    }
+
+
+def _pct(value: float) -> str:
+    return f"{0.0 if abs(value) < 1e-12 else value:.1%}"
+
+
+def _change_pp(delta: float) -> str:
+    return f"{round(delta * 100.0, 1) + 0.0:+.1f} pp"  # + 0.0 turns -0.0 into 0.0
+
+
+def _allocation_table(
+    target_weights: pd.Series,
+    cash: float | None,
+    last_week_weights: pd.Series | None,
+    asset_classes: dict[str, str] | None,
+) -> list[str]:
+    """The "### Target allocation" block (D-09): one row per asset class, in ``asset_classes``
+    order, with its tradable ticker, target %, last week's %, and the change in percentage
+    points. Target is the EXECUTED book (``target_weights``, absent = 0.0%); the cash row's
+    target is ``cash`` and its last-week value the residual ``1 - sum(last week's risky
+    weights)``, which is what ``execute_rebalance`` leaves in cash. ``last_week_weights`` None
+    reads n/a. A ticker outside the map gets its own "unmapped" row; the cash row falls back to
+    ticker CASH when the map carries no cash class (a config without one, e.g. a test world).
+    """
+    classes = dict(asset_classes or {})
+    cash_ticker = next((t for t, c in classes.items() if c == "cash"), "CASH")
+    rows = list(classes.items())
+    if cash is not None and cash_ticker not in classes:
+        rows.append((cash_ticker, "cash"))
+    seen = {t for t, _ in rows}
+    known = set(target_weights.index) | (set(last_week_weights.index) if last_week_weights is not None else set())
+    rows.extend((t, "unmapped") for t in sorted(known - seen))
+
+    risky_target = float(target_weights.drop(labels=[cash_ticker], errors="ignore").sum())
+    lines = ["### Target allocation", ""]
+    if not rows:
+        lines.append("(no target allocation available)")
+        lines.append("")
+        return lines
+    lines.append("| Class | Ticker | Target % | Last week % | Change |")
+    lines.append("|---|---|---|---|---|")
+    for ticker, asset_class in rows:
+        if ticker == cash_ticker:
+            target = float(cash) if cash is not None else max(0.0, 1.0 - risky_target)
+            last = (
+                None if last_week_weights is None
+                else 1.0 - float(last_week_weights.drop(labels=[cash_ticker], errors="ignore").sum())
+            )
+        else:
+            target = float(target_weights.get(ticker, 0.0))
+            last = None if last_week_weights is None else float(last_week_weights.get(ticker, 0.0))
+        last_cell, change_cell = ("n/a", "n/a") if last is None else (_pct(last), _change_pp(target - last))
+        lines.append(f"| {asset_class} | {ticker} | {_pct(target)} | {last_cell} | {change_cell} |")
+    lines.append("")
+    lines.append(
+        "Target is the executed book after the no-trade band; last week is the book this report "
+        "executed before this run (n/a when there was none)."
+    )
+    lines.append("")
+    return lines
 
 
 def save_executed_weights(
@@ -325,6 +478,10 @@ def assemble_weekly_report(
     trade_threshold_pct: float = _DEFAULT_TRADE_THRESHOLD_PCT,
     scored_as_of_note: str | None = None,
     input_sensitivity_note: str | None = None,
+    stale_series: dict[str, int | None] | None = None,
+    stale_expected_through: pd.Timestamp | None = None,
+    last_week_weights: pd.Series | None = None,
+    asset_classes: dict[str, str] | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -346,10 +503,18 @@ def assemble_weekly_report(
     q1-c) is rendered directly under the distribution heading: the month scored and the
     model columns each newer row lacks. ``input_sensitivity_note`` (ruling q2-ii) is rendered
     directly under the distribution: the exact count of distinct posteriors across history.
+    ``stale_series`` (``stale_series()``'s output) puts a STALE DATA banner right after the
+    title when non-empty; ``stale_expected_through`` names the month-end those series should
+    have covered. The banner warns only: the report is still assembled in full (A-12).
+    Directly under the trades heading, with or without ``accounts``, a "Target allocation" table
+    lists every class in ``asset_classes`` (``{ticker: class}``, in row order) with target %,
+    ``last_week_weights`` (last run's executed book, None = n/a) and the change (D-09, A-11).
     """
     probs = pd.Series(regime_probs, dtype=float)
 
     lines: list[str] = ["# Trading-Crab Platform Weekly Report", ""]
+    if stale_series:
+        lines.extend(_stale_banner(stale_series, stale_expected_through))
 
     # ── 1. Current regime distribution ────────────────────────────────────
     lines.append("## Current Regime Distribution")
@@ -429,6 +594,7 @@ def assemble_weekly_report(
     # ── 4. Target-vs-current + trades implied, per account ────────────────
     lines.append("## Target vs. Current — Trades Implied")
     lines.append("")
+    lines.extend(_allocation_table(target_weights, cash, last_week_weights, asset_classes))
     if no_trade_band is not None:
         lines.append(
             f"Targets below are the EXECUTED book after the {no_trade_band:.1%} no-trade band "
@@ -547,9 +713,8 @@ def _scored_row(monthly_features: pd.DataFrame, cols: list[str]) -> tuple[pd.Dat
     every model column, exactly as observed — ``monthly_features[cols].dropna(how="any")``,
     last row. Nothing is imputed: no forward-fill, no interpolation, no fill from another
     series. Raises ValueError, before any state is loaded or saved, when no month is complete
-    in the model columns, or when the latest complete month is more than
-    ``MAX_SCORING_LAG_MONTHS`` month-ends behind the newest ``monthly_features`` row (the
-    staleness cap is measured against the data, not the wall clock).
+    in the model columns. A latest complete month far behind the newest row does NOT refuse:
+    staleness is judged per series against the run date and shown as a banner (A-12).
     """
     complete = monthly_features[cols].dropna(how="any")
     if complete.empty:
@@ -566,15 +731,6 @@ def _scored_row(monthly_features: pd.DataFrame, cols: list[str]) -> tuple[pd.Dat
         (pd.Timestamp(date).date().isoformat(), [c for c in cols if pd.isna(row[c])])
         for date, row in newer.iterrows()
     ]
-    if lag > MAX_SCORING_LAG_MONTHS:
-        detail = "; ".join(f"{d} lacks {', '.join(missing)}" for d, missing in lacking)
-        raise ValueError(
-            f"The latest month observed in every one of the nowcaster's {len(cols)} model columns is "
-            f"{as_of.date().isoformat()}, {lag} month-ends behind the newest monthly_features row "
-            f"({newest.date().isoformat()}). That exceeds the staleness cap, MAX_SCORING_LAG_MONTHS = "
-            f"{MAX_SCORING_LAG_MONTHS} (ruling q1-c, 08-SERVING.md §2.1), so the report refuses to serve "
-            f"guidance this old. Newer rows: {detail}. The report does not impute."
-        )
     note = (
         f"Scored as of {as_of.date().isoformat()}, the latest month observed in all {len(cols)} of the "
         "nowcaster's model columns"
@@ -636,7 +792,11 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         (the filtered belief the allocation consumed), ``active_regime`` (the
         hysteresis output), ``transition_matrix``, ``returns_by_regime``,
         ``target_weights`` / ``cash`` (the EXECUTED book, after the no-trade band),
-        ``pre_band_target_weights`` (the tilt's target) and ``no_trade_band``.
+        ``pre_band_target_weights`` (the tilt's target), ``no_trade_band``, and
+        ``stale_series`` / ``stale_expected_through`` (A-12: series later than the run date
+        allows, for the banner; empty when every watched series is current) and
+        ``last_week_weights`` (the previous run's executed book, read before this run saves
+        its own; None with no band configured or no earlier run).
     """
     cm = cm or get_platform_checkpoint_manager()
 
@@ -659,6 +819,17 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     # them (ruling q1-c); validated before any state load or save, so a refusal writes nothing.
     cols = _model_columns(nowcaster, monthly_features)
     row, scored_as_of_note = _scored_row(monthly_features, cols)
+    # A-12: per-series staleness against the run date, over the series the lag table lists
+    # (derived research series inherit their inputs' lags) that the full-span frame carries.
+    report_cfg = cfg.get("report", {})
+    grace_days = int(report_cfg.get("staleness_grace_days", _DEFAULT_STALENESS_GRACE_DAYS))
+    watched = [
+        str(name) for name, entry in (cfg.get("publication_lags") or {}).items()
+        if entry != DERIVED and name in monthly_features.columns
+    ]
+    run_date = _run_date()
+    late = stale_series(monthly_features, watched, run_date=run_date, grace_days=grace_days)
+    stale_expected_through = expected_month_end(run_date, grace_days)
     proba = nowcaster.predict_proba(row)[0]
     regime_probs = pd.Series(proba, index=nowcaster.classes_)
     # Ruling q2-ii: disclose how input-dependent that posterior is (looking, not fitting).
@@ -700,6 +871,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
 
     # The no-trade band (plan 08-09): the SAME function the drivers call. Held-book I/O
     # happens only when a band is configured — with none, the executed book is the target.
+    last_week = load_last_executed_weights(cm) if no_trade_band is not None else None  # load BEFORE save
     held = load_held_weights(cm, as_of=as_of) if no_trade_band is not None else None  # load BEFORE save
     executed = execute_rebalance(tilt["weights"], tilt["cash"], held, band=no_trade_band)
     if no_trade_band is not None:
@@ -717,6 +889,9 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         "no_trade_band": no_trade_band,
         "scored_as_of_note": scored_as_of_note,
         "input_sensitivity_note": input_sensitivity_note,
+        "stale_series": late,
+        "stale_expected_through": stale_expected_through,
+        "last_week_weights": last_week,
     }
 
 
@@ -758,6 +933,10 @@ def main(argv: list[str] | None = None) -> int:
         trade_threshold_pct=report_cfg.get("trade_threshold_pct", _DEFAULT_TRADE_THRESHOLD_PCT),
         scored_as_of_note=inputs.get("scored_as_of_note"),
         input_sensitivity_note=inputs.get("input_sensitivity_note"),
+        stale_series=inputs.get("stale_series"),
+        stale_expected_through=inputs.get("stale_expected_through"),
+        last_week_weights=inputs.get("last_week_weights"),
+        asset_classes=_class_by_ticker(cfg),
     )
     report_path = write_weekly_report(markdown)
 

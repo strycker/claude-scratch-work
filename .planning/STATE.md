@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 08.1
-current_phase_name: Point-in-Time Data Audit
+current_phase: 08.2
+current_phase_name: Lean MVP — Simplify, Modularize, Notebook-Gate
 status: planning
-stopped_at: Phase 8 COMPLETE 2026-09-30 (19/19 plans, verified 12/12, Mac suite + build→serving→weekly passed); next is 08.1 (order decided by Glenn 2026-09-30), then 08.2
-last_updated: "2026-09-30T15:51:23.038Z"
+stopped_at: Phase 08.1 COMPLETE 2026-09-30 (3/3 plans; verified; Mac run passed); E-06 NO; regime view stays advisory in 8.2 (G-06); next /gsd-discuss-phase 8.2
+last_updated: "2026-09-30T22:36:16.801Z"
 progress:
   total_phases: 10
-  completed_phases: 7
-  total_plans: 67
-  completed_plans: 66
-last_activity: 2026-09-29
-last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
+  completed_phases: 8
+  total_plans: 70
+  completed_plans: 69
+last_activity: 2026-09-30
+last_activity_desc: "Phase 08.1 executed: publication-lag table + PIT test (mutation proven), weekly STALE banner + always-on allocation table, tracked data migrated, D-04 re-measured — tilt does NOT beat ablation on point-in-time data (before +0.1677, after -0.1515). Registry 46."
 ---
 
 # Project State
@@ -28,10 +28,17 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 08.1 — Point-in-Time Data Audit
-Status: Ready to plan — 08.1 next (Glenn, 2026-09-30); scope includes two usability fixes (always print target allocation; per-series staleness cap). Awaiting Glenn's merge to main + new branch before discuss-phase.
-Closing record: `08-MEASUREMENTS.md`. **Registry 42 → 44, the ADR-0002 ceiling exactly — zero
-headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
+Phase: 08.2 — Lean MVP — Simplify, Modularize, Notebook-Gate
+Status: Ready to plan
+**Phase 08.1 closed 2026-09-30.** Point-in-time data: a measured `publication_lags` table (M2SL 1, TOTALSL 2,
+div_yield 3, pre-1991 GDP fallback 3, others 0 or vintage-aligned), applied once in ingestion and guarded by a
+point-in-time test with a mutation proof. Weekly page: per-series STALE banner (A-12) and an always-printed
+allocation table (A-11). **E-06: NO** — on point-in-time data the regime tilt does not beat the no-regime ablation
+(TLW 3.8909 vs 4.0424, delta −0.1515; before the lags +0.1677). Registry **44 → 46** (G-05 budget spent; ADR-0004,
+no standing cap). Suite 2550. **8.2 ruling (Glenn): the regime view stays advisory (G-06).**
+
+Phase 8 closing record: `08-MEASUREMENTS.md`. Registry 42 → 44 (the Phase 7–8 budget; ADR-0004 later removed the
+standing-cap reading). Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
 1972-01-31 → 2020-12-31: l1only `wealth_delta` **−0.125307** (was −0.123438), `dd_delta`
 **+0.026164** (was +0.024084); mean turnover #1-alone **0.127** (was 0.163), joint **0.081** (was
 0.120). The band cut turnover and did not improve the lift. **A11 gate FAILED 2 of 2** — DSR

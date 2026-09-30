@@ -108,6 +108,25 @@ def _make_synthetic_macro(idx: pd.DatetimeIndex) -> pd.DataFrame:
     )
 
 
+# Lag 0 for every synthetic ingest column and fallback 1 for the agency names, so
+# the pins in this file keep testing splice/alignment mechanics, not lags. Lags
+# themselves are proven in test_platform_point_in_time.py against the real config.
+PUBLICATION_LAGS_CFG: dict = {
+    **dict.fromkeys(
+        [
+            "fred_gs10", "fred_tb3ms", "fred_baa", "fred_aaa", "fred_t10y2y", "fred_vix",
+            "sp500", "div_yield", "cape_shiller", "gold_spot", "wti_crude", "IAU",
+        ],
+        0,
+    ),
+    **dict.fromkeys(["equities_tr", "long_duration_tr", "gold", "oil", "cash"], "derived"),
+    **{
+        name: {"vintage": True, "fallback_months": 1}
+        for name in ("fred_gdp", "fred_cpi", "fred_unrate", "fred_indpro", "fred_payems")
+    },
+}
+
+
 def _make_cfg(start: str = "2015-01-01", end: str = "2020-12-31") -> dict:
     return {
         "data": {"start_date": start, "end_date": end, "monthly_freq": "ME"},
@@ -119,6 +138,7 @@ def _make_cfg(start: str = "2015-01-01", end: str = "2020-12-31") -> dict:
         },
         "splice": SPLICE_CFG,
         "taxonomy": TAXONOMY_CFG,
+        "publication_lags": PUBLICATION_LAGS_CFG,
     }
 
 
