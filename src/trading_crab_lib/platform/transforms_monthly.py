@@ -6,8 +6,9 @@ ONE monthly feature table indexed by month-end back to ~1962:
 
   1. Fetch monthly macro/long-history raw data (``macro_monthly.fetch_macro_monthly``).
   2. Fetch daily universe prices + derive a monthly spine (``prices_daily.fetch_universe_prices``).
-  3. Build the 5 core research series via ratio-splice/synthesis
-     (``splice.build_core_research_series``).
+  3. Apply the measured publication lags once (``publication_lags.apply_publication_lags``,
+     D-01), then build the 5 core research series from the lagged frame via
+     ratio-splice/synthesis (``splice.build_core_research_series``).
   4. Point-in-time-align the D-06 agency series (``align_agency_monthly``) — value_as_of
      where ALFRED vintages exist, publication-lag shift fallback before the earliest
      recorded vintage (RESEARCH Pitfall 4: vintage-correction subsumes the shift once
@@ -44,6 +45,7 @@ from trading_crab_lib.platform import splice, taxonomy
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.honesty.holdout import write_monthly_features_split
 from trading_crab_lib.platform.ingestion import alfred, macro_monthly, prices_daily
+from trading_crab_lib.platform.ingestion.publication_lags import apply_publication_lags
 
 log = logging.getLogger(__name__)
 
@@ -327,16 +329,23 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     # whatever is available (a class missing its required macro columns then
     # raises its own actionable preflight error, rather than silently
     # skipping the whole splice step).
+    #
+    # Publication lags (D-01) are applied HERE, once, to the whole ingest frame:
+    # the research series and monthly_raw are both built from the lagged frame,
+    # so no consumer can reach an unlagged copy. Agency columns are added
+    # afterwards and never pass through it (D-02: vintage-aligned already).
     splice_input_frames = [f for f in (macro, monthly_prices) if not f.empty]
     if splice_input_frames:
         splice_input = pd.concat(splice_input_frames, axis=1)
-        research = splice.build_core_research_series(splice_input, cfg)
+        lagged = apply_publication_lags(splice_input, cfg)
+        research = splice.build_core_research_series(lagged, cfg)
     else:
+        lagged = pd.DataFrame()
         research = pd.DataFrame()
 
     agency = align_agency_monthly(monthly_index, cfg)
 
-    frames = [f for f in (macro, monthly_prices, research, agency) if not f.empty]
+    frames = [f for f in (lagged, research, agency) if not f.empty]
     monthly_raw = pd.concat(frames, axis=1) if frames else pd.DataFrame(index=monthly_index)
     monthly_raw = monthly_raw.reindex(monthly_index)
     monthly_raw.index.name = "date"
