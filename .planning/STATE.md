@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08.1
 current_phase_name: Point-in-Time Data Audit
-status: planned
-stopped_at: Phase 08.1 PLANNED 2026-09-30 (3 lean plans, checker 0 blockers / 5 warnings fixed); awaiting Glenn approval of rulings 1-3 + yes/no rule before /gsd-execute-phase 8.1
+status: verifying
+stopped_at: Phase 08.1 EXECUTED + VERIFIED (human_needed) 2026-09-30 — 3/3 plans; E-06 answer NO (tilt 3.8909 vs ablation 4.0424 on PIT data); registry 44->46 (budget spent); suite 2550; awaiting Glenn Mac serving+weekly run before phase.complete
 last_updated: "2026-09-30T16:46:08.466Z"
 progress:
   total_phases: 10
@@ -13,7 +13,7 @@ progress:
   total_plans: 67
   completed_plans: 66
 last_activity: 2026-09-30
-last_activity_desc: "Phase 08.1 planned — research (lag table measured; pre-1991 GDP fallback look-ahead found), 3 plans (01 lags+PIT test+D-12, 02 weekly STALE banner + allocation table, 03 before run → migrate → checkpoint → D-04 44→46). Registry 44."
+last_activity_desc: "Phase 08.1 executed: publication-lag table + PIT test (mutation proven), weekly STALE banner + always-on allocation table, tracked data migrated, D-04 re-measured — tilt does NOT beat ablation on point-in-time data (before +0.1677, after -0.1515). Registry 46."
 ---
 
 # Project State
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.1 — Point-in-Time Data Audit
-Status: **Planned** (2026-09-30) — 08.1-01/02 wave 1, 08.1-03 wave 2 with a blocking checkpoint before the 2-row D-04 run. Awaiting Glenn approval to execute.
+Status: **Executed + verified, human_needed** (2026-09-30) — 3/3 plans; answer E-06 NO; awaiting Glenn Mac run (serving + weekly on PIT data) to close.
 Closing record: `08-MEASUREMENTS.md`. **Registry 42 → 44, the ADR-0002 ceiling exactly — zero
 headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
 1972-01-31 → 2020-12-31: l1only `wealth_delta` **−0.125307** (was −0.123438), `dd_delta`
