@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-2530%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2550%20passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
@@ -480,7 +480,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ 2530 tests (unit + integration), all passing
+- ✓ 2550 tests (unit + integration), all passing
 - ✓ Exploration notebooks (01–12)
 
 ---
@@ -552,10 +552,19 @@ trained on (`nowcaster_class_prior`), which step 2 writes beside the model; a pr
 states are not the model's classes is refused, so the two are rebuilt together.
 When the newest data row lacks some of the model's columns (a publication lag), step 3 scores
 the latest month observed in every model column, prints "Scored as of <month>" and names what
-each newer row lacks; it refuses when that month is more than 3 month-ends behind the newest
-row, and it never imputes. Under the distribution it prints how many distinct posteriors the
-model gives across history; on today's data that is 1, and the page says the distribution
-does not depend on the features.
+each newer row lacks, and it never imputes. A series later than its publication lag allows
+on the run date (`report.staleness_grace_days`, 7) puts a STALE DATA banner at the top naming
+it and its months late; the report still runs. The page always shows a target-allocation
+table (class, ticker, target %, last week's %, change), with or without an account file.
+Under the distribution it prints how many distinct posteriors the model gives across history;
+on today's data that is 1, and the page says the distribution does not depend on the features.
+
+To also see trades implied against your real holdings (optional; the file is gitignored and
+never committed):
+
+1. Copy `config/accounts/example.yaml` to `config/accounts/<name>.yaml` and enter your weights and cash.
+2. List `<name>` under `report.accounts:` in `config/platform_settings.yaml`.
+3. Re-run step 3: the page adds "Account: <name>" with the trades implied.
 
 ---
 
