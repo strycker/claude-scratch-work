@@ -922,14 +922,21 @@ class TestTheDecisionBearingRunSpentExactlyTwoRows:
         assert reg["baseline_tag"] == reg["joint_tag"] == "(NO_REGISTRY)"
 
     def test_the_tracked_ledger_carries_the_two_rows_the_record_claims(self):
-        """No commit may claim 44 while the ledger reads 42: the ledger is read here."""
+        """No commit may claim 44 while the ledger reads 42: the ledger is read here.
+
+        Since 08.1 the live count may exceed 44, up to the declared ceiling of 46
+        (DECISIONS G-05), so 08-10's rows need not be last; they must exist, in
+        order, at adjacent positions."""
         from trading_crab_lib.platform.honesty.registry import total_trial_count
 
-        assert total_trial_count() == _REGISTRY_AFTER
+        assert _REGISTRY_AFTER <= total_trial_count() <= 46
         rows = [json.loads(line) for line in (_ROOT / "registry" / "trials.jsonl").read_text().splitlines() if line]
         rec = _record("l1only")
         tagged = {r["config"]["trial_tag"]: r for r in rows if r["config"].get("trial_tag") in _TAGS_0810}
-        assert sorted(tagged) == sorted(_TAGS_0810) and [r["config"]["trial_tag"] for r in rows[-2:]] == list(_TAGS_0810)
+        assert sorted(tagged) == sorted(_TAGS_0810)
+        tags = [r["config"].get("trial_tag") for r in rows]
+        first = tags.index(_TAGS_0810[0])
+        assert tags[first : first + 2] == list(_TAGS_0810), "08-10's two rows must be adjacent and in order"
         for tag, leg, weight in zip(_TAGS_0810, ("baseline_leg", "joint_leg"), (1.0, 0.5)):
             row = tagged[tag]
             assert row["config"]["no_trade_band"] == 0.05
