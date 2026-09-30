@@ -240,6 +240,63 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     holdout_mod.HOLDOUT_CHECKPOINT_DIR = original_holdout_dir
 
 
+# ---------------------------------------------------------------------------
+# Pre-8.1 platform checkpoints (git show, never the live working tree)
+# ---------------------------------------------------------------------------
+# 08.1-03 migrated the tracked platform data to publication lags. A test that
+# verifies a Phase 7/8 RECORD (a number measured on the unlagged data and written
+# into a committed JSON/markdown record) must keep reading the data that record
+# was measured on, so it reads the checkpoints as they stood at the last pre-8.1
+# data commit. Skips (never fails) when the commit is unreachable, e.g. a
+# shallow clone — the same convention as test_platform_evaluation_disagreement.py.
+
+#: Last commit before 08.1-03 migrated data/checkpoints/platform (08.1-03-PLAN.md).
+PRE_PIT_DATA_COMMIT = "06002f9c7535bf29d3991fdeedf9695cb5dc3ba3"
+_PRE_PIT_PLATFORM_PATH = "data/checkpoints/platform"
+
+
+def _extract_pre_pit_platform(dest: Path) -> Path | None:
+    """Write every file under ``data/checkpoints/platform`` at PRE_PIT_DATA_COMMIT
+    into *dest*; None if git or the commit is unreachable."""
+    import subprocess
+
+    try:
+        listing = subprocess.run(
+            ["git", "ls-tree", "--name-only", f"{PRE_PIT_DATA_COMMIT}:{_PRE_PIT_PLATFORM_PATH}"],
+            capture_output=True, check=True, text=True,
+        ).stdout.split()
+        dest.mkdir(parents=True, exist_ok=True)
+        for name in listing:
+            blob = subprocess.run(
+                ["git", "show", f"{PRE_PIT_DATA_COMMIT}:{_PRE_PIT_PLATFORM_PATH}/{name}"],
+                capture_output=True, check=True,
+            ).stdout
+            (dest / name).write_bytes(blob)
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
+    return dest if listing else None
+
+
+@pytest.fixture(scope="session")
+def _pre_pit_platform_snapshot(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    path = _extract_pre_pit_platform(tmp_path_factory.mktemp("pre_pit_platform"))
+    if path is None:
+        pytest.skip(f"pre-8.1 platform checkpoints not reachable via `git show {PRE_PIT_DATA_COMMIT[:7]}`")
+    return path
+
+
+@pytest.fixture
+def pre_pit_platform_dir(_pre_pit_platform_snapshot: Path, tmp_path: Path, monkeypatch) -> Path:
+    """Point ``PLATFORM_CHECKPOINT_DIR`` at a fresh copy of the pre-8.1 platform
+    checkpoints for one test (a copy, so a test that saves cannot alter the snapshot)."""
+    import trading_crab_lib.platform.checkpoints as platform_ckpt_mod
+
+    copy = tmp_path / "pre_pit_platform"
+    shutil.copytree(_pre_pit_platform_snapshot, copy)
+    monkeypatch.setattr(platform_ckpt_mod, "PLATFORM_CHECKPOINT_DIR", copy)
+    return copy
+
+
 @pytest.fixture
 def quarterly_index():
     """20 quarter-end dates starting 2000-Q1."""

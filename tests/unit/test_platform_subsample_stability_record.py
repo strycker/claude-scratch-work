@@ -48,6 +48,24 @@ CLASSIFIER1_FROZEN = [
 ]
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _pre_pit_platform_data(_pre_pit_platform_snapshot, tmp_path_factory):
+    """08.1 (2026-09-30): this module guards 08-07's RECORD (stability_record.json), measured on
+    the pre-8.1 unlagged checkpoints, so every test here reads them (git show 06002f9, via
+    tests/conftest.py). On the point-in-time data classifier #1 still reproduces (695 months,
+    1963-02-28); classifier #2's regime_labels_2 is DEFER and stale (its features now start
+    1963-04-30, 693 months), so the reference identity could not hold there."""
+    import shutil
+
+    import trading_crab_lib.platform.checkpoints as platform_ckpt_mod
+
+    copy = tmp_path_factory.mktemp("subsample_pre_pit") / "platform"
+    shutil.copytree(_pre_pit_platform_snapshot, copy)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(platform_ckpt_mod, "PLATFORM_CHECKPOINT_DIR", copy)
+        yield copy
+
+
 @pytest.fixture(scope="module")
 def cfg():
     return load_platform_config()

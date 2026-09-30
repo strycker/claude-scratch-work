@@ -685,7 +685,9 @@ class TestTheServedClassPrior:
 #: 08-SERVING.md §1 item 6: the served posterior on the last complete dev month, exact floats.
 _RECORDED_POSTERIOR = [0.41800356506238856, 0.5639928698752229, 0.018003565062388593]
 #: 08-SERVING.md §1 item 3: dev label counts over 695 months, 1963-02-28 -> 2020-12-31.
-_RECORDED_LABEL_COUNTS = {0: 40, 1: 228, 2: 71, 3: 200, 4: 84, 5: 72}
+#: 08.1 (2026-09-30): {0: 40, 1: 228, ...} -> {0: 41, 1: 227, ...} on the point-in-time labels
+#: (1974-10 moved 5 -> 0 and 1991-04 moved 1 -> 5; the other 693 months are unchanged).
+_RECORDED_LABEL_COUNTS = {0: 41, 1: 227, 2: 71, 3: 200, 4: 84, 5: 72}
 #: 08-SERVING.md §1 item 5: the fit's training block, 153 rows, 2007-04-30 -> 2019-12-31.
 _RECORDED_TRAIN_COUNTS = {0: 11, 3: 137, 4: 5}
 
@@ -747,10 +749,13 @@ class TestTheServedModelOnTheTrackedData:
         belief = weekly.advance_regime_belief(
             None, labels, post, class_prior=prior, state_index=states, as_of=labels.index[-1]
         )
+        # 08.1 (2026-09-30): 0.300 / 0.293 / 0.163 -> 0.306 / 0.290 / 0.162 on the point-in-time
+        # labels (the transition matrix moved; the posterior and the training prior did not).
+        # The CR-01 flip survives: argmax 0 under the new rule, 3 under the old.
         assert int(belief.idxmax()) == 0
-        assert belief[0] == pytest.approx(0.300, abs=5e-3)
-        assert belief[1] == pytest.approx(0.293, abs=5e-3)
-        assert belief[3] == pytest.approx(0.163, abs=5e-3)
+        assert belief[0] == pytest.approx(0.306, abs=5e-3)
+        assert belief[1] == pytest.approx(0.290, abs=5e-3)
+        assert belief[3] == pytest.approx(0.162, abs=5e-3)
 
         # The old rule by explicit arithmetic (not through filter_step): normalize((pi_0 A) x r_old),
         # r_old = post / label_prior on classes_ and 1.0 elsewhere.
@@ -762,7 +767,8 @@ class TestTheServedModelOnTheTrackedData:
         old = (pi0 @ a) * r_old
         old = old / old.sum()
         assert int(np.argmax(old)) == 3
-        assert old[3] == pytest.approx(0.369, abs=5e-3)
+        # 08.1 (2026-09-30): 0.369 -> 0.370 (measured 0.3695) on the point-in-time labels.
+        assert old[3] == pytest.approx(0.370, abs=5e-3)
 
 
 # ── Glenn's 08-12 rulings at serve (plan 08-14): q1-c and q2-ii ──────────────

@@ -51,10 +51,20 @@ REAL_MONTHLY_FEATURES = Path("data/checkpoints/platform/monthly_features.parquet
 # see the assertion below; do not weaken it to an inequality, subset, or
 # tolerance check, as that would have failed to catch the staleness this
 # amendment fixes.
+#
+# 08.1 (2026-09-30): old -> new, on the point-in-time (publication-lagged) data.
+# Old: [(1972-01-31, 5), (1972-02-29, 7), (1972-04-30, 9), (1973-02-28, 10),
+#       (1986-06-30, 11), (1995-02-28, 12), (2000-01-31, 13)].
+# div_yield (lag 3) now starts 1962-04 instead of 1962-01, and equities_tr (built
+# from it) has no 1962-02/03 value, so trailing_return_1m / realized_vol_1m start
+# 1962-05 (was 1962-02). With min_history 120 each activates 3 months later:
+# div_yield joins at 1972-04, the 1m pair at 1972-05. From 1973-02 on nothing moved.
 EXPECTED_CHANGE_POINTS = [
-    ("1972-01-31", 5),
-    ("1972-02-29", 7),
-    ("1972-04-30", 9),
+    ("1972-01-31", 4),
+    ("1972-04-30", 5),
+    ("1972-05-31", 7),
+    ("1972-06-30", 8),
+    ("1972-07-31", 9),
     ("1973-02-28", 10),
     ("1986-06-30", 11),
     ("1995-02-28", 12),
@@ -241,7 +251,9 @@ class TestActiveFeatureCountTimeline:
         # >= 5, not >= 4 (D-02-A, 2026-09-14): the first decision window now
         # carries five active features (oil joins the frozen set from the
         # start — see the EXPECTED_CHANGE_POINTS comment above).
-        assert int(timeline["n_active"].min()) >= 5
+        # 08.1 (2026-09-30): 5 -> 4. div_yield (lag 3) leaves the first three
+        # decision windows, 1972-01..03, and joins at 1972-04.
+        assert int(timeline["n_active"].min()) >= 4
         assert int(timeline["n_active"].max()) <= 13
 
         change_dates = pregime.feature_set_change_dates(timeline)
