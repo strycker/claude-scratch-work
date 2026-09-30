@@ -31,6 +31,37 @@ plan's ``must_haves``):
   (``TestAblationSkipInvariant`` proves skip=True == skip=False
   byte-for-byte).
 
+**The Bayes filter (plan 08-08, ROADMAP criterion 1).** With
+``use_regime_filter=True`` (the default) the nowcaster's raw posterior is filtered
+into a belief — ``prediction/regime_filter.py``'s ``π_t ∝ [π_{t−1} A] · L_t`` —
+carried across steps as a LOOP VARIABLE (``prev_belief``). ``A`` and the cold start
+π_0 come from the step's own in-window labels (``transition_matrix_for`` and
+``unconditional_belief``, the SAME function objects ``joint_driver.py`` and
+``report/weekly.py`` use). ``L_t`` divides the posterior by the step fit's TRAINING
+class prior over ``model.classes_``, the third value ``fit_l2_nowcaster`` returns and
+``_refit_l2`` passes through: the same object serve persists as
+``nowcaster_class_prior`` (CR-01, plan 08-17; one helper, one rule, no train/serve
+skew). No driver computes a likelihood prior from its window labels. The **belief** is what
+``update_active_regime`` and ``vol_targeted_tilt`` consume. The raw posterior is
+still accumulated into ``per_step_metrics["proba"]`` so raw-posterior churn stays
+measurable as a control; the belief goes into ``per_step_metrics["belief"]`` /
+``["belief_classes"]`` (empty when the filter is off). There are no in-window labels
+on a degraded step here (L1 and L2 share one try), so there is no ``A`` to advance
+by and the belief is held with a WARNING (``joint_driver.py``, whose L1 labels
+survive an L2 degrade, advances by ``predict_only_step`` instead). The filter is not
+applied on the ``use_regime_tilt=False`` ablation, whose constant one-state vector
+is not a posterior.
+
+**The no-trade band (plan 08-09, design §5.3's bounded-turnover arm, ``08-A7.md``).**
+The tilt's target passes through ``allocation/hysteresis.py::execute_rebalance`` — the
+5pp band from ``allocation.no_trade_band``, NOT SWEPT, the one function
+``joint_driver.py`` and ``report/weekly.py`` also call. ``held`` is the last EXECUTED
+book; the first execution (no ``held`` yet — including after leading degraded steps)
+trades in full; a degraded step holds the executed book unbanded. It applies to the
+``use_regime_tilt=False`` ablation too, which runs the same allocation code. With the key
+absent or null the curve is byte-identical to the pre-08-09 one. ``active_regime`` is
+still computed and recorded; it gates no weight (A7 closed by rewording).
+
 Exactly one registry trial is logged per full run (mirroring, not
 duplicating, ``run_walkforward``'s single-trial convention) — this loop is
 NOT a call to ``run_walkforward`` (A1: the per-step body is new code; only
@@ -63,8 +94,14 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
 
-from trading_crab_lib.platform.allocation.hysteresis import update_active_regime
+from trading_crab_lib.platform.allocation.hysteresis import (
+    execute_rebalance,
+    hysteresis_thresholds,
+    no_trade_band_from_config,
+    update_active_regime,
+)
 from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
 from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.backtest.costs import apply_transaction_cost, compute_turnover
@@ -77,6 +114,11 @@ from trading_crab_lib.platform.labeling.jump_model import (
     standardize_features,
 )
 from trading_crab_lib.platform.prediction.nowcaster import build_nowcaster_training_set, fit_nowcaster
+from trading_crab_lib.platform.prediction.regime_filter import (
+    filter_step,
+    transition_matrix_for,
+    unconditional_belief,
+)
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
@@ -263,29 +305,69 @@ def _refit_l1(
     return pd.Series(states, index=X_df.index, name="state")
 
 
-def _refit_l2(
-    train_features: pd.DataFrame,
-    train_states: pd.Series,
-    feature_row: pd.DataFrame,
-    cfg: dict[str, Any],
-) -> pd.Series:
-    """Refit the L2 nowcaster on ``(train_features, train_states)``, score ``feature_row``.
+def training_class_prior(y_train: pd.Series, classes: Any) -> pd.Series:
+    """The ONE rule for the likelihood's class prior (CR-01).
 
-    ``feature_row`` is a single-row DataFrame for the CURRENT decision date
-    ``t`` (causal features already available at ``t`` — a PREDICTION input,
-    never a training row: ``train_states`` never contains a label at or
-    after ``t``, since ``train_features``/``train_states`` are sliced to
-    ``train_index`` which ``expanding_steps`` guarantees is strictly before
-    ``t``).
+    The Bayes filter inverts the nowcaster's posterior into a likelihood,
+    ``L_t(j) = posterior(j) / prior(j)``. That inversion is valid only with the class
+    frequency the calibrated posterior was fit against: the labels of the rows the model
+    was actually trained on (the D-01 embargoed, finite-row block), over its ``classes_``
+    only. Not the whole label series, which can put a different weight on every state.
+    :func:`fit_l2_nowcaster` computes it from its own rows and returns it beside the
+    model, so no consumer re-derives it.
+
+    Args:
+        y_train: the labels of the rows the model was fit on.
+        classes: the model's ``classes_``.
 
     Returns:
-        pd.Series: regime_probs indexed by ``model.classes_`` (the class
-        order this step's fit produced).
+        pd.Series indexed by ``[int(c) for c in classes]``, float, summing to 1.
 
     Raises:
-        ValueError: propagated from a degenerate fold fit (RESEARCH.md
-            Pitfall 2) — the caller (``run_backtest``) decides whether to
-            degrade gracefully (added in Task 3).
+        ValueError: if ``y_train`` is empty, or its label set is not exactly ``classes``
+            (a wiring bug, not a distribution).
+    """
+    idx = [int(c) for c in classes]
+    y = pd.Series(y_train)
+    if y.empty:
+        raise ValueError("training_class_prior: y_train is empty")
+    seen = sorted({int(v) for v in y.unique()})
+    if seen != sorted(idx):
+        raise ValueError(
+            f"training_class_prior: y_train carries classes {seen}, the model's classes are {sorted(idx)}. "
+            "The prior must come from the rows the model was fit on."
+        )
+    return y.astype(int).value_counts(normalize=True).reindex(idx).astype(float).rename("class_prior")
+
+
+def fit_l2_nowcaster(
+    train_features: pd.DataFrame,
+    train_states: pd.Series,
+    cfg: dict[str, Any],
+) -> tuple[CalibratedClassifierCV, list[str], pd.Series]:
+    """The ONE L2 fit recipe: embargo -> CV-safe active features -> calibrated fit.
+
+    Two callers, and only two:
+
+    - ``_refit_l2``, at every backtest step, on that step's in-window data;
+    - ``report/serving.py::build_serving_artifacts``, once, on the full DEV history,
+      to build the ``nowcaster`` the weekly report scores (plan 08-13, G-08-2).
+
+    One function, two callers, is the train/serve-skew guarantee: the served model is
+    fit by exactly the code the backtest evaluated (08-CONTEXT amendment, "a rule that
+    differs between train and serve is train/serve skew"). This function must never
+    gain a parameter the backtest does not pass — a serving-only knob would be exactly
+    the drift this extraction exists to prevent.
+
+    Returns:
+        tuple: ``(model, active, class_prior)`` — the fitted ``CalibratedClassifierCV``,
+        the column list it was fit on (equal to ``model.feature_names_in_``; score only
+        ``row[active]``), and :func:`training_class_prior` of the rows it was fit on,
+        indexed by ``model.classes_``. That prior is what the Bayes filter's likelihood
+        divides by (CR-01); a new return value, not a parameter.
+
+    Raises:
+        ValueError: propagated from a degenerate fold fit (RESEARCH.md Pitfall 2).
     """
     embargo_months = cfg.get("labeling", {}).get("embargo_months", 12)
     X, y = build_nowcaster_training_set(train_features, train_states, embargo_months=embargo_months)
@@ -298,9 +380,46 @@ def _refit_l2(
     n_splits = int(cfg.get("backtest", {}).get("nowcaster_cv_splits", 5))
     active = _cv_safe_active_features(X, y, list(X.columns), min_history=min_history, n_splits=n_splits)
     X = X[active]
+    # The same non-finite-row rule fit_nowcaster applies, run first so the fitted rows are
+    # known here (fit_nowcaster's own drop then keeps every row; the fit is unchanged).
+    finite = np.isfinite(X.to_numpy(dtype=float)).all(axis=1)
+    X, y = X.loc[finite], y.loc[finite]
     model = fit_nowcaster(X, y, n_splits=n_splits)
+    class_prior = training_class_prior(y, model.classes_)
+    return model, active, class_prior
+
+
+def _refit_l2(
+    train_features: pd.DataFrame,
+    train_states: pd.Series,
+    feature_row: pd.DataFrame,
+    cfg: dict[str, Any],
+) -> tuple[pd.Series, pd.Series]:
+    """Refit the L2 nowcaster on ``(train_features, train_states)``, score ``feature_row``.
+
+    ``feature_row`` is a single-row DataFrame for the CURRENT decision date
+    ``t`` (causal features already available at ``t`` — a PREDICTION input,
+    never a training row: ``train_states`` never contains a label at or
+    after ``t``, since ``train_features``/``train_states`` are sliced to
+    ``train_index`` which ``expanding_steps`` guarantees is strictly before
+    ``t``).
+
+    Returns:
+        tuple: ``(regime_probs, class_prior)``. ``regime_probs`` is indexed by
+        ``model.classes_`` (the class order this step's fit produced).
+        ``class_prior`` is :func:`training_class_prior` of the rows the fit kept,
+        over the same ``classes_``, exactly as ``fit_l2_nowcaster`` returned it.
+        The Bayes filter's likelihood divides by it (CR-01), in both drivers and
+        at serve.
+
+    Raises:
+        ValueError: propagated from a degenerate fold fit (RESEARCH.md
+            Pitfall 2) — the caller (``run_backtest``) decides whether to
+            degrade gracefully (added in Task 3).
+    """
+    model, active, class_prior = fit_l2_nowcaster(train_features, train_states, cfg)
     proba = model.predict_proba(feature_row[active])
-    return pd.Series(proba[0], index=model.classes_)
+    return pd.Series(proba[0], index=model.classes_), class_prior
 
 
 def _realized_return(
@@ -333,6 +452,7 @@ def run_backtest(
     registry_path: Any = None,
     frozen_l1_features: list[str] | None = None,
     trial_tag: str | None = None,
+    use_regime_filter: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """Run the L1->L4 expanding-window walk-forward loop, log exactly one trial.
 
@@ -389,14 +509,23 @@ def run_backtest(
             deduplicates identical configs (confirmed against
             ``registry/trials.jsonl``, where several adjacent rows share an
             identical ``config`` payload) — the tag is provenance, not a key.
+        use_regime_filter: filter the posterior into a belief and hand the
+            belief to the hysteresis and the tilt (plan 08-08). ``False``
+            reproduces the pre-08-08 curve exactly. The registry row records
+            the EFFECTIVE flag, ``use_regime_filter and use_regime_tilt``, as
+            ``config["use_regime_filter"]`` (CR-05). A ``run_backtest`` row
+            WITHOUT the key ran unfiltered: every such row in both ledgers
+            predates ec354b1 (2026-09-23T20:10:50Z), when the filter arrived.
 
     Returns:
         tuple[pd.DataFrame, dict[str, list]]: ``(equity_curve, per_step_metrics)``.
         ``equity_curve`` is indexed by decision date with columns
         ``return``, ``turnover``, ``cost``, ``active_regime``, ``scale``,
         ``degraded``. ``per_step_metrics`` has keys ``dates``, ``proba``,
-        ``classes`` — NO loop-sourced ``y_true`` (review F2); the report
-        layer joins ``y_true`` from the smoothed reference by date.
+        ``classes`` (the RAW posterior) and ``belief``, ``belief_classes`` (the
+        filtered belief; empty when the filter did not run) — NO loop-sourced
+        ``y_true`` (review F2); the report layer joins ``y_true`` from the
+        smoothed reference by date.
     """
     backtest_cfg = cfg.get("backtest", {})
     if min_train is None:
@@ -408,9 +537,9 @@ def run_backtest(
     target_vol_annual = allocation_cfg.get("target_vol_annual", 0.10)
     halflife = allocation_cfg.get("ewma_halflife_months", 6)
     portfolio_vol_min_obs = allocation_cfg.get("portfolio_vol_min_obs", 12)
-    hysteresis_cfg = allocation_cfg.get("hysteresis", {})
-    act_threshold = hysteresis_cfg.get("act_threshold", 0.70)
-    unwind_threshold = hysteresis_cfg.get("unwind_threshold", 0.40)
+    act_threshold, unwind_threshold = hysteresis_thresholds(cfg)
+    # §5.3's bounded-turnover arm (plan 08-09, 08-A7.md): None = no band, byte-identical.
+    no_trade_band = no_trade_band_from_config(cfg)
 
     # T-05-03: apply the holdout boundary BEFORE constructing expanding_steps
     # — no call to the holdout-namespace checkpoint manager getter anywhere in this module,
@@ -419,11 +548,21 @@ def run_backtest(
     dev_asset_returns, _ = split_by_holdout_boundary(asset_returns, cutoff=DEFAULT_HOLDOUT_CUTOFF)
 
     records: list[dict[str, Any]] = []
-    per_step_metrics: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    per_step_metrics: dict[str, list] = {
+        "dates": [], "proba": [], "classes": [], "belief": [], "belief_classes": [],
+    }
+    # The filter's recursion state — a LOOP VARIABLE, not a feature (plan 08-08).
+    prev_belief: pd.Series | None = None
+    state_index = list(range(int(cfg.get("labeling", {}).get("K", 5))))
+    apply_filter = use_regime_filter and use_regime_tilt
 
     prev_weights: pd.Series = pd.Series(dtype=float)
     prev_active_regime: int | None = None
     prev_cash: float = 1.0
+    # The band's ``held`` is the last EXECUTED book (prev_weights) once anything has been
+    # executed; before the first non-degraded step there is none and the first
+    # execution trades to target in full (08-A7.md).
+    executed_once = False
 
     # Materialize the step list so progress can be reported as N/total. Every
     # step refits L1+L2 on an expanding window, so a full run is minutes of
@@ -468,11 +607,12 @@ def run_backtest(
                     )
             states = pd.Series(0, index=train_index)
             regime_probs = pd.Series({0: 1.0})
+            class_prior = None
         else:
             try:
                 states = _refit_l1(train_features, cfg, frozen_features=frozen_l1_features)
                 feature_row = dev_features.loc[[t]]
-                regime_probs = _refit_l2(train_features, states, feature_row, cfg)
+                regime_probs, class_prior = _refit_l2(train_features, states, feature_row, cfg)
             except _L2_DEGRADE_EXCEPTIONS as exc:
                 log.warning(
                     "Step %s: L2 refit degraded (early small post-embargo window, "
@@ -481,6 +621,26 @@ def run_backtest(
                 degraded = True
                 states = pd.Series(dtype=float)
                 regime_probs = pd.Series(dtype=float)
+                class_prior = None
+
+        belief = regime_probs  # what the allocator consumes
+        if apply_filter:
+            if degraded:
+                if prev_belief is not None:
+                    log.warning(
+                        "Step %s: degraded step has no in-window labels — holding the filtered "
+                        "belief unchanged (no A to advance by)", t,
+                    )
+            else:
+                # Two roles, two rules (CR-01): π_0 and A from the in-window labels;
+                # L_t divides by this step fit's training prior, as at serve.
+                if prev_belief is None:
+                    start = unconditional_belief(states, state_index=state_index)
+                else:
+                    start = prev_belief
+                transition = transition_matrix_for(states, state_index=state_index)
+                belief = filter_step(start, transition, regime_probs, class_prior)
+                prev_belief = belief
 
         if degraded:
             new_weights = prev_weights
@@ -489,21 +649,25 @@ def run_backtest(
         else:
             stats = returns_by_regime_stats(dev_asset_returns.loc[train_index], states)
             new_active_regime = update_active_regime(
-                regime_probs,
+                belief,
                 prev_active_regime,
                 act_threshold=act_threshold,
                 unwind_threshold=unwind_threshold,
             )
             tilt = vol_targeted_tilt(
-                regime_probs,
+                belief,
                 stats,
                 dev_asset_returns.loc[train_index],
                 target_vol_annual=target_vol_annual,
                 halflife=halflife,
                 min_obs=portfolio_vol_min_obs,
             )
-            new_weights = tilt["weights"]
-            new_cash = tilt["cash"]
+            executed = execute_rebalance(
+                tilt["weights"], tilt["cash"], prev_weights if executed_once else None, band=no_trade_band
+            )
+            new_weights = executed["weights"]
+            new_cash = executed["cash"]
+            executed_once = True
 
         turnover = compute_turnover(prev_weights, new_weights)
         test_date = test_index[0]
@@ -530,6 +694,9 @@ def run_backtest(
             per_step_metrics["dates"].append(t)
             per_step_metrics["proba"].append(regime_probs.values)
             per_step_metrics["classes"].append(list(regime_probs.index))
+            if apply_filter:
+                per_step_metrics["belief"].append(belief.values)
+                per_step_metrics["belief_classes"].append(list(belief.index))
 
         prev_weights = new_weights
         prev_active_regime = new_active_regime
@@ -553,6 +720,11 @@ def run_backtest(
     # call site itself so the ledger is still self-describing. Phase 7 wave 1's four
     # untagged smoke rows are why: an unattributable row still counts toward D-16.
     trial_config["trial_tag"] = trial_tag if trial_tag is not None else "run_backtest"
+    if no_trade_band is not None:
+        # Attributable: a banded run is a different configuration (08-A7.md).
+        trial_config["no_trade_band"] = no_trade_band
+    # The EFFECTIVE flag: the filter changes the curve only when the tilt is on (CR-05).
+    trial_config["use_regime_filter"] = bool(apply_filter)
     if trial_tag is not None:
         # 07-01 Task 2: provenance only, never a dedup key — the registry is
         # append-only and does not deduplicate identical configs (confirmed

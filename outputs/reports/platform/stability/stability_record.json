@@ -1,0 +1,4345 @@
+{
+  "plan": "08-07",
+  "criterion": "design \u00a74.4 criterion 3 (subsample stability), PER-06",
+  "generated_at": "2026-09-23T18:37:35+00:00",
+  "holdout_cutoff": "2020-12-31",
+  "seed": 20260921,
+  "fit_random_state": 42,
+  "n_bootstrap": 200,
+  "n_null_reps": 200,
+  "block_length_ladder": [
+    6,
+    12,
+    24,
+    48
+  ],
+  "politis_white_anchor_months": {
+    "value": 8.86,
+    "role": "quoted as the variance-estimation anchor n^(1/3); NOT obeyed"
+  },
+  "replicate_seed_rule": "np.random.SeedSequence([seed, block_length, replicate]).generate_state(1)[0]",
+  "schemes_run": [
+    "drop_first_decade",
+    "drop_last_decade",
+    "circular_block_bootstrap",
+    "leave_one_episode_out"
+  ],
+  "runtime_seconds": 231.2,
+  "workers": 4,
+  "registry_trial_count": {
+    "before": 42,
+    "after": 42
+  },
+  "distance": "Euclidean distance between de-standardized (winsorized-unit) centroids",
+  "keyed_on": "occupancy, null and episodes are read off the Hungarian-matched partner",
+  "scope_note": "No persistence cutoff exists in this record and none was invented. The only pass/fail is \u00a74.4 AMENDMENT condition (i), attached to classifier #1 state 0 rows only.",
+  "classifiers": {
+    "1": {
+      "frozen_columns": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "K": 6,
+      "lambda": 10.0,
+      "n_restarts": 10,
+      "sort_column": "trailing_return_1m",
+      "reference_identity": {
+        "checkpoint": "regime_labels",
+        "n_months": 695,
+        "n_states": 6,
+        "start": "1963-02-28",
+        "end": "2020-12-31",
+        "mismatches": 0,
+        "identical": true
+      },
+      "full_sample": {
+        "0": {
+          "occupancy_months": 40,
+          "occupancy_pct": 0.05755395683453238,
+          "n_episodes": 9,
+          "longest_episode": 11,
+          "episodes": [
+            {
+              "start": "1970-05",
+              "end": "1970-07",
+              "length": 3
+            },
+            {
+              "start": "1973-11",
+              "end": "1974-09",
+              "length": 11
+            },
+            {
+              "start": "1981-09",
+              "end": "1981-09",
+              "length": 1
+            },
+            {
+              "start": "1987-10",
+              "end": "1988-01",
+              "length": 4
+            },
+            {
+              "start": "1990-08",
+              "end": "1990-10",
+              "length": 3
+            },
+            {
+              "start": "2002-06",
+              "end": "2002-09",
+              "length": 4
+            },
+            {
+              "start": "2008-09",
+              "end": "2009-04",
+              "length": 8
+            },
+            {
+              "start": "2011-08",
+              "end": "2011-10",
+              "length": 3
+            },
+            {
+              "start": "2020-03",
+              "end": "2020-05",
+              "length": 3
+            }
+          ]
+        },
+        "1": {
+          "occupancy_months": 228,
+          "occupancy_pct": 0.32805755395683456,
+          "n_episodes": 5,
+          "longest_episode": 87,
+          "episodes": [
+            {
+              "start": "1963-02",
+              "end": "1970-04",
+              "length": 87
+            },
+            {
+              "start": "1971-03",
+              "end": "1973-10",
+              "length": 32
+            },
+            {
+              "start": "1976-05",
+              "end": "1978-03",
+              "length": 23
+            },
+            {
+              "start": "1988-09",
+              "end": "1990-07",
+              "length": 23
+            },
+            {
+              "start": "1991-04",
+              "end": "1996-06",
+              "length": 63
+            }
+          ]
+        },
+        "2": {
+          "occupancy_months": 71,
+          "occupancy_pct": 0.10215827338129496,
+          "n_episodes": 1,
+          "longest_episode": 71,
+          "episodes": [
+            {
+              "start": "1996-07",
+              "end": "2002-05",
+              "length": 71
+            }
+          ]
+        },
+        "3": {
+          "occupancy_months": 200,
+          "occupancy_pct": 0.28776978417266186,
+          "n_episodes": 4,
+          "longest_episode": 100,
+          "episodes": [
+            {
+              "start": "2002-10",
+              "end": "2008-08",
+              "length": 71
+            },
+            {
+              "start": "2009-10",
+              "end": "2011-07",
+              "length": 22
+            },
+            {
+              "start": "2011-11",
+              "end": "2020-02",
+              "length": 100
+            },
+            {
+              "start": "2020-06",
+              "end": "2020-12",
+              "length": 7
+            }
+          ]
+        },
+        "4": {
+          "occupancy_months": 84,
+          "occupancy_pct": 0.12086330935251799,
+          "n_episodes": 3,
+          "longest_episode": 72,
+          "episodes": [
+            {
+              "start": "1981-10",
+              "end": "1987-09",
+              "length": 72
+            },
+            {
+              "start": "1988-02",
+              "end": "1988-08",
+              "length": 7
+            },
+            {
+              "start": "2009-05",
+              "end": "2009-09",
+              "length": 5
+            }
+          ]
+        },
+        "5": {
+          "occupancy_months": 72,
+          "occupancy_pct": 0.10359712230215827,
+          "n_episodes": 4,
+          "longest_episode": 41,
+          "episodes": [
+            {
+              "start": "1970-08",
+              "end": "1971-02",
+              "length": 7
+            },
+            {
+              "start": "1974-10",
+              "end": "1976-04",
+              "length": 19
+            },
+            {
+              "start": "1978-04",
+              "end": "1981-08",
+              "length": 41
+            },
+            {
+              "start": "1990-11",
+              "end": "1991-03",
+              "length": 5
+            }
+          ]
+        }
+      },
+      "distance_scale_dominance": {
+        "reference_winsorized_sd": {
+          "cape_shiller": 8.113174568347016,
+          "credit_spread_baa_aaa": 0.42721219344891975,
+          "curve_10y3m": 1.2100233758852033,
+          "div_yield": 0.011397681859559798,
+          "oil": 27.52647218545657,
+          "real_rate_level": 2.3217591382333964,
+          "realized_vol_1m": 0.022729685532634793,
+          "realized_vol_3m": 0.014334121176758046,
+          "trailing_return_1m": 0.03362124503804066,
+          "trailing_return_3m": 0.06628163988433707
+        },
+        "share_winsorized": {
+          "cape_shiller": 0.19186592369591335,
+          "credit_spread_baa_aaa": 0.00025901160580804437,
+          "curve_10y3m": 0.0007848659683057887,
+          "div_yield": 3.250334659159686e-07,
+          "oil": 0.7947863388087002,
+          "real_rate_level": 0.012293659649267409,
+          "realized_vol_1m": 3.618010292678574e-07,
+          "realized_vol_3m": 2.8458564397046154e-07,
+          "trailing_return_1m": 1.0195931297890865e-06,
+          "trailing_return_3m": 8.20925873622456e-06
+        },
+        "share_reference_sd": {
+          "cape_shiller": 0.1873587148734735,
+          "credit_spread_baa_aaa": 0.09121990931183922,
+          "curve_10y3m": 0.034456064297237736,
+          "div_yield": 0.16082468493099034,
+          "oil": 0.06742282945063413,
+          "real_rate_level": 0.14659006913186934,
+          "realized_vol_1m": 0.045013277389863694,
+          "realized_vol_3m": 0.08902839343033463,
+          "trailing_return_1m": 0.057977169381741765,
+          "trailing_return_3m": 0.1201088878020156
+        }
+      },
+      "reference_centroids_winsorized": {
+        "0": {
+          "cape_shiller": 16.09575,
+          "credit_spread_baa_aaa": 1.3301299999999996,
+          "curve_10y3m": 1.3935,
+          "div_yield": 0.032905000000000004,
+          "oil": 30.4108,
+          "real_rate_level": 0.6340213583439529,
+          "realized_vol_1m": 0.05656632289918286,
+          "realized_vol_3m": 0.047935458877903944,
+          "trailing_return_1m": -0.03775136258202609,
+          "trailing_return_3m": -0.10648960894039657
+        },
+        "1": {
+          "cape_shiller": 19.01973684210526,
+          "credit_spread_baa_aaa": 0.7660964912280701,
+          "curve_10y3m": 1.3236070175438597,
+          "div_yield": 0.031462719298245616,
+          "oil": 10.283513157894763,
+          "real_rate_level": 2.709954683740599,
+          "realized_vol_1m": 0.019720918690875937,
+          "realized_vol_3m": 0.015936275505756173,
+          "trailing_return_1m": 0.00800327806273462,
+          "trailing_return_3m": 0.02560709230134608
+        },
+        "2": {
+          "cape_shiller": 35.10954647887324,
+          "credit_spread_baa_aaa": 0.7815492957746478,
+          "curve_10y3m": 1.1490140845070422,
+          "div_yield": 0.01459154929577465,
+          "oil": 22.322957746478874,
+          "real_rate_level": 3.2805385605208035,
+          "realized_vol_1m": 0.031997668634952896,
+          "realized_vol_3m": 0.027693336882229254,
+          "trailing_return_1m": 0.0085878678651203,
+          "trailing_return_3m": 0.027916623280946715
+        },
+        "3": {
+          "cape_shiller": 25.74075,
+          "credit_spread_baa_aaa": 0.9698,
+          "curve_10y3m": 1.7105029999999997,
+          "div_yield": 0.019045000000000006,
+          "oil": 65.88388800000001,
+          "real_rate_level": 0.9220368431730073,
+          "realized_vol_1m": 0.024077181578551057,
+          "realized_vol_3m": 0.018278357515423838,
+          "trailing_return_1m": 0.011303095041693976,
+          "trailing_return_3m": 0.03506729023052681
+        },
+        "4": {
+          "cape_shiller": 11.536969047619046,
+          "credit_spread_baa_aaa": 1.549454761904762,
+          "curve_10y3m": 2.541085714285714,
+          "div_yield": 0.040895285714285703,
+          "oil": 28.15547619047619,
+          "real_rate_level": 6.334893094617148,
+          "realized_vol_1m": 0.029588557234823138,
+          "realized_vol_3m": 0.02358709377444609,
+          "trailing_return_1m": 0.0186325246407837,
+          "trailing_return_3m": 0.0558682232956787
+        },
+        "5": {
+          "cape_shiller": 10.474305555555548,
+          "credit_spread_baa_aaa": 1.4429166666666668,
+          "curve_10y3m": 0.7900833333333332,
+          "div_yield": 0.04617083333333333,
+          "oil": 21.01054166666666,
+          "real_rate_level": -0.16055788077864275,
+          "realized_vol_1m": 0.035068229698435024,
+          "realized_vol_3m": 0.028567819093384024,
+          "trailing_return_1m": 0.02107728536407038,
+          "trailing_return_3m": 0.0559852429053676
+        }
+      },
+      "n_subsample_fits": 808,
+      "feature_set_note": "fit on the 10 frozen columns from _reference_label_columns (first_decision 1972-01-31), not lean_feature_set's 13: the ten are what reproduce the tracked regime_labels checkpoint elementwise"
+    },
+    "2": {
+      "frozen_columns": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "K": 5,
+      "lambda": 16.0,
+      "n_restarts": 10,
+      "sort_column": "rs_equities_bonds",
+      "reference_identity": {
+        "checkpoint": "regime_labels_2",
+        "n_months": 696,
+        "n_states": 5,
+        "start": "1963-01-31",
+        "end": "2020-12-31",
+        "mismatches": 0,
+        "identical": true
+      },
+      "full_sample": {
+        "0": {
+          "occupancy_months": 116,
+          "occupancy_pct": 0.16666666666666666,
+          "n_episodes": 2,
+          "longest_episode": 104,
+          "episodes": [
+            {
+              "start": "1974-01",
+              "end": "1982-08",
+              "length": 104
+            },
+            {
+              "start": "1983-11",
+              "end": "1984-10",
+              "length": 12
+            }
+          ]
+        },
+        "1": {
+          "occupancy_months": 158,
+          "occupancy_pct": 0.22701149425287356,
+          "n_episodes": 4,
+          "longest_episode": 95,
+          "episodes": [
+            {
+              "start": "1963-01",
+              "end": "1970-11",
+              "length": 95
+            },
+            {
+              "start": "1971-12",
+              "end": "1973-12",
+              "length": 25
+            },
+            {
+              "start": "1987-04",
+              "end": "1989-04",
+              "length": 25
+            },
+            {
+              "start": "1994-03",
+              "end": "1995-03",
+              "length": 13
+            }
+          ]
+        },
+        "2": {
+          "occupancy_months": 156,
+          "occupancy_pct": 0.22413793103448276,
+          "n_episodes": 5,
+          "longest_episode": 58,
+          "episodes": [
+            {
+              "start": "1970-12",
+              "end": "1971-11",
+              "length": 12
+            },
+            {
+              "start": "1982-09",
+              "end": "1983-10",
+              "length": 14
+            },
+            {
+              "start": "1984-11",
+              "end": "1987-03",
+              "length": 29
+            },
+            {
+              "start": "1989-05",
+              "end": "1994-02",
+              "length": 58
+            },
+            {
+              "start": "1995-04",
+              "end": "1998-10",
+              "length": 43
+            }
+          ]
+        },
+        "3": {
+          "occupancy_months": 166,
+          "occupancy_pct": 0.23850574712643677,
+          "n_episodes": 1,
+          "longest_episode": 166,
+          "episodes": [
+            {
+              "start": "1998-11",
+              "end": "2012-08",
+              "length": 166
+            }
+          ]
+        },
+        "4": {
+          "occupancy_months": 100,
+          "occupancy_pct": 0.14367816091954022,
+          "n_episodes": 1,
+          "longest_episode": 100,
+          "episodes": [
+            {
+              "start": "2012-09",
+              "end": "2020-12",
+              "length": 100
+            }
+          ]
+        }
+      },
+      "distance_scale_dominance": {
+        "reference_winsorized_sd": {
+          "rs_equities_bonds": 2371.2960693970476,
+          "rs_oil_equities": 0.001421743487182577,
+          "equities_tr_mom_12m": 0.1548159956183989,
+          "long_duration_tr_mom_12m": 0.08718858221526664,
+          "oil_mom_12m": 0.3617769840912536,
+          "corr_equities_tr_long_duration_tr_24m": 0.3724204088153827,
+          "cpi_acceleration": 0.002737831638934984,
+          "m2_gdp": 0.19277159397951432
+        },
+        "share_winsorized": {
+          "rs_equities_bonds": 0.9999999649553294,
+          "rs_oil_equities": 3.811937170612219e-13,
+          "equities_tr_mom_12m": 8.522858531375873e-10,
+          "long_duration_tr_mom_12m": 6.085763243856797e-10,
+          "oil_mom_12m": 4.461502499625197e-09,
+          "corr_equities_tr_long_duration_tr_24m": 2.1012642176647824e-08,
+          "cpi_acceleration": 5.072848059533156e-16,
+          "m2_gdp": 8.109282016515634e-09
+        },
+        "share_reference_sd": {
+          "rs_equities_bonds": 0.20074105292772665,
+          "rs_oil_equities": 0.2128683112362472,
+          "equities_tr_mom_12m": 0.0401385237436145,
+          "long_duration_tr_mom_12m": 0.09036569592208879,
+          "oil_mom_12m": 0.038477517865373,
+          "corr_equities_tr_long_duration_tr_24m": 0.17100999561144622,
+          "cpi_acceleration": 7.639169643603484e-05,
+          "m2_gdp": 0.24632251099706756
+        }
+      },
+      "reference_centroids_winsorized": {
+        "0": {
+          "rs_equities_bonds": 2652.706091173972,
+          "rs_oil_equities": 0.003965377369809148,
+          "equities_tr_mom_12m": 0.07097394641692789,
+          "long_duration_tr_mom_12m": 0.04073796089990427,
+          "oil_mom_12m": 0.3244867021286244,
+          "corr_equities_tr_long_duration_tr_24m": 0.3109273409315346,
+          "cpi_acceleration": 4.75922243699675e-05,
+          "m2_gdp": 0.198230858601925
+        },
+        "1": {
+          "rs_equities_bonds": 2761.1842867218497,
+          "rs_oil_equities": 0.001037525855167471,
+          "equities_tr_mom_12m": 0.07873591970579583,
+          "long_duration_tr_mom_12m": 0.01781413436232366,
+          "oil_mom_12m": 0.03085222951298741,
+          "corr_equities_tr_long_duration_tr_24m": 0.17284186860815842,
+          "cpi_acceleration": 8.680115811127165e-05,
+          "m2_gdp": 0.1580487057354681
+        },
+        "2": {
+          "rs_equities_bonds": 4176.57680927978,
+          "rs_oil_equities": 0.0010454804840480483,
+          "equities_tr_mom_12m": 0.22785996060356478,
+          "long_duration_tr_mom_12m": 0.16933043553781535,
+          "oil_mom_12m": -0.02847051035823711,
+          "corr_equities_tr_long_duration_tr_24m": 0.4490037983065258,
+          "cpi_acceleration": -6.038625876023565e-05,
+          "m2_gdp": 0.29976789572046125
+        },
+        "3": {
+          "rs_equities_bonds": 6013.496884214445,
+          "rs_oil_equities": 0.0004251135328859932,
+          "equities_tr_mom_12m": 0.052957553880444194,
+          "long_duration_tr_mom_12m": 0.06753654100290851,
+          "oil_mom_12m": 0.20463135097440677,
+          "corr_equities_tr_long_duration_tr_24m": -0.21897046436128764,
+          "cpi_acceleration": 6.259817891813054e-06,
+          "m2_gdp": 0.4459621232407506
+        },
+        "4": {
+          "rs_equities_bonds": 8449.802769518456,
+          "rs_oil_equities": 0.00023478448619187802,
+          "equities_tr_mom_12m": 0.1390333241725828,
+          "long_duration_tr_mom_12m": 0.035413064421370724,
+          "oil_mom_12m": -0.05602009482748806,
+          "corr_equities_tr_long_duration_tr_24m": -0.38559185031672333,
+          "cpi_acceleration": 1.5365975357303363e-06,
+          "m2_gdp": 0.7009440467320689
+        }
+      },
+      "n_subsample_fits": 807
+    }
+  },
+  "rows": [
+    {
+      "classifier": 1,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 0,
+      "evaporated": false,
+      "subsample_occupancy_months": 21,
+      "subsample_occupancy_pct": 0.036521739130434785,
+      "n_subsample_months": 575,
+      "matched_partner": 0,
+      "is_identity": false,
+      "matched_distance": 4.839965555026494,
+      "split_half_null": {
+        "median": 5.59535390295615,
+        "p10": 1.6742423064492538,
+        "p90": 10.953740161272329,
+        "n": 21,
+        "n_reps": 200
+      },
+      "margin": 0.5828759529022826,
+      "subsample_episode_count": 5,
+      "subsample_longest_episode": 7,
+      "reference_months_in_subsample": 37,
+      "partner_overlap_months": 18,
+      "refscaled": {
+        "matched_distance": 1.818212319782394,
+        "split_half_null": {
+          "median": 1.6045667543101398,
+          "p10": 1.0627379255945273,
+          "p90": 2.2932953002001777,
+          "n": 21
+        },
+        "own_partner": 0,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.818212319782394,
+        "own_partner_occupancy_months": 21,
+        "own_partner_evaporated": false
+      },
+      "amendment_condition_i": {
+        "holds": true,
+        "subsample_episode_count": 5,
+        "min_episodes_quoted": 3,
+        "condition": "(i) it recurs in at least three temporally separated episodes, so that removing any one leaves the state intact \u2014 criterion 3 applied directly, not by proxy"
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 1,
+      "evaporated": false,
+      "subsample_occupancy_months": 148,
+      "subsample_occupancy_pct": 0.2573913043478261,
+      "n_subsample_months": 575,
+      "matched_partner": 3,
+      "is_identity": false,
+      "matched_distance": 10.222462620359428,
+      "split_half_null": {
+        "median": 1.2095846005888526,
+        "p10": 0.479476275341628,
+        "p90": 2.308757423689099,
+        "n": 148,
+        "n_reps": 200
+      },
+      "margin": 0.7598748396564484,
+      "subsample_episode_count": 6,
+      "subsample_longest_episode": 91,
+      "reference_months_in_subsample": 118,
+      "partner_overlap_months": 96,
+      "refscaled": {
+        "matched_distance": 1.076403970923476,
+        "split_half_null": {
+          "median": 0.35012780700101365,
+          "p10": 0.23638081795489296,
+          "p90": 0.4932792635631868,
+          "n": 148
+        },
+        "own_partner": 3,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.076403970923476,
+        "own_partner_occupancy_months": 148,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 2,
+      "evaporated": false,
+      "subsample_occupancy_months": 180,
+      "subsample_occupancy_pct": 0.3130434782608696,
+      "n_subsample_months": 575,
+      "matched_partner": 4,
+      "is_identity": false,
+      "matched_distance": 19.98124837909331,
+      "split_half_null": {
+        "median": 2.0101927673441122,
+        "p10": 0.7286833831254158,
+        "p90": 4.6667707380511105,
+        "n": 180,
+        "n_reps": 200
+      },
+      "margin": 1.219487639716422,
+      "subsample_episode_count": 4,
+      "subsample_longest_episode": 72,
+      "reference_months_in_subsample": 71,
+      "partner_overlap_months": 62,
+      "refscaled": {
+        "matched_distance": 1.3029887483404654,
+        "split_half_null": {
+          "median": 0.3181302418539409,
+          "p10": 0.219260584528248,
+          "p90": 0.44426538747262906,
+          "n": 180
+        },
+        "own_partner": 4,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.3029887483404654,
+        "own_partner_occupancy_months": 180,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 3,
+      "evaporated": false,
+      "subsample_occupancy_months": 75,
+      "subsample_occupancy_pct": 0.13043478260869565,
+      "n_subsample_months": 575,
+      "matched_partner": 2,
+      "is_identity": false,
+      "matched_distance": 27.15836411108735,
+      "split_half_null": {
+        "median": 1.689838635588941,
+        "p10": 0.5320291507339994,
+        "p90": 3.7722739130687133,
+        "n": 75,
+        "n_reps": 200
+      },
+      "margin": 1.1011764727815618,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 63,
+      "reference_months_in_subsample": 200,
+      "partner_overlap_months": 70,
+      "refscaled": {
+        "matched_distance": 1.2611694224200023,
+        "split_half_null": {
+          "median": 0.46515174488482486,
+          "p10": 0.29645466621883354,
+          "p90": 0.6695076091058414,
+          "n": 75
+        },
+        "own_partner": 2,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.2611694224200023,
+        "own_partner_occupancy_months": 75,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 4,
+      "evaporated": false,
+      "subsample_occupancy_months": 69,
+      "subsample_occupancy_pct": 0.12,
+      "n_subsample_months": 575,
+      "matched_partner": 5,
+      "is_identity": false,
+      "matched_distance": 1.7688102628183309,
+      "split_half_null": {
+        "median": 1.9573158828426247,
+        "p10": 0.6934129424383536,
+        "p90": 3.985470032755337,
+        "n": 69,
+        "n_reps": 200
+      },
+      "margin": 0.17108261005792835,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 65,
+      "reference_months_in_subsample": 84,
+      "partner_overlap_months": 69,
+      "refscaled": {
+        "matched_distance": 0.34486792752014744,
+        "split_half_null": {
+          "median": 0.5549760437283324,
+          "p10": 0.3563802984489771,
+          "p90": 0.8272279671770337,
+          "n": 69
+        },
+        "own_partner": 5,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.34486792752014744,
+        "own_partner_occupancy_months": 69,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 5,
+      "evaporated": false,
+      "subsample_occupancy_months": 82,
+      "subsample_occupancy_pct": 0.1426086956521739,
+      "n_subsample_months": 575,
+      "matched_partner": 1,
+      "is_identity": false,
+      "matched_distance": 1.5667868703495702,
+      "split_half_null": {
+        "median": 1.7940044339584182,
+        "p10": 0.6900315352266988,
+        "p90": 4.435057593200999,
+        "n": 82,
+        "n_reps": 200
+      },
+      "margin": 0.1698156675703429,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 50,
+      "reference_months_in_subsample": 65,
+      "partner_overlap_months": 58,
+      "refscaled": {
+        "matched_distance": 0.9025718471405523,
+        "split_half_null": {
+          "median": 0.6347124201077596,
+          "p10": 0.3914039340565013,
+          "p90": 0.9010853080641006,
+          "n": 82
+        },
+        "own_partner": 1,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.9025718471405523,
+        "own_partner_occupancy_months": 82,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 0,
+      "evaporated": false,
+      "subsample_occupancy_months": 25,
+      "subsample_occupancy_pct": 0.043478260869565216,
+      "n_subsample_months": 575,
+      "matched_partner": 0,
+      "is_identity": false,
+      "matched_distance": 3.141533504600844,
+      "split_half_null": {
+        "median": 5.890483232896743,
+        "p10": 2.312254585620649,
+        "p90": 11.950705857332183,
+        "n": 25,
+        "n_reps": 200
+      },
+      "margin": 0.35434509232795086,
+      "subsample_episode_count": 9,
+      "subsample_longest_episode": 6,
+      "reference_months_in_subsample": 34,
+      "partner_overlap_months": 24,
+      "refscaled": {
+        "matched_distance": 1.1852171788825083,
+        "split_half_null": {
+          "median": 1.3360727166435116,
+          "p10": 0.8778280219600406,
+          "p90": 2.024159678535784,
+          "n": 25
+        },
+        "own_partner": 0,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.1852171788825083,
+        "own_partner_occupancy_months": 25,
+        "own_partner_evaporated": false
+      },
+      "amendment_condition_i": {
+        "holds": true,
+        "subsample_episode_count": 9,
+        "min_episodes_quoted": 3,
+        "condition": "(i) it recurs in at least three temporally separated episodes, so that removing any one leaves the state intact \u2014 criterion 3 applied directly, not by proxy"
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 1,
+      "evaporated": false,
+      "subsample_occupancy_months": 245,
+      "subsample_occupancy_pct": 0.4260869565217391,
+      "n_subsample_months": 575,
+      "matched_partner": 1,
+      "is_identity": false,
+      "matched_distance": 0.5022826966518587,
+      "split_half_null": {
+        "median": 0.9057692479701459,
+        "p10": 0.40186064173654573,
+        "p90": 1.624331122998972,
+        "n": 245,
+        "n_reps": 200
+      },
+      "margin": 0.03299546909037512,
+      "subsample_episode_count": 5,
+      "subsample_longest_episode": 87,
+      "reference_months_in_subsample": 228,
+      "partner_overlap_months": 223,
+      "refscaled": {
+        "matched_distance": 0.17293960129652597,
+        "split_half_null": {
+          "median": 0.2543792772995286,
+          "p10": 0.16412723837112078,
+          "p90": 0.3589653259294642,
+          "n": 245
+        },
+        "own_partner": 1,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.17293960129652597,
+        "own_partner_occupancy_months": 245,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 2,
+      "evaporated": false,
+      "subsample_occupancy_months": 133,
+      "subsample_occupancy_pct": 0.23130434782608697,
+      "n_subsample_months": 575,
+      "matched_partner": 3,
+      "is_identity": false,
+      "matched_distance": 12.590481237701667,
+      "split_half_null": {
+        "median": 2.3308275502018763,
+        "p10": 0.828449873435312,
+        "p90": 5.771751957941655,
+        "n": 133,
+        "n_reps": 200
+      },
+      "margin": 0.626219930781959,
+      "subsample_episode_count": 3,
+      "subsample_longest_episode": 67,
+      "reference_months_in_subsample": 71,
+      "partner_overlap_months": 70,
+      "refscaled": {
+        "matched_distance": 0.9027774590924835,
+        "split_half_null": {
+          "median": 0.4114104345521235,
+          "p10": 0.26648316094527147,
+          "p90": 0.5554542183350107,
+          "n": 133
+        },
+        "own_partner": 3,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.9027774590924835,
+        "own_partner_occupancy_months": 133,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 3,
+      "evaporated": false,
+      "subsample_occupancy_months": 35,
+      "subsample_occupancy_pct": 0.06086956521739131,
+      "n_subsample_months": 575,
+      "matched_partner": 2,
+      "is_identity": false,
+      "matched_distance": 17.80786082633295,
+      "split_half_null": {
+        "median": 3.819340005246012,
+        "p10": 1.1626116199867382,
+        "p90": 8.029839440027684,
+        "n": 35,
+        "n_reps": 200
+      },
+      "margin": 0.5527105507658332,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 21,
+      "reference_months_in_subsample": 86,
+      "partner_overlap_months": 28,
+      "refscaled": {
+        "matched_distance": 1.6851363592917454,
+        "split_half_null": {
+          "median": 0.9141709979243888,
+          "p10": 0.5978533891974824,
+          "p90": 1.2470000459362,
+          "n": 35
+        },
+        "own_partner": 2,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.6851363592917454,
+        "own_partner_occupancy_months": 35,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 4,
+      "evaporated": false,
+      "subsample_occupancy_months": 72,
+      "subsample_occupancy_pct": 0.12521739130434784,
+      "n_subsample_months": 575,
+      "matched_partner": 5,
+      "is_identity": false,
+      "matched_distance": 1.712262001465112,
+      "split_half_null": {
+        "median": 1.334694144007161,
+        "p10": 0.5111427158207669,
+        "p90": 2.7810071080240757,
+        "n": 72,
+        "n_reps": 200
+      },
+      "margin": 0.2723712766728965,
+      "subsample_episode_count": 1,
+      "subsample_longest_episode": 72,
+      "reference_months_in_subsample": 84,
+      "partner_overlap_months": 72,
+      "refscaled": {
+        "matched_distance": 0.252768692581617,
+        "split_half_null": {
+          "median": 0.5554603134297393,
+          "p10": 0.363984592022584,
+          "p90": 0.7798767786388282,
+          "n": 72
+        },
+        "own_partner": 5,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.252768692581617,
+        "own_partner_occupancy_months": 72,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 5,
+      "evaporated": false,
+      "subsample_occupancy_months": 65,
+      "subsample_occupancy_pct": 0.11304347826086956,
+      "n_subsample_months": 575,
+      "matched_partner": 4,
+      "is_identity": false,
+      "matched_distance": 1.2892250920492037,
+      "split_half_null": {
+        "median": 2.023901886111596,
+        "p10": 0.7547825263106458,
+        "p90": 4.59369321939825,
+        "n": 65,
+        "n_reps": 200
+      },
+      "margin": 0.14811760805802768,
+      "subsample_episode_count": 3,
+      "subsample_longest_episode": 41,
+      "reference_months_in_subsample": 72,
+      "partner_overlap_months": 59,
+      "refscaled": {
+        "matched_distance": 0.528613073157254,
+        "split_half_null": {
+          "median": 0.6802646429023662,
+          "p10": 0.46136254622501854,
+          "p90": 0.9917522485508533,
+          "n": 65
+        },
+        "own_partner": 4,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.528613073157254,
+        "own_partner_occupancy_months": 65,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 33.0,
+      "subsample_occupancy_months_p10": 23.0,
+      "subsample_occupancy_months_p90": 74.39999999999998,
+      "subsample_occupancy_months_min": 13.0,
+      "subsample_occupancy_pct": 0.04748201438848921,
+      "n_subsample_months": 695,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.71,
+      "is_identity": false,
+      "identity_fraction": 0.01,
+      "matched_distance": 8.205926621330107,
+      "matched_distance_p10": 3.093118287890987,
+      "matched_distance_p90": 21.306825316514555,
+      "split_half_null": {
+        "median": 5.233085689714389,
+        "p10": 2.2566962942695064,
+        "p90": 8.40822221084945,
+        "n": 33.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 1.0067929788499794,
+      "subsample_episode_count": 10.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 114,
+        "max": 119
+      },
+      "reference_months_in_subsample": 40.0,
+      "partner_overlap_months": 21.5,
+      "refscaled": {
+        "matched_distance": 2.240222587649419,
+        "matched_distance_p10": 1.2796432919398404,
+        "matched_distance_p90": 4.580723388459272,
+        "split_half_null": {
+          "median": 1.1471939375297064,
+          "p10": 0.618670313786722,
+          "p90": 1.4726604702598305,
+          "n": 33.0
+        },
+        "own_partner_agrees_fraction": 0.76,
+        "own_partner_evaporated_replicates": 0
+      },
+      "amendment_condition_i": {
+        "holds": null,
+        "condition": "(i) it recurs in at least three temporally separated episodes, so that removing any one leaves the state intact \u2014 criterion 3 applied directly, not by proxy",
+        "not_evaluated_because": "a block-bootstrapped series is not in calendar order, so 'temporally separated episodes' is undefined on it; its episode count counts resampling seams"
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 224.5,
+      "subsample_occupancy_months_p10": 137.60000000000002,
+      "subsample_occupancy_months_p90": 285.0,
+      "subsample_occupancy_months_min": 30.0,
+      "subsample_occupancy_pct": 0.32302158273381293,
+      "n_subsample_months": 695,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.295,
+      "is_identity": false,
+      "identity_fraction": 0.01,
+      "matched_distance": 2.2494385167942106,
+      "matched_distance_p10": 0.7483295549393869,
+      "matched_distance_p90": 4.752221698251129,
+      "split_half_null": {
+        "median": 0.9835275197846638,
+        "p10": 0.8246850185629842,
+        "p90": 1.2310576812503007,
+        "n": 224.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.1796421227779338,
+      "subsample_episode_count": 23.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 114,
+        "max": 119
+      },
+      "reference_months_in_subsample": 230.0,
+      "partner_overlap_months": 193.0,
+      "refscaled": {
+        "matched_distance": 0.4193899789074036,
+        "matched_distance_p10": 0.2297952168472771,
+        "matched_distance_p90": 1.1306790934120492,
+        "split_half_null": {
+          "median": 0.24961636599835185,
+          "p10": 0.22168006814184088,
+          "p90": 0.3444142164267579,
+          "n": 224.5
+        },
+        "own_partner_agrees_fraction": 0.895,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 103.0,
+      "subsample_occupancy_months_p10": 57.900000000000006,
+      "subsample_occupancy_months_p90": 219.2,
+      "subsample_occupancy_months_min": 19.0,
+      "subsample_occupancy_pct": 0.14820143884892087,
+      "n_subsample_months": 695,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 0.265,
+      "is_identity": false,
+      "identity_fraction": 0.01,
+      "matched_distance": 8.843743402062863,
+      "matched_distance_p10": 1.6439342706151672,
+      "matched_distance_p90": 25.766229941823234,
+      "split_half_null": {
+        "median": 1.830054213137358,
+        "p10": 1.3438737120082855,
+        "p90": 2.681861729941838,
+        "n": 103.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.47799699563731546,
+      "subsample_episode_count": 13.5,
+      "n_seams": {
+        "median": 116.0,
+        "min": 114,
+        "max": 119
+      },
+      "reference_months_in_subsample": 69.5,
+      "partner_overlap_months": 60.0,
+      "refscaled": {
+        "matched_distance": 1.219780721824455,
+        "matched_distance_p10": 0.4477972410179034,
+        "matched_distance_p90": 2.640624708793574,
+        "split_half_null": {
+          "median": 0.4173075284892847,
+          "p10": 0.27643335172655886,
+          "p90": 0.6138934951953523,
+          "n": 103.0
+        },
+        "own_partner_agrees_fraction": 0.895,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 161.5,
+      "subsample_occupancy_months_p10": 71.7,
+      "subsample_occupancy_months_p90": 219.2,
+      "subsample_occupancy_months_min": 19.0,
+      "subsample_occupancy_pct": 0.23237410071942446,
+      "n_subsample_months": 695,
+      "matched_partner": 2,
+      "matched_partner_mode_fraction": 0.29,
+      "is_identity": false,
+      "identity_fraction": 0.01,
+      "matched_distance": 6.638080664768669,
+      "matched_distance_p10": 1.6067861547442213,
+      "matched_distance_p90": 25.472825142084176,
+      "split_half_null": {
+        "median": 2.328981894094773,
+        "p10": 1.838385329585204,
+        "p90": 3.181237520730513,
+        "n": 161.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.262163634971305,
+      "subsample_episode_count": 20.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 114,
+        "max": 119
+      },
+      "reference_months_in_subsample": 199.0,
+      "partner_overlap_months": 154.0,
+      "refscaled": {
+        "matched_distance": 0.494655826610099,
+        "matched_distance_p10": 0.24262738784729082,
+        "matched_distance_p90": 1.3926063761114622,
+        "split_half_null": {
+          "median": 0.3148096634628587,
+          "p10": 0.2618305506797404,
+          "p90": 0.44888576371541933,
+          "n": 161.5
+        },
+        "own_partner_agrees_fraction": 0.945,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 78.0,
+      "subsample_occupancy_months_p10": 49.900000000000006,
+      "subsample_occupancy_months_p90": 125.29999999999998,
+      "subsample_occupancy_months_min": 18.0,
+      "subsample_occupancy_pct": 0.11223021582733812,
+      "n_subsample_months": 695,
+      "matched_partner": 5,
+      "matched_partner_mode_fraction": 0.485,
+      "is_identity": false,
+      "identity_fraction": 0.01,
+      "matched_distance": 3.5407642341808163,
+      "matched_distance_p10": 1.4347104185933919,
+      "matched_distance_p90": 7.428295178727618,
+      "split_half_null": {
+        "median": 1.5674014830720746,
+        "p10": 0.9193818018167391,
+        "p90": 2.6225786641783833,
+        "n": 78.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.36902754899678175,
+      "subsample_episode_count": 12.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 114,
+        "max": 119
+      },
+      "reference_months_in_subsample": 83.0,
+      "partner_overlap_months": 65.0,
+      "refscaled": {
+        "matched_distance": 0.8381368917004497,
+        "matched_distance_p10": 0.4222357601537799,
+        "matched_distance_p90": 1.6876376382770566,
+        "split_half_null": {
+          "median": 0.5289288583057641,
+          "p10": 0.39210614685057443,
+          "p90": 0.6904215581339845,
+          "n": 78.0
+        },
+        "own_partner_agrees_fraction": 0.96,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 5,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 69.5,
+      "subsample_occupancy_months_p10": 37.900000000000006,
+      "subsample_occupancy_months_p90": 138.2,
+      "subsample_occupancy_months_min": 16.0,
+      "subsample_occupancy_pct": 0.1,
+      "n_subsample_months": 695,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.235,
+      "is_identity": false,
+      "identity_fraction": 0.01,
+      "matched_distance": 4.750136165227947,
+      "matched_distance_p10": 1.5999454493334488,
+      "matched_distance_p90": 9.654581322487665,
+      "split_half_null": {
+        "median": 1.9893570773922236,
+        "p10": 1.3489994628483466,
+        "p90": 3.3577157149430024,
+        "n": 69.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.5432107979106229,
+      "subsample_episode_count": 11.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 114,
+        "max": 119
+      },
+      "reference_months_in_subsample": 74.0,
+      "partner_overlap_months": 50.0,
+      "refscaled": {
+        "matched_distance": 1.327924538141727,
+        "matched_distance_p10": 0.7301058801040241,
+        "matched_distance_p90": 3.3256072034052435,
+        "split_half_null": {
+          "median": 0.6306269821945639,
+          "p10": 0.41385741770600676,
+          "p90": 0.9384151354388647,
+          "n": 69.5
+        },
+        "own_partner_agrees_fraction": 0.755,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 33.5,
+      "subsample_occupancy_months_p10": 19.900000000000002,
+      "subsample_occupancy_months_p90": 88.0,
+      "subsample_occupancy_months_min": 11.0,
+      "subsample_occupancy_pct": 0.04820143884892086,
+      "n_subsample_months": 695,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.71,
+      "is_identity": false,
+      "identity_fraction": 0.015,
+      "matched_distance": 9.012719556352007,
+      "matched_distance_p10": 3.7288456303801283,
+      "matched_distance_p90": 18.316365571673824,
+      "split_half_null": {
+        "median": 4.902642091977176,
+        "p10": 1.8219110845804658,
+        "p90": 8.471682839927361,
+        "n": 33.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.9902162049999623,
+      "subsample_episode_count": 8.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 42.5,
+      "partner_overlap_months": 20.0,
+      "refscaled": {
+        "matched_distance": 2.5378479741247277,
+        "matched_distance_p10": 1.4391323066962571,
+        "matched_distance_p90": 4.241979161900609,
+        "split_half_null": {
+          "median": 1.171481066358295,
+          "p10": 0.5883726464634177,
+          "p90": 1.5795013372447444,
+          "n": 33.5
+        },
+        "own_partner_agrees_fraction": 0.74,
+        "own_partner_evaporated_replicates": 0
+      },
+      "amendment_condition_i": {
+        "holds": null,
+        "condition": "(i) it recurs in at least three temporally separated episodes, so that removing any one leaves the state intact \u2014 criterion 3 applied directly, not by proxy",
+        "not_evaluated_because": "a block-bootstrapped series is not in calendar order, so 'temporally separated episodes' is undefined on it; its episode count counts resampling seams"
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 202.5,
+      "subsample_occupancy_months_p10": 114.9,
+      "subsample_occupancy_months_p90": 272.0,
+      "subsample_occupancy_months_min": 46.0,
+      "subsample_occupancy_pct": 0.29136690647482016,
+      "n_subsample_months": 695,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.315,
+      "is_identity": false,
+      "identity_fraction": 0.015,
+      "matched_distance": 2.536980772734622,
+      "matched_distance_p10": 1.1436634589940913,
+      "matched_distance_p90": 6.191061832855497,
+      "split_half_null": {
+        "median": 0.9278421034405775,
+        "p10": 0.7426756135644732,
+        "p90": 1.2183918032466055,
+        "n": 202.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.25144291808516095,
+      "subsample_episode_count": 13.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 230.0,
+      "partner_overlap_months": 180.5,
+      "refscaled": {
+        "matched_distance": 0.5734255994978117,
+        "matched_distance_p10": 0.26569662312905384,
+        "matched_distance_p90": 1.5851731962538742,
+        "split_half_null": {
+          "median": 0.25428232368170534,
+          "p10": 0.21932372498862923,
+          "p90": 0.3790936214557833,
+          "n": 202.5
+        },
+        "own_partner_agrees_fraction": 0.87,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 108.0,
+      "subsample_occupancy_months_p10": 59.0,
+      "subsample_occupancy_months_p90": 185.0,
+      "subsample_occupancy_months_min": 13.0,
+      "subsample_occupancy_pct": 0.1553956834532374,
+      "n_subsample_months": 695,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 0.275,
+      "is_identity": false,
+      "identity_fraction": 0.015,
+      "matched_distance": 8.41189832125815,
+      "matched_distance_p10": 1.9843167129143735,
+      "matched_distance_p90": 24.351387752931426,
+      "split_half_null": {
+        "median": 1.6749748567672773,
+        "p10": 1.2149206018092442,
+        "p90": 2.5770249163554446,
+        "n": 108.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.4586851737257369,
+      "subsample_episode_count": 9.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 69.0,
+      "partner_overlap_months": 60.0,
+      "refscaled": {
+        "matched_distance": 1.1282669026227725,
+        "matched_distance_p10": 0.4363138048481278,
+        "matched_distance_p90": 2.3088574024542363,
+        "split_half_null": {
+          "median": 0.392402670543079,
+          "p10": 0.2874016019932469,
+          "p90": 0.5756583850612491,
+          "n": 108.0
+        },
+        "own_partner_agrees_fraction": 0.9,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 164.0,
+      "subsample_occupancy_months_p10": 74.9,
+      "subsample_occupancy_months_p90": 227.0,
+      "subsample_occupancy_months_min": 30.0,
+      "subsample_occupancy_pct": 0.23597122302158274,
+      "n_subsample_months": 695,
+      "matched_partner": 2,
+      "matched_partner_mode_fraction": 0.335,
+      "is_identity": false,
+      "identity_fraction": 0.015,
+      "matched_distance": 5.186713838249686,
+      "matched_distance_p10": 1.4488130291573302,
+      "matched_distance_p90": 27.532838648389927,
+      "split_half_null": {
+        "median": 2.2493472347800103,
+        "p10": 1.7142390435283428,
+        "p90": 3.1048673309860417,
+        "n": 164.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.17236750972813858,
+      "subsample_episode_count": 12.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 195.0,
+      "partner_overlap_months": 158.0,
+      "refscaled": {
+        "matched_distance": 0.5632225896588379,
+        "matched_distance_p10": 0.250155199539574,
+        "matched_distance_p90": 1.3631151032233262,
+        "split_half_null": {
+          "median": 0.30145703246046573,
+          "p10": 0.2504561052051071,
+          "p90": 0.44123484597669577,
+          "n": 164.0
+        },
+        "own_partner_agrees_fraction": 0.98,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 84.0,
+      "subsample_occupancy_months_p10": 47.0,
+      "subsample_occupancy_months_p90": 142.1,
+      "subsample_occupancy_months_min": 28.0,
+      "subsample_occupancy_pct": 0.12086330935251799,
+      "n_subsample_months": 695,
+      "matched_partner": 5,
+      "matched_partner_mode_fraction": 0.52,
+      "is_identity": false,
+      "identity_fraction": 0.015,
+      "matched_distance": 4.4103725051551095,
+      "matched_distance_p10": 1.8117255138663295,
+      "matched_distance_p90": 9.584250166103446,
+      "split_half_null": {
+        "median": 1.386495262609932,
+        "p10": 0.6831497998746743,
+        "p90": 2.711665067700314,
+        "n": 84.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.46079100780730764,
+      "subsample_episode_count": 7.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 83.5,
+      "partner_overlap_months": 70.0,
+      "refscaled": {
+        "matched_distance": 0.9104384229291278,
+        "matched_distance_p10": 0.4959329684772198,
+        "matched_distance_p90": 2.2326796970164606,
+        "split_half_null": {
+          "median": 0.4978819627668165,
+          "p10": 0.361209757072228,
+          "p90": 0.7578402675980741,
+          "n": 84.0
+        },
+        "own_partner_agrees_fraction": 0.915,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 5,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 70.0,
+      "subsample_occupancy_months_p10": 38.0,
+      "subsample_occupancy_months_p90": 153.1,
+      "subsample_occupancy_months_min": 22.0,
+      "subsample_occupancy_pct": 0.10071942446043165,
+      "n_subsample_months": 695,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.29,
+      "is_identity": false,
+      "identity_fraction": 0.015,
+      "matched_distance": 6.468891739493836,
+      "matched_distance_p10": 2.1312076918469565,
+      "matched_distance_p90": 10.95691179232024,
+      "split_half_null": {
+        "median": 1.7620148718407072,
+        "p10": 1.0187026955629153,
+        "p90": 2.9362036567974186,
+        "n": 70.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6935641021494614,
+      "subsample_episode_count": 7.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 69.0,
+      "partner_overlap_months": 42.0,
+      "refscaled": {
+        "matched_distance": 1.7193335887431278,
+        "matched_distance_p10": 0.8877179533800871,
+        "matched_distance_p90": 3.450703373137198,
+        "split_half_null": {
+          "median": 0.6242092779004327,
+          "p10": 0.3208229458588342,
+          "p90": 0.9056728818860051,
+          "n": 70.0
+        },
+        "own_partner_agrees_fraction": 0.71,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 35.0,
+      "subsample_occupancy_months_p10": 21.0,
+      "subsample_occupancy_months_p90": 95.99999999999994,
+      "subsample_occupancy_months_min": 12.0,
+      "subsample_occupancy_pct": 0.050359712230215826,
+      "n_subsample_months": 695,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.665,
+      "is_identity": false,
+      "identity_fraction": 0.0,
+      "matched_distance": 9.834493447950743,
+      "matched_distance_p10": 3.69798908795966,
+      "matched_distance_p90": 21.77437016258805,
+      "split_half_null": {
+        "median": 4.610545909423663,
+        "p10": 1.4984455431087849,
+        "p90": 8.344504786640078,
+        "n": 35.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 1.0365849799985192,
+      "subsample_episode_count": 8.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 40.0,
+      "partner_overlap_months": 19.0,
+      "refscaled": {
+        "matched_distance": 2.6351523074431165,
+        "matched_distance_p10": 1.345698643484068,
+        "matched_distance_p90": 4.586026501584494,
+        "split_half_null": {
+          "median": 1.1091604369605317,
+          "p10": 0.37704582743106296,
+          "p90": 1.4759268087641393,
+          "n": 35.0
+        },
+        "own_partner_agrees_fraction": 0.695,
+        "own_partner_evaporated_replicates": 0
+      },
+      "amendment_condition_i": {
+        "holds": null,
+        "condition": "(i) it recurs in at least three temporally separated episodes, so that removing any one leaves the state intact \u2014 criterion 3 applied directly, not by proxy",
+        "not_evaluated_because": "a block-bootstrapped series is not in calendar order, so 'temporally separated episodes' is undefined on it; its episode count counts resampling seams"
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 181.0,
+      "subsample_occupancy_months_p10": 114.60000000000001,
+      "subsample_occupancy_months_p90": 263.0,
+      "subsample_occupancy_months_min": 43.0,
+      "subsample_occupancy_pct": 0.260431654676259,
+      "n_subsample_months": 695,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.285,
+      "is_identity": false,
+      "identity_fraction": 0.0,
+      "matched_distance": 3.641956661463362,
+      "matched_distance_p10": 1.6539150890635486,
+      "matched_distance_p90": 6.806526709256327,
+      "split_half_null": {
+        "median": 0.9185393361087486,
+        "p10": 0.7431939286195076,
+        "p90": 1.2231486161324792,
+        "n": 181.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.36132183923041,
+      "subsample_episode_count": 8.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 224.5,
+      "partner_overlap_months": 160.5,
+      "refscaled": {
+        "matched_distance": 0.7721237167294352,
+        "matched_distance_p10": 0.345175651119126,
+        "matched_distance_p90": 1.287997632383913,
+        "split_half_null": {
+          "median": 0.25924229860399367,
+          "p10": 0.2172431035177685,
+          "p90": 0.3543402947018404,
+          "n": 181.0
+        },
+        "own_partner_agrees_fraction": 0.845,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 104.5,
+      "subsample_occupancy_months_p10": 54.0,
+      "subsample_occupancy_months_p90": 202.0,
+      "subsample_occupancy_months_min": 23.0,
+      "subsample_occupancy_pct": 0.15035971223021583,
+      "n_subsample_months": 695,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 0.245,
+      "is_identity": false,
+      "identity_fraction": 0.0,
+      "matched_distance": 6.792486346212966,
+      "matched_distance_p10": 1.888482572639918,
+      "matched_distance_p90": 25.950725392140825,
+      "split_half_null": {
+        "median": 1.4903286704520422,
+        "p10": 1.058584060132947,
+        "p90": 2.5951419146429635,
+        "n": 104.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.41598081059581604,
+      "subsample_episode_count": 6.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 72.0,
+      "partner_overlap_months": 60.5,
+      "refscaled": {
+        "matched_distance": 0.9897194428764309,
+        "matched_distance_p10": 0.43169346776944834,
+        "matched_distance_p90": 3.005378802954588,
+        "split_half_null": {
+          "median": 0.4086143631322421,
+          "p10": 0.26394631063419927,
+          "p90": 0.6102113146407808,
+          "n": 104.5
+        },
+        "own_partner_agrees_fraction": 0.895,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 161.0,
+      "subsample_occupancy_months_p10": 87.9,
+      "subsample_occupancy_months_p90": 228.0,
+      "subsample_occupancy_months_min": 36.0,
+      "subsample_occupancy_pct": 0.2316546762589928,
+      "n_subsample_months": 695,
+      "matched_partner": 3,
+      "matched_partner_mode_fraction": 0.32,
+      "is_identity": false,
+      "identity_fraction": 0.0,
+      "matched_distance": 7.373088588873122,
+      "matched_distance_p10": 1.705378400692652,
+      "matched_distance_p90": 26.126855056708486,
+      "split_half_null": {
+        "median": 2.1740568659678825,
+        "p10": 1.5847469778016525,
+        "p90": 2.81529272166024,
+        "n": 161.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.2637355751454324,
+      "subsample_episode_count": 7.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 194.0,
+      "partner_overlap_months": 152.0,
+      "refscaled": {
+        "matched_distance": 0.5861504912126791,
+        "matched_distance_p10": 0.2725222116209422,
+        "matched_distance_p90": 1.3083000970702485,
+        "split_half_null": {
+          "median": 0.30448596663040506,
+          "p10": 0.24020907170003533,
+          "p90": 0.41703560622870367,
+          "n": 161.0
+        },
+        "own_partner_agrees_fraction": 0.955,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 88.0,
+      "subsample_occupancy_months_p10": 45.900000000000006,
+      "subsample_occupancy_months_p90": 155.0,
+      "subsample_occupancy_months_min": 22.0,
+      "subsample_occupancy_pct": 0.12661870503597122,
+      "n_subsample_months": 695,
+      "matched_partner": 5,
+      "matched_partner_mode_fraction": 0.4,
+      "is_identity": false,
+      "identity_fraction": 0.0,
+      "matched_distance": 5.040449806246357,
+      "matched_distance_p10": 1.8466580912151738,
+      "matched_distance_p90": 11.957503588354758,
+      "split_half_null": {
+        "median": 1.205732997929462,
+        "p10": 0.6110445610688037,
+        "p90": 2.600940649749647,
+        "n": 88.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.5109902053362361,
+      "subsample_episode_count": 5.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 85.0,
+      "partner_overlap_months": 67.0,
+      "refscaled": {
+        "matched_distance": 1.0036142472234955,
+        "matched_distance_p10": 0.4974359441899041,
+        "matched_distance_p90": 2.859799039050261,
+        "split_half_null": {
+          "median": 0.4682467500967158,
+          "p10": 0.31626019678212425,
+          "p90": 0.8114406965224342,
+          "n": 88.0
+        },
+        "own_partner_agrees_fraction": 0.865,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 5,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 76.5,
+      "subsample_occupancy_months_p10": 40.0,
+      "subsample_occupancy_months_p90": 153.1,
+      "subsample_occupancy_months_min": 23.0,
+      "subsample_occupancy_pct": 0.11007194244604317,
+      "n_subsample_months": 695,
+      "matched_partner": 5,
+      "matched_partner_mode_fraction": 0.25,
+      "is_identity": false,
+      "identity_fraction": 0.0,
+      "matched_distance": 6.669386016172404,
+      "matched_distance_p10": 2.0404594277596515,
+      "matched_distance_p90": 11.704044879953768,
+      "split_half_null": {
+        "median": 1.6728264152960015,
+        "p10": 0.889316712712435,
+        "p90": 2.9906455268703214,
+        "n": 76.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.7503866197389255,
+      "subsample_episode_count": 6.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 69.0,
+      "partner_overlap_months": 40.0,
+      "refscaled": {
+        "matched_distance": 1.7799985192649368,
+        "matched_distance_p10": 0.9052937429959312,
+        "matched_distance_p90": 3.3962847592528664,
+        "split_half_null": {
+          "median": 0.5854325933836659,
+          "p10": 0.3040819309927596,
+          "p90": 0.9359144715294793,
+          "n": 76.5
+        },
+        "own_partner_agrees_fraction": 0.635,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 37.5,
+      "subsample_occupancy_months_p10": 23.0,
+      "subsample_occupancy_months_p90": 112.19999999999999,
+      "subsample_occupancy_months_min": 10.0,
+      "subsample_occupancy_pct": 0.0539568345323741,
+      "n_subsample_months": 695,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.67,
+      "is_identity": false,
+      "identity_fraction": 0.025,
+      "matched_distance": 10.221888951010243,
+      "matched_distance_p10": 4.683219310451496,
+      "matched_distance_p90": 22.17343280946422,
+      "split_half_null": {
+        "median": 4.387131137487857,
+        "p10": 1.2988631440396508,
+        "p90": 8.111975944898257,
+        "n": 37.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 1.0775164829117405,
+      "subsample_episode_count": 7.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 39.0,
+      "partner_overlap_months": 20.5,
+      "refscaled": {
+        "matched_distance": 2.674576073819016,
+        "matched_distance_p10": 1.3004774508865913,
+        "matched_distance_p90": 4.503422379866896,
+        "split_half_null": {
+          "median": 1.0224665351478626,
+          "p10": 0.42488356513900605,
+          "p90": 1.489899880253031,
+          "n": 37.5
+        },
+        "own_partner_agrees_fraction": 0.685,
+        "own_partner_evaporated_replicates": 0
+      },
+      "amendment_condition_i": {
+        "holds": null,
+        "condition": "(i) it recurs in at least three temporally separated episodes, so that removing any one leaves the state intact \u2014 criterion 3 applied directly, not by proxy",
+        "not_evaluated_because": "a block-bootstrapped series is not in calendar order, so 'temporally separated episodes' is undefined on it; its episode count counts resampling seams"
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 175.5,
+      "subsample_occupancy_months_p10": 105.7,
+      "subsample_occupancy_months_p90": 261.0,
+      "subsample_occupancy_months_min": 32.0,
+      "subsample_occupancy_pct": 0.2525179856115108,
+      "n_subsample_months": 695,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.345,
+      "is_identity": false,
+      "identity_fraction": 0.025,
+      "matched_distance": 4.813978258606582,
+      "matched_distance_p10": 1.7630627347494296,
+      "matched_distance_p90": 7.80466034991922,
+      "split_half_null": {
+        "median": 0.863279823283179,
+        "p10": 0.5290035490958931,
+        "p90": 1.2758622070297412,
+        "n": 175.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.4284602012926165,
+      "subsample_episode_count": 6.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 223.0,
+      "partner_overlap_months": 161.0,
+      "refscaled": {
+        "matched_distance": 0.7991652015865751,
+        "matched_distance_p10": 0.4001393505363766,
+        "matched_distance_p90": 1.538518228697408,
+        "split_half_null": {
+          "median": 0.25685404609152784,
+          "p10": 0.21431139997633453,
+          "p90": 0.3694989247964818,
+          "n": 175.5
+        },
+        "own_partner_agrees_fraction": 0.82,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 120.5,
+      "subsample_occupancy_months_p10": 55.900000000000006,
+      "subsample_occupancy_months_p90": 199.1,
+      "subsample_occupancy_months_min": 14.0,
+      "subsample_occupancy_pct": 0.17338129496402876,
+      "n_subsample_months": 695,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 0.265,
+      "is_identity": false,
+      "identity_fraction": 0.025,
+      "matched_distance": 7.427876173034248,
+      "matched_distance_p10": 1.8517430318918504,
+      "matched_distance_p90": 26.36197415058481,
+      "split_half_null": {
+        "median": 1.459320140836171,
+        "p10": 0.9139570993652647,
+        "p90": 2.2533129859112284,
+        "n": 120.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.44574628103949177,
+      "subsample_episode_count": 4.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 63.0,
+      "partner_overlap_months": 53.5,
+      "refscaled": {
+        "matched_distance": 1.18134605691773,
+        "matched_distance_p10": 0.43333770571336366,
+        "matched_distance_p90": 3.0019801014604823,
+        "split_half_null": {
+          "median": 0.3799412243651199,
+          "p10": 0.2559807925050195,
+          "p90": 0.573685390539781,
+          "n": 120.5
+        },
+        "own_partner_agrees_fraction": 0.85,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 150.5,
+      "subsample_occupancy_months_p10": 73.80000000000001,
+      "subsample_occupancy_months_p90": 234.1,
+      "subsample_occupancy_months_min": 19.0,
+      "subsample_occupancy_pct": 0.21654676258992805,
+      "n_subsample_months": 695,
+      "matched_partner": 3,
+      "matched_partner_mode_fraction": 0.335,
+      "is_identity": false,
+      "identity_fraction": 0.025,
+      "matched_distance": 11.245372741829886,
+      "matched_distance_p10": 2.4430217195748605,
+      "matched_distance_p90": 27.17216147765343,
+      "split_half_null": {
+        "median": 2.1180003020585474,
+        "p10": 1.35016822149269,
+        "p90": 3.2524318293313357,
+        "n": 150.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.380041990907496,
+      "subsample_episode_count": 6.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 190.5,
+      "partner_overlap_months": 136.0,
+      "refscaled": {
+        "matched_distance": 0.7474130080662716,
+        "matched_distance_p10": 0.3109175690256111,
+        "matched_distance_p90": 1.4200963026722242,
+        "split_half_null": {
+          "median": 0.30931521847512067,
+          "p10": 0.23309984687869437,
+          "p90": 0.44641713695334223,
+          "n": 150.5
+        },
+        "own_partner_agrees_fraction": 0.945,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 93.0,
+      "subsample_occupancy_months_p10": 41.0,
+      "subsample_occupancy_months_p90": 161.2,
+      "subsample_occupancy_months_min": 17.0,
+      "subsample_occupancy_pct": 0.13381294964028778,
+      "n_subsample_months": 695,
+      "matched_partner": 5,
+      "matched_partner_mode_fraction": 0.365,
+      "is_identity": false,
+      "identity_fraction": 0.025,
+      "matched_distance": 5.600398890459745,
+      "matched_distance_p10": 2.0727299317435666,
+      "matched_distance_p90": 14.417900027736401,
+      "split_half_null": {
+        "median": 1.2373806741734714,
+        "p10": 0.6537322937544546,
+        "p90": 2.8236196430024982,
+        "n": 93.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6291893236018486,
+      "subsample_episode_count": 5.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 83.5,
+      "partner_overlap_months": 64.0,
+      "refscaled": {
+        "matched_distance": 1.1007061328222147,
+        "matched_distance_p10": 0.45188840562963767,
+        "matched_distance_p90": 3.0666447761311986,
+        "split_half_null": {
+          "median": 0.47797467693138795,
+          "p10": 0.30539940783241776,
+          "p90": 0.8478701202537752,
+          "n": 93.0
+        },
+        "own_partner_agrees_fraction": 0.855,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 5,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 77.0,
+      "subsample_occupancy_months_p10": 29.0,
+      "subsample_occupancy_months_p90": 154.89999999999995,
+      "subsample_occupancy_months_min": 11.0,
+      "subsample_occupancy_pct": 0.11079136690647481,
+      "n_subsample_months": 695,
+      "matched_partner": 5,
+      "matched_partner_mode_fraction": 0.28,
+      "is_identity": false,
+      "identity_fraction": 0.025,
+      "matched_distance": 6.247945155067676,
+      "matched_distance_p10": 2.0768708657924666,
+      "matched_distance_p90": 11.698172175044617,
+      "split_half_null": {
+        "median": 1.7484751815527044,
+        "p10": 0.92906313417483,
+        "p90": 3.6051629059133545,
+        "n": 77.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.7240859331071625,
+      "subsample_episode_count": 5.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 71.0,
+      "partner_overlap_months": 41.0,
+      "refscaled": {
+        "matched_distance": 1.8982965360323836,
+        "matched_distance_p10": 0.8984041867088389,
+        "matched_distance_p90": 3.7394207784370495,
+        "split_half_null": {
+          "median": 0.5869184907587143,
+          "p10": 0.3062737745206584,
+          "p90": 1.0445173914732144,
+          "n": 77.0
+        },
+        "own_partner_agrees_fraction": 0.635,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s0",
+      "reference_state": 0,
+      "evaporated": false,
+      "subsample_occupancy_months": 34,
+      "subsample_occupancy_pct": 0.049707602339181284,
+      "n_subsample_months": 684,
+      "matched_partner": 0,
+      "is_identity": false,
+      "matched_distance": 12.075870673271462,
+      "split_half_null": {
+        "median": 5.981068655355718,
+        "p10": 2.2305977058803648,
+        "p90": 16.177699773980567,
+        "n": 34,
+        "n_reps": 200
+      },
+      "margin": 1.561906730682926,
+      "subsample_episode_count": 9,
+      "subsample_longest_episode": 10,
+      "reference_months_in_subsample": 29,
+      "partner_overlap_months": 28,
+      "refscaled": {
+        "matched_distance": 1.2316359103961183,
+        "split_half_null": {
+          "median": 1.1144384956738258,
+          "p10": 0.7526295612402706,
+          "p90": 1.6362994536569346,
+          "n": 34
+        },
+        "own_partner": 0,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.2316359103961183,
+        "own_partner_occupancy_months": 34,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 11,
+      "n_episodes_before": 9,
+      "dropped_span": [
+        "1973-11",
+        "1974-09"
+      ],
+      "amendment_condition_i": {
+        "holds": true,
+        "subsample_episode_count": 9,
+        "min_episodes_quoted": 3,
+        "condition": "(i) it recurs in at least three temporally separated episodes, so that removing any one leaves the state intact \u2014 criterion 3 applied directly, not by proxy"
+      }
+    },
+    {
+      "classifier": 1,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s1",
+      "reference_state": 1,
+      "evaporated": false,
+      "subsample_occupancy_months": 156,
+      "subsample_occupancy_pct": 0.2565789473684211,
+      "n_subsample_months": 608,
+      "matched_partner": 2,
+      "is_identity": false,
+      "matched_distance": 5.051371148839098,
+      "split_half_null": {
+        "median": 1.0802383419815558,
+        "p10": 0.4645210279808898,
+        "p90": 1.9137555065565621,
+        "n": 156,
+        "n_reps": 200
+      },
+      "margin": 0.34338046251098975,
+      "subsample_episode_count": 3,
+      "subsample_longest_episode": 88,
+      "reference_months_in_subsample": 141,
+      "partner_overlap_months": 126,
+      "refscaled": {
+        "matched_distance": 0.8097078382963081,
+        "split_half_null": {
+          "median": 0.32296483937457193,
+          "p10": 0.21147578008560372,
+          "p90": 0.44571536049303345,
+          "n": 156
+        },
+        "own_partner": 2,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.8097078382963081,
+        "own_partner_occupancy_months": 156,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 87,
+      "n_episodes_before": 5,
+      "dropped_span": [
+        "1963-02",
+        "1970-04"
+      ]
+    },
+    {
+      "classifier": 1,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s2",
+      "reference_state": 2,
+      "evaporated": false,
+      "subsample_occupancy_months": 107,
+      "subsample_occupancy_pct": 0.17147435897435898,
+      "n_subsample_months": 624,
+      "matched_partner": 2,
+      "is_identity": false,
+      "matched_distance": 19.4439506975167,
+      "split_half_null": {
+        "median": 1.2177590020478797,
+        "p10": 0.4781055163198249,
+        "p90": 2.3834680962491586,
+        "n": 107,
+        "n_reps": 200
+      },
+      "margin": 0.9338788577663439,
+      "subsample_episode_count": 5,
+      "subsample_longest_episode": 51,
+      "reference_months_in_subsample": 0,
+      "partner_overlap_months": 0,
+      "refscaled": {
+        "matched_distance": 3.117988870964572,
+        "split_half_null": {
+          "median": 0.33860270273639026,
+          "p10": 0.21760825749811277,
+          "p90": 0.4795762296453949,
+          "n": 107
+        },
+        "own_partner": 1,
+        "own_partner_agrees": false,
+        "own_is_identity": false,
+        "own_matched_distance": 2.574175434890835,
+        "own_partner_occupancy_months": 135,
+        "own_partner_evaporated": false
+      },
+      "degenerate": true,
+      "n_months_dropped": 71,
+      "n_episodes_before": 1,
+      "dropped_span": [
+        "1996-07",
+        "2002-05"
+      ]
+    },
+    {
+      "classifier": 1,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s3",
+      "reference_state": 3,
+      "evaporated": false,
+      "subsample_occupancy_months": 87,
+      "subsample_occupancy_pct": 0.146218487394958,
+      "n_subsample_months": 595,
+      "matched_partner": 4,
+      "is_identity": false,
+      "matched_distance": 4.691611771087378,
+      "split_half_null": {
+        "median": 3.0781111843746123,
+        "p10": 1.0199986535413197,
+        "p90": 8.548214718557992,
+        "n": 87,
+        "n_reps": 200
+      },
+      "margin": 0.129958811567994,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 50,
+      "reference_months_in_subsample": 100,
+      "partner_overlap_months": 78,
+      "refscaled": {
+        "matched_distance": 0.5109089355203389,
+        "split_half_null": {
+          "median": 0.5329849682364239,
+          "p10": 0.344539661066611,
+          "p90": 0.7755968936265523,
+          "n": 87
+        },
+        "own_partner": 4,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.5109089355203389,
+        "own_partner_occupancy_months": 87,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 100,
+      "n_episodes_before": 4,
+      "dropped_span": [
+        "2011-11",
+        "2020-02"
+      ]
+    },
+    {
+      "classifier": 1,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s4",
+      "reference_state": 4,
+      "evaporated": false,
+      "subsample_occupancy_months": 41,
+      "subsample_occupancy_pct": 0.06581059390048154,
+      "n_subsample_months": 623,
+      "matched_partner": 5,
+      "is_identity": false,
+      "matched_distance": 8.209638194701885,
+      "split_half_null": {
+        "median": 4.2674022434341,
+        "p10": 1.3106528947983827,
+        "p90": 9.914249916919692,
+        "n": 41,
+        "n_reps": 200
+      },
+      "margin": 0.7086589705199905,
+      "subsample_episode_count": 5,
+      "subsample_longest_episode": 16,
+      "reference_months_in_subsample": 12,
+      "partner_overlap_months": 4,
+      "refscaled": {
+        "matched_distance": 2.884472684500549,
+        "split_half_null": {
+          "median": 0.8227650530896458,
+          "p10": 0.5399662791611768,
+          "p90": 1.129892308592626,
+          "n": 41
+        },
+        "own_partner": 5,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 2.884472684500549,
+        "own_partner_occupancy_months": 41,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 72,
+      "n_episodes_before": 3,
+      "dropped_span": [
+        "1981-10",
+        "1987-09"
+      ]
+    },
+    {
+      "classifier": 1,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s5",
+      "reference_state": 5,
+      "evaporated": false,
+      "subsample_occupancy_months": 133,
+      "subsample_occupancy_pct": 0.20336391437308868,
+      "n_subsample_months": 654,
+      "matched_partner": 3,
+      "is_identity": false,
+      "matched_distance": 9.410852590167112,
+      "split_half_null": {
+        "median": 1.0567378552720288,
+        "p10": 0.5398520105439587,
+        "p90": 2.011435094126856,
+        "n": 133,
+        "n_reps": 200
+      },
+      "margin": 1.519212994675334,
+      "subsample_episode_count": 6,
+      "subsample_longest_episode": 52,
+      "reference_months_in_subsample": 31,
+      "partner_overlap_months": 23,
+      "refscaled": {
+        "matched_distance": 2.668662289891828,
+        "split_half_null": {
+          "median": 0.33118168562389916,
+          "p10": 0.21111730934090028,
+          "p90": 0.539540739943625,
+          "n": 133
+        },
+        "own_partner": 3,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 2.668662289891828,
+        "own_partner_occupancy_months": 133,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 41,
+      "n_episodes_before": 4,
+      "dropped_span": [
+        "1978-04",
+        "1981-08"
+      ]
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 0,
+      "evaporated": false,
+      "subsample_occupancy_months": 24,
+      "subsample_occupancy_pct": 0.041666666666666664,
+      "n_subsample_months": 576,
+      "matched_partner": 0,
+      "is_identity": true,
+      "matched_distance": 186.65135119276775,
+      "split_half_null": {
+        "median": 110.2311385725518,
+        "p10": 16.715606160503146,
+        "p90": 254.64466030980816,
+        "n": 24,
+        "n_reps": 200
+      },
+      "margin": 2.7558003239787876,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 12,
+      "reference_months_in_subsample": 116,
+      "partner_overlap_months": 24,
+      "refscaled": {
+        "matched_distance": 3.1238133780638253,
+        "split_half_null": {
+          "median": 0.7511617446901658,
+          "p10": 0.45836128456576647,
+          "p90": 1.2814080659871765,
+          "n": 24
+        },
+        "own_partner": 0,
+        "own_partner_agrees": true,
+        "own_is_identity": true,
+        "own_matched_distance": 3.1238133780638253,
+        "own_partner_occupancy_months": 24,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 1,
+      "evaporated": false,
+      "subsample_occupancy_months": 107,
+      "subsample_occupancy_pct": 0.1857638888888889,
+      "n_subsample_months": 576,
+      "matched_partner": 1,
+      "is_identity": true,
+      "matched_distance": 40.74860578493402,
+      "split_half_null": {
+        "median": 69.09746016273519,
+        "p10": 15.95113455821682,
+        "p90": 163.2991671043656,
+        "n": 107,
+        "n_reps": 200
+      },
+      "margin": 0.13807019974353135,
+      "subsample_episode_count": 4,
+      "subsample_longest_episode": 55,
+      "reference_months_in_subsample": 50,
+      "partner_overlap_months": 12,
+      "refscaled": {
+        "matched_distance": 1.8049297168288503,
+        "split_half_null": {
+          "median": 0.363840913125391,
+          "p10": 0.21696363270412955,
+          "p90": 0.5324843143985172,
+          "n": 107
+        },
+        "own_partner": 1,
+        "own_partner_agrees": true,
+        "own_is_identity": true,
+        "own_matched_distance": 1.8049297168288503,
+        "own_partner_occupancy_months": 107,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 2,
+      "evaporated": false,
+      "subsample_occupancy_months": 179,
+      "subsample_occupancy_pct": 0.3107638888888889,
+      "n_subsample_months": 576,
+      "matched_partner": 2,
+      "is_identity": true,
+      "matched_distance": 72.7775345718896,
+      "split_half_null": {
+        "median": 118.44501988190297,
+        "p10": 17.87166541303539,
+        "p90": 267.98793813046234,
+        "n": 179,
+        "n_reps": 200
+      },
+      "margin": 0.04997973370300854,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 167,
+      "reference_months_in_subsample": 144,
+      "partner_overlap_months": 141,
+      "refscaled": {
+        "matched_distance": 0.4738718383073423,
+        "split_half_null": {
+          "median": 0.2684567859209894,
+          "p10": 0.1742904100396939,
+          "p90": 0.4134739228483062,
+          "n": 179
+        },
+        "own_partner": 2,
+        "own_partner_agrees": true,
+        "own_is_identity": true,
+        "own_matched_distance": 0.4738718383073423,
+        "own_partner_occupancy_months": 179,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 3,
+      "evaporated": false,
+      "subsample_occupancy_months": 166,
+      "subsample_occupancy_pct": 0.2881944444444444,
+      "n_subsample_months": 576,
+      "matched_partner": 3,
+      "is_identity": true,
+      "matched_distance": 0.0004859033728870563,
+      "split_half_null": {
+        "median": 171.1682297272203,
+        "p10": 24.381058070545194,
+        "p90": 403.88887455968745,
+        "n": 166,
+        "n_reps": 200
+      },
+      "margin": 2.7543314454638294e-07,
+      "subsample_episode_count": 1,
+      "subsample_longest_episode": 166,
+      "reference_months_in_subsample": 166,
+      "partner_overlap_months": 166,
+      "refscaled": {
+        "matched_distance": 0.005029529754091536,
+        "split_half_null": {
+          "median": 0.35209814105536397,
+          "p10": 0.199479962966603,
+          "p90": 0.5150315236430932,
+          "n": 166
+        },
+        "own_partner": 3,
+        "own_partner_agrees": true,
+        "own_is_identity": true,
+        "own_matched_distance": 0.005029529754091536,
+        "own_partner_occupancy_months": 166,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_first_decade",
+      "scheme_instance": "drop_first_decade",
+      "reference_state": 4,
+      "evaporated": false,
+      "subsample_occupancy_months": 100,
+      "subsample_occupancy_pct": 0.1736111111111111,
+      "n_subsample_months": 576,
+      "matched_partner": 4,
+      "is_identity": true,
+      "matched_distance": 4.940765185314027,
+      "split_half_null": {
+        "median": 209.58031647577582,
+        "p10": 34.83400906187806,
+        "p90": 585.3183372364496,
+        "n": 100,
+        "n_reps": 200
+      },
+      "margin": 0.002027974050664171,
+      "subsample_episode_count": 1,
+      "subsample_longest_episode": 100,
+      "reference_months_in_subsample": 100,
+      "partner_overlap_months": 100,
+      "refscaled": {
+        "matched_distance": 0.009318306772297546,
+        "split_half_null": {
+          "median": 0.3494696633301897,
+          "p10": 0.193888601619963,
+          "p90": 0.5474003981382772,
+          "n": 100
+        },
+        "own_partner": 4,
+        "own_partner_agrees": true,
+        "own_is_identity": true,
+        "own_matched_distance": 0.009318306772297546,
+        "own_partner_occupancy_months": 100,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 0,
+      "evaporated": false,
+      "subsample_occupancy_months": 24,
+      "subsample_occupancy_pct": 0.041666666666666664,
+      "n_subsample_months": 576,
+      "matched_partner": 0,
+      "is_identity": true,
+      "matched_distance": 219.01157856053263,
+      "split_half_null": {
+        "median": 129.69691197202187,
+        "p10": 25.61114906641602,
+        "p90": 294.38841537822276,
+        "n": 24,
+        "n_reps": 200
+      },
+      "margin": 1.9929860193907953,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 12,
+      "reference_months_in_subsample": 116,
+      "partner_overlap_months": 24,
+      "refscaled": {
+        "matched_distance": 3.1241870274518795,
+        "split_half_null": {
+          "median": 0.751134669103141,
+          "p10": 0.4595390902231722,
+          "p90": 1.2823543004103926,
+          "n": 24
+        },
+        "own_partner": 0,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 3.1241870274518795,
+        "own_partner_occupancy_months": 24,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 1,
+      "evaporated": false,
+      "subsample_occupancy_months": 227,
+      "subsample_occupancy_pct": 0.3940972222222222,
+      "n_subsample_months": 576,
+      "matched_partner": 1,
+      "is_identity": true,
+      "matched_distance": 218.36896901600625,
+      "split_half_null": {
+        "median": 40.93876254237796,
+        "p10": 3.908984095885115,
+        "p90": 91.8382781776061,
+        "n": 227,
+        "n_reps": 200
+      },
+      "margin": 0.6667958450755388,
+      "subsample_episode_count": 4,
+      "subsample_longest_episode": 132,
+      "reference_months_in_subsample": 158,
+      "partner_overlap_months": 120,
+      "refscaled": {
+        "matched_distance": 0.9016827108304182,
+        "split_half_null": {
+          "median": 0.225381027384993,
+          "p10": 0.14300944309644928,
+          "p90": 0.3405632857908089,
+          "n": 227
+        },
+        "own_partner": 1,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 0.9016827108304182,
+        "own_partner_occupancy_months": 227,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 2,
+      "evaporated": false,
+      "subsample_occupancy_months": 38,
+      "subsample_occupancy_pct": 0.06597222222222222,
+      "n_subsample_months": 576,
+      "matched_partner": 2,
+      "is_identity": true,
+      "matched_distance": 1015.0807968384211,
+      "split_half_null": {
+        "median": 46.21728906170328,
+        "p10": 10.03456870203635,
+        "p90": 102.16480316894923,
+        "n": 38,
+        "n_reps": 200
+      },
+      "margin": 3.0493338090489672,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 24,
+      "reference_months_in_subsample": 156,
+      "partner_overlap_months": 37,
+      "refscaled": {
+        "matched_distance": 1.9027345743801871,
+        "split_half_null": {
+          "median": 0.5561760939610128,
+          "p10": 0.34050192237207216,
+          "p90": 0.7936191531597143,
+          "n": 38
+        },
+        "own_partner": 2,
+        "own_partner_agrees": true,
+        "own_is_identity": false,
+        "own_matched_distance": 1.9027345743801871,
+        "own_partner_occupancy_months": 38,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 3,
+      "evaporated": false,
+      "subsample_occupancy_months": 139,
+      "subsample_occupancy_pct": 0.24131944444444445,
+      "n_subsample_months": 576,
+      "matched_partner": 3,
+      "is_identity": true,
+      "matched_distance": 1504.0341592549028,
+      "split_half_null": {
+        "median": 134.24402264182166,
+        "p10": 29.303032993154275,
+        "p90": 309.04888653040496,
+        "n": 139,
+        "n_reps": 200
+      },
+      "margin": 9.916203096737089,
+      "subsample_episode_count": 1,
+      "subsample_longest_episode": 139,
+      "reference_months_in_subsample": 146,
+      "partner_overlap_months": 0,
+      "refscaled": {
+        "matched_distance": 2.110538484506844,
+        "split_half_null": {
+          "median": 0.28355204499225894,
+          "p10": 0.18237179681467192,
+          "p90": 0.4291781426254534,
+          "n": 139
+        },
+        "own_partner": 4,
+        "own_partner_agrees": false,
+        "own_is_identity": false,
+        "own_matched_distance": 0.21429829435832803,
+        "own_partner_occupancy_months": 148,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "drop_last_decade",
+      "scheme_instance": "drop_last_decade",
+      "reference_state": 4,
+      "evaporated": false,
+      "subsample_occupancy_months": 148,
+      "subsample_occupancy_pct": 0.2569444444444444,
+      "n_subsample_months": 576,
+      "matched_partner": 4,
+      "is_identity": true,
+      "matched_distance": 2284.631545267933,
+      "split_half_null": {
+        "median": 159.6307731084422,
+        "p10": 25.757473777872864,
+        "p90": 447.36338537778926,
+        "n": 148,
+        "n_reps": 200
+      },
+      "margin": 0.5798056886674029,
+      "subsample_episode_count": 1,
+      "subsample_longest_episode": 148,
+      "reference_months_in_subsample": 0,
+      "partner_overlap_months": 0,
+      "refscaled": {
+        "matched_distance": 2.0808084196369565,
+        "split_half_null": {
+          "median": 0.3486802967463676,
+          "p10": 0.23338179395773145,
+          "p90": 0.5770101532419818,
+          "n": 148
+        },
+        "own_partner": 3,
+        "own_partner_agrees": false,
+        "own_is_identity": false,
+        "own_matched_distance": 3.4062059049295805,
+        "own_partner_occupancy_months": 139,
+        "own_partner_evaporated": false
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 41.0,
+      "subsample_occupancy_months_p10": 20.0,
+      "subsample_occupancy_months_p90": 137.1,
+      "subsample_occupancy_months_min": 8.0,
+      "subsample_occupancy_pct": 0.05890804597701149,
+      "n_subsample_months": 696,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.94,
+      "is_identity": false,
+      "identity_fraction": 0.865,
+      "matched_distance": 202.0034434060571,
+      "matched_distance_p10": 32.345849824747084,
+      "matched_distance_p90": 506.13882625344115,
+      "split_half_null": {
+        "median": 90.98106483710666,
+        "p10": 56.83796564820127,
+        "p90": 123.25450700860551,
+        "n": 41.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.5411340700667948,
+      "subsample_episode_count": 7.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 113,
+        "max": 119
+      },
+      "reference_months_in_subsample": 116.0,
+      "partner_overlap_months": 36.0,
+      "refscaled": {
+        "matched_distance": 2.6286074009780016,
+        "matched_distance_p10": 0.6135930471417987,
+        "matched_distance_p90": 3.992346678736782,
+        "split_half_null": {
+          "median": 0.6117673736983363,
+          "p10": 0.32408502378391346,
+          "p90": 0.7666392036299049,
+          "n": 41.0
+        },
+        "own_partner_agrees_fraction": 0.83,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 220.5,
+      "subsample_occupancy_months_p10": 46.0,
+      "subsample_occupancy_months_p90": 328.1,
+      "subsample_occupancy_months_min": 16.0,
+      "subsample_occupancy_pct": 0.3168103448275862,
+      "n_subsample_months": 696,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.925,
+      "is_identity": false,
+      "identity_fraction": 0.865,
+      "matched_distance": 250.35642805511827,
+      "matched_distance_p10": 48.481467456765465,
+      "matched_distance_p90": 617.3461242227855,
+      "split_half_null": {
+        "median": 80.86519411772136,
+        "p10": 48.87841021506098,
+        "p90": 115.29298442832051,
+        "n": 220.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.9305130871869782,
+      "subsample_episode_count": 18.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 113,
+        "max": 119
+      },
+      "reference_months_in_subsample": 155.0,
+      "partner_overlap_months": 126.0,
+      "refscaled": {
+        "matched_distance": 0.8501089680706511,
+        "matched_distance_p10": 0.4927461899757307,
+        "matched_distance_p90": 3.7873609572826004,
+        "split_half_null": {
+          "median": 0.2395832980710267,
+          "p10": 0.19616667884427624,
+          "p90": 0.5342569626744382,
+          "n": 220.5
+        },
+        "own_partner_agrees_fraction": 0.675,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 121.5,
+      "subsample_occupancy_months_p10": 52.900000000000006,
+      "subsample_occupancy_months_p90": 329.1,
+      "subsample_occupancy_months_min": 24.0,
+      "subsample_occupancy_pct": 0.17456896551724138,
+      "n_subsample_months": 696,
+      "matched_partner": 2,
+      "matched_partner_mode_fraction": 0.92,
+      "is_identity": false,
+      "identity_fraction": 0.865,
+      "matched_distance": 458.2991209901154,
+      "matched_distance_p10": 129.53858651572634,
+      "matched_distance_p90": 950.8084548037698,
+      "split_half_null": {
+        "median": 135.72480919232856,
+        "p10": 66.80298462021416,
+        "p90": 222.2325154566619,
+        "n": 121.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.5122259644067904,
+      "subsample_episode_count": 13.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 113,
+        "max": 119
+      },
+      "reference_months_in_subsample": 154.5,
+      "partner_overlap_months": 93.5,
+      "refscaled": {
+        "matched_distance": 0.8624024557170789,
+        "matched_distance_p10": 0.2941720382032715,
+        "matched_distance_p90": 2.331886396002921,
+        "split_half_null": {
+          "median": 0.3202348997935676,
+          "p10": 0.20651582858796189,
+          "p90": 0.5076755334525499,
+          "n": 121.5
+        },
+        "own_partner_agrees_fraction": 0.74,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 125.0,
+      "subsample_occupancy_months_p10": 56.0,
+      "subsample_occupancy_months_p90": 235.29999999999998,
+      "subsample_occupancy_months_min": 19.0,
+      "subsample_occupancy_pct": 0.17959770114942528,
+      "n_subsample_months": 696,
+      "matched_partner": 3,
+      "matched_partner_mode_fraction": 0.94,
+      "is_identity": false,
+      "identity_fraction": 0.865,
+      "matched_distance": 699.0778633325414,
+      "matched_distance_p10": 148.58441864894473,
+      "matched_distance_p90": 1806.7030711639304,
+      "split_half_null": {
+        "median": 187.3892857431211,
+        "p10": 120.38177768404664,
+        "p90": 275.21370083335813,
+        "n": 125.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.5253295431975373,
+      "subsample_episode_count": 13.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 113,
+        "max": 119
+      },
+      "reference_months_in_subsample": 166.0,
+      "partner_overlap_months": 72.0,
+      "refscaled": {
+        "matched_distance": 1.4071346768719035,
+        "matched_distance_p10": 0.5394452704121852,
+        "matched_distance_p90": 2.487978774100837,
+        "split_half_null": {
+          "median": 0.3607506616896553,
+          "p10": 0.2576553252607669,
+          "p90": 0.5420140439194086,
+          "n": 125.0
+        },
+        "own_partner_agrees_fraction": 0.75,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L6",
+      "block_length": 6,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 144.5,
+      "subsample_occupancy_months_p10": 71.80000000000001,
+      "subsample_occupancy_months_p90": 234.29999999999998,
+      "subsample_occupancy_months_min": 30.0,
+      "subsample_occupancy_pct": 0.20761494252873564,
+      "n_subsample_months": 696,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 1.0,
+      "is_identity": false,
+      "identity_fraction": 0.865,
+      "matched_distance": 931.245510561444,
+      "matched_distance_p10": 223.86558336136295,
+      "matched_distance_p90": 1680.741720686668,
+      "split_half_null": {
+        "median": 210.92778675307446,
+        "p10": 165.27353859302445,
+        "p90": 284.5954950673429,
+        "n": 144.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.3081565931612732,
+      "subsample_episode_count": 16.0,
+      "n_seams": {
+        "median": 116.0,
+        "min": 113,
+        "max": 119
+      },
+      "reference_months_in_subsample": 97.0,
+      "partner_overlap_months": 81.5,
+      "refscaled": {
+        "matched_distance": 1.0637033169297534,
+        "matched_distance_p10": 0.40886332423809246,
+        "matched_distance_p90": 1.6796845310021788,
+        "split_half_null": {
+          "median": 0.3231985871972236,
+          "p10": 0.2716174829902014,
+          "p90": 0.42120372229553604,
+          "n": 144.5
+        },
+        "own_partner_agrees_fraction": 0.88,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 49.5,
+      "subsample_occupancy_months_p10": 20.0,
+      "subsample_occupancy_months_p90": 212.2,
+      "subsample_occupancy_months_min": 9.0,
+      "subsample_occupancy_pct": 0.07112068965517242,
+      "n_subsample_months": 696,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.91,
+      "is_identity": false,
+      "identity_fraction": 0.85,
+      "matched_distance": 218.71198659590016,
+      "matched_distance_p10": 35.52161986746834,
+      "matched_distance_p90": 533.2624035502399,
+      "split_half_null": {
+        "median": 73.71869031681118,
+        "p10": 48.432831445723444,
+        "p90": 117.31571683171413,
+        "n": 49.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 1.102685614018383,
+      "subsample_episode_count": 5.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 113.0,
+      "partner_overlap_months": 43.0,
+      "refscaled": {
+        "matched_distance": 2.5290040511320275,
+        "matched_distance_p10": 0.6693429777838583,
+        "matched_distance_p90": 4.190657774729119,
+        "split_half_null": {
+          "median": 0.508022080182335,
+          "p10": 0.21080762955171953,
+          "p90": 0.7144141776395395,
+          "n": 49.5
+        },
+        "own_partner_agrees_fraction": 0.685,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 199.0,
+      "subsample_occupancy_months_p10": 51.900000000000006,
+      "subsample_occupancy_months_p90": 295.1,
+      "subsample_occupancy_months_min": 22.0,
+      "subsample_occupancy_pct": 0.2859195402298851,
+      "n_subsample_months": 696,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.91,
+      "is_identity": false,
+      "identity_fraction": 0.85,
+      "matched_distance": 167.70420568262648,
+      "matched_distance_p10": 30.88625145925267,
+      "matched_distance_p90": 413.0069538345684,
+      "split_half_null": {
+        "median": 63.828368234068115,
+        "p10": 41.33537768984065,
+        "p90": 98.49344498094614,
+        "n": 199.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6028220280264778,
+      "subsample_episode_count": 12.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 156.5,
+      "partner_overlap_months": 128.0,
+      "refscaled": {
+        "matched_distance": 0.8836959429183451,
+        "matched_distance_p10": 0.38041966881486383,
+        "matched_distance_p90": 3.8931181068615994,
+        "split_half_null": {
+          "median": 0.2376034614251701,
+          "p10": 0.19367417158211783,
+          "p90": 0.5207795011795239,
+          "n": 199.0
+        },
+        "own_partner_agrees_fraction": 0.645,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 122.0,
+      "subsample_occupancy_months_p10": 50.800000000000004,
+      "subsample_occupancy_months_p90": 221.9999999999999,
+      "subsample_occupancy_months_min": 30.0,
+      "subsample_occupancy_pct": 0.1752873563218391,
+      "n_subsample_months": 696,
+      "matched_partner": 2,
+      "matched_partner_mode_fraction": 0.93,
+      "is_identity": false,
+      "identity_fraction": 0.85,
+      "matched_distance": 586.6462608758693,
+      "matched_distance_p10": 93.89664796105444,
+      "matched_distance_p90": 1096.3018752856838,
+      "split_half_null": {
+        "median": 128.79187456335393,
+        "p10": 53.41757913624946,
+        "p90": 197.10026561918465,
+        "n": 122.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6216419563631181,
+      "subsample_episode_count": 9.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 158.0,
+      "partner_overlap_months": 103.5,
+      "refscaled": {
+        "matched_distance": 0.8125914223408961,
+        "matched_distance_p10": 0.2994894052104541,
+        "matched_distance_p90": 2.8655367235996536,
+        "split_half_null": {
+          "median": 0.30668582465747685,
+          "p10": 0.2170009142521779,
+          "p90": 0.4972557974458299,
+          "n": 122.0
+        },
+        "own_partner_agrees_fraction": 0.795,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 131.0,
+      "subsample_occupancy_months_p10": 60.0,
+      "subsample_occupancy_months_p90": 217.29999999999998,
+      "subsample_occupancy_months_min": 22.0,
+      "subsample_occupancy_pct": 0.1882183908045977,
+      "n_subsample_months": 696,
+      "matched_partner": 3,
+      "matched_partner_mode_fraction": 0.935,
+      "is_identity": false,
+      "identity_fraction": 0.85,
+      "matched_distance": 778.4595547579713,
+      "matched_distance_p10": 151.78200338802415,
+      "matched_distance_p90": 1808.9862207938888,
+      "split_half_null": {
+        "median": 161.9120198732453,
+        "p10": 109.26330090359222,
+        "p90": 244.70423619201924,
+        "n": 131.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6147378817432829,
+      "subsample_episode_count": 8.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 159.0,
+      "partner_overlap_months": 72.0,
+      "refscaled": {
+        "matched_distance": 1.5202838117715087,
+        "matched_distance_p10": 0.6206844273838988,
+        "matched_distance_p90": 2.4916333145308496,
+        "split_half_null": {
+          "median": 0.3325862365745525,
+          "p10": 0.2493244060589607,
+          "p90": 0.5180525887371548,
+          "n": 131.0
+        },
+        "own_partner_agrees_fraction": 0.735,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L12",
+      "block_length": 12,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 166.5,
+      "subsample_occupancy_months_p10": 79.9,
+      "subsample_occupancy_months_p90": 243.1,
+      "subsample_occupancy_months_min": 29.0,
+      "subsample_occupancy_pct": 0.23922413793103448,
+      "n_subsample_months": 696,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 1.0,
+      "is_identity": false,
+      "identity_fraction": 0.85,
+      "matched_distance": 1099.309869643148,
+      "matched_distance_p10": 326.1024301458932,
+      "matched_distance_p90": 1911.9342731039299,
+      "split_half_null": {
+        "median": 190.57761472615087,
+        "p10": 147.70554333442414,
+        "p90": 264.62574263981435,
+        "n": 166.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.35268405135750724,
+      "subsample_episode_count": 10.0,
+      "n_seams": {
+        "median": 58.0,
+        "min": 56,
+        "max": 61
+      },
+      "reference_months_in_subsample": 96.0,
+      "partner_overlap_months": 84.0,
+      "refscaled": {
+        "matched_distance": 1.1226054010896511,
+        "matched_distance_p10": 0.5820638359162074,
+        "matched_distance_p90": 1.6767876476466756,
+        "split_half_null": {
+          "median": 0.30650159037440194,
+          "p10": 0.2589831602626837,
+          "p90": 0.38426651665086087,
+          "n": 166.5
+        },
+        "own_partner_agrees_fraction": 0.9,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 80.5,
+      "subsample_occupancy_months_p10": 25.0,
+      "subsample_occupancy_months_p90": 236.2,
+      "subsample_occupancy_months_min": 12.0,
+      "subsample_occupancy_pct": 0.11566091954022989,
+      "n_subsample_months": 696,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.875,
+      "is_identity": false,
+      "identity_fraction": 0.835,
+      "matched_distance": 209.7496344699286,
+      "matched_distance_p10": 32.13379293188002,
+      "matched_distance_p90": 523.3272467748017,
+      "split_half_null": {
+        "median": 66.15146192095712,
+        "p10": 37.645413012415844,
+        "p90": 97.77680530252609,
+        "n": 80.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.9071522695807328,
+      "subsample_episode_count": 4.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 107.0,
+      "partner_overlap_months": 50.5,
+      "refscaled": {
+        "matched_distance": 2.0006103259186467,
+        "matched_distance_p10": 0.5617267334988055,
+        "matched_distance_p90": 3.9278969175272134,
+        "split_half_null": {
+          "median": 0.41518017242543226,
+          "p10": 0.2010672752516358,
+          "p90": 0.6706965131972553,
+          "n": 80.5
+        },
+        "own_partner_agrees_fraction": 0.725,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 166.0,
+      "subsample_occupancy_months_p10": 48.0,
+      "subsample_occupancy_months_p90": 281.29999999999995,
+      "subsample_occupancy_months_min": 17.0,
+      "subsample_occupancy_pct": 0.23850574712643677,
+      "n_subsample_months": 696,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.865,
+      "is_identity": false,
+      "identity_fraction": 0.835,
+      "matched_distance": 230.47230781993085,
+      "matched_distance_p10": 37.93093198883005,
+      "matched_distance_p90": 685.7165745028461,
+      "split_half_null": {
+        "median": 60.17344846644244,
+        "p10": 34.57383412921511,
+        "p90": 106.52134549726448,
+        "n": 166.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.8599829622331027,
+      "subsample_episode_count": 7.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 150.0,
+      "partner_overlap_months": 90.0,
+      "refscaled": {
+        "matched_distance": 1.1549381302619017,
+        "matched_distance_p10": 0.32118059676207944,
+        "matched_distance_p90": 3.986290202221274,
+        "split_half_null": {
+          "median": 0.24555714734598605,
+          "p10": 0.19100899873683833,
+          "p90": 0.5479458585276639,
+          "n": 166.0
+        },
+        "own_partner_agrees_fraction": 0.565,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 120.5,
+      "subsample_occupancy_months_p10": 46.0,
+      "subsample_occupancy_months_p90": 252.2,
+      "subsample_occupancy_months_min": 12.0,
+      "subsample_occupancy_pct": 0.17313218390804597,
+      "n_subsample_months": 696,
+      "matched_partner": 2,
+      "matched_partner_mode_fraction": 0.945,
+      "is_identity": false,
+      "identity_fraction": 0.835,
+      "matched_distance": 651.7348952432055,
+      "matched_distance_p10": 96.68532647759935,
+      "matched_distance_p90": 1150.0885334277866,
+      "split_half_null": {
+        "median": 110.6778395987344,
+        "p10": 40.71549160195019,
+        "p90": 199.61384818599635,
+        "n": 120.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6607430558482563,
+      "subsample_episode_count": 6.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 159.5,
+      "partner_overlap_months": 102.5,
+      "refscaled": {
+        "matched_distance": 1.0240107447003706,
+        "matched_distance_p10": 0.3468111394921443,
+        "matched_distance_p90": 3.508459352971418,
+        "split_half_null": {
+          "median": 0.3061598948618122,
+          "p10": 0.20932643100743323,
+          "p90": 0.5224518656765096,
+          "n": 120.5
+        },
+        "own_partner_agrees_fraction": 0.685,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 135.0,
+      "subsample_occupancy_months_p10": 61.0,
+      "subsample_occupancy_months_p90": 225.1,
+      "subsample_occupancy_months_min": 16.0,
+      "subsample_occupancy_pct": 0.1939655172413793,
+      "n_subsample_months": 696,
+      "matched_partner": 3,
+      "matched_partner_mode_fraction": 0.95,
+      "is_identity": false,
+      "identity_fraction": 0.835,
+      "matched_distance": 574.3135051149306,
+      "matched_distance_p10": 123.07581855031731,
+      "matched_distance_p90": 1657.2800347715217,
+      "split_half_null": {
+        "median": 153.85530445995977,
+        "p10": 93.0412715183728,
+        "p90": 250.47950158671992,
+        "n": 135.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.48881512579243125,
+      "subsample_episode_count": 5.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 164.5,
+      "partner_overlap_months": 90.5,
+      "refscaled": {
+        "matched_distance": 1.328484910263997,
+        "matched_distance_p10": 0.5000359605312352,
+        "matched_distance_p90": 2.3650651438340202,
+        "split_half_null": {
+          "median": 0.3198054024887709,
+          "p10": 0.2391586575229604,
+          "p90": 0.4734666478718019,
+          "n": 135.0
+        },
+        "own_partner_agrees_fraction": 0.775,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L24",
+      "block_length": 24,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 144.5,
+      "subsample_occupancy_months_p10": 67.9,
+      "subsample_occupancy_months_p90": 223.1,
+      "subsample_occupancy_months_min": 32.0,
+      "subsample_occupancy_pct": 0.20761494252873564,
+      "n_subsample_months": 696,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 0.99,
+      "is_identity": false,
+      "identity_fraction": 0.835,
+      "matched_distance": 1030.3189143664508,
+      "matched_distance_p10": 195.65951503965593,
+      "matched_distance_p90": 1928.6287679219072,
+      "split_half_null": {
+        "median": 189.86848277074017,
+        "p10": 128.41283238839105,
+        "p90": 272.3456769749073,
+        "n": 144.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.3771723689454064,
+      "subsample_episode_count": 6.0,
+      "n_seams": {
+        "median": 29.0,
+        "min": 27,
+        "max": 33
+      },
+      "reference_months_in_subsample": 96.0,
+      "partner_overlap_months": 86.0,
+      "refscaled": {
+        "matched_distance": 1.0182323115399807,
+        "matched_distance_p10": 0.38907062735537074,
+        "matched_distance_p90": 1.8481545427840163,
+        "split_half_null": {
+          "median": 0.31088731932692887,
+          "p10": 0.2574843304760601,
+          "p90": 0.40857316811964145,
+          "n": 144.5
+        },
+        "own_partner_agrees_fraction": 0.91,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 0,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 82.0,
+      "subsample_occupancy_months_p10": 23.0,
+      "subsample_occupancy_months_p90": 250.2,
+      "subsample_occupancy_months_min": 9.0,
+      "subsample_occupancy_pct": 0.11781609195402298,
+      "n_subsample_months": 696,
+      "matched_partner": 0,
+      "matched_partner_mode_fraction": 0.845,
+      "is_identity": false,
+      "identity_fraction": 0.705,
+      "matched_distance": 200.00750201345318,
+      "matched_distance_p10": 35.220135987664726,
+      "matched_distance_p90": 531.4921049598026,
+      "split_half_null": {
+        "median": 61.55591923971156,
+        "p10": 30.096656930469965,
+        "p90": 105.9319510082602,
+        "n": 82.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.9033026432583382,
+      "subsample_episode_count": 3.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 114.0,
+      "partner_overlap_months": 38.0,
+      "refscaled": {
+        "matched_distance": 2.1852299397569506,
+        "matched_distance_p10": 0.5195178953384529,
+        "matched_distance_p90": 3.9461358644252837,
+        "split_half_null": {
+          "median": 0.414833042095508,
+          "p10": 0.18786218186646228,
+          "p90": 0.7115444090619514,
+          "n": 82.0
+        },
+        "own_partner_agrees_fraction": 0.585,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 1,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 148.0,
+      "subsample_occupancy_months_p10": 45.0,
+      "subsample_occupancy_months_p90": 278.0,
+      "subsample_occupancy_months_min": 19.0,
+      "subsample_occupancy_pct": 0.21264367816091953,
+      "n_subsample_months": 696,
+      "matched_partner": 1,
+      "matched_partner_mode_fraction": 0.815,
+      "is_identity": false,
+      "identity_fraction": 0.705,
+      "matched_distance": 177.44893255140335,
+      "matched_distance_p10": 27.58930941464071,
+      "matched_distance_p90": 569.3067212680921,
+      "split_half_null": {
+        "median": 65.77480795029399,
+        "p10": 32.25269417212771,
+        "p90": 112.57823283390479,
+        "n": 148.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.7561777905768711,
+      "subsample_episode_count": 5.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 165.5,
+      "partner_overlap_months": 67.5,
+      "refscaled": {
+        "matched_distance": 1.5789811817237869,
+        "matched_distance_p10": 0.2738655774564654,
+        "matched_distance_p90": 3.8604309528154737,
+        "split_half_null": {
+          "median": 0.26735328000865455,
+          "p10": 0.18745733844794246,
+          "p90": 0.5261232000164596,
+          "n": 148.0
+        },
+        "own_partner_agrees_fraction": 0.535,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 2,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 124.0,
+      "subsample_occupancy_months_p10": 52.0,
+      "subsample_occupancy_months_p90": 233.1,
+      "subsample_occupancy_months_min": 14.0,
+      "subsample_occupancy_pct": 0.1781609195402299,
+      "n_subsample_months": 696,
+      "matched_partner": 2,
+      "matched_partner_mode_fraction": 0.83,
+      "is_identity": false,
+      "identity_fraction": 0.705,
+      "matched_distance": 719.6216207370422,
+      "matched_distance_p10": 184.79463082224137,
+      "matched_distance_p90": 1270.051215410974,
+      "split_half_null": {
+        "median": 102.31480483076905,
+        "p10": 36.19458162645113,
+        "p90": 200.09215412761975,
+        "n": 124.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6536905566857498,
+      "subsample_episode_count": 5.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 155.5,
+      "partner_overlap_months": 97.5,
+      "refscaled": {
+        "matched_distance": 1.1437756788683133,
+        "matched_distance_p10": 0.3779884762645083,
+        "matched_distance_p90": 3.478698150897232,
+        "split_half_null": {
+          "median": 0.3013281855060992,
+          "p10": 0.2148596701163459,
+          "p90": 0.489047851838647,
+          "n": 124.0
+        },
+        "own_partner_agrees_fraction": 0.735,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 3,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 144.5,
+      "subsample_occupancy_months_p10": 65.9,
+      "subsample_occupancy_months_p90": 226.59999999999997,
+      "subsample_occupancy_months_min": 12.0,
+      "subsample_occupancy_pct": 0.20761494252873564,
+      "n_subsample_months": 696,
+      "matched_partner": 3,
+      "matched_partner_mode_fraction": 0.86,
+      "is_identity": false,
+      "identity_fraction": 0.705,
+      "matched_distance": 773.5859356888752,
+      "matched_distance_p10": 176.36479176896347,
+      "matched_distance_p90": 2558.343408524941,
+      "split_half_null": {
+        "median": 151.46408190978553,
+        "p10": 73.39159627165695,
+        "p90": 244.08329680989098,
+        "n": 144.5,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.6240236047124198,
+      "subsample_episode_count": 4.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 159.0,
+      "partner_overlap_months": 75.0,
+      "refscaled": {
+        "matched_distance": 1.4714497877557238,
+        "matched_distance_p10": 0.43713410604420866,
+        "matched_distance_p90": 2.6610812287873085,
+        "split_half_null": {
+          "median": 0.3203985107955388,
+          "p10": 0.22358929143932313,
+          "p90": 0.48913392743846823,
+          "n": 144.5
+        },
+        "own_partner_agrees_fraction": 0.615,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "circular_block_bootstrap",
+      "scheme_instance": "circular_block_bootstrap_L48",
+      "block_length": 48,
+      "n_replicates": 200,
+      "reference_state": 4,
+      "evaporated": false,
+      "n_replicates_evaporated": 0,
+      "subsample_occupancy_months": 142.0,
+      "subsample_occupancy_months_p10": 67.80000000000001,
+      "subsample_occupancy_months_p90": 243.29999999999998,
+      "subsample_occupancy_months_min": 15.0,
+      "subsample_occupancy_pct": 0.20402298850574713,
+      "n_subsample_months": 696,
+      "matched_partner": 4,
+      "matched_partner_mode_fraction": 0.97,
+      "is_identity": false,
+      "identity_fraction": 0.705,
+      "matched_distance": 1140.2308123410542,
+      "matched_distance_p10": 236.72892644656076,
+      "matched_distance_p90": 2416.4982362461797,
+      "split_half_null": {
+        "median": 177.78252850951958,
+        "p10": 113.53972896828274,
+        "p90": 252.32009866749308,
+        "n": 142.0,
+        "n_reps": 200,
+        "aggregation": "quantiles across non-evaporated replicates of each replicate's own-n null median"
+      },
+      "margin": 0.46602941479890303,
+      "subsample_episode_count": 4.0,
+      "n_seams": {
+        "median": 15.0,
+        "min": 13,
+        "max": 18
+      },
+      "reference_months_in_subsample": 88.5,
+      "partner_overlap_months": 77.0,
+      "refscaled": {
+        "matched_distance": 1.0448613740071266,
+        "matched_distance_p10": 0.3361077008328186,
+        "matched_distance_p90": 2.1788456661439226,
+        "split_half_null": {
+          "median": 0.3108998637083611,
+          "p10": 0.2430029648977237,
+          "p90": 0.42984783107906477,
+          "n": 142.0
+        },
+        "own_partner_agrees_fraction": 0.835,
+        "own_partner_evaporated_replicates": 0
+      }
+    },
+    {
+      "classifier": 2,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s0",
+      "reference_state": 0,
+      "evaporated": false,
+      "subsample_occupancy_months": 151,
+      "subsample_occupancy_pct": 0.25506756756756754,
+      "n_subsample_months": 592,
+      "matched_partner": 0,
+      "is_identity": true,
+      "matched_distance": 96.04694154594279,
+      "split_half_null": {
+        "median": 45.77922605070884,
+        "p10": 7.2983695852576735,
+        "p90": 127.45224625096131,
+        "n": 151,
+        "n_reps": 200
+      },
+      "margin": 0.16883923654994024,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 132,
+      "reference_months_in_subsample": 12,
+      "partner_overlap_months": 0,
+      "refscaled": {
+        "matched_distance": 2.258713947336617,
+        "split_half_null": {
+          "median": 0.20918325077218208,
+          "p10": 0.13209439522138464,
+          "p90": 0.333116221169575,
+          "n": 151
+        },
+        "own_partner": 1,
+        "own_partner_agrees": false,
+        "own_is_identity": false,
+        "own_matched_distance": 2.534933329986368,
+        "own_partner_occupancy_months": 41,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 104,
+      "n_episodes_before": 2,
+      "dropped_span": [
+        "1974-01",
+        "1982-08"
+      ]
+    },
+    {
+      "classifier": 2,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s1",
+      "reference_state": 1,
+      "evaporated": false,
+      "subsample_occupancy_months": 225,
+      "subsample_occupancy_pct": 0.37437603993344426,
+      "n_subsample_months": 601,
+      "matched_partner": 1,
+      "is_identity": true,
+      "matched_distance": 1200.6889018079012,
+      "split_half_null": {
+        "median": 109.83038146669873,
+        "p10": 25.74317959130467,
+        "p90": 240.04575874999807,
+        "n": 225,
+        "n_reps": 200
+      },
+      "margin": 6.764310904522058,
+      "subsample_episode_count": 2,
+      "subsample_longest_episode": 193,
+      "reference_months_in_subsample": 63,
+      "partner_overlap_months": 58,
+      "refscaled": {
+        "matched_distance": 1.7384203908948275,
+        "split_half_null": {
+          "median": 0.24882037104325797,
+          "p10": 0.16647692031879124,
+          "p90": 0.3725653275683087,
+          "n": 225
+        },
+        "own_partner": 2,
+        "own_partner_agrees": false,
+        "own_is_identity": false,
+        "own_matched_distance": 3.049819324046395,
+        "own_partner_occupancy_months": 64,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 95,
+      "n_episodes_before": 4,
+      "dropped_span": [
+        "1963-01",
+        "1970-11"
+      ]
+    },
+    {
+      "classifier": 2,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s2",
+      "reference_state": 2,
+      "evaporated": false,
+      "subsample_occupancy_months": 70,
+      "subsample_occupancy_pct": 0.109717868338558,
+      "n_subsample_months": 638,
+      "matched_partner": 2,
+      "is_identity": true,
+      "matched_distance": 166.77024690813792,
+      "split_half_null": {
+        "median": 277.0112646997269,
+        "p10": 26.699024441028772,
+        "p90": 649.5425998646772,
+        "n": 70,
+        "n_reps": 200
+      },
+      "margin": 0.13519362163984555,
+      "subsample_episode_count": 4,
+      "subsample_longest_episode": 28,
+      "reference_months_in_subsample": 98,
+      "partner_overlap_months": 70,
+      "refscaled": {
+        "matched_distance": 0.9180407870410275,
+        "split_half_null": {
+          "median": 0.405453734602741,
+          "p10": 0.2656137687118871,
+          "p90": 0.6868090389598296,
+          "n": 70
+        },
+        "own_partner": 2,
+        "own_partner_agrees": true,
+        "own_is_identity": true,
+        "own_matched_distance": 0.9180407870410275,
+        "own_partner_occupancy_months": 70,
+        "own_partner_evaporated": false
+      },
+      "degenerate": false,
+      "n_months_dropped": 58,
+      "n_episodes_before": 5,
+      "dropped_span": [
+        "1989-05",
+        "1994-02"
+      ]
+    },
+    {
+      "classifier": 2,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s3",
+      "reference_state": 3,
+      "evaporated": false,
+      "subsample_occupancy_months": 158,
+      "subsample_occupancy_pct": 0.2981132075471698,
+      "n_subsample_months": 530,
+      "matched_partner": 3,
+      "is_identity": true,
+      "matched_distance": 1812.304064443126,
+      "split_half_null": {
+        "median": 127.03749721731354,
+        "p10": 18.775059103683816,
+        "p90": 317.06773810610497,
+        "n": 158,
+        "n_reps": 200
+      },
+      "margin": 0.7417052795741594,
+      "subsample_episode_count": 5,
+      "subsample_longest_episode": 57,
+      "reference_months_in_subsample": 0,
+      "partner_overlap_months": 0,
+      "refscaled": {
+        "matched_distance": 2.7351392056895096,
+        "split_half_null": {
+          "median": 0.27287108947990957,
+          "p10": 0.18749816028107935,
+          "p90": 0.4346071179518228,
+          "n": 158
+        },
+        "own_partner": 0,
+        "own_partner_agrees": false,
+        "own_is_identity": false,
+        "own_matched_distance": 5.163491363993867,
+        "own_partner_occupancy_months": 24,
+        "own_partner_evaporated": false
+      },
+      "degenerate": true,
+      "n_months_dropped": 166,
+      "n_episodes_before": 1,
+      "dropped_span": [
+        "1998-11",
+        "2012-08"
+      ]
+    },
+    {
+      "classifier": 2,
+      "scheme": "leave_one_episode_out",
+      "scheme_instance": "leave_one_episode_out_s4",
+      "reference_state": 4,
+      "evaporated": false,
+      "subsample_occupancy_months": 168,
+      "subsample_occupancy_pct": 0.28187919463087246,
+      "n_subsample_months": 596,
+      "matched_partner": 4,
+      "is_identity": false,
+      "matched_distance": 2435.0565005248795,
+      "split_half_null": {
+        "median": 146.24248050284095,
+        "p10": 19.450876029904236,
+        "p90": 389.55250034466866,
+        "n": 168,
+        "n_reps": 200
+      },
+      "margin": 0.5889347074504198,
+      "subsample_episode_count": 1,
+      "subsample_longest_episode": 168,
+      "reference_months_in_subsample": 0,
+      "partner_overlap_months": 0,
+      "refscaled": {
+        "matched_distance": 2.00019024652725,
+        "split_half_null": {
+          "median": 0.341349803415141,
+          "p10": 0.18492149090849885,
+          "p90": 0.49063817776842816,
+          "n": 168
+        },
+        "own_partner": 0,
+        "own_partner_agrees": false,
+        "own_is_identity": false,
+        "own_matched_distance": 6.645545522369433,
+        "own_partner_occupancy_months": 24,
+        "own_partner_evaporated": false
+      },
+      "degenerate": true,
+      "n_months_dropped": 100,
+      "n_episodes_before": 1,
+      "dropped_span": [
+        "2012-09",
+        "2020-12"
+      ]
+    }
+  ]
+}

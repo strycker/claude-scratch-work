@@ -27,7 +27,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
 - [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation (completed 2026-09-10)
 - [x] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01). **Closed 2026-09-21: INV-01 delivered in full; REG-01 delivered PARTIALLY — criterion 6's dependence verdict is UNRESOLVED and no independent second axis is established**
-- [ ] **Phase 8: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
+- [x] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run (completed 2026-09-30)
+- [ ] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget
+- [ ] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning
+- [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
 
@@ -376,6 +379,11 @@ start dates that fully explains the 7 changes — `curve_10y2y` 1976-06→1986-0
   7. Joint (#1 × #2) allocation lift is measured walk-forward against #1 alone, every
      configuration logged to the trial registry, deflated-Sharpe applied for the full count.
 
+     > **RESULT: FAILED — A11 / ADR-0003 quality tier (2026-09-21): neither leg's deflated Sharpe
+     > clears the hurdle.** Recorded here per Glenn's ruling 2026-09-29 ("mark both"; 08-A11.md §3.4).
+     > Re-measured by 08-10 under the 5pp band: −0.125307 / +0.026164. Both legs are exposed to the
+     > CR-03 publication-lag look-ahead; re-run owned by Phase 08.1.
+     >
      > ✅ **MET 2026-09-21 as a measurement. The wealth sign is negative and is stated as
      > measured.** Evidence: `.planning/phases/07-regime-representation/07-JOINT-LIFT.md`.
      > `wealth_delta` = **−0.123438 nats** and `dd_delta` = **+0.024084**, both over **588
@@ -427,6 +435,8 @@ executed, 07-09..07-11 executed 2026-09-18..2026-09-21, 07-12 executed 2026-09-2
 > plans below are **entirely inside phase-wave 1**. The `exec-wave N` labels are GSD *execution*
 > ordering within this pass, not the phase's gate. No plan below touches classifier #2.
 
+(Note 2026-09-29: this warning refers to the wave-1 plans 07-01..07-04 only; wave-2 plans 07-05..07-12 follow.)
+
 Plans (all phase-wave 1):
 
 - [x] 07-01-PLAN.md — Tracer: freeze the L1 feature policy to one computed-once column list shared by driver and reference, with the criterion-1 equivalence test *(exec-wave 1)*
@@ -460,6 +470,7 @@ part**:
   candidate registry-logged (2 rows, `total_trial_count()` 38 → 40) and walk-forward assessed,
   survivors `m2_gdp` and `credit_gdp` admitted as **named** features and never anonymous
   principal components (design decision R4).
+
 - **REG-01 — PARTIALLY.** The second-classifier, disjointness and joint-lift clauses are
   satisfied. **The orthogonality clause was measured but its verdict is UNRESOLVED** — the
   pre-registered control returned INCONCLUSIVE (criterion 6 above), and no tie-break is
@@ -490,7 +501,264 @@ credit/GDP) are wave 2's feature-discovery work, and INV-01's constraint that su
 admitted as **named** features — never anonymous principal components, preserving design
 decision R4 — is exactly the interpretability requirement a leadership classifier needs.
 
-### Phase 8: Migration to Public Repo
+### Phase 8: Regime Persistence & Stability
+
+**Goal**: The real-time (filtered) regime labeling stops flickering, allocation responds through
+the anti-flicker machinery the design already specifies, and the one §4.4 acceptance criterion
+that has never been run is run.
+
+**Depends on**: Phase 7
+**Blocks**: Phase 9 (Migration) — per the Phase 7 wave-2 UAT ruling, 2026-09-21
+**Requirements**: PER-01, PER-02, PER-03, PER-04, PER-05, PER-06, PER-07, PER-08, PER-09, PER-10
+— assigned at planning 2026-09-21, one per success criterion 0–9 in order.
+
+**Why this phase exists.** Phase 7's UAT measured classifier #1's *filtered* labeling changing
+state in **246 of 587 step-pairs (41.91%)** against a full-sample rate of 3.74%. Median filtered
+run length is **1.0 month**; 136 of 247 runs are a single month.
+
+> ### CORRECTION 2026-09-21 — the first scoping of this phase had the causal model wrong
+>
+> These criteria originally assumed the 41.91% churn was L2 nowcaster flicker, fixable by §5.1's
+> recursive prior-state feature. **Research and independent verification show it is not.**
+>
+> - `joint_driver.py:502` sets `state_1 = states_1.iloc[-1]` — the **jump model's** (L1) label.
+> - `joint_driver.py:431` — under the decision-bearing `ROUTING_L1_ONLY`,
+>   `probs_1 = _last_state_one_hot(states_1)`; **`_refit_l2` is never called.**
+> - Classifier #2 runs the **same code path** and churns **4.09%** (24/587).
+>
+> So a §5.1 fix, which changes L2, **cannot move that number**. The original criterion 2 would
+> have reported 246 → 246 bit-for-bit whether the fix worked perfectly or not at all — an
+> unfalsifiable criterion, inside a phase written to catch unfalsifiable criteria. Sixth recorded
+> instance of this project's signature defect; authored by Claude, caught by its own research.
+>
+> **There are two distinct problems and they are now separated:**
+>
+> **A — L1 terminal-month churn (41.91%).** The DP's terminal month is the only month with no
+> right neighbour, so deviating there costs **λ** where an interior deviation costs **2λ** — and
+> the filtered labeling reads exactly that month, every step. Classifier #1 has **λ/d = 1.0**;
+> #2 has **2.0** and churns 10× less. This is a consequence of the λ re-pin of 2026-09-18
+> (coefficient 4 → 1).
+>
+> **B — L2 flat posteriors.** Under `l2` routing `active_regime` changes **462/587 (78.7%)** and
+> is all-cash in **387/588** months, implying **≥309/488** non-degraded steps had max calibrated
+> probability below the 0.70 act threshold. 0.70 is **4.2× uniform at K=6**. §5.1 addresses this.
+>
+> **CORRECTED 2026-09-24 (found in 08-09, verified by the orchestrator).** "462/587 (78.7%)" counted
+> every consecutive all-cash pair as a change, because `NaN != NaN` evaluates True — **340** of the
+> 462 are None→None. Treating None as a state, `active_regime` changes **122/587 (20.8%)**. The
+> **387/588** all-cash count stands. The orchestrator relayed 462 during Phase 8 scoping using the
+> same comparison; it framed Track B's motivation but bore on no ruling.
+>
+> **REFUTED 2026-09-23 by criterion 3's own pre-registered rule (08-02).** Churn is flat in k:
+> classifier #1 changes 246 / 242 / 245 / 248 / 247 / 249 of 587 pairs for k = 1…6, so the
+> terminal-month edge artefact described above is not the cause. The 41.91% is the labeler's own
+> path. Not ruled out: edge effects longer than 6 months; λ/d is not isolated from K, features
+> and d. See `08-TRACK-A.md`.
+
+**Depends on**: Phase 7
+**Blocks**: Phase 9 (Migration) — per the Phase 7 wave-2 UAT ruling, 2026-09-21
+
+**Success Criteria** (what must be TRUE):
+
+  0. **PREREQUISITE — the per-step probability matrix is persisted.** `driver.py:530-532`
+     accumulates it and throws it away; only the equity curve is written. Nothing in criteria 1–3
+     is measurable without it. Small and boring; it gates everything else.
+
+  1. **A prior-state belief propagates into the nowcaster's output, and it cannot leak.**
+     **REWORDED 2026-09-21** from "the feature set includes the prior predicted distribution".
+     An explicit Bayes filter — `π_t ∝ [Σ π_{t−1} A] · L_t`, with `A` the existing empirical
+     transition matrix — satisfies §5.1's intent ("a discriminative replacement for the HMM
+     filter", §5.1's own first sentence) with **zero train/serve skew, zero leakage surface and
+     zero free parameters**, because it has no training-time analogue at all. It does not put the
+     prior state in the feature set, and the original wording required that; the wording is
+     changed deliberately, not reinterpreted.
+     The L1 labeler is **non-causal within its window by design** (`jump_model.py:15-18`), so a
+     *trained* prior-state column would carry post-t information that no holdout, purge or embargo
+     can detect. Eliminating that channel beats guarding it.
+
+  2. **Both churn series are reported, and neither can masquerade as the other.**
+     - **A's metric:** `state_1` changes / 587. Currently **246 (41.91%)**. A §5.1-style change
+       must NOT move it; if it appears to, something is wired wrong.
+
+     - **B's metric:** `argmax(regime_probs)` churn — **never measured anywhere**, and the object
+       criterion 1 actually changes. Requires criterion 0.
+     No target is pre-declared for either. Both are reported with their window.
+
+  3. **Track A is diagnosed before it is changed.** The zero-trial diagnostic: record the step-*t*
+     fit's label for months *t−1 … t−6* and churn each series across steps. Falling churn in *k*
+     confirms the terminal-month edge artefact; flat churn refutes it and λ/d is the whole story.
+     **A λ sweep is NOT authorized** — it costs one registry trial per value against 42/44 used,
+     and needs its own ruling.
+
+  4. **§5.3's hysteresis gates allocation, closing audit item A7 — and is evaluated only after B.**
+     Verified 2026-09-21: `active_regime` is elementwise equal to `state_1` in all 588 months, so
+     under the decision-bearing routing the hysteresis is a **provable identity** on a one-hot
+     input. It cannot be evaluated until the probability vector stops being degenerate, which is
+     why §5.1 comes first. Mechanism (hard gate / bounded turnover / magnitude-scaling) and the
+     0.70/0.40 pair are **decision checkpoints for Glenn**, not planner choices.
+
+  5. **§4.4 criterion 3 is RUN for both classifiers**, with **four** subsample schemes: drop first
+     decade, drop last decade, circular block bootstrap, **and leave-one-episode-out**. The fourth
+     is added because the three named schemes are poorly aimed: classifier #1's **state 2** is
+     **one contiguous episode, 1996-07 → 2002-05** — exactly the "20% state appearing once as a
+     contiguous block" the §4.4 amendment describes — and **neither decade-drop touches it**.
+     Leave-one-episode-out is the design's own "drop 2008-09" generalised; for a one-episode state
+     it is degenerate, **and that degeneracy is the answer**, with no threshold invented.
+     Use **centroid distance in de-standardized units** (empirical multivariate Wasserstein is
+     unusable at n=40: sampling bias 2.88 against a true signal of 0.949) with
+     `scipy.optimize.linear_sum_assignment`. Report a **within-state split-half null at the same
+     n** as the yardstick — the null is **0.706**, not 0, at n=40. Every row carries subsample
+     occupancy, because `_recompute_centroids` freezes zero-occupancy states at their previous
+     centroid and would otherwise score an evaporated state as *stable*.
+
+  6. **Criterion 7 is re-measured** under whatever changed, both legs, one harness, window inline.
+
+  7. **A11 is revisited and answered.** Reopened by Glenn 2026-09-21 after being deliberately left
+     open on 2026-09-18. Written as the reversal of a prior decision that it is.
+
+  8. **Validation gap G6 is pinned** — a test asserting non-joint consumers of `vol_targeted_tilt`
+     (notably `driver.py:497`) receive the **unpooled** estimate. Pin the known **non**-compliance;
+     writing it as a compliance assertion produces a test that can only pass.
+
+  9. **Recorded counts match reality.** `CLAUDE.md` ×2 and `README.md`'s badge say **1705**; the
+     suite is at **2018**. Also fix F-4: the churn rate's denominator is 587 pairs, not 588 months
+     (`246/587 = 41.91%`, recorded as 41.84%) — the fix breaks an existing pin, so do both in one
+     commit.
+
+**Plans**: 19 plans (10 across 5 execution waves, planned 2026-09-21, plus 9 gap-closure plans 08-11..08-19; the count was 10 until 2026-09-29). Two blocking
+`checkpoint:decision` gates — A11 in wave 1 (deliberately **ahead** of every number, so a gate is
+never chosen after seeing the value it judges) and §5.3's mechanism plus the 0.70/0.40 pair in
+wave 4.
+
+> ⚠ **The two tracks never share a plan, and that is the phase's core structural decision.**
+> Track A is the L1 terminal-month churn (`state_1`, **246/587 = 41.91%**) and Track B is the L2
+> filtered posterior (`argmax(regime_probs)`, never measured before this phase). A §5.1-style
+> change **cannot** move Track A. Criterion 0 — persisting the per-step probability matrix — gates
+> criteria 1, 2 and 4 and is therefore plan 08-01, the phase tracer.
+
+**Wave 1** *(no dependencies; 08-05 blocks on a human decision)*
+
+- [x] 08-01-PLAN.md — **Tracer.** Persist the per-step probability matrix end to end and split criterion 2's churn into its two named series, with the l1only identity pinned and F-4's denominator fixed alongside its pin *(PER-01, PER-03, PER-10)*
+- [x] 08-02-PLAN.md — Track A's zero-trial terminal-month diagnostic: churn vs `iloc[-k]` for k = 1…6, both classifiers, anchored elementwise to the tracked curve at k = 1 *(PER-04)*
+- [x] 08-03-PLAN.md — §4.4 criterion 3 machinery: Hungarian matching on de-standardized centroids, the within-state split-half null, the evaporation flag, and the four subsample schemes *(PER-06)*
+- [x] 08-04-PLAN.md — G6 pinned as the known **non**-compliance across all three `vol_targeted_tilt` consumers, with the both-halves rule *(PER-09)*
+- [x] 08-05-PLAN.md — **A11 answered, written as the reversal it is** — decided in wave 1 so the ruling precedes every number it could judge *(PER-08)*
+
+**Wave 2** *(08-06 blocked on 08-01; 08-07 blocked on 08-03)*
+
+- [x] 08-06-PLAN.md — The explicit Bayes filter (no training column at all) plus the **signed** detection offset, and the leakage guard whose substituted arm proves it discriminates *(PER-02)*
+- [x] 08-07-PLAN.md — Run §4.4 criterion 3 for both classifiers under all four schemes; write the record with the pre-registered prediction quoted from its commit *(PER-06)*
+
+**Wave 3** *(blocked on 08-06)*
+
+- [x] 08-08-PLAN.md — Wire the filter into both drivers and the weekly report; report **three** churn numbers (A, B0 the control, B1 the new one) with the l1only curve pinned bit-for-bit *(PER-02, PER-03)*
+
+**Wave 4** *(blocked on 08-08)*
+
+- [x] 08-09-PLAN.md — §5.3's hysteresis gates allocation and A7 closes, at two blocking decisions whose registry cost is priced before the choice *(PER-05)*
+
+**Wave 5** *(blocked on 08-02, 08-05, 08-07, 08-09)*
+
+- [x] 08-10-PLAN.md — Criterion 7 re-measured (both legs, one harness, window inline), recorded counts corrected against a live collection, and the phase's closing measurement record *(PER-07, PER-10)*
+
+**Gap closure — UAT 2026-09-28 (G-08-1, G-08-2)** *(4 plans, 3 waves; 08-12 blocks on two decisions for Glenn, run in parallel with 08-11)*
+
+- [x] 08-11-PLAN.md — **G-08-1.** The criterion-7 re-derivation compares floats portably (rel 1e-9, abs 0), proven to reject the band-off record, a 1-ppm error in every field and a zeroed DSR; the same defect class is swept suite-wide and listed *(PER-07, PER-10)* — wave 1
+- [x] 08-12-PLAN.md — **G-08-2 decisions.** Measured facts on the serving recipe, then Glenn rules on the ragged edge (the 2026-08-31 row lacks 3 model columns) and on the input-independent served posterior; recorded in 08-SERVING.md *(PER-02, PER-05)* — wave 1, checkpoint
+- [x] 08-13-PLAN.md — **G-08-2 build.** `python -m trading_crab_lib.platform.report.serving` builds all three serving artifacts weekly reads (the UAT found one; there are three) through the backtest's own `fit_l2_nowcaster`, under `NO_REGISTRY`; weekly scores the model's own columns; the end-to-end test is proven able to fail *(PER-02, PER-05, PER-10)* — wave 2
+- [x] 08-14-PLAN.md — **G-08-2 serve.** Glenn's two 08-12 rulings implemented, then the supported sequence run on the real tracked data in scratch directories, with G-08-2's real-data status stated honestly *(PER-02, PER-05, PER-10)* — wave 3
+
+**Gap closure 2 — code review + verification 2026-09-29 (CR-01, CR-05, CR-06, neutral-posture display)** *(5 plans, 5 sequential waves — every plan moves the recorded test count, so no two share a wave; ADR-0004 budget 0, registry stays 44 byte-identical; Glenn's ruling "fix small ones, then close"; CR-02/CR-03/CR-04 are Phase 8.1)*
+
+- [x] 08-15-PLAN.md — **Display.** Neutral posture no longer lists every (regime, asset) row unlabelled (24 rows, each asset 6×, since `036ae74`); per-asset rows follow the active regime and name it, as the page's own A7 sentence says *(PER-05, PER-10)* — wave 1
+- [x] 08-16-PLAN.md — **CR-01 tracer, served path.** `fit_l2_nowcaster` returns the training prior of the rows it fit; serving persists it beside the model; weekly divides by it (π₀ and A stay on the labels, decided and justified); the verified real-data flip (state 3's L 1.96 → 0.63, top belief state 3 → 0) pinned by a test that fails under the old prior *(PER-02, PER-10)* — wave 2
+- [x] 08-17-PLAN.md — **CR-01 backtest.** Both drivers divide by the same returned prior (`_refit_l2` → posterior + prior); `likelihood_ratio` refuses the whole-window prior shape; l1only bit-for-bit pins unmodified *(PER-02, PER-03, PER-10)* — wave 3
+- [x] 08-18-PLAN.md — **CR-05 + CR-06.** `run_joint_lift` checks a declared ADR-0004 ceiling (`--declared-ceiling`) before any append, with explicit raises that survive `-O`; registry rows record the effective `use_regime_filter`; the joint row names its harness plan instead of claiming `07-11` *(PER-02, PER-07, PER-10)* — wave 4
+- [x] 08-19-PLAN.md — **Re-measure and record.** l1only proven byte-unchanged; the l2 leg, B1 and S-1 re-measured under NO_REGISTRY behind controls, every new negative offset adjudicated by truncation; the served belief re-run on real data; old → new amendments in 08-MEASUREMENTS and 08-SERVING, nothing overwritten *(PER-02, PER-03, PER-07, PER-10)* — wave 5
+
+**Explicit non-goals**: no λ sweep; no dependence statistic of any kind; no migration work; no
+2021+ holdout use for any selection decision; no re-pin of K or λ; no target pre-declared for
+either churn metric; `legacy/` and the reference submodules untouched; the legacy-import ratchet
+stays at **31** and may only decrease.
+
+---
+
+### Phase 08.1: Point-in-Time Data Audit (INSERTED)
+
+**Goal:** No feature enters a fit or a score before it could have been published. Found by Phase 8's
+code review (CR-03, orchestrator-verified 2026-09-29 against `monthly_raw` built 2026-09-21):
+`fred_m2sl` (~1 month lag) and `fred_totalsl` (~2 months) carry `shift: false`, and multpl series
+(incl. `div_yield`, 2–3 months, a classifier-#1 lean-set feature) have no lag handling at all — so
+every L1 labeling since Phase 1 and both criterion-7 legs are exposed. Scope, to be fixed at
+discuss-phase: measure every raw series' publication lag; set the shifts; a test that FAILS when a
+feature is used before its publication date; re-run the decision-bearing evaluations under a
+declared ADR-0004 trial budget, with earlier positive results labelled possibly-inflated until then.
+Look-ahead can only flatter each leg, so the absolute-performance verdicts (DSR does not clear; A11 FAILED) stand; the SIGN of relative numbers (wealth_delta, dd_delta) and the dependence verdict are NOT guaranteed, because the legs are exposed differently (Phase 7 wave-2 verification, 2026-09-29). Criterion 5 is directly exposed: lagging fred_m2sl by 1 month moves classifier #2's occupancy to 3.45/13.79/22.70/21.84/38.22% — outside the 8–35% band at both ends, 17.82% of months keep their state (a 2-month lag gives 98.13%); orchestrator re-ran the diagnostic 2026-09-29.
+Candidates to schedule at discuss-phase (Phase 8 named blockers): CR-02 (filter belief carried
+across refits whose state ids are not aligned) and the input-independent L2 recipe.
+**Order decided (Glenn, 2026-09-30): 08.1 runs BEFORE 08.2** — 8.1's re-measured answer to "does the
+regime tilt beat the no-regime ablation on point-in-time data?" shapes 8.2's MVP design.
+**Two usability fixes ride along (Glenn, 2026-09-30)**, found in his 2026-09-30 Mac weekly report:
+  - **Report always prints the target allocation.** Today the target/executed book appears only
+    per configured account; with no account configured the page never says what to hold. Print the
+    executed target book unconditionally; per-account trades stay as an extra section.
+  - **Staleness cap measured per series, not against the newest raw row.** The 2026-09-30 build
+    appended a mostly-empty current-month row (16 series missing), so the scored month (June) sat
+    exactly at the 3-month-end cap and next month's run would likely refuse. Base the cap on the
+    per-series publication-lag table this phase builds (a series is "stale" only if it is later than
+    its own expected lag), so a partial current-month row cannot trip it.
+**Usable output of 8.1:** a weekly page that shows a concrete allocation on point-in-time data and
+runs reliably month to month; the regime tilt remains unproven until 8.1's re-measurement says otherwise.
+**Requirements**: TBD
+**Depends on:** Phase 8
+**Blocks**: Phase 9 (Migration) — Glenn's ruling, 2026-09-29
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 08.1 to break down)
+
+### Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED)
+
+**Goal:** A product Glenn can **use** every week, built and reviewed module by module, with planning
+kept small. Added 2026-09-29 at Glenn's request: the planning-to-code ratio had reached ~5.5:1
+(Phase 8: 17.8k planning lines vs 3.2k source lines changed) and the product is still not usable
+with confidence. Plan: `REBUILD-FROM-SCRATCH-GUIDE.md` §3–§5; decisions: `platform_design/DECISIONS.md`
+(Lean column).
+**Lean mode (applies to this phase and after, unless Glenn says otherwise):** one module per phase,
+≤ 2–3 plans, ≤ ~150-line PLANs, ≤ 5 discuss questions, decisions recorded as `DECISIONS.md` rows;
+mutation proofs / ruling records / amendments only for **decision-bearing** numbers.
+**Candidate success criteria (to be confirmed at discuss-phase):**
+
+  1. **MVP-1 usable:** one command on real data produces the weekly report with a regime-free,
+     vol-targeted core allocation that works on its own; the regime view is shown as **advisory**
+     (no weight) until it beats the no-regime ablation.
+
+  2. **Module map:** the platform is organised as the guide's modules M0–M7, each with a small stated
+     interface — simplification by *not carrying forward* (classifier #2 / joint driver / stability
+     suite parked, not deleted).
+
+  3. **Notebook gates:** every module used by MVP-1 has a notebook that runs top-to-bottom on real
+     data with one human sign-off cell — including the gaps today: serving/report (N4), the filtered
+     belief, and a "does the regime layer pay rent?" scoreboard (N7).
+
+  4. **Builds on 08.1** (which now runs first, Glenn 2026-09-30): point-in-time data, the per-series
+     staleness rule and an always-visible target allocation are already in place; 8.1's re-measured
+     tilt-vs-ablation answer decides whether MVP-1 shows the regime view as advisory or weighted.
+
+  5. Full suite green on Mac and Linux; no new trial-registry rows (budget 0).
+
+**Requirements**: TBD
+**Depends on:** Phase 8
+**Order:** after 08.1 (decided by Glenn 2026-09-30). 08.2's modules are the natural units for Phase 9's
+module-by-module migration.
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 08.2 to break down)
+
+### Phase 9: Migration to Public Repo
 
 **Goal**: The validated platform lives in `strycker/trading-crab`, the public/PyPI
 two-package repo, ready for continued development outside the heavy-dev workbench.
@@ -522,7 +790,8 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 9
+(Order confirmed by Glenn 2026-09-30: 8.1 before 8.2 — 8.1's outcome shapes 8.2's design.)
 (Phase 7 gates internally: wave 2 does not start unless wave 1 passes.)
 
 | Phase | Plans Complete | Status | Completed |
@@ -533,5 +802,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Asset Prediction & Allocation | 5/5 | Complete   | 2026-07-23 |
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
-| 7. Regime Representation | 11/12 | In progress — wave 1 closed (verified+validated+UAT); 07-05..07-11 executed; ADR-0002 still Proposed, criterion 6 UNRESOLVED, criterion 7 measured; 07-12 outstanding | wave 1: 2026-09-15; 07-11: 2026-09-21 |
-| 8. Migration to Public Repo | 0/TBD | Not started | - |
+| 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
+| 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
+| 08.1 Point-in-Time Data Audit (INSERTED) | 0/TBD | Not started | - |
+| 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 0/TBD | Not started | - |
+| 9. Migration to Public Repo | 0/TBD | Not started | - |

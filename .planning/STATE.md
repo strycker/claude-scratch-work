@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase_name: Regime Representation
-status: in-progress
-stopped_at: Completed 07-12-PLAN.md — Phase 7 closed
-last_updated: "2026-09-21T16:05:00.000Z"
+current_phase: 08.1
+current_phase_name: Point-in-Time Data Audit
+status: planning
+stopped_at: Phase 8 COMPLETE 2026-09-30 (19/19 plans, verified 12/12, Mac suite + build→serving→weekly passed); next is 08.1 (order decided by Glenn 2026-09-30), then 08.2
+last_updated: "2026-09-30T15:51:23.038Z"
 progress:
-  total_phases: 8
+  total_phases: 10
   completed_phases: 7
-  total_plans: 47
-  completed_plans: 47
-current_phase: 7
-last_activity: 2026-09-21
-last_activity_desc: "Phase 7 CLOSED — ADR-0002 Accepted 2026-09-21. INV-01 delivered in full; REG-01 delivered PARTIALLY, criterion 6's dependence verdict UNRESOLVED (NMI 0.464088 at the 96.60th percentile, p95 0.449202, p99 0.501195) with no tie-break permitted. Criterion 5 MET; criterion 7 MET as a measurement with wealth_delta -0.123438 (an 11.61% terminal-wealth shortfall) and dd_delta +0.024084, both over 588 steps 1972-01-31 → 2020-12-31. Ratchet re-measured at 31, unchanged. Suite 1983 passed, 0 skipped"
+  total_plans: 67
+  completed_plans: 66
+last_activity: 2026-09-29
+last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
 ---
 
 # Project State
@@ -24,11 +24,81 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 7 — Regime Representation (approved, not yet discussed/planned)
+**Current focus:** Phase 8 COMPLETE (2026-09-30). Next: Phase 08.1 Point-in-Time Data Audit — order 8.1 → 8.2 decided by Glenn 2026-09-30; 8.1 also carries two usability fixes (target allocation always printed; staleness cap per series). Lean-MVP mode applies. Starts on a new branch after Glenn merges this branch to main.
 
 ## Current Position
 
-Phase: **7 — Regime Representation — CLOSED 2026-09-21**
+Phase: 08.1 — Point-in-Time Data Audit
+Status: Ready to plan — 08.1 next (Glenn, 2026-09-30); scope includes two usability fixes (always print target allocation; per-series staleness cap). Awaiting Glenn's merge to main + new branch before discuss-phase.
+Closing record: `08-MEASUREMENTS.md`. **Registry 42 → 44, the ADR-0002 ceiling exactly — zero
+headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
+1972-01-31 → 2020-12-31: l1only `wealth_delta` **−0.125307** (was −0.123438), `dd_delta`
+**+0.026164** (was +0.024084); mean turnover #1-alone **0.127** (was 0.163), joint **0.081** (was
+0.120). The band cut turnover and did not improve the lift. **A11 gate FAILED 2 of 2** — DSR
+1.82e-13 and 4.13e-12 against hurdle **2.226891** at 44 trials. F-4 rates 246/587 = 0.419080 on
+both records. Suite **2392 passed, 0 skipped** → 2494 (2026-09-29); recorded counts pinned to a live collection.
+All ten PER requirements closed.
+
+**Wave 4 as closed:** **WAVES 1-4 COMPLETE (9 of 10 plans).** Wave 4 (2026-09-24): Glenn ruled 08-09 — bounded
+turnover as a **5pp no-trade band** (not swept), hysteresis per-classifier with the blend mismatch
+declared, thresholds kept at 0.70/0.40. One helper (`allocation/hysteresis.py::execute_rebalance`)
+at all three call sites. Band-off l1only byte-identical to git; registry 42 (A7 authorises 2, which
+08-10 consumes). Observational l2 turnover 0.173→0.141 (baseline), 0.107→0.069 (joint), 588 steps,
+100 degraded. Suite 2350 / 0 / 0. PER-05 closed. Two executor readings consistent with the ruling
+(leading degraded steps execute nothing, so the first non-degraded step trades in full; the weekly
+report bands once per month) — open to Glenn's overrule. **Next: 08-10.**
+
+**Waves 1-3 as closed:** **WAVES 1-3 COMPLETE (8 of 10 plans).** Wave 3 (2026-09-23): 08-08 wired the Bayes filter at
+all three call sites. Its pre-registered S-1 guard HALTED on 3 LEADs (classifier #2); investigation
+showed no leak (beliefs bit-identical under truncation at every negative offset, 4 of 4) and no shared
+vocabulary between #2's walk-forward and reference labelings. **Ruling (Glenn): causal invariance
+governs; S-1 is observational.** B1 = **81/487** (#1, vs B0 221) and **30/487** (#2, vs B0 66) (→ 64/487, 27/487 after CR-01 fix, 08-MEASUREMENTS §11), 100
+degraded, 1974-02 → 2020-12. l1only byte-identical; Track A and B0 unchanged. Suite 2263 / 0 / 0.
+PER-02 and PER-03 closed. **Next: wave 4 (08-09) — two checkpoint decisions for Glenn.**
+
+**Waves 1-2 as closed:** **WAVES 1-2 COMPLETE (7 of 10 plans).** Wave 2 (2026-09-23): 08-06 built the zero-parameter
+Bayes filter and the signed detection offset; 08-07 RAN §4.4 criterion 3 for both classifiers
+(PER-06 closed, with a named limitation — see Pending Todos). Suite 2212 passed, 0 skipped.
+Registry 42. Next: wave 3 — `08-08` wires the filter in, under the held-through-return rule
+pre-registered 2026-09-23 before any real 08-08 number existed.
+
+**Wave 1 as closed:** **WAVE 1 COMPLETE (5 of 10 plans).** Next: wave 2 — `08-06` (Bayes filter + signed
+detection offset, dep 08-01) and `08-07` (§4.4 criterion 3 run, dep 08-03). Both autonomous.
+Full suite **2150 passed, 0 skipped, 0 failed**; ruff/flake8 clean; both wheels build and ship
+`evaluation/churn.py` + `labeling/stability.py`. Registry **42 of 44**. Ratchet **31**.
+
+**Requirements closed by wave 1:** PER-01 (08-01), PER-04 (08-02), PER-08 (08-05), PER-09 (08-04).
+**Partially delivered, completed later:** PER-03 (08-08), PER-06 (08-07 runs 08-03's machinery),
+PER-10 (08-01 did the F-4 half; 08-10 pins the suite count).
+
+**What wave 1 established, as measured:**
+
+- **A11 ANSWERED — `b-promote-dsr`** (Glenn, 2026-09-22), taken *before* 08-01/08-02 produced
+  any number, so the pre-registration claim stands unqualified. `registry rows spent: 0`.
+  **Criterion 7's MET becomes FAILED retroactively** on both legs of the l1only routing —
+  DSR 2.28e-12 (baseline) and 1.47e-11 (joint) against hurdle 2.208694. ADR-0003 Accepted.
+  The gate is decided and tested but **not yet wired**: 08-10 must add it to `joint_lift_table`
+  before re-measuring criterion 7.
+
+- **Track A's terminal-month edge artefact is REFUTED** by criterion 3's pre-registered rule.
+  Classifier #1 churn is flat in k: **246 / 242 / 245 / 248 / 247 / 249** of 587 pairs for
+  k = 1…6 (1972-01-31 → 2020-12-31); #2 is 24–25. k=1 anchored to `state_1` at 0/588
+  mismatches. The 41.91% is the labeler's own path, not its edge. **The lever is λ, and a λ sweep
+  is not authorized** — so classifier #1's churn is not fixable in this phase, and **08-09's
+  bounded turnover is the only mechanism left that can move the decision-bearing leg.**
+  Not ruled out: edge effects longer than 6 months; λ/d not isolated from K, features and d.
+
+- **Both churn series exist and are separately denominated** (08-01). l1only: Track A ≡ Track B
+  (identity pinned True). l2: #1 Track B **221/487 = 45.38%**, #2 **66/487 = 13.55%** (100
+  degraded), identity pinned False. Max posterior < 0.70 in **355/488** rows for #1.
+
+- **l1only is bit-reproducible** — curves byte-identical to HEAD; criterion 7 reproduces to the
+  last digit. 08-10's 1e-12 reproduction gate is safe.
+
+---
+
+### Previously: Phase 7 — Regime Representation — CLOSED 2026-09-21
+
 Status: **PHASE CLOSED.** 12 of 12 plans executed. ADR-0002 **Accepted 2026-09-21**; all eight
 probe edges resolved with a named test each; legacy-import ratchet re-measured at **31**
 (unchanged, constant untouched); full suite **1983 passed, 0 skipped, 0 xfailed**.
@@ -39,6 +109,7 @@ probe edges resolved with a named test each; legacy-import ratchet re-measured a
   § Requirement coverage). Claimed at the strength of the evidence and no further: the era
   screen was *survived*; a PC1 loading of exactly 1/√2 on two standardized candidates is an
   arithmetic identity, not by itself evidence of five-decade economic stability.
+
 - **REG-01 — DELIVERED PARTIALLY.** The open item is **named, not folded in: criterion 6's
   dependence verdict is UNRESOLVED.** The pre-registered block-permutation control returned
   **INCONCLUSIVE** — NMI **0.464088** at the **96.60th percentile** against p95 **0.449202** and
@@ -491,6 +562,112 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
+- **(Phase 08.1) Hysteresis thresholds 0.70/0.40 — revisit on the final belief (Glenn, 2026-09-29: defer).**
+  The 08-09 keep-absolute ruling cited belief ≥0.70 in 307/488 and 415/488 months; after the CR-01 fix
+  those are 273/488 and 408/488 (08-MEASUREMENTS §11). They move again once 8.1 lands CR-02/CR-03; any
+  re-tuning is a new configuration under an ADR-0004 budget.
+
+- **(Phase 8.1 candidate — Phase 9 is Migration; found 2026-09-28 while planning G-08-2) the evaluated L2 nowcaster recipe is input-independent at full history.**
+  Fit exactly as `driver._refit_l2` fits it on all labelled history, `_cv_safe_active_features` admits all
+  55 columns, which truncates training to 153 rows (2007-04-30 → 2019-12-31) holding 3 of 6 regimes
+  ({0:11, 3:137, 4:5}). The sigmoid calibration then flattens a base LR that varies (222–231 distinct
+  outputs) to **1 distinct posterior** {0: 0.418, 3: 0.564, 4: 0.018} across all 231 scorable months;
+  the backtest's last two steps show the same triple. Reproduced independently by the orchestrator.
+  Criterion 7 was L1-only routed, so no decision-bearing number rests on L2; the weekly report's
+  filter does. Glenn ruled q2-ii (disclose the count on the page). Fixing the recipe is a new
+  configuration → a trial budget under ADR-0004 in the phase that schedules it (8.1 discuss-phase).
+
+- **(Phase 8 code review, orchestrator-verified 2026-09-29 — `08-REVIEW.md`)** ~~CR-01 (filter divides by the
+  whole-label prior, not the nowcaster's training prior — flips live state 3's L from 0.63 to 1.96), CR-05
+  (`use_regime_filter` absent from trial config), CR-06 (`run_joint_lift` ceiling assert after the appends)
+  and the neutral-posture Per-Asset Signals display bug → **Phase 8 gap closure (Glenn, 2026-09-29, budget 0)**.~~
+  **RESOLVED (08-15..08-18, re-verified 2026-09-29):** CR-01 by 08-16/08-17, CR-05 and CR-06 by 08-18, the
+  neutral-posture display bug by 08-15; measured in 08-MEASUREMENTS §11.
+  CR-02 (belief across unaligned refits) and CR-03 (publication-lag look-ahead: M2SL, TOTALSL, div_yield)
+  → **Phase 8.1**. CR-04 = the `run_stability` keying item below.
+
+- **(Phase 08.1)** `classifier2.py` docstrings still describe K=3, λ=4n and `python -m trading_crab_lib.platform.labeling.classifier2` raises ValueError (builds λ=32 against the re-pinned λ=2n rule) — found by Phase 7 wave-2 verification 2026-09-29.
+- **(Phase 08.1)** deflated-Sharpe units undocumented (annualised Sharpe paired with monthly observation counts); verdicts survive every convention but this now drives the ADR-0003 gate.
+- **(Before the next registry row — Phase 8.1's re-runs) migrate the three hard-coded-44 enforcement sites** listed in
+  ADR-0004 § Consequences (`test_platform_gate_tiers.py`, `test_platform_joint_diagnostics_record.py`,
+  `scripts/run_joint_lift.py`) to check the live count against the open phase's declared ceiling.
+
+- ~~**(Phase 8, found at close) the joint driver's `append_trial` never wrote `sharpe` or
+  `independent_trial`.**~~ **RESOLVED 2026-09-28 (Glenn approved).** The append site now writes
+  `independent_trial: False` (every run of the harness is an ablation arm) and `sharpe` =
+  `annualized_sharpe` — the A11 gate's own `observed_sharpe`, verified to reproduce the 07-11 rows'
+  0.917073 / 0.914903 exactly. The two 08-10 rows were backfilled (0.896446 / 0.899378), following
+  230c91c's precedent: as-run `config_hash` kept, only the two keys added, 2 lines changed. DSR state
+  byte-identical before/after (44 trials, variance 1.0, hurdle 2.226891); the estimator now excludes
+  all 4 ablation rows by the flag — without it the 08-10 rows would have been 2 usable observations.
+  Convention made explicit: `config_hash` is the hash of the config **as appended**; post-hoc
+  annotations do not re-hash it. Known, not fixed: the append site hardcodes `"plan": "07-11"`, so
+  the 08-10 rows carry that value; their `trial_tag` identifies them.
+
+- **PRIORITY (Phase 8, measured 2026-09-23) — neither classifier's walk-forward labeling shares a
+  state vocabulary with its own full-sample reference.** Terminal-month walk-forward labels (08-02's
+  `c{1,2}_lag1_state`, 588 months) against `regime_labels` / `regime_labels_2`:
+
+  | classifier | raw id agreement | best 1:1 relabel | chance 1/K |
+  |---|---|---|---|
+  | #1 (K=6) | 23.0% | **35.7%** | 16.7% |
+  | #2 (K=5) | 16.7% | **41.3%** | 20.0% |
+
+  #2's walk-forward labeler assigns state 4 to 359 of 361 months from 1990-09. **Every metric that
+  compares walk-forward output to the full-sample reference is measured across two vocabularies** —
+  the sojourn/lag headline (median lag 4.0, ratio 2.375), the §5.4 ratios, S-1, and all of S-3
+  (#1's overall accuracy 0.154 → 0.090 is *below* chance, which this explains). **Not yet checked:**
+  whether any human-facing surface — the weekly report's regime NAME via `regime_labels.yaml`, pinned
+  to full-sample ids — names a walk-forward state with a full-sample label. Allocation itself is
+  internally consistent (each step's tilt is keyed on that step's own in-window labels). Not a leak;
+  a structural L1 finding. Out of Phase 8's scope — needs its own ruling.
+
+- **(Phase 8, found in 08-07 — decision needed) the `evaporated` flag cannot fire under a K-fixed
+  refit.** It is built from the subsample state's occupancy, and the refit always repopulates
+  every one of the K slots. Measured: **36 rows** where every one of the reference state's months
+  is absent from the subsample; **0** flagged. That is the exact failure criterion 5 built the
+  flag to catch ("would otherwise score an evaporated state as stable") — a check that can only
+  confirm. The true signal is carried in every row as `reference_months_in_subsample` (and
+  `partner_overlap_months`). Recommended: redefine `evaporated` as `reference_months_in_subsample
+  == 0`, which needs 08-07's artifacts regenerated. Not changed — it is a definition, not a typo.
+
+- **(Phase 8, found in 08-07, NOT fixed — no committed number affected) `stability.run_stability`
+  keys rows on the reference state id.** `matched_distance[state]` is the distance to
+  `assignment[state]`, but occupancy, split-half null and episodes are read from the subsample
+  state carrying the *same id* — two different states in one row whenever the Hungarian
+  assignment is not the identity, which for classifier #1 is every scheme. 08-03's tests only
+  exercised identity assignments. 08-07's runner composes the public functions keyed on the
+  partner and is correct; the defective function is called only by its own `__main__` footer and
+  tests. Fix: key on `assignment[state]`, with a non-identity fixture that fails first.
+
+- **(Phase 8, verified 2026-09-23 — no leak, but unguarded) `run_joint_lift.build_inputs` derives
+  features on the uncut `monthly_raw` (68 post-2020 rows).** Verified: `add_relative_features`,
+  `build_core_research_series` and `compute_monthly_returns` give pre-2021 values **identical**
+  (max |diff| 0.0, identical NaN pattern, 708 rows) whether computed on the full or carved frame,
+  so criterion 7 is clean. The safety is incidental — it holds because each is backward-looking.
+  Recommended: a test pinning that invariance, so a future full-sample transform fails loudly.
+
+- **(Phase 8, found in 08-06, NOT fixed — predates the phase) the sojourn/lag headline counts
+  transitions the platform could never have acted on.** `compute_detection_lag`'s forward search
+  has no upper bound, and 3 of the 25 reference transitions (**1970-05, 1970-08, 1971-03**) fall
+  **before the first decision date, 1972-01-31**. They contribute lags of **44, 54 and 28 months**
+  to the committed median of **4.0** (ratio 2.375). The headline is pinned byte-for-byte by
+  08-06 and read by 08-08's S-3, so changing it is a deliberate decision, not a cleanup.
+
+- **(Phase 8, found in 08-01, NOT fixed) `_leg_kpis` carries F-4's off-by-one.**
+  `scripts/run_joint_lift.py::_leg_kpis` computes `state_{1,2}_transition_rate` as changes /
+  `n_steps` (588), not / pairs (587). It feeds the committed `measurement_*.json`, which still
+  say **0.418367** while `diagnostics_*.json` now say **0.419080** — two records, same 246 changes,
+  different rates. **Folded into 08-10 Task 1 — approved by Glenn 2026-09-23.** Source fix and
+  record regeneration land in one commit; a verify accepts /587 and rejects /588 (fails today).
+
+- **(Phase 8, found in 08-01) the l2 leg drifts ~1e-7 across environments, not across runs.**
+  Within one container l2 is bit-reproducible run to run; against HEAD's l2 curves (produced in
+  a different container, 2026-09-21) numeric columns differ by up to **8.54e-08**, KPI
+  `wealth_delta` by ~3e-10. `degraded` / `state_*` / `active_regime` identical; argmax unaffected
+  (min top-2 gap 0.002). Cause unconfirmed — most plausibly BLAS/CPU. **l1only is unaffected.**
+  Any cross-environment l2 comparison needs a ~1e-7 tolerance.
+
 - **Release-engineering tech debt, recorded as `ROADMAP.md` Tier 0.5 (R1–R4), deferred
   deliberately 2026-09-11/14 — none block Phase 7, but R1 touches it directly.**
 
@@ -584,6 +761,12 @@ Recent decisions affecting current work:
 | 260911-kkj | add a PyPI token-presence guard: fails the job before any build/upload when the leg's API token secret is absent or empty, naming the exact secret and noting that a dynamic secrets[...] lookup yields an empty string on a name mismatch rather than erroring | 2026-09-11 | 118bd06 | [260911-kkj-add-a-token-presence-guard-to-the-pypi-p](./quick/260911-kkj-add-a-token-presence-guard-to-the-pypi-p/) |
 | 260911-la3 | fix trading-crab-lib's blank PyPI page (wired real README into pyproject readme key, twine check --strict WARNING -> PASSED), add a twine check --strict gate before every upload, add a workflow_dispatch target input (testpypi default) for a TestPyPI dry-run path with target-aware secret selection, write docs/RELEASING.md | 2026-09-11 | c25cbc6 + beabc63 + e97c8a5 + ca837cd | [260911-la3-harden-the-release-procedure-twine-check](./quick/260911-la3-harden-the-release-procedure-twine-check/) |
 | 260911-nt7 | fix the empty trading-crab-lib wheel (0.1.0–0.1.4 shipped zero Python modules): explicit package-dir + enumerated packages list, install-and-import smoke gate, --no-deps so parallel matrix legs cannot couple; bumped both packages to 0.1.5 | 2026-09-11 | f204de3 + 926ef21 | [260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins](./quick/260911-nt7-fix-empty-trading-crab-lib-wheel-add-ins/) |
+| 15 | ADR-0004 trial budgeting policy: per-phase pre-registered budgets replace reading ADR-0002's 44 as a standing cap | 2026-09-28 | 1a4df87 | — |
+
+### Roadmap Evolution
+
+- Phase 8.1 inserted after Phase 8: Point-in-Time Data Audit — Phase 8 code review CR-03 (verified 2026-09-29): fred_m2sl (~1mo lag), fred_totalsl (~2mo) and div_yield (2-3mo, classifier #1 lean set) enter features at their reference month with no publication-lag shift. Glenn ruled: audit phase before Phase 9. (URGENT)
+- Phase 8.2 inserted after Phase 8: Lean MVP — Simplify, Modularize, Notebook-Gate (Glenn, 2026-09-29): usable weekly product first; module map M0–M7 with a notebook gate each; lean planning; folds the cheap config/test half of 8.1. Recommended before 8.1's re-evaluation half — pending Glenn. (URGENT)
 
 ## Deferred Items
 

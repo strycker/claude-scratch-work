@@ -1,3 +1,5 @@
+> **STALE (flagged 2026-09-29):** generated 2026-07-09, before the monthly `platform/` package was built (Phases 1–8). It describes the legacy quarterly codebase. For the platform see `REBUILD-FROM-SCRATCH-GUIDE.md` §3 and `platform_design/DECISIONS.md`; regenerate with `/gsd-map-codebase` before relying on it.
+
 # External Integrations
 
 **Analysis Date:** 2026-07-09

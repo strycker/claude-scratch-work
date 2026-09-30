@@ -59,6 +59,55 @@ it composes the same public helpers, and
 pins that it reproduces ``_refit_l1`` exactly on classifier #1's own inputs — so
 it is a seam, not a fork.
 
+**The Bayes filter (plan 08-08, ROADMAP criterion 1) applies to the l2 routing
+ONLY.** Under :data:`ROUTING_L2_NOWCAST` (and ``use_regime_filter=True``) each
+classifier's raw nowcaster posterior is filtered into a belief —
+``prediction/regime_filter.py``'s ``π_t ∝ [π_{t−1} A] · L_t`` — carried across
+steps as a LOOP VARIABLE (``prev_belief_1`` / ``prev_belief_2``), and the
+**belief**, never the raw posterior, is what ``update_active_regime`` and
+``blend_regime_tilts`` consume. ``A`` and the cold start π_0 come from the step's own
+in-window labels (``states_N``, ``train_index`` only): ``transition_matrix_for`` and
+``unconditional_belief``, the one rule ``driver.py`` and ``report/weekly.py`` also use.
+``L_t`` divides each classifier's posterior by THAT classifier's step-fit training
+class prior over ``model.classes_``, the second value ``_refit_l2`` returns (from
+``driver.fit_l2_nowcaster``, the same object serve persists as
+``nowcaster_class_prior``; CR-01, plan 08-17). A degraded step has no observation: the belief
+advances by ``predict_only_step`` (``π A``) when that step's labels exist, and is
+held with a WARNING when they do not. The raw posterior is still accumulated into
+``per_step_metrics_N`` (so raw-posterior churn stays measurable as a control); the
+belief goes into ``per_step_belief_N``. Under the decision-bearing
+:data:`ROUTING_L1_ONLY` the filter is **not applied**: there ``probs`` is
+``_last_state_one_hot(states)`` — a label, not a likelihood — and filtering it
+would fabricate a posterior the routing declares does not exist and would move the
+decision-bearing leg for a wiring reason. The gate is a literal
+``routing == ROUTING_L2_NOWCAST`` test in code, not a property of the data; the
+l1only curve is pinned bit-for-bit with the filter on and off.
+
+The likelihood's class prior (CR-01, plan 08-17; this replaces the "known
+approximation" first stated in plan 08-06). Inverting a calibrated posterior into
+a likelihood is only valid with the prior of the rows the model was fit on: the
+D-01 embargoed, finite-row block (trailing ``embargo_months`` dropped, non-finite
+rows dropped), over its own ``classes_``. The whole in-window label distribution is
+a different object and can flip a state's evidence, so no driver computes a
+likelihood prior from its window labels, and ``likelihood_ratio`` refuses that shape.
+
+A third inconsistency, ruled on by Glenn 2026-09-24 (plan 08-09, ``08-A7.md``):
+``update_active_regime`` receives classifier #1's belief ALONE while
+``blend_regime_tilts`` trades BOTH classifiers. That mismatch is DECLARED out of the
+state machine's remit, not resolved: classifier #1 has K=6 and #2 K=5 with independent
+state ids, so no "blended belief" exists to feed it. The proper resolution is a joint
+R1 x R2 state space — future work. ``active_regime`` is a reported label and gates no
+weight.
+
+**What does gate the weights (plan 08-09, §5.3's bounded-turnover arm).** The blended
+target passes through ``allocation/hysteresis.py::execute_rebalance`` — the 5pp
+no-trade band read from ``allocation.no_trade_band``, NOT SWEPT — the same function
+``driver.py`` and ``report/weekly.py`` call. ``held`` is the last EXECUTED book; before
+the first non-degraded step nothing has been executed and the first execution trades in
+full. A degraded step holds the executed book and is not banded. With the key absent or
+null the band is off and the curve is byte-identical to the pre-08-09 one — the pin
+that lets plan 08-10 attribute any criterion-7 movement to the band alone.
+
 **Plausibility bands.** The band constants below are ``07-BANDS.md`` §8's
 confirmed dispositions (Glenn, 2026-09-18), recorded before any joint-lift number
 existed. Two tiers, and only one governs a verdict: a **universal/arithmetic**
@@ -67,6 +116,16 @@ breach means the MEASUREMENT is broken (halt; do not report a lift); a
 ``DD_DELTA_UNIVERSAL`` is the REVISED ``[-1, 1]``, not the retired ``[-2, 2]`` —
 the old bound was wider than the quantity's own arithmetic range
 (``max_drawdown`` in ``[-1, 0]`` per leg) and could therefore only confirm.
+
+**The quality tier (A11 answered, Glenn 2026-09-21, ``08-A11.md`` / ADR-0003).** The
+bands above assert a number is *possible*; none can fail on a bad-but-working model.
+:func:`joint_lift_table` therefore also reports, per leg, the one gate that can: the
+leg PASSES iff ``observed_sharpe > expected_max_sharpe(total_trial_count(),
+sharpe_variance)`` — identically ``deflated_sharpe_ratio(...) > 0.5``. Both hurdle
+arguments are read live unless the caller passes the values it read itself; neither
+is ever a literal. The gate GOVERNS only a decision-bearing leg; on the
+observational l2 routing it is computed and reported, never acted on. The four
+plausibility bands are unchanged and remain plausibility-only.
 
 Usage::
 
@@ -92,9 +151,15 @@ import logging
 import time
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
-from trading_crab_lib.platform.allocation.hysteresis import update_active_regime
+from trading_crab_lib.platform.allocation.hysteresis import (
+    execute_rebalance,
+    hysteresis_thresholds,
+    no_trade_band_from_config,
+    update_active_regime,
+)
 from trading_crab_lib.platform.allocation.joint_tilt import blend_regime_tilts
 from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.backtest.costs import apply_transaction_cost, compute_turnover
@@ -103,6 +168,12 @@ from trading_crab_lib.platform.backtest.driver import (
     _realized_return,
     _refit_l1,
     _refit_l2,
+)
+from trading_crab_lib.platform.evaluation.deflated_sharpe import (
+    _VERDICT_HURDLE,
+    deflated_sharpe_ratio,
+    expected_max_sharpe,
+    registry_sharpe_variance,
 )
 from trading_crab_lib.platform.evaluation.kpis import max_drawdown_and_duration, terminal_log_wealth
 from trading_crab_lib.platform.honesty import registry
@@ -113,6 +184,12 @@ from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
     fit_jump_model,
     standardize_features,
+)
+from trading_crab_lib.platform.prediction.regime_filter import (
+    filter_step,
+    predict_only_step,
+    transition_matrix_for,
+    unconditional_belief,
 )
 
 log = logging.getLogger(__name__)
@@ -141,7 +218,8 @@ _ROUTINGS = (ROUTING_L1_ONLY, ROUTING_L2_NOWCAST)
 WEALTH_DELTA_UNIVERSAL: float = 15.0
 
 #: Domain / ADVISORY trigger on ``wealth_delta``. A breach is a recorded note;
-#: criterion 7 still reports (D-07; A11 stays open by design).
+#: criterion 7 still reports (D-07). A11 is ANSWERED (08-A11.md), but not by this
+#: band: the quality gate is the deflated-Sharpe hurdle in :func:`quality_tier`.
 WEALTH_DELTA_DOMAIN: float = 5.0
 
 #: Universal / GOVERNING bound on ``dd_delta`` (fraction of peak). REVISED from
@@ -263,6 +341,52 @@ def _occupancy(states: pd.Series) -> pd.Series:
     return states.value_counts(normalize=True).astype(float)
 
 
+def _filtered_belief(
+    prev_belief: pd.Series | None,
+    states: pd.Series,
+    posterior: pd.Series,
+    class_prior: pd.Series,
+    *,
+    state_index: list[int],
+) -> pd.Series:
+    """One l2 filter step for one classifier.
+
+    Two roles, two rules (CR-01, as at serve). ``A`` and the cold start π_0 (no
+    previous belief) come from ``states``, this step's in-window labels
+    (``train_index`` only), via ``transition_matrix_for`` and ``unconditional_belief``.
+    The likelihood divides ``posterior`` by ``class_prior``: the training prior this
+    classifier's ``_refit_l2`` returned for this step, over the posterior's own
+    ``classes_``. The rule is shared with ``driver.py`` and ``report/weekly.py``.
+    """
+    transition = transition_matrix_for(states, state_index=state_index)
+    start = unconditional_belief(states, state_index=state_index) if prev_belief is None else prev_belief
+    return filter_step(start, transition, posterior, class_prior)
+
+
+def _advance_without_observation(
+    prev_belief: pd.Series | None,
+    states: pd.Series,
+    *,
+    state_index: list[int],
+    t: Any,
+    which: int,
+) -> pd.Series | None:
+    """The degraded-step rule: ``predict_only_step`` when labels exist, else hold.
+
+    Weights are held either way; this only sets the NEXT step's prior. ``None``
+    stays ``None`` — there is nothing to advance before the first observation.
+    """
+    if prev_belief is None:
+        return None
+    if states is None or len(states.dropna()) < 2:
+        log.warning(
+            "Step %s: classifier #%d has no in-window labels on this degraded step — "
+            "holding its filtered belief unchanged (no A to advance by)", t, which,
+        )
+        return prev_belief
+    return predict_only_step(prev_belief, transition_matrix_for(states, state_index=state_index))
+
+
 def _classifier2_params(cfg: dict[str, Any]) -> dict[str, Any]:
     """``classifier2_config`` with a defensive fallback for synthetic test configs."""
     return classifier2_config(cfg)
@@ -278,6 +402,7 @@ def run_joint_backtest(
     frozen_features_1: list[str] | None = None,
     frozen_features_2: list[str] | None = None,
     routing: str = ROUTING_L1_ONLY,
+    use_regime_filter: bool = True,
     min_train: int | None = None,
     cash_returns: pd.Series | None = None,
     registry_path: Any = None,
@@ -312,6 +437,14 @@ def run_joint_backtest(
         routing: :data:`ROUTING_L1_ONLY` (decision-bearing) or
             :data:`ROUTING_L2_NOWCAST` (observational; MUST be paired with
             ``registry_path=registry.NO_REGISTRY``).
+        use_regime_filter: apply the Bayes filter under :data:`ROUTING_L2_NOWCAST`
+            (plan 08-08). Has no effect under :data:`ROUTING_L1_ONLY`, where the
+            filter is never applied. ``False`` reproduces the pre-08-08 l2 leg.
+            The registry row records the EFFECTIVE flag,
+            ``use_regime_filter and routing == ROUTING_L2_NOWCAST``, as
+            ``config["use_regime_filter"]`` (CR-05). A joint row WITHOUT the key
+            ran unfiltered: every such row is ``ROUTING_L1_ONLY``, where the
+            filter is inert.
         min_train: overrides ``cfg["backtest"]["min_train_months"]``.
         cash_returns: the cash sleeve's own return series (review F4).
         registry_path: ledger path, or ``registry.NO_REGISTRY`` for zero rows.
@@ -324,8 +457,9 @@ def run_joint_backtest(
         date with ``driver.py``'s columns plus ``state_1``/``state_2``.
         ``metadata`` carries ``routing``, ``blend_weight_1``, ``n_steps``,
         ``n_degraded``, ``n_degraded_classifier_1``, ``n_degraded_classifier_2``,
-        ``first_date``, ``last_date``, ``records``, and each classifier's
-        ``per_step_metrics``.
+        ``first_date``, ``last_date``, ``records``, each classifier's
+        ``per_step_metrics`` (the RAW posterior) and ``per_step_belief`` (the
+        filtered belief; empty unless the filter ran).
     """
     if routing not in _ROUTINGS:
         raise ValueError(
@@ -343,9 +477,9 @@ def run_joint_backtest(
     target_vol_annual = allocation_cfg.get("target_vol_annual", 0.10)
     halflife = allocation_cfg.get("ewma_halflife_months", 6)
     portfolio_vol_min_obs = allocation_cfg.get("portfolio_vol_min_obs", 12)
-    hysteresis_cfg = allocation_cfg.get("hysteresis", {})
-    act_threshold = hysteresis_cfg.get("act_threshold", 0.70)
-    unwind_threshold = hysteresis_cfg.get("unwind_threshold", 0.40)
+    act_threshold, unwind_threshold = hysteresis_thresholds(cfg)
+    # §5.3's bounded-turnover arm (plan 08-09, 08-A7.md): None = no band, byte-identical.
+    no_trade_band = no_trade_band_from_config(cfg)
 
     c2 = _classifier2_params(cfg)
     if frozen_features_2 is None:
@@ -371,10 +505,21 @@ def run_joint_backtest(
     records: list[JointStepRecord] = []
     per_step_1: dict[str, list] = {"dates": [], "proba": [], "classes": []}
     per_step_2: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    per_step_belief_1: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    per_step_belief_2: dict[str, list] = {"dates": [], "proba": [], "classes": []}
+    # The filter's recursion state — a LOOP VARIABLE, not a feature (plan 08-08).
+    prev_belief_1: pd.Series | None = None
+    prev_belief_2: pd.Series | None = None
+    state_index_1 = list(range(int(cfg.get("labeling", {}).get("K", 5))))
+    state_index_2 = list(range(int(c2["K"])))
 
     prev_weights: pd.Series = pd.Series(dtype=float)
     prev_active_regime: int | None = None
     prev_cash: float = 1.0
+    # The band's ``held`` is the last EXECUTED book (prev_weights) once anything has been
+    # executed; before the first non-degraded step there is none and the first
+    # execution trades to target in full (08-A7.md).
+    executed_once = False
 
     n_degraded_1 = 0
     n_degraded_2 = 0
@@ -406,6 +551,8 @@ def run_joint_backtest(
         states_2 = pd.Series(dtype=float)
         probs_1 = pd.Series(dtype=float)
         probs_2 = pd.Series(dtype=float)
+        prior_1: pd.Series | None = None
+        prior_2: pd.Series | None = None
 
         try:
             states_1 = _refit_l1(train_1, cfg, frozen_features=frozen_features_1)
@@ -438,7 +585,7 @@ def run_joint_backtest(
                 # L2 failure against one classifier — a count that reads as
                 # evidence about classifier #2 while measuring something else.
                 try:
-                    probs_1 = _refit_l2(train_1, states_1, dev_features_1.loc[[t]], cfg)
+                    probs_1, prior_1 = _refit_l2(train_1, states_1, dev_features_1.loc[[t]], cfg)
                 except _L2_DEGRADE_EXCEPTIONS as exc:
                     log.warning(
                         "Step %s: classifier #1 L2 refit degraded (RESEARCH Pitfall 2) "
@@ -448,7 +595,7 @@ def run_joint_backtest(
                     n_degraded_1 += 1
                 if not degraded:
                     try:
-                        probs_2 = _refit_l2(train_2, states_2, dev_features_2.loc[[t]], cfg)
+                        probs_2, prior_2 = _refit_l2(train_2, states_2, dev_features_2.loc[[t]], cfg)
                     except _L2_DEGRADE_EXCEPTIONS as exc:
                         log.warning(
                             "Step %s: classifier #2 L2 refit degraded (RESEARCH Pitfall 2) "
@@ -456,6 +603,23 @@ def run_joint_backtest(
                         )
                         degraded = True
                         n_degraded_2 += 1
+
+        # What the allocator consumes. Under l1only this is the one-hot, untouched.
+        belief_1, belief_2 = probs_1, probs_2
+        filtered = False
+        if routing == ROUTING_L2_NOWCAST and use_regime_filter:
+            if degraded:
+                prev_belief_1 = _advance_without_observation(
+                    prev_belief_1, states_1, state_index=state_index_1, t=t, which=1
+                )
+                prev_belief_2 = _advance_without_observation(
+                    prev_belief_2, states_2, state_index=state_index_2, t=t, which=2
+                )
+            else:
+                belief_1 = _filtered_belief(prev_belief_1, states_1, probs_1, prior_1, state_index=state_index_1)
+                belief_2 = _filtered_belief(prev_belief_2, states_2, probs_2, prior_2, state_index=state_index_2)
+                prev_belief_1, prev_belief_2 = belief_1, belief_2
+                filtered = True
 
         if degraded:
             new_weights = prev_weights
@@ -466,12 +630,12 @@ def run_joint_backtest(
             stats_1 = returns_by_regime_stats(train_returns, states_1)
             stats_2 = returns_by_regime_stats(train_returns, states_2)
             new_active_regime = update_active_regime(
-                probs_1, prev_active_regime,
+                belief_1, prev_active_regime,
                 act_threshold=act_threshold, unwind_threshold=unwind_threshold,
             )
             tilt = blend_regime_tilts(
-                probs_1, stats_1,
-                probs_2, stats_2,
+                belief_1, stats_1,
+                belief_2, stats_2,
                 train_returns,
                 weight_1=blend_weight_1,
                 target_vol_annual=target_vol_annual,
@@ -480,8 +644,12 @@ def run_joint_backtest(
                 occupancy_1=_occupancy(states_1),
                 occupancy_2=_occupancy(states_2),
             )
-            new_weights = tilt["weights"]
-            new_cash = tilt["cash"]
+            executed = execute_rebalance(
+                tilt["weights"], tilt["cash"], prev_weights if executed_once else None, band=no_trade_band
+            )
+            new_weights = executed["weights"]
+            new_cash = executed["cash"]
+            executed_once = True
 
         turnover = compute_turnover(prev_weights, new_weights)
         test_date = test_index[0]
@@ -509,6 +677,11 @@ def run_joint_backtest(
                 bucket["dates"].append(t)
                 bucket["proba"].append(probs.values)
                 bucket["classes"].append(list(probs.index))
+            if filtered:
+                for bucket, belief in ((per_step_belief_1, belief_1), (per_step_belief_2, belief_2)):
+                    bucket["dates"].append(t)
+                    bucket["proba"].append(belief.values)
+                    bucket["classes"].append(list(belief.index))
 
         prev_weights = new_weights
         prev_active_regime = new_active_regime
@@ -526,7 +699,9 @@ def run_joint_backtest(
 
     trial_config = {
         "phase": "07-regime-representation",
-        "plan": "07-11",
+        # The plan that BUILT this harness, true for every row it writes. The run's own
+        # plan is its trial_tag; historical rows carry "plan": "07-11" for this reason.
+        "harness_plan": "07-11",
         "criterion": 7,
         "routing": routing,
         "blend_weight_1": float(blend_weight_1),
@@ -539,18 +714,37 @@ def run_joint_backtest(
         "features_1": list(frozen_features_1) if frozen_features_1 else [],
         "features_2": list(frozen_features_2),
     }
+    if no_trade_band is not None:
+        # Attributable: a banded run is a different configuration (08-A7.md).
+        trial_config["no_trade_band"] = no_trade_band
+    # The EFFECTIVE flag, the same expression the metadata carries: the filter acts
+    # under l2 only (CR-05).
+    trial_config["use_regime_filter"] = bool(use_regime_filter and routing == ROUTING_L2_NOWCAST)
     if trial_tag is not None:
         trial_config["trial_tag"] = trial_tag
+    # Every run of this harness is one ARM of the joint-lift ablation (a blend weight of
+    # 1.0 is the classifier-#1-alone baseline of the same comparison), never an
+    # independently-tried configuration. ADR-0002 (07-DSR-ESTIMATOR-NOTE, 230c91c): such
+    # rows must say so, because a missing key reads as independent and would feed
+    # registry_sharpe_variance two near-identical Sharpes — the trap that once collapsed
+    # the multiple-testing hurdle 2.2087 -> 0.0034.
+    trial_config["independent_trial"] = False
+    metrics: dict[str, Any] = {
+        "n_steps": int(len(equity_curve)),
+        "terminal_log_wealth": tlw,
+        "n_degraded": n_degraded,
+    }
+    # The same annualized_sharpe the A11 gate reads as observed_sharpe, at the precision of
+    # the existing rows. Omitted when undefined (empty or flat curve), never recorded as NaN.
+    sharpe = annualized_sharpe(equity_curve["return"]) if not equity_curve.empty else float("nan")
+    if np.isfinite(sharpe):
+        metrics["sharpe"] = round(float(sharpe), 6)
     # EXACTLY ONE append_trial site in this module — run_full_backtest_evaluation's
     # factor of two comes from its own two sites and does not apply here.
     registry.append_trial(
         config=trial_config,
         features=list(frozen_features_1 or []) + list(frozen_features_2),
-        metrics={
-            "n_steps": int(len(equity_curve)),
-            "terminal_log_wealth": tlw,
-            "n_degraded": n_degraded,
-        },
+        metrics=metrics,
         path=registry_path,
     )
 
@@ -567,6 +761,10 @@ def run_joint_backtest(
         "records": records,
         "per_step_metrics_1": per_step_1,
         "per_step_metrics_2": per_step_2,
+        "per_step_belief_1": per_step_belief_1,
+        "per_step_belief_2": per_step_belief_2,
+        "use_regime_filter": bool(use_regime_filter and routing == ROUTING_L2_NOWCAST),
+        "no_trade_band": no_trade_band,
         "frozen_features_1": list(frozen_features_1 or []),
         "frozen_features_2": list(frozen_features_2),
         "registry_row_written": registry_path != registry.NO_REGISTRY,
@@ -574,7 +772,76 @@ def run_joint_backtest(
     return equity_curve, metadata
 
 
-def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) -> dict[str, Any]:
+#: ADR-0003's gate, as a string carried in every record that reports it.
+QUALITY_TIER_RULE: str = (
+    "observed_sharpe > expected_max_sharpe(total_trial_count(), sharpe_variance) "
+    "<=> deflated_sharpe_ratio > 0.5 (ADR-0003; 08-A11.md b-promote-dsr)"
+)
+
+
+def annualized_sharpe(returns: pd.Series) -> float:
+    """``assets/returns.py``'s convention: ``(mean / std) * sqrt(12)`` over non-null months.
+
+    ``NaN`` when the standard deviation is zero — a constant series has no Sharpe.
+    """
+    clean = returns.dropna()
+    sd = float(clean.std())
+    return float((clean.mean() / sd) * np.sqrt(12)) if sd > 0 else float("nan")
+
+
+def quality_tier(returns: pd.Series, *, n_trials: int, sharpe_variance: float) -> dict[str, Any]:
+    """The A11 gate for ONE leg: does its Sharpe clear the multiple-testing hurdle?
+
+    PASSES iff ``deflated_sharpe_ratio(...) > _VERDICT_HURDLE`` (0.5), which is the
+    same statement as ``observed_sharpe > expected_max_sharpe(n_trials,
+    sharpe_variance)``. ``_VERDICT_HURDLE`` is imported, never re-declared.
+
+    A leg without a defined Sharpe (fewer than two months, or zero variance) or
+    with a non-finite DSR does NOT pass: a hurdle cannot be cleared by a number
+    that does not exist. It is reported with ``defined: False`` so the reason is
+    visible rather than folded into a plain ``False``.
+
+    Raises:
+        ValueError: propagated from ``deflated_sharpe_ratio`` when the leg's own
+            moments give a non-positive PSR denominator — a broken measurement,
+            not a verdict.
+    """
+    clean = returns.dropna()
+    hurdle = expected_max_sharpe(n_trials, sharpe_variance)
+    sharpe = annualized_sharpe(clean)
+    out: dict[str, Any] = {
+        "observed_sharpe": sharpe,
+        "hurdle": hurdle,
+        "n_trials": int(n_trials),
+        "sharpe_variance": float(sharpe_variance),
+        "n_obs": int(len(clean)),
+        "dsr": float("nan"),
+        "ok": False,
+        "defined": False,
+    }
+    if len(clean) < 2 or not np.isfinite(sharpe):
+        return out
+    dsr = deflated_sharpe_ratio(
+        observed_sharpe=sharpe,
+        n_trials=n_trials,
+        sharpe_variance=sharpe_variance,
+        skew=float(clean.skew()),
+        kurtosis=float(clean.kurtosis() + 3.0),  # pandas reports EXCESS kurtosis
+        n_obs=int(len(clean)),
+    )
+    if not np.isfinite(dsr):
+        return out
+    out.update(dsr=dsr, ok=bool(dsr > _VERDICT_HURDLE), defined=True)
+    return out
+
+
+def joint_lift_table(
+    joint_curve: pd.DataFrame,
+    baseline_curve: pd.DataFrame,
+    *,
+    n_trials: int | None = None,
+    sharpe_variance: float | None = None,
+) -> dict[str, Any]:
     """Both criterion-7 axes, each inseparable from the window it was measured on.
 
     The deltas are computed over the INTERSECTION of the two curves' indexes, and
@@ -592,8 +859,12 @@ def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) ->
         dict with ``wealth_delta``, ``dd_delta``, each leg's own
         ``terminal_log_wealth`` / ``max_drawdown`` / ``duration_months``, the
         window (``n_steps``, ``first_date``, ``last_date``, ``n_steps_joint``,
-        ``n_steps_baseline``, ``indexes_identical``), and the ``07-BANDS.md`` §8
-        verdicts (``*_universal_ok`` governs; ``*_domain_note`` is advisory).
+        ``n_steps_baseline``, ``indexes_identical``), the ``07-BANDS.md`` §8
+        verdicts (``*_universal_ok`` governs; ``*_domain_note`` is advisory), and
+        the A11 quality tier per leg (``*_quality_tier_ok``, ``*_dsr``,
+        ``*_observed_sharpe``) against ``quality_tier_hurdle``, computed at
+        ``quality_tier_n_trials`` / ``quality_tier_sharpe_variance`` — read live
+        from the registry when the caller does not pass them.
     """
     j_index = joint_curve.index
     b_index = baseline_curve.index
@@ -619,6 +890,14 @@ def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) ->
     wealth_delta = float(j_tlw - b_tlw)
     dd_delta = float(j_dd["max_drawdown"] - b_dd["max_drawdown"])
 
+    # Read live unless the caller passes the counts it read itself (never a literal).
+    if n_trials is None:
+        n_trials = registry.total_trial_count()
+    if sharpe_variance is None:
+        sharpe_variance = registry_sharpe_variance()
+    j_q = quality_tier(j_ret, n_trials=n_trials, sharpe_variance=sharpe_variance)
+    b_q = quality_tier(b_ret, n_trials=n_trials, sharpe_variance=sharpe_variance)
+
     return {
         # the numbers
         "wealth_delta": wealth_delta,
@@ -641,4 +920,15 @@ def joint_lift_table(joint_curve: pd.DataFrame, baseline_curve: pd.DataFrame) ->
         "wealth_delta_domain_note": bool(abs(wealth_delta) >= WEALTH_DELTA_DOMAIN),
         "dd_delta_universal_ok": bool(DD_DELTA_UNIVERSAL[0] <= dd_delta <= DD_DELTA_UNIVERSAL[1]),
         "dd_delta_domain_note": bool(abs(dd_delta) >= DD_DELTA_DOMAIN),
+        # A11 quality tier (ADR-0003): the one gate that fails a bad-but-working leg
+        "quality_tier_rule": QUALITY_TIER_RULE,
+        "quality_tier_n_trials": int(n_trials),
+        "quality_tier_sharpe_variance": float(sharpe_variance),
+        "quality_tier_hurdle": j_q["hurdle"],
+        "joint_observed_sharpe": j_q["observed_sharpe"],
+        "baseline_observed_sharpe": b_q["observed_sharpe"],
+        "joint_dsr": j_q["dsr"],
+        "baseline_dsr": b_q["dsr"],
+        "joint_quality_tier_ok": j_q["ok"],
+        "baseline_quality_tier_ok": b_q["ok"],
     }

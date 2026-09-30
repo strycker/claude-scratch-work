@@ -90,6 +90,13 @@ overhead; it is the product. A beautiful but leaky backtest is worthless.
 | Quarterly pipeline kept as frozen incumbent | It is the baseline the new skeleton must replace; zero new investment | — Pending |
 | Minimal daily tripwire ships in v1 | Crash avoidance is the platform's reason to exist; cheap by construction | — Pending |
 | Core accounts only in v1 (no sleeve reporting) | Tactical sleeve arrives with the tactics layer in a later milestone | — Pending |
+| Honesty: fence on fitting, not looking (2026-08-04) | Must see live decay; post-2020 decisions recorded with date | ✓ Active (Constraints above) |
+| DSR hurdle is the one quality gate (ADR-0003, 2026-09-21) | "Is the output any good?" needed one honest answer | ✓ Active — criterion 7 FAILED it |
+| Per-phase trial budgets replace the fixed 44 cap (ADR-0004, 2026-09-28) | 44 was Phase 7's arithmetic, not a statistical limit | ✓ Active |
+| Serving refit is not a trial (NO_REGISTRY, 2026-09-28) | Refits an evaluated config; selects nothing | ✓ Active |
+| **Lean-MVP mode (2026-09-29)** | Planning reached ~5.5:1 vs code in Phase 8; product not yet usable with confidence | ✓ Adopted — Phase 08.2; see REBUILD-FROM-SCRATCH-GUIDE.md |
+
+**Full register:** `platform_design/DECISIONS.md` (every platform decision, one line each, with a Lean keep/simplify/defer column).
 
 ## Evolution
 
@@ -109,4 +116,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-09 after initialization*
+*Last updated: 2026-09-29 (Key Decisions extended; lean-MVP mode adopted). Previously 2026-07-09 after initialization.*

@@ -10,13 +10,27 @@
 
 ---
 
+> ## Status 2026-09-29 — read before using this plan
+>
+> - **Phase number:** Migration is GSD **Phase 9**, after 8.1 (point-in-time audit) and 8.2 (lean MVP).
+> - **Stale sizes:** `platform/` is now **19.1k LOC / 13 subpackages**; platform tests are **66 files,
+>   ~1,365 test functions** (suite total 2,494). The "6,977 LOC / 378 tests" figures below are from 2026-08.
+> - **Stale reference numbers (§6):** the 111.06 terminal-log-wealth run predates the UAT-AUDIT
+>   regression fixes; do not use §6 as an acceptance target until re-measured.
+> - **Coupling:** 31 legacy-import sites remain (ratchet test `test_platform_legacy_import_ratchet.py`).
+> - **Recommended approach:** migrate **module by module** in the order of
+>   `REBUILD-FROM-SCRATCH-GUIDE.md` §4 (M0 skeleton → M1 data → … → M7), porting each module in its
+>   simplified form with its notebook as the gate — so Glenn can test as it goes. The P0–P6 steps below
+>   map onto M0–M8 and remain valid as a checklist.
+
 > ## ⚠️ This plan replaces the 2026-04 version
 >
 > The previous MIGRATION-PLAN.md (Q0–Q9) migrated the **legacy quarterly 9-step
 > pipeline** — ingest → features → clustering → regime → predict → assets → diagnostics
 > → tactics → CLI. It was written in April 2026, before the platform existed.
 >
-> That is **not** what we are migrating. `.planning/ROADMAP.md` Phase 8 targets the
+> That is **not** what we are migrating. `.planning/ROADMAP.md` Phase 9 (renumbered from 8 on 2026-09-21 when Phase 8
+> Regime Persistence & Stability was inserted ahead of it) targets the
 > **L0–L4 platform** built and verified across GSD Phases 1–5. Following the old plan
 > would port 10,935 lines of superseded quarterly code and none of the 6,977 lines that
 > five phases of verification actually cover.

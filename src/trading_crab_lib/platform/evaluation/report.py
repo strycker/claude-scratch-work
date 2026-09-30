@@ -66,7 +66,11 @@ import pandas as pd
 
 from trading_crab_lib import OUTPUT_DIR
 from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
-from trading_crab_lib.platform.assets.returns import compute_monthly_returns, returns_by_regime_stats
+from trading_crab_lib.platform.assets.returns import (
+    compute_monthly_returns,
+    returns_by_regime_stats,
+    tradable_asset_returns,
+)
 from trading_crab_lib.platform.backtest.baselines import faber_sma, no_regime_ablation, sixty_forty, spy_buy_hold
 from trading_crab_lib.platform.backtest.driver import run_backtest
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
@@ -841,13 +845,7 @@ def run_full_backtest_evaluation(
     # An optional research class (e.g. gold when macrotrends is blocked) may be
     # absent from `returns` — skip it here so the backtest runs on the assets
     # that DO have data instead of KeyError-ing on the missing series.
-    asset_returns = pd.DataFrame(
-        {
-            params["tradable"]: returns[params["research_name"]]
-            for name, params in splice_cfg.items()
-            if name != "cash" and params["research_name"] in returns.columns
-        }
-    )
+    asset_returns = tradable_asset_returns(returns, splice_cfg)
     _excluded = [
         params["research_name"]
         for name, params in splice_cfg.items()

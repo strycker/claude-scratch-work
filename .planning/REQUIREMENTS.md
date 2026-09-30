@@ -64,6 +64,46 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 - [ ] **MIG-01**: Platform decoupled from the legacy library (4 seams vendored, import-guard test) and migrated to `strycker/trading-crab` (two-package layout), tests green in that repo's CI, real run reproduces the reference numbers, README/docs updated — step plan in `MIGRATION-PLAN.md`
 
+### Regime Persistence & Stability (PER)
+
+Minted at Phase 8 planning, 2026-09-21, one per ROADMAP Phase 8 success criterion 0–9 in order.
+The corrected causal model behind them is in `08-CONTEXT.md`'s AMENDMENT: the recorded 41.91%
+filtered churn is an **L1** quantity (`joint_driver.py:502`), while design §5.1 changes **L2** and
+under the decision-bearing `ROUTING_L1_ONLY` `_refit_l2` is never called
+(`joint_driver.py:431`). The two tracks are therefore separate requirements and neither may be
+measured by the other's metric.
+
+- [x] **PER-01**: The per-step probability matrix the walk-forward drivers accumulate
+  (`driver.py:530-532`, `joint_driver.py:508-510`) is persisted to disk for both classifiers and
+  both routings — the prerequisite that gates PER-02, PER-03 and PER-05 (criterion 0)
+- [x] **PER-02**: A prior-state belief propagates into the nowcaster's consumed output via an
+  explicit Bayes filter, `π_t ∝ [Σ π_{t−1} A] · L_t`, with zero train/serve skew, zero leakage
+  surface and zero free parameters — and a guard test that **fails** on a smoothed substitution
+  (criterion 1, reworded 2026-09-21; design §5.1/§4.2)
+- [x] **PER-03**: Both churn series are reported with their own denominators, windows and degraded
+  counts, and neither can masquerade as the other: Track A (`state_1` changes / 587) and Track B
+  (`argmax(regime_probs)`), with no target pre-declared for either (criterion 2)
+- [x] **PER-04**: Track A is diagnosed before it is changed — the zero-trial terminal-month
+  diagnostic, churning the step-*t* fit's label for months *t−1 … t−6* across steps. A λ sweep is
+  **not** authorized (criterion 3)
+- [x] **PER-05**: §5.3's hysteresis gates allocation, closing audit item A7, evaluated only after
+  the probability vector stops being degenerate; the mechanism and the 0.70/0.40 pair are human
+  decisions, not planner choices (criterion 4; design §5.3)
+- [x] **PER-06**: §4.4 criterion 3 is RUN for both classifiers under four subsample schemes —
+  drop first decade, drop last decade, circular block bootstrap, and leave-one-episode-out — using
+  centroid distance in de-standardized units with Hungarian matching, a within-state split-half
+  null at the same n, and subsample occupancy on every row (criterion 5; design §4.4)
+- [x] **PER-07**: Criterion 7 is re-measured under whatever changed, both legs, one harness,
+  window inline; the prior `wealth_delta` −0.123438 / `dd_delta` +0.024084 is a comparison point,
+  not a target (criterion 6)
+- [x] **PER-08**: Audit item A11 — *"no gate fails on a bad model"* — is answered and written as
+  the reversal of the 2026-09-18 decision to leave it open (criterion 7)
+- [x] **PER-09**: Validation gap G6 is pinned as the known **non**-compliance: non-joint consumers
+  of `vol_targeted_tilt` receive the unpooled per-regime estimate (criterion 8)
+- [x] **PER-10**: Recorded counts match measured reality — the four documentation sites, and
+  F-4's churn denominator (587 adjacent pairs, not 588 months) with its pin moved in the same
+  commit (criterion 9)
+
 ### Invariants (INV)
 
 - [~] **REG-01**: One documented feature policy shared by the walk-forward driver and the
@@ -75,6 +115,12 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
   configuration logged to the trial registry. Scope in
   `.planning/PROPOSAL-phase-regime-representation.md`
 
+  > **Status amended 2026-09-29 (Glenn): PARTIAL, pending Phase 08.1.** Criterion 7 is MET as a
+  > measurement and FAILED as a result (A11 / ADR-0003, 2026-09-21). Criterion 5 (classifier #2's
+  > occupancy band) holds only on unlagged M2SL: a 1-month publication lag moves occupancy to
+  > 3.45–38.22%, outside 8–35% (07-VERIFICATION-WAVE2.md, re-run by the orchestrator). Classifier #2
+  > is re-fit and re-judged on point-in-time data in Phase 08.1.
+  >
   > **DELIVERED PARTIALLY — Phase 7, 2026-09-21. The open item is named, not folded in:
   > criterion 6's dependence verdict is UNRESOLVED.** Wave 1 (ADR-0001) satisfied the
   > feature-policy, §5.4-interpretability and ablation-re-measurement clauses. Wave 2 (ADR-0002)
@@ -196,9 +242,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-03 | Phase 5 | Complete |
 | EVAL-04 | Phase 5 | Complete |
 | NB-01 | Phase 6 | Complete |
-| REG-01 | Phase 7 | **Partial** — criterion 6 (dependence) UNRESOLVED; see ADR-0002 |
+| REG-01 | Phase 7 | **Partial, pending Phase 08.1** — criterion 6 (dependence) UNRESOLVED; criterion 7 MET as a measurement, FAILED as a result (A11 / ADR-0003); criterion 5 contingent on the 08.1 point-in-time re-run (a 1-month M2SL lag breaks its occupancy band). Glenn ruling 2026-09-29; see ADR-0002, 07-VERIFICATION-WAVE2.md |
 | INV-01 | Phase 7 | Complete |
-| MIG-01 | Phase 8 | Pending |
+| PER-01 | Phase 8 | Complete |
+| PER-02 | Phase 8 | Complete (leakage governed by causal invariance, ruling 2026-09-23). CR-01 (filter likelihood prior) closed by 08-16/08-17, re-verified 2026-09-29 |
+| PER-03 | Phase 8 | Complete (A, B0, B1 each separately denominated) |
+| PER-04 | Phase 8 | Complete |
+| PER-05 | Phase 8 | Complete (A7 closed by rewording; 5pp no-trade band, ruling 2026-09-24) |
+| PER-06 | Phase 8 | Complete (named limitation: `evaporated` flag inert under K-fixed refits) |
+| PER-07 | Phase 8 | Complete (criterion 7 re-measured with the 5pp band; A11 gate FAILED 2/2) |
+| PER-08 | Phase 8 | Complete |
+| PER-09 | Phase 8 | Complete |
+| PER-10 | Phase 8 | Complete (four doc sites pinned to a live collection, 2392 as of 08-10; live 2494 as of 2026-09-29 after gap closure 08-11..08-19) |
+| MIG-01 | Phase 9 | Pending |
 
 **Coverage:**
 

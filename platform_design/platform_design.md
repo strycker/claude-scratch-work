@@ -4,6 +4,15 @@
 **Owner:** Glenn Strycker. **Origin:** Claude chat discussion, July 2026.
 **Purpose of this file:** portable design record for (a) re-evaluating `trading-crab` / `trading-crab-lib` and (b) building the next iteration. Focus is mathematics and architecture, not code.
 
+> **Status 2026-09-29 (v1.8 pointer, no design content changed here).** Implementation reached GSD
+> Phase 8 (19 plans). Decisions taken during implementation — including every Phase 7–8 ruling — are
+> indexed one-per-line in `platform_design/DECISIONS.md`; ADRs 0001–0004 in `platform_design/adr/`
+> amend §4.3/§4.4 (L1 feature policy, classifier #2), §8 (DSR as the one quality gate, ADR-0003) and
+> the trial-ceiling rule (per-phase budgets, ADR-0004). §14's phase plan is superseded for build order
+> by `REBUILD-FROM-SCRATCH-GUIDE.md` (usable baseline and serving first; regime tilt gated on beating
+> its ablation). Known open defects: CR-02 (state ids not aligned across refits), CR-03 (publication
+> lags missing for fred_m2sl / fred_totalsl / div_yield) — Phase 08.1.
+
 ---
 
 ## 1. Objective & Framing
@@ -262,6 +271,7 @@ Statistical self-defense for a solo researcher (no skeptical risk committee; the
 2. **Point-in-time data.** ALFRED vintages for agency series; publication-lag alignment (a value enters the feature matrix only after its publication date); market-observed features preferred (never revised). One-sided filters only in causal features — no centered/zero-phase (filtfilt-style) smoothing.
 3. **Purged & embargoed CV** for all supervised components with overlapping labels.
 4. **Trial registry.** Log every configuration evaluated (features, K, λ, model class, hyperparameters, resulting metrics). This is the multiple-testing denominator: the best of N noise strategies has a computable inflated Sharpe. Treat it as a pre-registration ledger.
+   *Trial budgeting (per-phase budgets declared before the runs): see [ADR-0004](adr/0004-trial-budgeting-policy.md).*
 5. **Holdout.** All data from **2021-01-01 onward** untouched during development; evaluated **once** at design freeze (= the declared end of iteration; evaluating on it more than once contaminates it, exactly like tuning on a test set).
 6. **Deflated Sharpe ratio** (Bailey–López de Prado) for headline performance — corrects for number of trials, non-normality, track length. Calibration for skepticism: Harvey–Liu–Zhu argue t ≈ 3, not 2, for a newly discovered signal.
 7. **Brutal baselines.** Buy-and-hold SPY; 60/40; static risk parity; historical-mean return forecast (Goyal–Welch: it beats most published predictors OOS); no-regime versions of every regime-conditional model (the regime layer must pay rent).

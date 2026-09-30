@@ -15,12 +15,18 @@ lag (the "fooled by its own backtest" failure).
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
+import trading_crab_lib.platform.evaluation.sojourn_lag as sojourn_lag_module
 from trading_crab_lib.platform.evaluation.sojourn_lag import (
     build_filtered_probs_matrix,
+    classify_negative_offsets,
+    compute_signed_detection_offsets,
     compute_sojourn_lag_headline,
 )
 from trading_crab_lib.platform.honesty.gap_lag import compute_detection_lag, sojourn_lag_ratio
@@ -322,3 +328,311 @@ class TestT012WrongColumnShapeRaises:
         probs = pd.DataFrame({True: [1.0] * 60, False: [0.0] * 60}, index=idx)
         with pytest.raises(ValueError, match="CANONICAL INTEGER state labels"):
             compute_sojourn_lag_headline(ref, probs)
+
+
+# ── Plan 08-06 Task 2: the extraction of _transitions_by_state moved nothing ───────
+#
+# These read the REAL dev inputs from tracked files, not the committed JSON alone: a
+# pin that only re-read diagnostics_l1only.json would pass whatever the refactor did
+# to the function, because the JSON was written before it. Both inputs are tracked
+# (data/checkpoints/platform/regime_labels.parquet and the l1only joint curve), so
+# nothing here skips in CI. The reconstruction mirrors
+# scripts/joint_lift_diagnostics.py::diagnose exactly: dev split of the full-sample
+# L1 labels, and a one-hot of the walk-forward state_1 column (exact, not an
+# approximation, under ROUTING_L1_ONLY).
+
+_JOINT_LIFT_DIR = Path(__file__).resolve().parents[2] / "outputs" / "reports" / "platform" / "joint_lift"
+
+
+def _real_dev_inputs() -> tuple[pd.Series, pd.DataFrame]:
+    from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+    from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+
+    full = get_platform_checkpoint_manager().load("regime_labels")["state"]
+    dev, _ = split_by_holdout_boundary(full.to_frame("state"), cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    filtered = pd.read_parquet(_JOINT_LIFT_DIR / "joint_lift_joint_l1only.parquet")["state_1"].dropna().astype(int)
+    probs = pd.DataFrame({int(k): (filtered == k).astype(float) for k in sorted(filtered.unique())}, index=filtered.index)
+    return dev["state"], probs
+
+
+class TestHeadlinePinOnRealDevInputs:
+    def test_classifier_1_headline_is_9_5_over_4_0_with_25_of_25(self):
+        states, probs = _real_dev_inputs()
+        assert states.index.max() <= pd.Timestamp("2020-12-31")  # holdout never read
+        out = compute_sojourn_lag_headline(states, probs, act_threshold=0.70)
+        assert (out["median_sojourn"], out["median_lag"], out["ratio"]) == (9.5, 4.0, 2.375)
+        assert (out["n_transitions"], out["n_resolved"]) == (25, 25)
+
+    def test_recomputation_equals_the_committed_record(self):
+        record = json.loads((_JOINT_LIFT_DIR / "diagnostics_l1only.json").read_text())["classifier_1"]["sojourn_lag"]
+        states, probs = _real_dev_inputs()
+        out = compute_sojourn_lag_headline(states, probs, act_threshold=record["act_threshold"])
+        for key in ("median_sojourn", "median_lag", "ratio", "n_transitions", "n_resolved"):
+            assert out[key] == record[key], key
+
+
+# ── Plan 08-06 Task 2: compute_signed_detection_offsets ────────────────────────────
+
+
+def _single_transition_fixture(col_values: list[float], *, i: int = 10, n: int = 20):
+    """States 0 until position i, then state 1. Column 1 is ``col_values``."""
+    idx = pd.date_range("1990-01-31", periods=n, freq="ME")
+    states = pd.Series([0] * i + [1] * (n - i), index=idx)
+    probs = pd.DataFrame({0: [1.0 - v for v in col_values], 1: col_values}, index=idx)
+    return states, probs
+
+
+class TestSignedOffsetAgreesWithDetectionLag:
+    def test_elementwise_equal_where_no_belief_leads(self):
+        """Four transitions, none led: forward lags 2, 1, 3 and one unresolved.
+        Every signed offset must equal compute_detection_lag's answer for the same
+        transition, NaN for NaN. Fails on any divergence in the forward branch."""
+        idx = pd.date_range("1990-01-31", periods=26, freq="ME")
+        # transitions: @6 -> 1, @11 -> 0, @15 -> 2, @20 -> 1
+        states = pd.Series([0] * 6 + [1] * 5 + [0] * 4 + [2] * 5 + [1] * 6, index=idx)
+        col0 = [0.9] * 6 + [0.1] * 6 + [0.8] * 3 + [0.1] * 11  # @11 crosses @12: lag 1
+        col1 = [0.0] * 8 + [0.75] * 3 + [0.0] * 15              # @6 crosses @8: lag 2; @20 never: NaN
+        col2 = [0.0] * 18 + [0.9] * 8                            # @15 crosses @18: lag 3
+        probs = pd.DataFrame({0: col0, 1: col1, 2: col2}, index=idx)
+
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+
+        expected = [
+            compute_detection_lag([pos], probs[s].reindex(states.index), threshold=0.7)["lags"][0]
+            for pos, s in zip(out["positions"], out["target_states"])
+        ]
+        assert out["positions"] == [6, 11, 15, 20]
+        np.testing.assert_array_equal(np.array(out["offsets"]), np.array(expected))
+        np.testing.assert_array_equal(np.array(out["offsets"]), np.array([2.0, 1.0, 3.0, np.nan]))
+        assert out["n_negative"] == 0 and out["n_zero_or_negative"] == 0
+        assert out["min_offset"] == 1.0
+
+    def test_agrees_on_every_transition_of_the_real_dev_inputs(self):
+        """The real l1only inputs: wherever compute_detection_lag is not 0, the signed
+        offset must equal it exactly; where it is 0, the signed offset must be <= 0.
+        Measured 2026-09-23: all 25 transitions have lag >= 1, so all 25 are equal and
+        none leads (min_offset 1.0, median 4.0 — the headline's own median)."""
+        states, probs = _real_dev_inputs()
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.70)
+        assert out["n_transitions"] == 25
+        for pos, s, off in zip(out["positions"], out["target_states"], out["offsets"]):
+            lag = compute_detection_lag([pos], probs[s].reindex(states.index), threshold=0.70)["lags"][0]
+            if lag == 0:
+                assert off <= 0, (pos, s, off)
+            elif np.isnan(lag):
+                assert np.isnan(off), (pos, s, off)
+            else:
+                assert off == lag, (pos, s, off, lag)
+        assert out["median_offset"] == compute_sojourn_lag_headline(states, probs)["median_lag"] == 4.0
+
+
+class TestNegativeOffsetsAreReachable:
+    def test_a_three_month_lead_is_exactly_minus_3(self):
+        """Column 1 is above threshold from i-3 onward; below at i-4. The offset is -3.
+        compute_detection_lag on the same input says 0 — the floor this function exists
+        to remove. Fails if the backward walk is missing (that would read 0 too)."""
+        col = [0.1] * 7 + [0.8] * 13  # i = 10; run starts at 7
+        states, probs = _single_transition_fixture(col)
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [-3.0]
+        assert out["n_negative"] == 1 and out["n_zero_or_negative"] == 1
+        assert out["min_offset"] == -3.0
+        assert compute_detection_lag([10], probs[1], threshold=0.7)["lags"] == [0.0]
+
+    def test_crossing_exactly_at_the_transition_is_zero_not_negative(self):
+        col = [0.1] * 10 + [0.8] * 10
+        states, probs = _single_transition_fixture(col)
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [0.0]
+        assert out["n_negative"] == 0 and out["n_zero_or_negative"] == 1
+
+    def test_the_run_boundary_is_respected(self):
+        """Above at i and i-1, BELOW at i-2, above again at i-5..i-3. The contiguous
+        run containing i starts at i-1, so the offset is -1 — not -5, which a naive
+        'first crossing anywhere before' search would return."""
+        col = [0.1] * 5 + [0.8] * 3 + [0.1] + [0.8] * 11  # i=10: 9,10 above; 8 below; 5..7 above
+        states, probs = _single_transition_fixture(col)
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [-1.0]
+
+    def test_nan_before_the_first_decision_stops_the_walk(self):
+        """Pre-warmup months carry NaN (no filtered row); NaN is never 'at or above'."""
+        idx = pd.date_range("1990-01-31", periods=20, freq="ME")
+        states = pd.Series([0] * 10 + [1] * 10, index=idx)
+        probs = pd.DataFrame({0: [0.1] * 14, 1: [0.9] * 14}, index=idx[6:])  # first row at position 6
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"] == [-4.0]
+
+
+class TestUnresolvedStaysNaN:
+    def test_never_crossing_is_nan_counted_but_excluded_from_the_median(self):
+        idx = pd.date_range("1990-01-31", periods=20, freq="ME")
+        states = pd.Series([0] * 5 + [1] * 5 + [2] * 10, index=idx)
+        probs = pd.DataFrame(
+            {0: [0.9] * 5 + [0.0] * 15, 1: [0.0] * 7 + [0.8] * 3 + [0.0] * 10, 2: [0.3] * 20}, index=idx
+        )
+        out = compute_signed_detection_offsets(states, probs, act_threshold=0.7)
+        assert out["offsets"][0] == 2.0 and np.isnan(out["offsets"][1])
+        assert out["n_transitions"] == 2 and out["n_resolved"] == 1
+        assert out["median_offset"] == 2.0 and out["min_offset"] == 2.0
+
+    def test_a_target_state_with_no_column_is_nan(self):
+        states, probs = _single_transition_fixture([0.1] * 20)
+        out = compute_signed_detection_offsets(states, probs[[0]], act_threshold=0.7)
+        assert np.isnan(out["offsets"][0]) and out["n_resolved"] == 0
+        assert np.isnan(out["median_offset"]) and np.isnan(out["min_offset"])
+
+
+class TestSignedOffsetReusesTheT012Guard:
+    def test_string_columns_raise_naming_this_function(self):
+        states, probs = _single_transition_fixture([0.1] * 20)
+        probs.columns = ["state_0", "state_1"]
+        with pytest.raises(ValueError, match="compute_signed_detection_offsets: .*CANONICAL INTEGER"):
+            compute_signed_detection_offsets(states, probs)
+
+
+# ── classify_negative_offsets: the held-through-return rule (plan 08-08, AMENDED 2026-09-23) ──
+#
+# Pinned against 08-06's synthetic arms BEFORE any real data is read. The prototype
+# results recorded in 08-08-PLAN.md (measured 2026-09-23 against 08-06's committed
+# fixtures) are reproduced exactly: caveat -> leads [], misses [45]; Arm 2 -> leads
+# [14, 45, 69], misses []; Arm 1 -> no negative offsets; clause (iii) dropped entirely
+# -> Arm 2 leads [14, 69], misses [45].
+#
+# Clause (iii)'s two halves (belief[s] >= act AND belief[r] < act) are REDUNDANT with
+# each other while act_threshold > 0.5 (belief[s] >= 0.70 forces belief[r] <= 0.30).
+# Both are kept because 08-09 may re-pin the threshold relative to 1/K, possibly below
+# 0.5, where they stop being redundant. Nobody should later "simplify" one away. For
+# the same reason there is deliberately NO mutation arm that drops only one half: at
+# act = 0.70 it cannot misclassify anything (measured 2026-09-23), so such an arm would
+# demand a failure that cannot occur.
+
+
+def _recursion_world():
+    """08-06's fixture and arms, reused rather than re-derived (one world, one set of numbers)."""
+    import test_platform_nowcaster_recursion as rec  # tests/unit is on sys.path under pytest's prepend mode
+
+    return rec
+
+
+def _caveat_arm():
+    rec = _recursion_world()
+    states, evidence, _, _ = rec._world()
+    a_emp = rec.transition_matrix_for(states, state_index=rec.IDX)
+    a_stickier = pd.DataFrame(0.999 * np.eye(len(rec.IDX)), index=rec.IDX, columns=rec.IDX) + 0.001 * a_emp
+    return states, rec._run_filter(states, evidence, a_stickier)
+
+
+def _arm2():
+    rec = _recursion_world()
+    states, evidence, _, _ = rec._world()
+    a = rec.transition_matrix_for(states, state_index=rec.IDX)
+    prior = rec.unconditional_belief(states, state_index=rec.IDX)
+    return states, rec._one_hot(rec._viterbi(evidence, a, prior), states.index)
+
+
+def _arm1():
+    rec = _recursion_world()
+    states, evidence, _, _ = rec._world()
+    a = rec.transition_matrix_for(states, state_index=rec.IDX)
+    return states, rec._run_filter(states, evidence, a)
+
+
+def _classify(states, belief, act=0.70):
+    offsets = compute_signed_detection_offsets(states, belief, act_threshold=act)
+    return offsets, classify_negative_offsets(states, belief, offsets, act)
+
+
+class TestHeldThroughReturnRuleOnTheSyntheticArms:
+    def test_caveat_fixture_honest_miss_is_exempted(self):
+        states, belief = _caveat_arm()
+        offsets, out = _classify(states, belief)
+        assert offsets["n_negative"] == 1
+        assert out["lead_positions"] == []
+        assert out["held_through_miss_positions"] == [45]
+        assert out["n_lead"] == 0 and out["n_held_through_miss"] == 1
+        (d,) = out["details"]
+        assert d["offset"] == -14.0 and d["state"] == 2 and d["preceding_state"] == 0
+        assert d["preceding_run"] == (36, 44)
+
+    def test_arm2_leak_still_halts_three_leads_zero_misses(self):
+        """Without this arm the amendment would be a relaxation with no evidence it
+        left the guard intact."""
+        states, belief = _arm2()
+        _, out = _classify(states, belief)
+        assert out["lead_positions"] == [14, 45, 69]
+        assert out["held_through_miss_positions"] == []
+        assert out["n_lead"] == 3 and out["n_held_through_miss"] == 0
+
+    def test_arm1_honest_filter_has_no_negative_offsets_to_classify(self):
+        states, belief = _arm1()
+        offsets, out = _classify(states, belief)
+        assert offsets["n_negative"] == 0
+        assert out["n_negative"] == 0 and out["n_lead"] == 0 and out["n_held_through_miss"] == 0
+
+    def test_mutation_dropping_clause_iii_entirely_swallows_the_leak_at_45(self, monkeypatch):
+        """Position 45 is the one led turn that is ALSO an s -> r -> s return, so it is
+        exactly the case the exemption must not swallow. With clause (iii) gone it is
+        misclassified as a miss (n_lead 3 -> 2) — proving (iii) is what keeps it a lead."""
+        monkeypatch.setattr(sojourn_lag_module, "_belief_held_through", lambda *a, **k: True)
+        states, belief = _arm2()
+        _, out = _classify(states, belief)
+        assert out["lead_positions"] == [14, 69]
+        assert out["held_through_miss_positions"] == [45]
+        assert out["n_lead"] == 2
+
+
+class TestHeldThroughReturnRuleClauses:
+    @staticmethod
+    def _frame(states: list[int], s_col: list[float], k: int = 3) -> tuple[pd.Series, pd.DataFrame]:
+        idx = pd.date_range("1990-01-31", periods=len(states), freq="ME")
+        cols = {j: [0.0] * len(states) for j in range(k)}
+        cols[states[-1]] = s_col
+        others = [j for j in range(k) if j != states[-1]]
+        for j in others:
+            cols[j] = [(1.0 - v) / len(others) for v in s_col]
+        return pd.Series(states, index=idx), pd.DataFrame(cols, index=idx)
+
+    def test_run_at_the_start_of_the_series_is_a_lead_not_a_return(self):
+        """Clause (ii)'s q-1 >= 0 guard. The series ENDS in s, so an unguarded
+        states[q-1] with q = 0 would wrap to states[-1] == s and call this a return."""
+        states, belief = self._frame([1] * 5 + [2] * 5, [0.9] * 10)
+        offsets, out = _classify(states, belief)
+        assert offsets["offsets"] == [-5.0]
+        assert out["lead_positions"] == [5] and out["held_through_miss_positions"] == []
+
+    def test_a_non_return_t_r_s_is_a_lead(self):
+        states, belief = self._frame([0] * 4 + [1] * 4 + [2] * 4, [0.9] * 12)
+        offsets, out = _classify(states, belief)
+        neg = [p for p, o in zip(offsets["positions"], offsets["offsets"]) if o < 0]
+        assert neg == [8]
+        assert out["lead_positions"] == [8]
+
+    def test_belief_registering_r_inside_the_run_is_a_lead(self):
+        """s -> r -> s where the belief drops below act on s for one month inside r and
+        comes back early: the leak pattern. (iii) fails -> LEAD."""
+        states = [2] * 4 + [0] * 4 + [2] * 4
+        s_col = [0.9] * 5 + [0.05] + [0.9] * 6  # leaves s at position 5, back above act from 6
+        st, belief = self._frame(states, s_col)
+        belief.loc[belief.index[5], 0] = 0.9  # ...and registers r = 0 there
+        belief.loc[belief.index[5], 1] = 0.05
+        offsets, out = _classify(st, belief)
+        by_pos = dict(zip(offsets["positions"], offsets["offsets"]))
+        assert by_pos[8] == -2.0
+        assert out["lead_positions"] == [8] and out["held_through_miss_positions"] == []
+
+    def test_a_missing_belief_month_never_exempts(self):
+        states = [2] * 4 + [0] * 4 + [2] * 4
+        st, belief = self._frame(states, [0.9] * 12)
+        _, full = _classify(st, belief)
+        assert full["held_through_miss_positions"] == [8]
+        _, gappy = _classify(st, belief.iloc[3:])  # belief starts exactly at q-1 = 3: still a miss
+        assert gappy["held_through_miss_positions"] == [8]
+        _, later = _classify(st, belief.iloc[4:])  # q-1 = 3 now unobserved (NaN)
+        assert later["held_through_miss_positions"] == [] and later["lead_positions"] == [8]
+
+    def test_threshold_mismatch_raises(self):
+        states, belief = _caveat_arm()
+        offsets = compute_signed_detection_offsets(states, belief, act_threshold=0.70)
+        with pytest.raises(ValueError, match="act_threshold"):
+            classify_negative_offsets(states, belief, offsets, 0.60)

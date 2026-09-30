@@ -31,6 +31,11 @@ data/raw/
 # repo, the scratch twin must be ignored explicitly — otherwise every P3 run
 # leaves untracked files one `git add data/` away from being committed.
 data/checkpoints/platform_notebook/
+# Serving model pickles in the TRACKED platform namespace (plan 08-13). nowcaster.pkl is
+# a machine-local joblib pickle rebuilt by `python -m trading_crab_lib.platform.report.serving`
+# (SERVING_BUILD_COMMAND); it is never committed. Loading an unverified pickle is
+# arbitrary code execution (P27), so a pickle must never arrive through git.
+data/checkpoints/platform/*.pkl
 # data/processed/
 # data/regimes/
 # outputs/figures/
@@ -74,3 +79,6 @@ Thumbs.db
 
 # GSD ephemeral agent worktrees (live isolation dirs; never commit)
 .claude/worktrees/
+
+# GSD research-store digest cache — tooling artifact, not a planning record
+.planning/research/.cache/

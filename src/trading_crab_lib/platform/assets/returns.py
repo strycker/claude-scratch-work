@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -65,6 +66,29 @@ def compute_monthly_returns(monthly_prices: pd.DataFrame) -> pd.DataFrame:
     observation) — its column is never dropped.
     """
     return monthly_prices.pct_change()
+
+
+def tradable_asset_returns(returns: pd.DataFrame, splice_cfg: dict[str, Any]) -> pd.DataFrame:
+    """The ONE research-to-tradable mapping: ``research_name`` column -> ``tradable`` ticker.
+
+    Risk classes only — the ``cash`` class is excluded (cash is never tilted into as a
+    position; it is the vol-target residual). An optional research class absent from
+    ``returns`` (e.g. gold when macrotrends is blocked) is skipped rather than
+    KeyError-ing, so the universe is the classes that DO have data. Columns follow the
+    splice config's order.
+
+    Two callers: ``evaluation/report.py::run_full_backtest_evaluation`` (the evaluated
+    backtest's universe) and ``report/serving.py`` (the served ``asset_returns``), so
+    the weekly tilt sees the same universe the backtest evaluated. Callers log their
+    own exclusions.
+    """
+    return pd.DataFrame(
+        {
+            params["tradable"]: returns[params["research_name"]]
+            for name, params in splice_cfg.items()
+            if name != "cash" and params["research_name"] in returns.columns
+        }
+    )
 
 
 def returns_by_regime_stats(returns: pd.DataFrame, states: pd.Series) -> pd.DataFrame:

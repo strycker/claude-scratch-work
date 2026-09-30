@@ -1,0 +1,171 @@
+{
+  "plan": "08-19",
+  "ruling": "2026-09-23 (Glenn): causal invariance is the GOVERNING leakage guard; S-1 is an observational reading. Two-stage on real data: S-1 detects, a truncation cut at p-1 adjudicates; any break halts.",
+  "generated_by": "scripts/diagnose_s1_truncation.py <T> <out-dir>  (NO_REGISTRY; inputs truncated at T before build_inputs)",
+  "compared_against": [
+    "outputs/reports/platform/joint_lift/joint_lift_belief_1_l2.parquet",
+    "outputs/reports/platform/joint_lift/joint_lift_belief_2_l2.parquet"
+  ],
+  "method": "every belief row with date <= T from the truncated run vs the committed full-run belief matrix; bit_identical = index equal AND max abs diff exactly 0.0. Plan 08-19 adds a second, NaN-aware comparator (nan_aware_exact): the cut's belief_{1,2}.parquet against the installed full-run matrix restricted to dates <= T, via pandas.testing.assert_frame_equal(check_exact=True) over the union of columns with absent columns filled 0.0 exactly as the script does, index not reindexed; it is needed because the script's np.nanmax ignores a NaN-versus-value cell (08-REVIEW WR-08, not fixed in the script). The cut set is p-1 (reference.index[p-1] on the classifier's own dev labels) of every LEAD and held-through miss on the CR-01-fixed belief path, plus 1982-08-31 as a standing spot-check; n_adjudicated counts cuts, n_negative_offsets counts offsets.",
+  "scope_note": "A p-1 cut rules out structural read-ahead of any size (all rows <= T identical) and smoothing-type influence AT these turns; it does not sweep every month (the unit-suite governing test does, on 08-06's synthetic world).",
+  "registry_total_trial_count": {
+    "before": 44,
+    "after": 44
+  },
+  "n_negative_offsets": 2,
+  "n_adjudicated": 3,
+  "n_break": 0,
+  "cuts": [
+    {
+      "T": "1982-08-31",
+      "seconds": 484.7,
+      "frozen_1": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "frozen_2": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "last_step": "1982-08-31",
+      "classifier_1": {
+        "rows_trunc": 66,
+        "rows_full_le_T": 66,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true,
+        "nan_aware_exact": true
+      },
+      "classifier_2": {
+        "rows_trunc": 66,
+        "rows_full_le_T": 66,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true,
+        "nan_aware_exact": true
+      },
+      "adjudicates": [],
+      "verdict": "not leakage (standing spot-check: no negative offset at this cut under the 08-19 belief path; 08-08's LEAD at 236 is gone)"
+    },
+    {
+      "T": "1995-03-31",
+      "seconds": 1048.6,
+      "frozen_1": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "frozen_2": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "last_step": "1995-03-31",
+      "classifier_1": {
+        "rows_trunc": 209,
+        "rows_full_le_T": 209,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true,
+        "nan_aware_exact": true
+      },
+      "classifier_2": {
+        "rows_trunc": 209,
+        "rows_full_le_T": 209,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true,
+        "nan_aware_exact": true
+      },
+      "adjudicates": [
+        {
+          "classifier": 2,
+          "position": 387,
+          "date": "1995-04-30",
+          "offset": -12.0,
+          "s1_verdict": "lead"
+        }
+      ],
+      "verdict": "not leakage"
+    },
+    {
+      "T": "2012-08-31",
+      "seconds": 1205.3,
+      "frozen_1": [
+        "cape_shiller",
+        "credit_spread_baa_aaa",
+        "curve_10y3m",
+        "div_yield",
+        "oil",
+        "real_rate_level",
+        "realized_vol_1m",
+        "realized_vol_3m",
+        "trailing_return_1m",
+        "trailing_return_3m"
+      ],
+      "frozen_2": [
+        "rs_equities_bonds",
+        "rs_oil_equities",
+        "equities_tr_mom_12m",
+        "long_duration_tr_mom_12m",
+        "oil_mom_12m",
+        "corr_equities_tr_long_duration_tr_24m",
+        "cpi_acceleration",
+        "m2_gdp"
+      ],
+      "last_step": "2012-08-31",
+      "classifier_1": {
+        "rows_trunc": 407,
+        "rows_full_le_T": 407,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true,
+        "nan_aware_exact": true
+      },
+      "classifier_2": {
+        "rows_trunc": 407,
+        "rows_full_le_T": 407,
+        "index_equal": true,
+        "max_abs_diff": 0.0,
+        "bit_identical": true,
+        "nan_aware_exact": true
+      },
+      "adjudicates": [
+        {
+          "classifier": 2,
+          "position": 596,
+          "date": "2012-09-30",
+          "offset": -32.0,
+          "s1_verdict": "lead"
+        }
+      ],
+      "verdict": "not leakage"
+    }
+  ]
+}

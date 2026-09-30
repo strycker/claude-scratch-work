@@ -1,7 +1,9 @@
 ---
 phase: 07-regime-representation
 verified: 2026-09-15T14:58:59Z
-status: human_needed
+status: passed
+resolved_by: "07-UAT.md UAT-2/UAT-3, 2026-09-15 (accept-with-caveats; criterion-8 claim corrected to 31 import sites, guarded by the legacy-import ratchet)"
+status_corrected: 2026-09-29
 score: 4/4 wave-1 criteria verified (criteria 1-4); criterion 8 verified-scoped-to-wave-1-touch, flagged blanket claim unsupported
 scope: phase-wave 1 ONLY (07-CONTEXT.md D-09); criteria 5, 6, 7 and INV-01 are wave 2 and correctly absent
 behavior_unverified: 0

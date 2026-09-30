@@ -32,10 +32,24 @@ threshold — exactly the "fooled by its own backtest" failure this honesty
 metric exists to prevent. Per-target-state lags are pooled across all
 transitions (grouped by their own target state) before taking the median.
 
+Plan 08-06 adds ONE piece of new arithmetic, and says so:
+``compute_signed_detection_offsets``. ``compute_detection_lag`` searches
+forward only and floors at zero; the signed offset calls it for every
+transition the belief has not already crossed, and walks BACKWARDS through
+the contiguous at-or-above-threshold run only where it has. Both functions
+derive transitions from the same ``_transitions_by_state`` rule.
+
+Plan 08-08 adds ``classify_negative_offsets``: the pre-registered (2026-09-23,
+before any real 08-08 number) rule that splits every strictly negative signed
+offset into a HELD-THROUGH MISS (an honest filter that never registered a short
+``s -> r -> s`` excursion) or a LEAD (proof of post-*t* information). Its three
+clauses are fixed in ``08-08-PLAN.md`` and are not to be edited after real data.
+
 Usage::
 
     from trading_crab_lib.platform.evaluation.sojourn_lag import (
-        build_filtered_probs_matrix, compute_sojourn_lag_headline,
+        build_filtered_probs_matrix, compute_signed_detection_offsets,
+        compute_sojourn_lag_headline,
     )
 
     filtered_probs_matrix = build_filtered_probs_matrix(per_step_metrics)
@@ -92,6 +106,63 @@ def build_filtered_probs_matrix(per_step_metrics: dict) -> pd.DataFrame:
         rows.append(row)
 
     return pd.DataFrame(rows, index=pd.DatetimeIndex(dates), columns=all_states)
+
+
+def _transitions_by_state(states_arr: np.ndarray) -> dict[int, list[int]]:
+    """The ONE transition-derivation rule (plan 08-06): change points of the smoothed states.
+
+    Position ``i`` is a transition into ``int(states_arr[i])`` whenever
+    ``states_arr[i] != states_arr[i - 1]``. Positions are GROUPED by their own
+    target state, in first-seen order — never by any property of the filtered
+    probability matrix (Pitfall 1). Extracted from
+    :func:`compute_sojourn_lag_headline` so that every consumer of transitions in
+    this module (the headline, and plan 08-06's signed offset) uses one rule and
+    none can disagree about what a transition is.
+    """
+    transitions_by_state: dict[int, list[int]] = {}
+    for i in range(1, len(states_arr)):
+        if states_arr[i] != states_arr[i - 1]:
+            target_state = int(states_arr[i])
+            transitions_by_state.setdefault(target_state, []).append(i)
+    return transitions_by_state
+
+
+def _require_integer_state_columns(filtered_probs_matrix: pd.DataFrame, *, caller: str) -> None:
+    """The T0.12 guard, shared: refuse a matrix whose columns cannot denote integer states."""
+    # ── T0.12 guard: a wrong column shape must not read as "no detections" ──
+    #
+    # target_state is an int. When filtered_probs_matrix carries "state_{k}"
+    # STRING columns instead of canonical integer labels, `0 not in
+    # ["state_0", ...]` is True for EVERY state, so every transition fell into
+    # the caller's no-column branch and the function returned n_resolved = 0,
+    # median_lag = NaN, ratio = NaN — with no exception and no warning. That
+    # reads as the substantive finding "real-time detection never happened" when
+    # the cause is that the caller passed the wrong matrix shape. Plan 07-11's
+    # first draft reported 0 of 25 transitions resolved for exactly this reason,
+    # and the wave-2 validation audit confirmed the trap was still live.
+    #
+    # The discriminator is the column TYPE, not overlap with the observed target
+    # states. Overlap is the wrong test: a labeling whose only transition targets
+    # a state that genuinely never appears as a column has zero overlap and is
+    # still perfectly legitimate — that transition is unresolved and keeps the
+    # NaN convention. What is never legitimate is a column that cannot denote a
+    # canonical integer state at all.
+    non_integer_columns = [
+        col for col in filtered_probs_matrix.columns
+        if not (isinstance(col, (int, np.integer)) and not isinstance(col, bool))
+    ]
+    if non_integer_columns:
+        raise ValueError(
+            f"{caller}: filtered_probs_matrix must be keyed by "
+            "CANONICAL INTEGER state labels (build_filtered_probs_matrix's own "
+            f"output). Got {len(non_integer_columns)} non-integer column(s): "
+            f"{[repr(c) for c in non_integer_columns[:5]]}"
+            f"{' ...' if len(non_integer_columns) > 5 else ''}. The usual culprit is "
+            "a 'state_{k}'-string matrix, against which every transition scores "
+            "unresolved and this function returns n_resolved=0, median_lag=NaN — "
+            "indistinguishable from 'real-time detection never happened'. Refusing "
+            "to report a zero that means a shape error."
+        )
 
 
 def compute_sojourn_lag_headline(
@@ -153,49 +224,9 @@ def compute_sojourn_lag_headline(
     occ = occupancy_and_sojourns(states_arr)
     median_sojourn = occ["overall_median_sojourn_months"]
 
-    # Derive (position, target_state) pairs from the smoothed states' own
-    # change points, then GROUP positions by their target_state — never by
-    # any property of filtered_probs_matrix (Pitfall 1).
-    transitions_by_state: dict[int, list[int]] = {}
-    for i in range(1, len(states_arr)):
-        if states_arr[i] != states_arr[i - 1]:
-            target_state = int(states_arr[i])
-            transitions_by_state.setdefault(target_state, []).append(i)
+    transitions_by_state = _transitions_by_state(states_arr)
 
-    # ── T0.12 guard: a wrong column shape must not read as "no detections" ──
-    #
-    # target_state is an int. When filtered_probs_matrix carries "state_{k}"
-    # STRING columns instead of canonical integer labels, `0 not in
-    # ["state_0", ...]` is True for EVERY state, so every transition fell into
-    # the no-column branch below and the function returned n_resolved = 0,
-    # median_lag = NaN, ratio = NaN — with no exception and no warning. That
-    # reads as the substantive finding "real-time detection never happened" when
-    # the cause is that the caller passed the wrong matrix shape. Plan 07-11's
-    # first draft reported 0 of 25 transitions resolved for exactly this reason,
-    # and the wave-2 validation audit confirmed the trap was still live.
-    #
-    # The discriminator is the column TYPE, not overlap with the observed target
-    # states. Overlap is the wrong test: a labeling whose only transition targets
-    # a state that genuinely never appears as a column has zero overlap and is
-    # still perfectly legitimate — that transition is unresolved and keeps the
-    # NaN convention. What is never legitimate is a column that cannot denote a
-    # canonical integer state at all.
-    non_integer_columns = [
-        col for col in filtered_probs_matrix.columns
-        if not (isinstance(col, (int, np.integer)) and not isinstance(col, bool))
-    ]
-    if non_integer_columns:
-        raise ValueError(
-            "compute_sojourn_lag_headline: filtered_probs_matrix must be keyed by "
-            "CANONICAL INTEGER state labels (build_filtered_probs_matrix's own "
-            f"output). Got {len(non_integer_columns)} non-integer column(s): "
-            f"{[repr(c) for c in non_integer_columns[:5]]}"
-            f"{' ...' if len(non_integer_columns) > 5 else ''}. The usual culprit is "
-            "a 'state_{k}'-string matrix, against which every transition scores "
-            "unresolved and this function returns n_resolved=0, median_lag=NaN — "
-            "indistinguishable from 'real-time detection never happened'. Refusing "
-            "to report a zero that means a shape error."
-        )
+    _require_integer_state_columns(filtered_probs_matrix, caller="compute_sojourn_lag_headline")
 
     pooled_lags: list[float] = []
     for target_state, positions in transitions_by_state.items():
@@ -235,6 +266,225 @@ def compute_sojourn_lag_headline(
         "ratio": ratio,
         "n_transitions": n_transitions,
         "n_resolved": n_resolved,
+        "act_threshold": act_threshold,
+    }
+
+
+def compute_signed_detection_offsets(
+    full_sample_states: pd.Series,
+    filtered_probs_matrix: pd.DataFrame,
+    *,
+    act_threshold: float = 0.70,
+) -> dict:
+    """Per-transition SIGNED detection offset — a lag that is allowed to be negative.
+
+    **Why this exists beside** ``compute_detection_lag``: that function searches
+    ``probs.iloc[t:]`` only (``honesty/gap_lag.py:86``), so it floors at zero. A
+    belief that already sat above the threshold *before* the reference transition
+    reads as lag **0** there — indistinguishable from a same-month detection. A
+    causal filtered belief cannot know a transition before the data that reveal
+    it; a smoothed (two-sided) label can and does. The leakage guard
+    (``tests/unit/test_platform_nowcaster_recursion.py``) has to tell those two
+    apart, so it needs a quantity that can go below zero. ``compute_detection_lag``
+    is not changed: its forward-only convention is right for a detection *lag*.
+    This is a different quantity with a different name.
+
+    **Definition.** Transitions come from :func:`_transitions_by_state` — the same
+    rule the headline uses. For a transition at position ``i`` into state ``s``,
+    let ``c`` be ``filtered_probs_matrix[s]`` reindexed onto
+    ``full_sample_states.index`` (dates with no filtered row carry NaN, which never
+    counts as at-or-above the threshold):
+
+    - ``c[i] >= act_threshold``: walk **backwards** to the start ``j`` of the
+      contiguous at-or-above-threshold run containing ``i``; the offset is
+      ``j - i <= 0``. Only the run containing ``i`` counts — an earlier, separate
+      excursion above the threshold is not a lead on this transition. A run that
+      reaches the first observed row is truncated there, so the offset is then the
+      most negative value the data can show.
+    - otherwise: the offset is ``compute_detection_lag``'s own answer for that
+      transition (called, not reimplemented), which is ``>= 1`` or NaN.
+
+    Unresolved (NaN) transitions — the column never crosses at or after ``i``, or
+    ``s`` has no column at all — are counted in ``n_transitions`` and excluded from
+    ``median_offset``/``min_offset``, the same convention ``compute_detection_lag``
+    documents.
+
+    Returns:
+        dict with ``offsets`` (list, chronological order), ``positions`` and
+        ``target_states`` (parallel lists), ``per_state`` (state -> offsets),
+        ``n_transitions``, ``n_resolved``, ``min_offset``, ``median_offset``,
+        ``n_negative`` (offset < 0), ``n_zero_or_negative`` (offset <= 0),
+        ``act_threshold``.
+
+    Raises:
+        ValueError: on a non-integer-keyed matrix (the shared T0.12 guard).
+    """
+    _require_integer_state_columns(filtered_probs_matrix, caller="compute_signed_detection_offsets")
+    states_arr = np.asarray(full_sample_states)
+    transitions_by_state = _transitions_by_state(states_arr)
+
+    by_position: dict[int, tuple[int, float]] = {}
+    per_state: dict[int, list[float]] = {}
+    for target_state, positions in transitions_by_state.items():
+        if target_state not in filtered_probs_matrix.columns:
+            offsets = [float("nan")] * len(positions)
+        else:
+            own_column = filtered_probs_matrix[target_state].reindex(full_sample_states.index)
+            forward = compute_detection_lag(positions, own_column, threshold=act_threshold)["lags"]
+            values = own_column.to_numpy(dtype=float)
+            offsets = []
+            for i, lag in zip(positions, forward):
+                if values[i] >= act_threshold:
+                    # The backward walk. compute_detection_lag (gap_lag.py:86) would
+                    # report 0 here whether the belief crossed this month or crossed
+                    # months ago; the guard needs to know which. Walk back to the
+                    # start of the contiguous at-or-above run that contains i.
+                    j = i
+                    while j - 1 >= 0 and values[j - 1] >= act_threshold:
+                        j -= 1
+                    offsets.append(float(j - i))
+                else:
+                    offsets.append(float(lag))
+        per_state[target_state] = offsets
+        for i, off in zip(positions, offsets):
+            by_position[i] = (target_state, off)
+
+    ordered = sorted(by_position)
+    all_offsets = [by_position[i][1] for i in ordered]
+    resolved = [o for o in all_offsets if not np.isnan(o)]
+    return {
+        "offsets": all_offsets,
+        "positions": ordered,
+        "target_states": [by_position[i][0] for i in ordered],
+        "per_state": per_state,
+        "n_transitions": len(all_offsets),
+        "n_resolved": len(resolved),
+        "min_offset": float(min(resolved)) if resolved else float("nan"),
+        "median_offset": float(np.median(resolved)) if resolved else float("nan"),
+        "n_negative": sum(1 for o in resolved if o < 0),
+        "n_zero_or_negative": sum(1 for o in resolved if o <= 0),
+        "act_threshold": act_threshold,
+    }
+
+
+def _belief_held_through(
+    belief_s: np.ndarray, belief_r: np.ndarray, start: int, stop: int, act_threshold: float
+) -> bool:
+    """Clause (iii): at every month in ``[start, stop]`` (inclusive), ``belief[s] >= act``
+    AND ``belief[r] < act``. NaN satisfies neither comparison, so a missing belief month
+    never exempts — missing data cannot turn a lead into a miss.
+
+    Both halves are kept although they are redundant while ``act_threshold > 0.5``
+    (``belief[s] >= 0.70`` forces ``belief[r] <= 0.30``): plan 08-09 may re-pin the
+    threshold relative to 1/K, possibly below 0.5, where they stop being redundant.
+    Do not simplify one away.
+    """
+    window_s = belief_s[start:stop + 1]
+    window_r = belief_r[start:stop + 1]
+    return bool(np.all(window_s >= act_threshold) and np.all(window_r < act_threshold))
+
+
+def classify_negative_offsets(
+    reference_states: pd.Series,
+    belief: pd.DataFrame,
+    offsets_result: dict,
+    act_threshold: float,
+) -> dict:
+    """Classify every strictly negative signed offset as a LEAD or a HELD-THROUGH MISS.
+
+    **The rule, pre-registered in 08-08-PLAN.md (AMENDED 2026-09-23, before any real
+    08-08 number existed) and not to be changed after real data is seen (T-08-40b).**
+    A strictly negative offset at reference transition position ``p`` into state ``s``
+    is a **HELD-THROUGH MISS** if and only if ALL of:
+
+    (i)   the reference run immediately before ``p`` is a run of some ``r != s``
+          spanning ``[q, p-1]``;
+    (ii)  ``q >= 1`` and the reference was in ``s`` at ``q-1`` — the reference went
+          ``s -> r -> s``, a return. A run beginning at the start of the series has no
+          predecessor, is not a return, and is a LEAD (``q-1 >= 0`` is guarded
+          explicitly: a negative position would silently wrap to the series' end);
+    (iii) at every month in ``[q-1, p-1]``: ``belief[s] >= act_threshold`` AND
+          ``belief[r] < act_threshold`` — the belief held ``s`` straight through the
+          whole ``r`` run and never registered it.
+
+    **Every other strictly negative offset is a LEAD** — proof that post-*t*
+    information reached the belief. Why a leak cannot hide behind (iii): a belief that
+    sees post-*t* information registers the ``r`` run it is looking at and then crosses
+    back into ``s`` early, so ``belief[r]`` reaches the threshold inside ``[q, p-1]``
+    and (iii) fails. The miss is the belief *never leaving* ``s``; the leak is the
+    belief *leaving ``s`` too late and returning too early*.
+
+    Why the rule exists (plan 08-06, measured): an honest causal filter with a sticky
+    ``A`` never registers a short intervening regime, so the reference's return to the
+    prior state reads as a lead of up to -14 months although nothing leaked. The
+    exemption is narrower than "ignore negatives": it covers exactly that pattern.
+
+    Args:
+        reference_states: the full-sample reference labels (the series
+            ``compute_signed_detection_offsets`` read transitions from).
+        belief: the belief path, integer state columns; reindexed onto
+            ``reference_states.index`` (missing months are NaN, which never exempts).
+        offsets_result: ``compute_signed_detection_offsets``' output on the same inputs.
+        act_threshold: must equal ``offsets_result["act_threshold"]``.
+
+    Returns:
+        dict with ``n_negative``, ``n_lead``, ``n_held_through_miss``,
+        ``lead_positions``, ``held_through_miss_positions`` and ``details`` (one
+        mapping per negative offset: position, date, offset, state, verdict, and the
+        preceding run's state and span where one exists).
+
+    Raises:
+        ValueError: if ``act_threshold`` differs from the one the offsets were
+            computed at, or ``belief`` is not integer-keyed (the shared T0.12 guard).
+    """
+    if float(offsets_result["act_threshold"]) != float(act_threshold):
+        raise ValueError(
+            f"classify_negative_offsets: act_threshold {act_threshold} differs from the "
+            f"{offsets_result['act_threshold']} the offsets were computed at"
+        )
+    _require_integer_state_columns(belief, caller="classify_negative_offsets")
+    states_arr = np.asarray(reference_states)
+    aligned = belief.reindex(reference_states.index)
+    nan_col = np.full(len(states_arr), np.nan)
+
+    def column(state: int) -> np.ndarray:
+        return aligned[state].to_numpy(dtype=float) if state in aligned.columns else nan_col
+
+    details: list[dict] = []
+    for p, s, off in zip(offsets_result["positions"], offsets_result["target_states"], offsets_result["offsets"]):
+        if np.isnan(off) or off >= 0:
+            continue
+        p, s = int(p), int(s)
+        # (i) the run immediately before p, of r != s, spanning [q, p-1].
+        r = int(states_arr[p - 1])
+        q = p - 1
+        while q - 1 >= 0 and states_arr[q - 1] == r:
+            q -= 1
+        clause_i = r != s
+        # (ii) a return: q >= 1 guarded BEFORE indexing q-1.
+        clause_ii = clause_i and q >= 1 and int(states_arr[q - 1]) == s
+        # (iii) the belief held s through [q-1, p-1] and never registered r.
+        clause_iii = clause_ii and _belief_held_through(column(s), column(r), q - 1, p - 1, act_threshold)
+        verdict = "held_through_miss" if (clause_i and clause_ii and clause_iii) else "lead"
+        details.append({
+            "position": p,
+            "date": reference_states.index[p],
+            "offset": float(off),
+            "state": s,
+            "preceding_state": r,
+            "preceding_run": (q, p - 1),
+            "verdict": verdict,
+        })
+
+    leads = [d["position"] for d in details if d["verdict"] == "lead"]
+    misses = [d["position"] for d in details if d["verdict"] == "held_through_miss"]
+    return {
+        "n_negative": len(details),
+        "n_lead": len(leads),
+        "n_held_through_miss": len(misses),
+        "lead_positions": leads,
+        "held_through_miss_positions": misses,
+        "details": details,
         "act_threshold": act_threshold,
     }
 

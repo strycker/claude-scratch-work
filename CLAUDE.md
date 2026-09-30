@@ -1,6 +1,14 @@
 # CLAUDE.md — Project Guide for Claude Code
 
 This file is read automatically by Claude Code at the start of every session.
+
+> **Scope note (2026-09-29).** Most of this file documents the **legacy quarterly pipeline**
+> (frozen reference). Active development is the monthly **platform**
+> (`src/trading_crab_lib/platform/`, `config/platform_settings.yaml`, `notebooks/platform/`):
+> its design is `platform_design/platform_design.md`, its decisions are indexed in
+> `platform_design/DECISIONS.md`, its build order is `REBUILD-FROM-SCRATCH-GUIDE.md`, and its
+> execution status is `.planning/ROADMAP.md` / `.planning/STATE.md`. Working mode is **lean MVP**
+> (Phase 08.2): usable weekly product first, one module per phase, small plans.
 It explains what this project is, how to work in it, and what conventions to follow.
 Architecture decisions, pitfalls, and development history are all in this file —
 no separate ARCHITECTURE.md, DECISIONS.md, or PITFALLS.md exists.
@@ -125,7 +133,7 @@ trading-crab/
 │   ├── jupyter_notebook_local.sh  ← local notebook launcher helper
 │   └── run_weekly_report.py       ← weekly report automation (pipeline + archive + email)
 │
-├── tests/                         ← pytest test suite (1705 tests)
+├── tests/                         ← pytest test suite (2494 tests)
 │   ├── conftest.py                ← shared fixtures (quarterly_index, raw_macro_df, etc.)
 │   ├── fixtures/                  ← test fixture data (currently empty)
 │   ├── integration/
@@ -603,8 +611,8 @@ Tests live under `tests/`. Unit tests should not require network access — mock
 See `docs/archive/STATE.md` (historical) and `.planning/STATE.md` (live) for a full breakdown of what runs, what's tested, and what output
 files are produced. See `ROADMAP.md` for prioritized feature backlog.
 
-**Summary:** all 9 pipeline steps run end-to-end on real data. **1705 tests collected**
-(10 skipped: HDBSCAN + cssselect optional). All 5 legacy alignment gaps closed.
+**Summary:** all 9 pipeline steps run end-to-end on real data. **2494 tests collected**
+(0 skipped with all optional extras installed). All 5 legacy alignment gaps closed.
 Clustering investigation suite (GMM, DBSCAN, Spectral, gap statistic, SVD) fully
 implemented. Phase 3 supervised models (RF + DT + GB + forward classifiers) implemented.
 New modules: diagnostics (RRG), tactics, email/weekly report.  FRED expanded from 7

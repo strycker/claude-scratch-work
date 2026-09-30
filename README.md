@@ -2,12 +2,18 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-1705%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2494%20passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
 
 Market regime classification and prediction pipeline.
+
+> **Status (2026-09-29):** the active codebase is the monthly regime-conditional **platform**
+> (`src/trading_crab_lib/platform/`, notebooks in `notebooks/platform/`, weekly report via
+> `python -m trading_crab_lib.platform.report.serving` then `python -m trading_crab_lib.platform.report.weekly`).
+> The quarterly pipeline described below is the frozen legacy reference. Decisions:
+> `platform_design/DECISIONS.md`; build order: `REBUILD-FROM-SCRATCH-GUIDE.md`.
 
 <br>
 
@@ -474,7 +480,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ 1705 tests (unit + integration), all passing
+- ✓ 2494 tests (unit + integration), all passing
 - ✓ Exploration notebooks (01–12)
 
 ---
@@ -517,6 +523,39 @@ Design document: [platform_design/platform_design.md](platform_design/platform_d
 Architecture, mathematics, evaluation discipline, and build phases for the regime-conditional
 investment platform. Supersedes ad-hoc `trading-crab` design notes; see §11 for the
 trading-crab re-evaluation checklist. Current version: v1.7 (2026-07-08).
+
+### Running the platform weekly report
+
+Three commands, in this order:
+
+```bash
+# 1. The data. Reads FRED (needs FRED_API_KEY) and the web sources; writes the platform
+#    checkpoints (data/checkpoints/platform/, and the 2021+ holdout under data/holdout/).
+python scripts/build_platform_data.py
+
+# 2. The serving artifacts. Reads the DEV monthly_features and regime_labels (to 2020-12-31)
+#    and monthly_raw; writes nowcaster.pkl, nowcaster_class_prior (the model's training
+#    prior, which the weekly filter divides by), asset_returns and returns_by_regime to
+#    data/checkpoints/platform/. Fit by the same function the backtest evaluated. It is NOT a
+#    registry trial: it appends nothing to registry/trials.jsonl.
+python -m trading_crab_lib.platform.report.serving
+
+# 3. The report. Reads the step-2 artifacts plus the full-span monthly_features; writes
+#    outputs/reports/platform/weekly_report.md and the belief / hysteresis / executed-book
+#    state checkpoints. --send-email is opt-in.
+python -m trading_crab_lib.platform.report.weekly [--send-email]
+```
+
+`nowcaster.pkl` is a machine-local joblib pickle and is git-ignored; rebuild it with step 2.
+The weekly filter divides the model's posterior by the class prior of the rows that model was
+trained on (`nowcaster_class_prior`), which step 2 writes beside the model; a prior whose
+states are not the model's classes is refused, so the two are rebuilt together.
+When the newest data row lacks some of the model's columns (a publication lag), step 3 scores
+the latest month observed in every model column, prints "Scored as of <month>" and names what
+each newer row lacks; it refuses when that month is more than 3 month-ends behind the newest
+row, and it never imputes. Under the distribution it prints how many distinct posteriors the
+model gives across history; on today's data that is 1, and the page says the distribution
+does not depend on the features.
 
 ---
 
