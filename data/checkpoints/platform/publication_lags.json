@@ -1,0 +1,67 @@
+{
+  "publication_lags": {
+    "AGG": 0,
+    "COST": 0,
+    "DBA": 0,
+    "EEM": 0,
+    "EFA": 0,
+    "GDX": 0,
+    "HYG": 0,
+    "IAU": 0,
+    "IEF": 0,
+    "IWM": 0,
+    "LQD": 0,
+    "MCD": 0,
+    "O": 0,
+    "QQQ": 0,
+    "SHY": 0,
+    "SLV": 0,
+    "SPY": 0,
+    "TSM": 0,
+    "UEC": 0,
+    "UNG": 0,
+    "VNQ": 0,
+    "VYM": 0,
+    "cape_shiller": 0,
+    "cash": "derived",
+    "div_yield": 3,
+    "equities_tr": "derived",
+    "fred_aaa": 0,
+    "fred_baa": 0,
+    "fred_cpi": {
+      "fallback_months": 1,
+      "vintage": true
+    },
+    "fred_gdp": {
+      "fallback_months": 3,
+      "vintage": true
+    },
+    "fred_gs10": 0,
+    "fred_indpro": {
+      "fallback_months": 1,
+      "vintage": true
+    },
+    "fred_m2sl": 1,
+    "fred_payems": {
+      "fallback_months": 1,
+      "vintage": true
+    },
+    "fred_t10y2y": 0,
+    "fred_t10y3m": 0,
+    "fred_tb3ms": 0,
+    "fred_totalsl": 2,
+    "fred_unrate": {
+      "fallback_months": 1,
+      "vintage": true
+    },
+    "fred_vix": 0,
+    "gold": "derived",
+    "gold_spot": 0,
+    "long_duration_tr": "derived",
+    "oil": "derived",
+    "sp500": 0,
+    "wti_crude": 0,
+    "wti_fred": 0
+  },
+  "written_at_utc": "2026-09-30T20:59:40+00:00"
+}
