@@ -28,7 +28,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation (completed 2026-09-10)
 - [x] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01). **Closed 2026-09-21: INV-01 delivered in full; REG-01 delivered PARTIALLY — criterion 6's dependence verdict is UNRESOLVED and no independent second axis is established**
 - [x] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run (completed 2026-09-30)
-- [ ] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget
+- [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
 - [ ] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
@@ -712,7 +712,7 @@ runs reliably month to month; the regime tilt remains unproven until 8.1's re-me
 **Requirements**: TBD
 **Depends on:** Phase 8
 **Blocks**: Phase 9 (Migration) — Glenn's ruling, 2026-09-29
-**Plans:** 3 plans (2 waves; lean mode; ADR-0004 budget 2 rows, 44 → 46, spent only by 08.1-03 after a blocking decision checkpoint)
+**Plans:** 3/3 plans complete (2 waves; lean mode; ADR-0004 budget 2 rows, 44 → 46, spent by 08.1-03 after Glenn's checkpoint "Run"). **Answer E-06: NO** — the regime view stays advisory in 8.2 (G-06).
 
 Plans:
 
@@ -806,6 +806,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
-| 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Verified — human_needed (Mac run) | - |
+| 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
