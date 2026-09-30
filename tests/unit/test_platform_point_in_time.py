@@ -70,23 +70,23 @@ def _walk(rng: np.random.Generator, level: float, n: int) -> np.ndarray:
     return level * np.exp(np.cumsum(rng.normal(0.0, 0.03, n)))
 
 
-def _synthetic_macro(cfg: dict, rng: np.random.Generator) -> pd.DataFrame:
+def _synthetic_macro(cfg: dict, rng: np.random.Generator, idx: pd.DatetimeIndex = IDX) -> pd.DataFrame:
     cols = {}
     for name in [*_macro_names(cfg), "sentinel"]:
         # FRED yields are percent (~5); multpl div_yield is a decimal (~0.03).
         level = 0.03 if name == "div_yield" else 5.0 if name.startswith("fred_") else 100.0
-        cols[name] = _walk(rng, level, len(IDX))
-    return pd.DataFrame(cols, index=IDX)
+        cols[name] = _walk(rng, level, len(idx))
+    return pd.DataFrame(cols, index=idx)
 
 
-def _synthetic_prices(cfg: dict, rng: np.random.Generator) -> pd.DataFrame:
-    return pd.DataFrame({t: _walk(rng, 50.0, len(IDX)) for t in _price_ingest_tickers(cfg)}, index=IDX)
+def _synthetic_prices(cfg: dict, rng: np.random.Generator, idx: pd.DatetimeIndex = IDX) -> pd.DataFrame:
+    return pd.DataFrame({t: _walk(rng, 50.0, len(idx)) for t in _price_ingest_tickers(cfg)}, index=idx)
 
 
-def _synthetic_vintages(rng: np.random.Generator) -> dict[str, pd.DataFrame]:
+def _synthetic_vintages(rng: np.random.Generator, end: str = END) -> dict[str, pd.DataFrame]:
     """Monthly agency releases, each reference month published 45 days after it
     starts. Identical in every build — the agency path is not under test here."""
-    refs = pd.date_range("1960-01-01", END, freq="MS")
+    refs = pd.date_range("1960-01-01", end, freq="MS")
     return {
         name: pd.DataFrame(
             {
@@ -288,3 +288,183 @@ class TestApplyPublicationLags:
     def test_lag_table_rejects_malformed_entries_naming_the_column(self, entry):
         with pytest.raises(ValueError, match=r"publication_lags\.bad_col"):
             pl.lag_table(_mini_cfg(bad_col=entry))
+
+
+# ── 5. ALFRED: vintage era and pre-vintage fallback are both point-in-time ──
+
+
+def _quarterly_gdp_releases(first_vintage_year: int = 1975) -> tuple[pd.DataFrame, pd.Series]:
+    """GDP-shaped synthetic ALFRED history: quarterly reference periods (dated at
+    the quarter start, as GDPC1 is), each released 30 days after its quarter ends.
+    The archive only begins in *first_vintage_year*: its first vintage carries
+    every earlier reference period at once, as GDPC1's 1991-12-04 vintage does.
+
+    Returns (all_releases, release date per reference period)."""
+    refs = pd.date_range("1955-01-01", "1980-10-01", freq="QS")
+    released = pd.Series(refs + pd.offsets.QuarterEnd(0) + pd.Timedelta(days=30), index=refs)
+    first_vintage = released[released >= pd.Timestamp(f"{first_vintage_year}-01-01")].iloc[0]
+    realtime_start = released.where(released >= first_vintage, first_vintage)
+    values = 100.0 * 1.01 ** np.arange(len(refs))
+    frame = pd.DataFrame({"realtime_start": realtime_start.to_numpy(), "date": refs, "value": values})
+    return frame, released
+
+
+class TestAlfredPointInTime:
+    def test_value_at_every_month_end_is_the_latest_release_known_by_then_in_both_eras(self):
+        releases, released = _quarterly_gdp_releases()
+        spine = pd.date_range("1962-01-01", "1980-12-31", freq="ME")
+        cfg = load_platform_config()
+
+        with patch(
+            "trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages",
+            return_value={"fred_gdp": releases},
+        ):
+            aligned = transforms_monthly.align_agency_monthly(spine, cfg)["fred_gdp"]
+
+        value_of = releases.set_index("date")["value"]
+        wrong = []
+        for t in spine[spine >= "1970-01-01"]:
+            latest_ref = released[released <= t].index.max()
+            expected = value_of[latest_ref]
+            if not np.isclose(aligned[t], expected, rtol=1e-9, atol=0.0):
+                wrong.append((str(t.date()), aligned[t], expected))
+        assert wrong == [], f"{len(wrong)} month-ends show a value not yet released (or a stale one): {wrong[:6]}"
+
+    def test_fallback_lag_is_a_parameter_applied_on_the_reference_month_grid(self):
+        releases, _ = _quarterly_gdp_releases()
+        spine = pd.date_range("1970-01-01", "1970-12-31", freq="ME")
+        q1 = releases.set_index("date").loc["1970-01-01", "value"]
+
+        lag3 = transforms_monthly._shift_fallback_series(releases, spine, "ME", lag=3)
+        lag1 = transforms_monthly._shift_fallback_series(releases, spine, "ME")
+
+        assert lag3["1970-04-30"] == q1 and lag3["1970-03-31"] != q1  # Q1 visible from Apr 30
+        assert lag1["1970-02-28"] == q1  # the default keeps the old behaviour for callers
+
+    def test_agency_series_without_a_vintage_entry_raises(self):
+        releases, _ = _quarterly_gdp_releases()
+        cfg = copy.deepcopy(load_platform_config())
+        del cfg["publication_lags"]["fred_gdp"]
+        with (
+            patch(
+                "trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages",
+                return_value={"fred_gdp": releases},
+            ),
+            pytest.raises(ValueError, match="fred_gdp"),
+        ):
+            transforms_monthly.align_agency_monthly(pd.date_range("1970-01-01", periods=3, freq="ME"), cfg)
+
+
+# ── 6. Index end: the running month is never a row ─────────────────────────
+
+
+class TestLastCompleteMonthEnd:
+    @pytest.mark.parametrize(
+        "today, expected",
+        [("2026-09-30", "2026-08-31"), ("2026-10-01", "2026-09-30"), ("2026-10-31", "2026-09-30"),
+         ("2026-09-30 17:45", "2026-08-31")],
+    )
+    def test_returns_the_last_complete_month_end(self, today, expected):
+        assert transforms_monthly.last_complete_month_end(pd.Timestamp(today)) == pd.Timestamp(expected)
+
+    def test_a_last_day_of_month_build_writes_no_row_for_that_month(self, tmp_path):
+        from datetime import date as real_date
+
+        class _LastDayOfSeptember(real_date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 9, 30)
+
+        cfg = _pit_cfg()
+        cfg["data"]["start_date"], cfg["data"]["end_date"] = "2024-01-01", None
+        idx = pd.date_range("2024-01-31", "2026-09-30", freq="ME")  # includes the running month
+        rng = np.random.default_rng(3)
+        with patch.object(transforms_monthly, "date", _LastDayOfSeptember):
+            out = _build(
+                cfg, _synthetic_macro(cfg, rng, idx), _synthetic_prices(cfg, rng, idx),
+                _synthetic_vintages(rng, "2026-09-30"), tmp_path,
+            )
+        assert out.index[-1] == pd.Timestamp("2026-08-31")
+        assert pd.Timestamp("2026-09-30") not in out.index
+
+
+# ── 7. Merge guard: never merge lagged data onto an unlagged monthly_raw ────
+
+
+MARKER_IDX = pd.date_range("1970-01-31", "1972-12-31", freq="ME")
+
+
+@pytest.fixture
+def small_world():
+    cfg = _pit_cfg()
+    cfg["data"]["start_date"], cfg["data"]["end_date"] = "1970-01-01", "1972-12-31"
+    rng = np.random.default_rng(7)
+    return (
+        cfg, _synthetic_macro(cfg, rng, MARKER_IDX), _synthetic_prices(cfg, rng, MARKER_IDX),
+        _synthetic_vintages(rng, "1972-12-31"),
+    )
+
+
+def _seed_monthly_raw(root: Path) -> Path:
+    from trading_crab_lib.checkpoints import CheckpointManager
+
+    cm = CheckpointManager(checkpoint_dir=root / "platform")
+    return cm.save(pd.DataFrame({"old_only": np.arange(len(MARKER_IDX), dtype=float)}, index=MARKER_IDX), "monthly_raw")
+
+
+class TestLagMarkerMergeGuard:
+    def test_empty_dir_saves_and_writes_a_matching_marker(self, small_world, tmp_path):
+        cfg, macro, prices, vintages = small_world
+        _build(cfg, macro, prices, vintages, tmp_path)
+        marker = tmp_path / "platform" / pl.LAG_MARKER_FILENAME
+        assert (tmp_path / "platform" / "monthly_raw.parquet").is_file()
+        assert pl.lag_marker_matches(marker, cfg)
+
+    @pytest.mark.parametrize("marker_state", ["missing", "different"])
+    def test_unmarked_or_differently_marked_monthly_raw_raises_before_any_write(
+        self, marker_state, small_world, tmp_path
+    ):
+        cfg, macro, prices, vintages = small_world
+        raw_path = _seed_monthly_raw(tmp_path)
+        before = raw_path.read_bytes()
+        if marker_state == "different":
+            other = copy.deepcopy(cfg)
+            other["publication_lags"]["div_yield"] = 4
+            pl.write_lag_marker(tmp_path / "platform" / pl.LAG_MARKER_FILENAME, other)
+
+        with pytest.raises(RuntimeError, match="migrate_publication_lags"):
+            _build(cfg, macro, prices, vintages, tmp_path)
+
+        assert raw_path.read_bytes() == before
+        assert not (tmp_path / "platform" / "daily_raw.parquet").exists()
+        assert not (tmp_path / "platform" / "monthly_features.parquet").exists()
+
+    def test_matching_marker_merges(self, small_world, tmp_path):
+        cfg, macro, prices, vintages = small_world
+        _seed_monthly_raw(tmp_path)
+        pl.write_lag_marker(tmp_path / "platform" / pl.LAG_MARKER_FILENAME, cfg)
+
+        _build(cfg, macro, prices, vintages, tmp_path)
+
+        saved = pd.read_parquet(tmp_path / "platform" / "monthly_raw.parquet")
+        assert "old_only" in saved.columns and "div_yield" in saved.columns
+
+    def test_marker_round_trip_detects_a_changed_table(self, tmp_path):
+        cfg = load_platform_config()
+        marker = pl.write_lag_marker(tmp_path / pl.LAG_MARKER_FILENAME, cfg)
+        assert pl.lag_marker_matches(marker, cfg)
+        changed = copy.deepcopy(cfg)
+        changed["publication_lags"]["fred_totalsl"] = 3
+        assert not pl.lag_marker_matches(marker, changed)
+        assert not pl.lag_marker_matches(tmp_path / "absent.json", cfg)
+
+
+# ── 8. No lag is applied twice ──────────────────────────────────────────────
+
+
+class TestShiftGuard:
+    def test_fred_monthly_shift_true_makes_lag_table_raise(self):
+        cfg = copy.deepcopy(load_platform_config())
+        cfg["fred_monthly"]["series"]["M2SL"]["shift"] = True
+        with pytest.raises(ValueError, match="fred_m2sl"):
+            pl.lag_table(cfg)
