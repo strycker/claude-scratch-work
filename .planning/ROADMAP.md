@@ -712,11 +712,13 @@ runs reliably month to month; the regime tilt remains unproven until 8.1's re-me
 **Requirements**: TBD
 **Depends on:** Phase 8
 **Blocks**: Phase 9 (Migration) — Glenn's ruling, 2026-09-29
-**Plans:** 0 plans
+**Plans:** 3 plans (2 waves; lean mode; ADR-0004 budget 2 rows, 44 → 46, spent only by 08.1-03 after a blocking decision checkpoint)
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 08.1 to break down)
+- [ ] 08.1-01-PLAN.md — `publication_lags` table for every raw series applied once in `build_monthly_spine`; GDP pre-vintage fallback lag 3; last-complete-month index end; merge-on-save marker guard; PIT truncation test with div_yield mutation proof; D-12 hard-coded-44 sites → 46 — wave 1
+- [ ] 08.1-02-PLAN.md — weekly: per-series STALE banner replaces the q1-c cap (A-12 supersedes A-07); always-printed target allocation table (A-11); README 3-line accounts how-to — wave 1
+- [ ] 08.1-03-PLAN.md — D-06 "before" run (NO_REGISTRY) on HEAD data, offline migration of tracked data to point-in-time, test re-pins, checkpoint, D-04 tilt-vs-ablation run (44 → 46) and DECISIONS rows (E-06 answer) — wave 2, checkpoint
 
 ### Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED)
 
@@ -804,6 +806,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
-| 08.1 Point-in-Time Data Audit (INSERTED) | 0/TBD | Not started | - |
+| 08.1 Point-in-Time Data Audit (INSERTED) | 0/3 | Planned | - |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
