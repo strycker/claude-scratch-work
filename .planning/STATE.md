@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase_name: Regime Persistence & Stability
-status: verifying
-stopped_at: Phase 8 EXECUTED (10/10 plans → 19/19 with gap closure 08-11..08-19, 2026-09-29); awaiting Mac runs and phase close
-last_updated: "2026-09-29T22:47:36.458Z"
+current_phase: 08.1
+current_phase_name: Point-in-Time Data Audit
+status: planning
+stopped_at: Phase 8 COMPLETE 2026-09-30 (19/19 plans, verified 12/12, Mac suite + build→serving→weekly passed); next is 08.2 or 08.1 — order pending Glenn
+last_updated: "2026-09-30T15:51:23.038Z"
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 67
   completed_plans: 66
-current_phase: 8
 last_activity: 2026-09-29
 last_activity_desc: "Phase 8 WAVE 1 COMPLETE — 08-01..08-05 executed. A11 ANSWERED b-promote-dsr (registry rows spent: 0; criterion 7 FAILED retroactively on both l1only legs). Track A terminal-month edge artefact REFUTED — #1 churn flat in k (242-249/587 for k=1..6). l1only bit-reproducible. Suite 2150 passed, 0 skipped. Registry 42/44. Ratchet 31."
 ---
@@ -28,8 +28,8 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: **8 — Regime Persistence & Stability — EXECUTING**
-Status: **PHASE 8 EXECUTED — 10 of 10 plans (2026-09-28). Awaiting verification and UAT.**
+Phase: 08.1 — Point-in-Time Data Audit
+Status: Ready to plan — Glenn to choose 08.2 (Lean MVP, recommended first) vs 08.1 (Point-in-Time Audit)
 Closing record: `08-MEASUREMENTS.md`. **Registry 42 → 44, the ADR-0002 ceiling exactly — zero
 headroom for the rest of v1.** Criterion 7 re-measured with the 5pp no-trade band, 588 steps,
 1972-01-31 → 2020-12-31: l1only `wealth_delta` **−0.125307** (was −0.123438), `dd_delta`

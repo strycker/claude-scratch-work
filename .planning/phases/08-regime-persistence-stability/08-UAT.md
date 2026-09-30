@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: complete
 phase: 08-regime-persistence-stability
 source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-05-SUMMARY.md, 08-06-SUMMARY.md, 08-07-SUMMARY.md, 08-08-SUMMARY.md, 08-09-SUMMARY.md, 08-10-SUMMARY.md]
 started: 2026-09-28T15:48:37Z
@@ -147,7 +147,7 @@ blocked: 0
     - "Compare floats with pytest.approx(rel=1e-9) — relative, so the ~1e-13 DSR values are held to the same standard as wealth_delta — and keep booleans exact"
     - "Prove the tolerance still discriminates: the band-off record must FAIL against the band-on curves"
   debug_session: ""
-  resolution: "fixed by 08-11 (G-08-1) / 08-12..08-14 (G-08-2), re-verified 2026-09-29 (08-VERIFICATION.md 12/12); Mac re-test pending (VERIFICATION human items 1-2)"
+  resolution: "fixed by 08-11 (G-08-1) / 08-12..08-14 (G-08-2), re-verified 2026-09-29 (08-VERIFICATION.md 12/12); Mac re-test PASSED 2026-09-30 (2494 passed; build→serving→weekly ×2 identical)"
 
 - gap_id: G-08-2
   truth: "The weekly report — the surface Glenn trades from — runs end to end from supported commands."
@@ -169,4 +169,4 @@ blocked: 0
     - "Ruling (APPROVED by Glenn 2026-09-28): the serving fit is NOT a registry trial — it is written with the NO_REGISTRY sentinel; it refits an already-evaluated configuration on full history, selects nothing, and leaves total_trial_count() at 44"
     - "An end-to-end test of weekly.main against a real fitted model"
   debug_session: ""
-  resolution: "fixed by 08-11 (G-08-1) / 08-12..08-14 (G-08-2), re-verified 2026-09-29 (08-VERIFICATION.md 12/12); Mac re-test pending (VERIFICATION human items 1-2)"
+  resolution: "fixed by 08-11 (G-08-1) / 08-12..08-14 (G-08-2), re-verified 2026-09-29 (08-VERIFICATION.md 12/12); Mac re-test PASSED 2026-09-30 (2494 passed; build→serving→weekly ×2 identical)"

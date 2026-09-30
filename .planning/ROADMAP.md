@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Honest Backtest & Evaluation** - Full 1972–2020 walk-forward backtest vs. baseline gauntlet with first-class honesty metrics (completed 2026-07-27, closed 2026-08-04)
 - [x] **Phase 6: Platform Notebook Suite** - Six EDA + human-in-the-loop validation notebooks (P1–P6) covering L0–L4 and evaluation (completed 2026-09-10)
 - [x] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01). **Closed 2026-09-21: INV-01 delivered in full; REG-01 delivered PARTIALLY — criterion 6's dependence verdict is UNRESOLVED and no independent second axis is established**
-- [ ] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run
+- [x] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run (completed 2026-09-30)
 - [ ] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget
 - [ ] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
@@ -716,19 +716,25 @@ with confidence. Plan: `REBUILD-FROM-SCRATCH-GUIDE.md` §3–§5; decisions: `pl
 ≤ 2–3 plans, ≤ ~150-line PLANs, ≤ 5 discuss questions, decisions recorded as `DECISIONS.md` rows;
 mutation proofs / ruling records / amendments only for **decision-bearing** numbers.
 **Candidate success criteria (to be confirmed at discuss-phase):**
+
   1. **MVP-1 usable:** one command on real data produces the weekly report with a regime-free,
      vol-targeted core allocation that works on its own; the regime view is shown as **advisory**
      (no weight) until it beats the no-regime ablation.
+
   2. **Module map:** the platform is organised as the guide's modules M0–M7, each with a small stated
      interface — simplification by *not carrying forward* (classifier #2 / joint driver / stability
      suite parked, not deleted).
+
   3. **Notebook gates:** every module used by MVP-1 has a notebook that runs top-to-bottom on real
      data with one human sign-off cell — including the gaps today: serving/report (N4), the filtered
      belief, and a "does the regime layer pay rent?" scoreboard (N7).
+
   4. **Cheap point-in-time fix folded in:** the publication-lag shifts for the three measured series
      (+ the point-in-time test) — the config/test half of Phase 08.1 — so MVP-1 is not built on
      look-ahead. The expensive half (re-running decision-bearing evaluations) stays in 08.1.
+
   5. Full suite green on Mac and Linux; no new trial-registry rows (budget 0).
+
 **Requirements**: TBD
 **Depends on:** Phase 8
 **Recommended order (Glenn to confirm):** 08.2 before 08.1's re-evaluation half; 08.2's modules are the
@@ -784,7 +790,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Honest Backtest & Evaluation | 7/7 | Complete (closed 2026-08-04) | 2026-07-27 |
 | 6. Platform Notebook Suite | 7/7 | Executed + verified (5/5 criteria; human_needed) | 2026-09-10 |
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
-| 8. Regime Persistence & Stability | 19/19 | Executed + re-verified 12/12 (human_needed: Mac suite + Mac build→serving→weekly) | 2026-09-29 |
+| 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
 | 08.1 Point-in-Time Data Audit (INSERTED) | 0/TBD | Not started | - |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

@@ -2,7 +2,8 @@
 phase: 08-regime-persistence-stability
 verified: 2026-09-29T21:40:00Z
 verified_at_commit: a64b0e7
-status: human_needed
+status: passed
+human_verified: 2026-09-30 (Glenn, macOS: 2494 passed / 0 failed; build → serving → weekly ×2 identical)
 score: 12/12 must-haves verified (10 ROADMAP success criteria 0-9 + 2 UAT gap truths G-08-1, G-08-2); round-2 plan must-haves 08-15..08-19 verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -366,3 +367,7 @@ _Verifier: Claude (gsd-verifier)_
 
 Human item 3 (neutral-posture display) is **CLOSED**: Glenn ruled "One sentence, no rows" — the
 behaviour 08-15 built stands. Items 1–2 (Mac full suite; Mac build → serving → weekly) remain open.
+
+Human items 1–2 **PASSED** on Glenn's Mac, 2026-09-30: `pytest tests/ -q` → 2494 passed, 0 failed, 0 skipped
+(5 seaborn `PendingDeprecationWarning`s from third-party internals in legacy `test_plotting.py` — not ours);
+`build_platform_data.py` → `serving` → `weekly` twice → no errors, second report byte-identical. Status → **passed**.
