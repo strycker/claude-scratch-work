@@ -91,7 +91,7 @@ def test_fetch_fred_monthly_produces_monthly_cadence_not_quarterly():
     raw = _make_daily_fred_series(years=3)
     mock_fred.get_series.return_value = raw
 
-    monthly = _fetch_fred_monthly(mock_fred, "GS10", "2020-01-01", "2023-01-01", shift=False)
+    monthly = _fetch_fred_monthly(mock_fred, "GS10", "2020-01-01", "2023-01-01")
     quarterly = raw.resample("QE").last()
 
     # ~12 rows/year over 3 years -> ~36 rows; materially more than quarterly's ~12
@@ -431,15 +431,21 @@ def test_fetch_macro_monthly_all_sources_empty_returns_empty_df():
 
 
 class TestInvariantSeriesIngestion:
-    def test_platform_config_maps_new_series_with_shift_false(self):
+    def test_platform_config_maps_new_series_with_lags_in_the_publication_lags_table(self):
+        """08.1: lags moved out of fred_monthly (no `shift` key anywhere) into the
+        top-level publication_lags table, which carries the measured H.6 / G.19
+        release delays."""
         from trading_crab_lib.platform.config import load_platform_config
+        from trading_crab_lib.platform.ingestion.publication_lags import lag_table
 
         cfg = load_platform_config()
         series = cfg["fred_monthly"]["series"]
         assert series["M2SL"]["name"] == "fred_m2sl"
-        assert series["M2SL"]["shift"] is False
         assert series["TOTALSL"]["name"] == "fred_totalsl"
-        assert series["TOTALSL"]["shift"] is False
+        assert [sid for sid, meta in series.items() if "shift" in meta] == []
+        table = lag_table(cfg)
+        assert table["fred_m2sl"] == 1
+        assert table["fred_totalsl"] == 2
 
     @patch("trading_crab_lib.platform.ingestion.macro_monthly.Fred")
     def test_mocked_fetch_returns_both_renamed_columns(self, mock_fred_cls):

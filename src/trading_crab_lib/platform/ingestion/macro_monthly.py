@@ -71,20 +71,18 @@ def _fetch_fred_monthly(
     series_id: str,
     start: str,
     end: str,
-    shift: bool,
     monthly_freq: str = "ME",
 ) -> pd.Series:
-    """Pull one FRED series, resample to month-end, optionally apply publication lag.
+    """Pull one FRED series and resample it to month-end.
 
     Monthly analog of ``fred.py::_fetch_one`` — same client and pull, but
     resamples to ``monthly_freq`` (month-end, ``"ME"``) instead of the
     incumbent's hardcoded quarterly period-end rule (RESEARCH Pitfall 1).
+    No publication lag here: lags are applied once, downstream, from
+    ``cfg['publication_lags']`` (``publication_lags.apply_publication_lags``).
     """
     raw = fred.get_series(series_id, observation_start=start, observation_end=end)
-    monthly = raw.resample(monthly_freq).last()
-    if shift:
-        monthly = monthly.shift(1)  # lag one period — data known next period
-    return monthly
+    return raw.resample(monthly_freq).last()
 
 
 def fetch_fred_monthly(cfg: dict[str, Any]) -> pd.DataFrame:
@@ -101,7 +99,6 @@ def fetch_fred_monthly(cfg: dict[str, Any]) -> pd.DataFrame:
           series:
             GS10:
               name:  "fred_gs10"
-              shift: false
         data:
           start_date:   "1962-01-01"
           end_date:     null
@@ -124,11 +121,9 @@ def fetch_fred_monthly(cfg: dict[str, Any]) -> pd.DataFrame:
 
     def _fetch_task(series_id: str, meta: dict) -> tuple[str, pd.Series | None]:
         friendly_name = meta["name"]
-        shift = meta.get("shift", False)
-        lag_note = " (shifted +1)" if shift else ""
-        log.info("Fetching FRED (monthly) %-10s → %s%s", series_id, friendly_name, lag_note)
+        log.info("Fetching FRED (monthly) %-10s → %s", series_id, friendly_name)
         try:
-            s = _fetch_fred_monthly(fred, series_id, start, end, shift, monthly_freq)
+            s = _fetch_fred_monthly(fred, series_id, start, end, monthly_freq)
             s.name = friendly_name
             return friendly_name, s
         except Exception as exc:  # noqa: BLE001 — fredapi raises various types

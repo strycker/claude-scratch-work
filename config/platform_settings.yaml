@@ -13,39 +13,32 @@ data:
   daily_persist: true          # D-05: store daily raw prices, derive monthly by resample
 
 # ── FRED market/fast-layer series (no ALFRED vintage needed) ──────────────────
-# Market-observed series (rates, spreads, prices) are never revised — plain
-# publication-lag `shift` (false here; none of these have meaningful lag) is
-# sufficient. `daily: true` marks series natively published at daily frequency
+# Market-observed series (rates, spreads, prices) are never revised. Their
+# publication lags live in the top-level `publication_lags` table (08.1), not
+# here: a `shift` key in this block makes the build raise, so nothing is lagged
+# twice. `daily: true` marks series natively published at daily frequency
 # (persisted daily per D-05, then resampled to the monthly spine).
 fred_monthly:
   series:
     GS10:
       name:  "fred_gs10"
-      shift: false
     TB3MS:
       name:  "fred_tb3ms"
-      shift: false
     BAA:
       name:  "fred_baa"
-      shift: false
     AAA:
       name:  "fred_aaa"
-      shift: false
     T10Y3M:
       name:  "fred_t10y3m"
-      shift: false
       daily: true
     T10Y2Y:
       name:  "fred_t10y2y"
-      shift: false
       daily: true
     VIXCLS:
       name:  "fred_vix"
-      shift: false
       daily: true
     WTISPLC:
       name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
-      shift: false
     # D-12/INV-01 (07-regime-representation wave 2): M2SL and TOTALSL feed
     # classifier #2's named invariant ratios (m2_gdp, credit_gdp —
     # platform/features/relative.py::compute_invariant_ratios). Both are
@@ -64,10 +57,8 @@ fred_monthly:
     # at exactly 13 raw columns (D-10's disjointness denominator).
     M2SL:
       name:  "fred_m2sl"
-      shift: false
     TOTALSL:
       name:  "fred_totalsl"
-      shift: false
 
 # ── FRED daily-frequency credit series (L4-04, Phase 4 Pitfall 2) ─────────────
 # BAA/AAA above are monthly-only on FRED; the tripwire's credit-spread-velocity
