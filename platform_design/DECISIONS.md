@@ -37,7 +37,7 @@ recommendation (2026-09-29) and **not yet ruled on**. Glenn edits it.
 | D-02 | Core 5 classes: equities (SPY), long duration (TLT), gold (IAU), oil (USO), cash. Satellites, holdings and watchlist are scored as well. | Minimal cross-asset spine | Phase 1 D-08..D-13 | KEEP |
 | D-03 | Ratio-splice at overlap windows; provenance of every resolved source is logged. | Continuity without level jumps | Phase 1 D-04; docs/splicing_rules.md | KEEP |
 | D-04 | ALFRED point-in-time vintages only for revision-heavy agency series; other series get a publication-lag shift. | Revisions leak future information | Phase 1 D-06 | SIMPLIFY (shifts first, vintages later) |
-| D-05 | **Every feature must be lagged to its publication date.** Measured gaps (2026-09-29): `fred_m2sl` ~1 month, `fred_totalsl` ~2 months, `div_yield` (multpl) 2–3 months are all unshifted today. | Look-ahead (CR-03) | 08-REVIEW CR-03; Phase 08.1 | KEEP, **open** |
+| D-05 | **Every feature must be lagged to its publication date.** Measured gaps (2026-09-29): `fred_m2sl` ~1 month, `fred_totalsl` ~2 months, `div_yield` (multpl) 2–3 months are all unshifted today. | Look-ahead (CR-03) | 08-REVIEW CR-03; Phase 08.1 | KEEP, **open** — **How (Glenn 2026-09-30):** measured `publication_lag_months` table for every series, applied once in ingestion; ALFRED series stay vintage-aligned (08.1-CONTEXT D-01..D-03) |
 | D-06 | Frozen 13-column lean taxonomy (fast + slow) for classifier #1. | Few, named, interpretable features | Phase 1 taxonomy | KEEP |
 
 ## Honesty rails
@@ -91,8 +91,8 @@ recommendation (2026-09-29) and **not yet ruled on**. Glenn edits it.
 | A-08 | The report prints the **count of distinct posterior vectors** (q2-ii), so a constant model can never pass as a live signal. | Honesty on the trading surface | 08-14 | KEEP |
 | A-09 | Neutral posture (no active regime): the per-asset section prints one sentence and no rows. Rows that do print name their regime. | 24 unlabelled contradictory rows were misleading | 08-15; ruling 2026-09-29 | KEEP |
 | A-10 | Minimal daily tripwire (3 signals). | Crash avoidance is the point | Phase 4 | KEEP |
-| A-11 | The weekly report **always prints the target (executed) allocation**; per-account trades are an extra section. | With no account configured the page never said what to hold (Glenn's 2026-09-30 Mac report) | Glenn 2026-09-30; Phase 08.1 | KEEP, **to build** |
-| A-12 | Staleness is judged **per series against its own publication lag**, replacing A-07's "3 month-ends behind the newest row" rule. | A mostly-empty current-month row put the scored month exactly at the cap | Glenn 2026-09-30; Phase 08.1 | KEEP, **to build** (supersedes A-07's cap once built) |
+| A-11 | The weekly report **always prints the target (executed) allocation**; per-account trades are an extra section. | With no account configured the page never said what to hold (Glenn's 2026-09-30 Mac report) | Glenn 2026-09-30; Phase 08.1 | KEEP, **to build** — **Form (Glenn 2026-09-30):** simple table: class, ticker, target %, last week %, change |
+| A-12 | Staleness is judged **per series against its own publication lag**, replacing A-07's "3 month-ends behind the newest row" rule. | A mostly-empty current-month row put the scored month exactly at the cap | Glenn 2026-09-30; Phase 08.1 | KEEP, **to build** (supersedes A-07's cap once built) — **Behavior (Glenn 2026-09-30):** stale series → report still runs with a prominent STALE banner naming them (no refusal, no imputation) |
 
 ## Evaluation
 
@@ -111,4 +111,5 @@ recommendation (2026-09-29) and **not yet ruled on**. Glenn edits it.
 | G-01 | Human notebooks P1–P6 (one per layer), each with a human sign-off cell in P3. | Human understanding and gating | Phase 6 | KEEP. **Extend**: nothing yet covers classifier #2, the Bayes filter, the no-trade band or serving |
 | G-02 | Plotting lives in `platform/plotting/` and notebooks call it; no inline plotting logic. | Reuse and testability | Phase 6 D-01/D-02 | KEEP |
 | G-04 | Phase order **8.1 → 8.2**: the point-in-time re-measurement of tilt vs ablation comes before the lean MVP, because its answer shapes the MVP's design. | Glenn, 2026-09-30 | ROADMAP | record |
+| G-05 | Phase 8.1 trial budget: **2 rows** (one tilt-vs-ablation run on point-in-time data), opening count 44, ceiling 46; criterion 7 not re-run. | Glenn, 2026-09-30 | 08.1-CONTEXT | record |
 | G-03 | The planning volume per phase is out of proportion (see the ratio table in `REBUILD-FROM-SCRATCH-GUIDE.md` §1). | Planning had become coding | Glenn, 2026-09-29 | **CHANGE**: Phase 8.2 lean-MVP mode |

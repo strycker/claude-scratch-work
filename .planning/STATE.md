@@ -6,7 +6,7 @@ current_phase: 08.1
 current_phase_name: Point-in-Time Data Audit
 status: planning
 stopped_at: Phase 8 COMPLETE 2026-09-30 (19/19 plans, verified 12/12, Mac suite + build→serving→weekly passed); next is 08.1 (order decided by Glenn 2026-09-30), then 08.2
-last_updated: "2026-09-30T15:51:23.038Z"
+last_updated: "2026-09-30T16:46:08.466Z"
 progress:
   total_phases: 10
   completed_phases: 7
