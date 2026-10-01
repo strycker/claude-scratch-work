@@ -124,7 +124,9 @@ interface, one notebook that shows its data and outputs to a human, and one gate
 | M7 | **Regime tilt + ablation** | belief → tilted weights; scoreboard adds tilt vs ablation | N7 does-regime-pay | tilt beats ablation net of costs, or it stays advisory | `allocation/`, `backtest/driver.py` |
 | **MVP-2** | *Regime-aware product* | | | | |
 | M8 | **Honesty upgrade** | registry budgets, DSR, holdout evaluation | N8 honesty | DSR computed against the registry | `honesty/`, `evaluation/deflated_sharpe.py` |
-| M9+ | Tripwire, stability, second classifier, mixture of experts, tactics | as designed | per module | per module | `tripwire/`, `labeling/{stability,classifier2}.py`, `evaluation/*` |
+| M9+ | Tripwire, stability, second classifier, mixture of experts, tactics | as designed | per module | per module | `tripwire/`, `parked/{stability,classifier2,joint_driver}.py`, `evaluation/*` |
+
+Current file mapping: `platform_design/MODULE-MAP.md` (08.2-02).
 
 **Notebook coverage today:** P1–P6 cover M1–M3, M5, the M6 nowcaster, and M7's backtest.
 **Gaps:**
