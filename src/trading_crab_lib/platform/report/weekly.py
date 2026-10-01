@@ -84,7 +84,10 @@ the asset returns up to the scored month to the same ``vol_targeted_tilt``, exac
 driver's tilt-off path does, then the same no-trade band. ``regime_tilt`` (the code default when
 the key is absent, so synthetic configs keep the Phase 8 path) tilts on the filtered belief. The
 belief and the hysteresis still load, advance and save in both modes, so flipping back does not
-cold-start the filter; in ``no_regime`` the page simply shows them as suspended (D-03).
+cold-start the filter; in ``no_regime`` the page simply shows them as suspended (D-03). The mode
+persists in the ``allocation_mode`` checkpoint (gated like the executed book): a run whose mode
+differs from the last one executes the new target in full, not banded against the old mode's
+book, and the page says so (A-15).
 
 Run order::
 
@@ -154,6 +157,7 @@ _DEFAULT_STALENESS_GRACE_DAYS = 7
 
 _BELIEF_CHECKPOINT = "regime_belief"
 _EXECUTED_CHECKPOINT = "executed_weights"
+_MODE_CHECKPOINT = "allocation_mode"
 
 # report.allocation_mode (D-01, A-13): what the page trades. regime_tilt stays available but off (G-06).
 ALLOCATION_MODES = ("regime_tilt", "no_regime")
@@ -364,6 +368,77 @@ def load_last_executed_weights(cm=None) -> pd.Series | None:
         return None
     rows = rows[rows["asset"].notna()]
     return pd.Series(rows["weight"].to_numpy(dtype=float), index=[str(a) for a in rows["asset"]], dtype=float)
+
+
+def load_allocation_mode(cm=None) -> dict | None:
+    """The mode the previous run traded (A-15): ``{"mode", "as_of", "changed_from"}`` or None.
+
+    ``changed_from`` is the mode a switch left this month (None when there was no switch), so a
+    same-month re-run can repeat the switch note. No checkpoint, or an empty one: None.
+    """
+    cm = cm or get_platform_checkpoint_manager()
+    try:
+        frame = cm.load(_MODE_CHECKPOINT)
+    except FileNotFoundError:
+        return None
+    if frame.empty or pd.isna(frame["mode"].iloc[0]):
+        return None
+    as_of, changed_from = frame["as_of"].iloc[0], frame["changed_from"].iloc[0]
+    return {
+        "mode": str(frame["mode"].iloc[0]),
+        "as_of": None if pd.isna(as_of) else pd.Timestamp(as_of),
+        "changed_from": None if pd.isna(changed_from) else str(changed_from),
+    }
+
+
+def save_allocation_mode(mode: str, cm=None, *, as_of: pd.Timestamp, changed_from: str | None) -> None:
+    """Persist this run's mode, the month it scored and the mode a switch left (or None)."""
+    cm = cm or get_platform_checkpoint_manager()
+    frame = pd.DataFrame(
+        [{"mode": mode, "as_of": as_of, "changed_from": changed_from}], columns=["mode", "as_of", "changed_from"]
+    )
+    cm.save(frame, _MODE_CHECKPOINT)
+
+
+def _has_executed_book(cm) -> bool:
+    try:
+        cm.load(_EXECUTED_CHECKPOINT)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def mode_switch(
+    record: dict | None, *, mode: str, as_of: pd.Timestamp, executed_exists: bool
+) -> tuple[bool, str | None]:
+    """The A-15 rule: ``(switched, changed_from)`` for this run.
+
+    - previous mode: the loaded record's; else ``regime_tilt`` when an ``executed_weights``
+      checkpoint exists (every pre-8.2 book was the tilt's); else None (nothing traded yet);
+    - ``switched``: a previous mode exists and differs from ``mode`` — the caller then
+      executes the new target in full (held None), never a band against the old mode's book;
+    - ``changed_from``: the previous mode on a switch; on a same-month re-run of the same mode,
+      the record's own ``changed_from`` (the note survives the re-run); otherwise None.
+    """
+    if record is not None:
+        previous = record["mode"]
+    elif executed_exists:
+        previous = "regime_tilt"
+    else:
+        previous = None
+    switched = previous is not None and previous != mode
+    if switched:
+        return True, previous
+    if record is not None and record["mode"] == mode and record["as_of"] == pd.Timestamp(as_of):
+        return False, record["changed_from"]
+    return False, None
+
+
+def _mode_note(mode: str, changed_from: str) -> str:
+    return (
+        f"**Note:** allocation mode changed to {mode} (was {changed_from}) — this run executes the new "
+        "target in full, so a large change against last week's book is expected (DECISIONS A-15)."
+    )
 
 
 def _class_by_ticker(cfg: dict) -> dict[str, str]:
@@ -916,7 +991,8 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         allows, for the banner; empty when every watched series is current) and
         ``last_week_weights`` (the previous run's executed book, read before this run saves
         its own; None with no band configured or no earlier run), ``allocation_mode`` (D-01:
-        ``no_regime`` targets ``no_regime_target``; ``regime_tilt`` tilts on the belief).
+        ``no_regime`` targets ``no_regime_target``; ``regime_tilt`` tilts on the belief) and
+        ``mode_note`` (A-15: set on the run that switched mode and on its same-month re-runs).
     """
     cm = cm or get_platform_checkpoint_manager()
     # D-01: validated before any artifact load or state I/O, so a bad value writes nothing.
@@ -997,11 +1073,20 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
 
     # The no-trade band (plan 08-09): the SAME function the drivers call. Held-book I/O
     # happens only when a band is configured — with none, the executed book is the target.
-    last_week = load_last_executed_weights(cm) if no_trade_band is not None else None  # load BEFORE save
-    held = load_held_weights(cm, as_of=as_of) if no_trade_band is not None else None  # load BEFORE save
+    # The mode record (A-15) is gated the same way, so band-free configs write nothing new.
+    last_week, held, changed_from = None, None, None
+    if no_trade_band is not None:
+        last_week = load_last_executed_weights(cm)  # load BEFORE save
+        switched, changed_from = mode_switch(
+            load_allocation_mode(cm), mode=mode, as_of=as_of, executed_exists=_has_executed_book(cm)
+        )  # load BEFORE save
+        # A-15: a switch trades the new target in full; a band against the old mode's book
+        # would hold a hybrid no measured leg ever held.
+        held = None if switched else load_held_weights(cm, as_of=as_of)  # load BEFORE save
     executed = execute_rebalance(tilt["weights"], tilt["cash"], held, band=no_trade_band)
     if no_trade_band is not None:
         save_executed_weights(executed["weights"], held, cm, as_of=as_of)  # save AFTER load
+        save_allocation_mode(mode, cm, as_of=as_of, changed_from=changed_from)  # save AFTER load
 
     return {
         "regime_probs": regime_probs,
@@ -1019,6 +1104,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         "stale_expected_through": stale_expected_through,
         "last_week_weights": last_week,
         "allocation_mode": mode,
+        "mode_note": _mode_note(mode, changed_from) if changed_from else None,
     }
 
 
