@@ -986,7 +986,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         (the filtered belief the allocation consumed), ``active_regime`` (the
         hysteresis output), ``transition_matrix``, ``returns_by_regime``,
         ``target_weights`` / ``cash`` (the EXECUTED book, after the no-trade band),
-        ``pre_band_target_weights`` (the tilt's target), ``no_trade_band``, and
+        ``pre_band_target_weights`` / ``pre_band_cash`` (the tilt's target), ``no_trade_band``, and
         ``stale_series`` / ``stale_expected_through`` (A-12: series later than the run date
         allows, for the banner; empty when every watched series is current) and
         ``last_week_weights`` (the previous run's executed book, read before this run saves
@@ -1097,6 +1097,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         "target_weights": executed["weights"],
         "cash": executed["cash"],
         "pre_band_target_weights": tilt["weights"],
+        "pre_band_cash": tilt["cash"],
         "no_trade_band": no_trade_band,
         "scored_as_of_note": scored_as_of_note,
         "input_sensitivity_note": input_sensitivity_note,
