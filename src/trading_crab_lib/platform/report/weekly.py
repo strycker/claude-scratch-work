@@ -719,8 +719,16 @@ def assemble_weekly_report(
 
 
 def _suspended_regime_view(scored_as_of_note: str | None, input_sensitivity_note: str | None) -> list[str]:
-    """Sections 1-3 in no_regime mode (D-03): one block, no probabilities, belief or posture."""
+    """Sections 1-3 in no_regime mode (D-03): one block, no probabilities, belief or posture.
+
+    No distribution is printed here, so the q2-ii constant-posterior sentence, which points at
+    "the distribution above", names the served posterior instead.
+    """
     lines = ["## Regime View (suspended)", "", _SUSPENDED_SENTENCE, ""]
+    if input_sensitivity_note:
+        input_sensitivity_note = input_sensitivity_note.replace(
+            _CONSTANT_POSTERIOR_SENTENCE, _SUSPENDED_CONSTANT_POSTERIOR_SENTENCE
+        )
     for note in (scored_as_of_note, input_sensitivity_note):
         if note:
             lines.append(note)
@@ -942,6 +950,9 @@ def _scored_row(monthly_features: pd.DataFrame, cols: list[str]) -> tuple[pd.Dat
 
 _CONSTANT_POSTERIOR_SENTENCE = (
     "The distribution above does not depend on the features: it is the same every week."
+)
+_SUSPENDED_CONSTANT_POSTERIOR_SENTENCE = (
+    "The served posterior does not depend on the features: it is the same every week."
 )
 
 

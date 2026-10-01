@@ -110,6 +110,7 @@ class TestNoRegimePageEndToEnd:
         assert "distinct posterior vector" in page
         assert page.index("## Regime View (suspended)") < page.index("distinct posterior vector")
         assert page.index("distinct posterior vector") < page.index("## Target vs. Current — Trades Implied")
+        assert "distribution above" not in page  # nothing above it is a distribution any more
         # Per-account lines name the core mix, not a regime.
         assert "(no-regime core mix)" in page
         assert "neutral posture)" not in page
@@ -384,3 +385,16 @@ class TestParityWithTheAblationLeg:
 
         assert _sha256(_REAL_REGISTRY) == sha_before
         assert registry.total_trial_count(_REAL_REGISTRY) == count_before == 46
+
+
+class TestSuspendedView:
+    def test_the_constant_posterior_sentence_does_not_point_at_a_missing_distribution(self):
+        note = "1 distinct posterior vector across 3 complete months (…). " + weekly._CONSTANT_POSTERIOR_SENTENCE
+        md = weekly.assemble_weekly_report(
+            regime_probs={0: 1.0}, transition_matrix=pd.DataFrame(), returns_by_regime=pd.DataFrame(),
+            target_weights=pd.Series({"SPY": 0.6}), accounts=[], active_regime=None,
+            input_sensitivity_note=note, regime_view_suspended=True, allocation_mode="no_regime",
+        )
+        assert "The served posterior does not depend on the features: it is the same every week." in md
+        assert "distribution above" not in md
+        assert "1 distinct posterior vector across 3 complete months" in md
