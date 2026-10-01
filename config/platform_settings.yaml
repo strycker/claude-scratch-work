@@ -585,6 +585,10 @@ report:
   staleness_grace_days: 7    # 08.1 ruling 4: FRED posts monthly averages 1-2 business days
                               # into m+1, so a series is judged late only once the run date is
                               # more than this many days past the month it should cover.
+  allocation_mode: no_regime # DECISIONS A-13 (08.2 D-01): the weekly page trades the measured
+                              # no-regime ablation leg. regime_tilt stays available but off
+                              # (G-06). An absent key means regime_tilt, so synthetic test configs
+                              # keep the Phase 8 path; a test pins this value.
 
 # ── Backtest & evaluation (EVAL-01..04, D-03) — honest walk-forward 1972-2020 ─
 # Read defensively via cfg.get("backtest", {}) everywhere; deliberately NOT

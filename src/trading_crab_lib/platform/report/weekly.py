@@ -77,6 +77,15 @@ refuses. Under ruling q2-ii (§2.2) it prints, directly under the distribution, 
 count of distinct posteriors the served model gives across every full-span month complete in
 its columns, and says so in plain words when that count is 1; it never withholds on it.
 
+**The allocation mode (plan 08.2-01, DECISIONS A-13, A-15).** ``report.allocation_mode`` picks
+what the weekly page trades. ``no_regime`` (the live config) is the measured no-regime ablation
+leg: ``no_regime_target`` hands a constant one-state belief and ``returns_by_regime_stats`` over
+the asset returns up to the scored month to the same ``vol_targeted_tilt``, exactly as the
+driver's tilt-off path does, then the same no-trade band. ``regime_tilt`` (the code default when
+the key is absent, so synthetic configs keep the Phase 8 path) tilts on the filtered belief. The
+belief and the hysteresis still load, advance and save in both modes, so flipping back does not
+cold-start the filter; in ``no_regime`` the page simply shows them as suspended (D-03).
+
 Run order::
 
     # 1. the data (FRED key plus network)
@@ -108,6 +117,7 @@ from trading_crab_lib.platform.allocation.hysteresis import (
     update_active_regime,
 )
 from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
+from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty.holdout import load_full_span
@@ -144,6 +154,56 @@ _DEFAULT_STALENESS_GRACE_DAYS = 7
 
 _BELIEF_CHECKPOINT = "regime_belief"
 _EXECUTED_CHECKPOINT = "executed_weights"
+
+# report.allocation_mode (D-01, A-13): what the page trades. regime_tilt stays available but off (G-06).
+ALLOCATION_MODES = ("regime_tilt", "no_regime")
+
+# D-03: what the page shows in place of the regime sections in no_regime mode.
+_SUSPENDED_SENTENCE = (
+    "Regime view: suspended — the served nowcaster is input-independent (fixed in the regime "
+    "rebuild); the allocation does not use it."
+)
+
+
+def allocation_mode_from_config(cfg: dict) -> str:
+    """The weekly allocation mode from ``cfg["report"]["allocation_mode"]``.
+
+    Absent or null means ``regime_tilt`` (ruling A2: synthetic test configs keep the Phase 8
+    path); the live config carries ``no_regime``, pinned by a test, so deleting the key goes
+    red rather than silently trading the tilt again. Any value outside ``ALLOCATION_MODES``
+    raises ValueError naming it.
+    """
+    value = cfg.get("report", {}).get("allocation_mode")
+    if value is None:
+        return "regime_tilt"
+    if not isinstance(value, str) or value not in ALLOCATION_MODES:
+        raise ValueError(f"report.allocation_mode must be one of {ALLOCATION_MODES} or null, got {value!r}")
+    return value
+
+
+def no_regime_target(asset_returns: pd.DataFrame, as_of: pd.Timestamp, cfg: dict) -> dict:
+    """The no-regime core mix at ``as_of``: the driver's tilt-off path, by its own functions.
+
+    ``backtest/driver.py`` with ``use_regime_tilt=False`` labels every training month state 0,
+    feeds the belief ``{0: 1.0}`` and conditions ``returns_by_regime_stats`` on those labels over
+    the returns up to the decision month. This does the same over ``asset_returns`` up to and
+    including ``as_of`` (served returns run past the scored month; those rows never enter), then
+    the same ``vol_targeted_tilt`` with the same ``allocation`` keys and defaults. No new
+    allocation math; the returns themselves are untouched (D-02 defers E-07).
+
+    Returns ``vol_targeted_tilt``'s dict: ``weights``, ``cash``, ``scale``, ``portfolio_vol``.
+    """
+    window = asset_returns.loc[asset_returns.index <= pd.Timestamp(as_of)]
+    stats = returns_by_regime_stats(window, pd.Series(0, index=window.index))
+    allocation_cfg = cfg.get("allocation", {})
+    return vol_targeted_tilt(
+        pd.Series({0: 1.0}),
+        stats,
+        window,
+        target_vol_annual=allocation_cfg.get("target_vol_annual", 0.10),
+        halflife=allocation_cfg.get("ewma_halflife_months", 6),
+        min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
+    )
 
 
 def load_regime_belief(cm=None) -> pd.Series | None:
@@ -482,6 +542,9 @@ def assemble_weekly_report(
     stale_expected_through: pd.Timestamp | None = None,
     last_week_weights: pd.Series | None = None,
     asset_classes: dict[str, str] | None = None,
+    regime_view_suspended: bool = False,
+    allocation_mode: str | None = None,
+    mode_note: str | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -509,6 +572,13 @@ def assemble_weekly_report(
     Directly under the trades heading, with or without ``accounts``, a "Target allocation" table
     lists every class in ``asset_classes`` (``{ticker: class}``, in row order) with target %,
     ``last_week_weights`` (last run's executed book, None = n/a) and the change (D-09, A-11).
+
+    ``regime_view_suspended`` (D-03, the no_regime mode) replaces sections 1-3 with one
+    ``## Regime View (suspended)`` block: the suspended sentence, ``scored_as_of_note`` and
+    ``input_sensitivity_note`` (A-08: the distinct-posterior count is the evidence); per-account
+    lines read "no-regime core mix". ``allocation_mode``, when given, is printed directly under
+    the trades heading, before the table, followed by ``mode_note`` (A-15, a mode switch). With
+    all three at their defaults the page is byte-identical to the pre-08.2 page.
     """
     probs = pd.Series(regime_probs, dtype=float)
 
@@ -516,6 +586,87 @@ def assemble_weekly_report(
     if stale_series:
         lines.extend(_stale_banner(stale_series, stale_expected_through))
 
+    if regime_view_suspended:
+        lines.extend(_suspended_regime_view(scored_as_of_note, input_sensitivity_note))
+    else:
+        lines.extend(_regime_sections(
+            probs,
+            transition_matrix=transition_matrix,
+            returns_by_regime=returns_by_regime,
+            active_regime=active_regime,
+            regime_belief=regime_belief,
+            min_obs_flag=min_obs_flag,
+            scored_as_of_note=scored_as_of_note,
+            input_sensitivity_note=input_sensitivity_note,
+        ))
+
+    # ── 4. Target-vs-current + trades implied, per account ────────────────
+    lines.append("## Target vs. Current — Trades Implied")
+    lines.append("")
+    if allocation_mode is not None:
+        lines.append(f"**Allocation mode:** {allocation_mode}")
+        lines.append("")
+    if mode_note:
+        lines.append(mode_note)
+        lines.append("")
+    lines.extend(_allocation_table(target_weights, cash, last_week_weights, asset_classes))
+    if no_trade_band is not None:
+        lines.append(
+            f"Targets below are the EXECUTED book after the {no_trade_band:.1%} no-trade band "
+            "(design §5.3 bounded turnover, 08-A7.md): an asset whose target moved by no more "
+            "than the band from its last executed weight keeps that weight."
+        )
+        lines.append("")
+    if regime_view_suspended:
+        rationale = "no-regime core mix"
+    else:
+        rationale = f"regime {active_regime}" if active_regime is not None else "neutral posture"
+    for account in accounts:
+        holdings = load_account_weights(account, accounts_dir=accounts_dir)
+        current_weights = pd.Series(holdings["weights"], dtype=float)
+        implied = trades_implied(target_weights, current_weights, threshold=trade_threshold_pct)
+        lines.append(f"### Account: {account} (cash on file: {holdings['cash']:.1%})")
+        lines.append("")
+        if implied.empty:
+            lines.append("(no target or current holdings)")
+        for row in implied.itertuples():
+            lines.append(
+                f"- {row.asset}: {row.signal} current={row.current_pct:.1%} "
+                f"target={row.target_pct:.1%} delta={row.delta_pct:+.1%} ({rationale})"
+            )
+        lines.append("")
+
+    if cash is not None:
+        lines.append(f"_Target allocation cash residual: {cash:.1%}_")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _suspended_regime_view(scored_as_of_note: str | None, input_sensitivity_note: str | None) -> list[str]:
+    """Sections 1-3 in no_regime mode (D-03): one block, no probabilities, belief or posture."""
+    lines = ["## Regime View (suspended)", "", _SUSPENDED_SENTENCE, ""]
+    for note in (scored_as_of_note, input_sensitivity_note):
+        if note:
+            lines.append(note)
+            lines.append("")
+    return lines
+
+
+def _regime_sections(
+    probs: pd.Series,
+    *,
+    transition_matrix: pd.DataFrame,
+    returns_by_regime: pd.DataFrame,
+    active_regime: int | None,
+    regime_belief: pd.Series | dict | None,
+    min_obs_flag: int,
+    scored_as_of_note: str | None,
+    input_sensitivity_note: str | None,
+) -> list[str]:
+    """Sections 1-3 in regime_tilt mode: distribution, belief, active regime, trajectory and
+    per-asset signals, exactly as the pre-08.2 page rendered them."""
+    lines: list[str] = []
     # ── 1. Current regime distribution ────────────────────────────────────
     lines.append("## Current Regime Distribution")
     lines.append("")
@@ -590,39 +741,7 @@ def assemble_weekly_report(
                 f"sharpe={row.sharpe_annualized:.2f} n_obs={row.n_obs}{flag}"
             )
     lines.append("")
-
-    # ── 4. Target-vs-current + trades implied, per account ────────────────
-    lines.append("## Target vs. Current — Trades Implied")
-    lines.append("")
-    lines.extend(_allocation_table(target_weights, cash, last_week_weights, asset_classes))
-    if no_trade_band is not None:
-        lines.append(
-            f"Targets below are the EXECUTED book after the {no_trade_band:.1%} no-trade band "
-            "(design §5.3 bounded turnover, 08-A7.md): an asset whose target moved by no more "
-            "than the band from its last executed weight keeps that weight."
-        )
-        lines.append("")
-    rationale = f"regime {active_regime}" if active_regime is not None else "neutral posture"
-    for account in accounts:
-        holdings = load_account_weights(account, accounts_dir=accounts_dir)
-        current_weights = pd.Series(holdings["weights"], dtype=float)
-        implied = trades_implied(target_weights, current_weights, threshold=trade_threshold_pct)
-        lines.append(f"### Account: {account} (cash on file: {holdings['cash']:.1%})")
-        lines.append("")
-        if implied.empty:
-            lines.append("(no target or current holdings)")
-        for row in implied.itertuples():
-            lines.append(
-                f"- {row.asset}: {row.signal} current={row.current_pct:.1%} "
-                f"target={row.target_pct:.1%} delta={row.delta_pct:+.1%} ({rationale})"
-            )
-        lines.append("")
-
-    if cash is not None:
-        lines.append(f"_Target allocation cash residual: {cash:.1%}_")
-        lines.append("")
-
-    return "\n".join(lines)
+    return lines
 
 
 def write_weekly_report(markdown: str, *, output_dir: Path | None = None) -> Path:
@@ -796,9 +915,12 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         ``stale_series`` / ``stale_expected_through`` (A-12: series later than the run date
         allows, for the banner; empty when every watched series is current) and
         ``last_week_weights`` (the previous run's executed book, read before this run saves
-        its own; None with no band configured or no earlier run).
+        its own; None with no band configured or no earlier run), ``allocation_mode`` (D-01:
+        ``no_regime`` targets ``no_regime_target``; ``regime_tilt`` tilts on the belief).
     """
     cm = cm or get_platform_checkpoint_manager()
+    # D-01: validated before any artifact load or state I/O, so a bad value writes nothing.
+    mode = allocation_mode_from_config(cfg)
 
     # The four serving artifacts are built by SERVING_BUILD_COMMAND (report/serving.py);
     # a missing one says so.
@@ -860,14 +982,18 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     )
     save_active_regime(active_regime, cm)  # save AFTER load
 
-    tilt = vol_targeted_tilt(
-        regime_belief,
-        returns_by_regime,
-        asset_returns,
-        target_vol_annual=allocation_cfg.get("target_vol_annual", 0.10),
-        halflife=allocation_cfg.get("ewma_halflife_months", 6),
-        min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
-    )
+    if mode == "no_regime":
+        # D-01: the measured ablation leg's target; the belief above is kept, not consumed.
+        tilt = no_regime_target(asset_returns, as_of, cfg)
+    else:
+        tilt = vol_targeted_tilt(
+            regime_belief,
+            returns_by_regime,
+            asset_returns,
+            target_vol_annual=allocation_cfg.get("target_vol_annual", 0.10),
+            halflife=allocation_cfg.get("ewma_halflife_months", 6),
+            min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
+        )
 
     # The no-trade band (plan 08-09): the SAME function the drivers call. Held-book I/O
     # happens only when a band is configured — with none, the executed book is the target.
@@ -892,6 +1018,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
         "stale_series": late,
         "stale_expected_through": stale_expected_through,
         "last_week_weights": last_week,
+        "allocation_mode": mode,
     }
 
 
@@ -937,6 +1064,9 @@ def main(argv: list[str] | None = None) -> int:
         stale_expected_through=inputs.get("stale_expected_through"),
         last_week_weights=inputs.get("last_week_weights"),
         asset_classes=_class_by_ticker(cfg),
+        regime_view_suspended=inputs.get("allocation_mode") == "no_regime",
+        allocation_mode=inputs.get("allocation_mode"),
+        mode_note=inputs.get("mode_note"),
     )
     report_path = write_weekly_report(markdown)
 

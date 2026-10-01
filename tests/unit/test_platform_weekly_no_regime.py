@@ -18,8 +18,7 @@ import re
 
 import pandas as pd
 import pytest
-
-from test_platform_report_serving import _serving_world  # noqa: E402  (tests/unit is on sys.path)
+from test_platform_report_serving import _serving_world  # tests/unit is on sys.path (prepend mode)
 
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.report import weekly
