@@ -476,3 +476,25 @@ def test_live_config_carries_the_stale_threshold_and_scoreboard_tag():
     cfg = load_platform_config()
     assert cfg["tripwire"]["stale_business_days"] == 5
     assert cfg["report"]["scoreboard_trial_tag"] == "08.1-pit-tilt-vs-ablation"
+
+
+class TestServedPosteriorPath:
+    def test_is_the_posterior_over_every_complete_month_the_page_counts(self, tmp_path, monkeypatch):
+        import re
+
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import weekly
+
+        world = _no_regime_world(tmp_path / "w", monkeypatch)
+        cm = get_platform_checkpoint_manager()
+        dates, proba, classes = weekly.served_posterior_path(cm)
+
+        model = cm.load_model("nowcaster")
+        cols = [str(c) for c in model.feature_names_in_]
+        frame = world["full"][cols].dropna(how="any")
+        assert dates.equals(pd.DatetimeIndex(frame.index))
+        np.testing.assert_array_equal(proba, model.predict_proba(frame))
+        assert classes == [int(c) for c in model.classes_]
+        note = weekly._input_sensitivity_note(model, world["full"], cols)
+        n_distinct = int(re.match(r"(\d+) distinct", note).group(1))
+        assert np.unique(proba, axis=0).shape[0] == n_distinct

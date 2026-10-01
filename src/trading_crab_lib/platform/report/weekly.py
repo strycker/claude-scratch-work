@@ -1061,6 +1061,23 @@ def _input_sensitivity_note(nowcaster, monthly_features: pd.DataFrame, cols: lis
     return note
 
 
+def served_posterior_path(cm=None) -> tuple[pd.DatetimeIndex, np.ndarray, list]:
+    """The served nowcaster's posterior over every full-span month complete in its columns.
+
+    For notebook N6 (D-09): the same rows ``_input_sensitivity_note`` counts — the model's own
+    columns (``_model_columns``), ``dropna(how="any")``, nothing imputed — scored with the
+    already-fitted model (looking, not fitting). Returns ``(dates, proba, classes)`` in the shape
+    ``plotting/nowcaster.py::plot_proba_over_time`` takes. Lives here, not in ``serving.py``,
+    because weekly already imports serving (the reverse import would be a cycle).
+    """
+    cm = cm or get_platform_checkpoint_manager()
+    nowcaster = _load_serving_artifact(cm, "nowcaster", model=True)
+    monthly_features = load_full_span("monthly_features")
+    frame = monthly_features[_model_columns(nowcaster, monthly_features)].dropna(how="any")
+    proba = np.asarray(nowcaster.predict_proba(frame), dtype=float)
+    return pd.DatetimeIndex(frame.index), proba, [int(c) for c in nowcaster.classes_]
+
+
 def _build_report_inputs(cfg: dict, cm=None) -> dict:
     """The full allocation-cycle orchestration (load -> update -> tilt ->
     save, load-before-save order per Pitfall 3): load the previous
