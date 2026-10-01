@@ -5,14 +5,14 @@ milestone_name: milestone
 current_phase: 08.2
 current_phase_name: Lean MVP — Simplify, Modularize, Notebook-Gate
 status: planning
-stopped_at: Phase 08.1 COMPLETE 2026-09-30 (3/3 plans; verified; Mac run passed); E-06 NO; regime view stays advisory in 8.2 (G-06); next /gsd-discuss-phase 8.2
+stopped_at: Phase 08.2 context gathered 2026-10-01 (5 questions; A-13, A-14, G-07); next /gsd-plan-phase 8.2
 last_updated: "2026-09-30T22:36:16.801Z"
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 70
   completed_plans: 69
-last_activity: 2026-09-30
+last_activity: 2026-10-01
 last_activity_desc: "Phase 08.1 executed: publication-lag table + PIT test (mutation proven), weekly STALE banner + always-on allocation table, tracked data migrated, D-04 re-measured — tilt does NOT beat ablation on point-in-time data (before +0.1677, after -0.1515). Registry 46."
 ---
 
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.2 — Lean MVP — Simplify, Modularize, Notebook-Gate
-Status: Ready to plan
+Status: Context gathered (2026-10-01) — MVP-1 on the no-regime path, regime view suspended, tripwire + static scoreboard, park classifier #2/joint driver/stability, module map, notebooks N4/N6/N7; budget 0. Ready for /gsd-plan-phase 8.2.
 **Phase 08.1 closed 2026-09-30.** Point-in-time data: a measured `publication_lags` table (M2SL 1, TOTALSL 2,
 div_yield 3, pre-1991 GDP fallback 3, others 0 or vintage-aligned), applied once in ingestion and guarded by a
 point-in-time test with a mutation proof. Weekly page: per-series STALE banner (A-12) and an always-printed
