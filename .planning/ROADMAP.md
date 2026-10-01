@@ -758,9 +758,9 @@ module-by-module migration.
 
 Plans:
 
-- [ ] 08.2-01-PLAN.md — **Page on the no-regime path.** `report.allocation_mode` (live `no_regime`, code default `regime_tilt`); weekly target = the ablation's own functions (parity with `run_backtest(use_regime_tilt=False)` at rel 1e-9, synthetic + tracked data); regime view suspended (D-03); mode checkpoint + A-15 switch rule (held=None, note); DECISIONS A-13 built, A-15 — wave 1
-- [ ] 08.2-02-PLAN.md — **Park + module map.** `quality_tier` extracted to `evaluation/deflated_sharpe.py`; classifier2 / joint_driver / stability `git mv`'d to `platform/parked/` (no shims, import-only edits to record tests); boundary test (subprocess `sys.modules` + AST scan); `platform_design/MODULE-MAP.md` (M0–M7, M8, M9+, Parked) — wave 1
-- [ ] 08.2-03-PLAN.md — **Tripwire, scoreboard, notebooks.** `evaluate_tripwire` (per-signal as-of; STALE after 5 business days; UNAVAILABLE, never green) + `fred_daily_raw` in the build; static scoreboard (`report/scoreboard.py`, common 1972–2020 window, E-07 line); `build_weekly_page`; notebooks P7 (N4) / P8 (N6) / P9 (N7) run headless with pending sign-offs; real-data scratch smoke; DECISIONS A-14 built, G-08 — wave 2
+- [x] 08.2-01-PLAN.md — **Page on the no-regime path.** `report.allocation_mode` (live `no_regime`, code default `regime_tilt`); weekly target = the ablation's own functions (parity with `run_backtest(use_regime_tilt=False)` at rel 1e-9, synthetic + tracked data); regime view suspended (D-03); mode checkpoint + A-15 switch rule (held=None, note); DECISIONS A-13 built, A-15 — wave 1
+- [x] 08.2-02-PLAN.md — **Park + module map.** `quality_tier` extracted to `evaluation/deflated_sharpe.py`; classifier2 / joint_driver / stability `git mv`'d to `platform/parked/` (no shims, import-only edits to record tests); boundary test (subprocess `sys.modules` + AST scan); `platform_design/MODULE-MAP.md` (M0–M7, M8, M9+, Parked) — wave 1
+- [x] 08.2-03-PLAN.md — **Tripwire, scoreboard, notebooks.** `evaluate_tripwire` (per-signal as-of; STALE after 5 business days; UNAVAILABLE, never green) + `fred_daily_raw` in the build; static scoreboard (`report/scoreboard.py`, common 1972–2020 window, E-07 line); `build_weekly_page`; notebooks P7 (N4) / P8 (N6) / P9 (N7) run headless with pending sign-offs; real-data scratch smoke; DECISIONS A-14 built, G-08 — wave 2
 
 ### Phase 9: Migration to Public Repo
 
@@ -809,5 +809,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
-| 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 0/3 | Planned | - |
+| 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Verified — human_needed (Mac run + sign-offs) | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
