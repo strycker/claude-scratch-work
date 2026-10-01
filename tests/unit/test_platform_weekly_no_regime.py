@@ -152,3 +152,111 @@ class TestNoRegimeTarget:
         shocked = returns.copy()
         shocked.loc[shocked.index > as_of, "SPY"] = 0.5
         _same(weekly.no_regime_target(shocked, as_of, cfg)["weights"], got["weights"])
+
+
+# ── A-15: a mode switch executes the new target in full and says so ──────────
+
+_NOTE = "allocation mode changed to no_regime (was regime_tilt)"
+
+
+def _run_at(world: dict, monkeypatch, month: str, mode: str | None) -> str:
+    """One weekly.main run scoring ``month`` (the full span cut there) in ``mode`` (None = no key)."""
+    cut = world["full"].loc[:pd.Timestamp(month)]
+    monkeypatch.setattr(weekly, "load_full_span", lambda name: cut)
+    if mode is None:
+        world["cfg"]["report"].pop("allocation_mode", None)
+    else:
+        world["cfg"]["report"]["allocation_mode"] = mode
+    assert weekly.main([]) == 0
+    return _report(world)
+
+
+class TestModeSwitch:
+    def test_switch_rerun_and_next_month(self, tmp_path, monkeypatch):
+        from test_platform_report_serving import _allocation_rows
+
+        from trading_crab_lib.platform.allocation.hysteresis import execute_rebalance
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        cm = get_platform_checkpoint_manager()
+        returns = cm.load("asset_returns")
+        may, june = pd.Timestamp("2021-05-31"), pd.Timestamp("2021-06-30")
+
+        # Run 1: regime_tilt (no key) scores May.
+        page1 = _run_at(world, monkeypatch, "2021-05-31", None)
+        assert "allocation mode changed" not in page1
+        tilt_book, _ = _executed(cm)
+
+        # Run 2: no_regime, same month. The full target, not a band against the tilt book.
+        page2 = _run_at(world, monkeypatch, "2021-05-31", "no_regime")
+        target = weekly.no_regime_target(returns, may, world["cfg"])
+        book2, cash2 = _executed(cm)
+        _same(book2, target["weights"])
+        assert cash2 == pytest.approx(target["cash"], rel=1e-9, abs=0)
+        banded = execute_rebalance(target["weights"], target["cash"], tilt_book, band=0.05)["weights"]
+        assert not book2.sort_index().equals(banded.sort_index()), "precondition: the band would bite here"
+        assert page2.count(_NOTE) == 1
+        assert "DECISIONS A-15" in page2
+        rows = _allocation_rows(page2)
+        for ticker, weight in tilt_book.items():
+            assert rows[ticker][3] == f"{weight:.1%}", rows[ticker]  # last week = run 1's book
+        heading = page2.index("## Target vs. Current — Trades Implied")
+        assert heading < page2.index(_NOTE) < page2.index("### Target allocation")
+        frame2 = cm.load("executed_weights")
+
+        # Run 3: a same-month re-run reproduces the book and keeps the note.
+        page3 = _run_at(world, monkeypatch, "2021-05-31", "no_regime")
+        pd.testing.assert_frame_equal(cm.load("executed_weights"), frame2)
+        assert page3.count(_NOTE) == 1
+
+        # Run 4: the next month bands normally against run 3's book, with no note.
+        page4 = _run_at(world, monkeypatch, "2021-06-30", "no_regime")
+        assert "allocation mode changed" not in page4
+        nxt = weekly.no_regime_target(returns, june, world["cfg"])
+        want = execute_rebalance(nxt["weights"], nxt["cash"], book2, band=0.05)
+        book4, cash4 = _executed(cm)
+        _same(book4, want["weights"])
+        assert cash4 == pytest.approx(want["cash"], rel=1e-9, abs=0)
+        record = cm.load("allocation_mode")
+        assert list(record.columns) == ["mode", "as_of", "changed_from"]
+        assert record["mode"].tolist() == ["no_regime"]
+        assert pd.Timestamp(record["as_of"].iloc[0]) == june
+        assert record["changed_from"].isna().all()
+
+    def test_an_executed_book_without_a_mode_record_counts_as_regime_tilt(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        cm = get_platform_checkpoint_manager()
+        _run_at(world, monkeypatch, "2021-05-31", None)
+        cm.clear("allocation_mode")  # a pre-8.2 checkpoint dir: executed_weights only
+        assert not (world["platform_dir"] / "allocation_mode.parquet").exists()
+
+        page = _run_at(world, monkeypatch, "2021-05-31", "no_regime")
+        assert page.count(_NOTE) == 1
+        book, _ = _executed(cm)
+        _same(book, weekly.no_regime_target(cm.load("asset_returns"), pd.Timestamp("2021-05-31"), world["cfg"])["weights"])
+
+    def test_with_neither_checkpoint_there_is_no_note(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch)
+        assert serving.main([]) == 0
+        page = _run_at(world, monkeypatch, "2021-05-31", "no_regime")
+        assert "allocation mode changed" not in page
+        assert (world["platform_dir"] / "allocation_mode.parquet").exists()
+
+    def test_a_band_free_config_writes_no_mode_record(self, tmp_path, monkeypatch):
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch)
+        del world["cfg"]["allocation"]["no_trade_band"]
+        assert serving.main([]) == 0
+        _run_at(world, monkeypatch, "2021-05-31", "no_regime")
+        assert not (world["platform_dir"] / "allocation_mode.parquet").exists()
+        assert not (world["platform_dir"] / "executed_weights.parquet").exists()
