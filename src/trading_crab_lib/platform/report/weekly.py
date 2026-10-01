@@ -134,6 +134,7 @@ from trading_crab_lib.platform.prediction.regime_filter import (
 from trading_crab_lib.platform.prediction.transition_matrix import empirical_transition_matrix
 from trading_crab_lib.platform.report.holdings import load_account_weights
 from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND, SERVING_CLASS_PRIOR
+from trading_crab_lib.platform.tripwire.monitor import evaluate_tripwire
 
 log = logging.getLogger(__name__)
 
@@ -620,6 +621,7 @@ def assemble_weekly_report(
     regime_view_suspended: bool = False,
     allocation_mode: str | None = None,
     mode_note: str | None = None,
+    tripwire: dict | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -654,6 +656,11 @@ def assemble_weekly_report(
     lines read "no-regime core mix". ``allocation_mode``, when given, is printed directly under
     the trades heading, before the table, followed by ``mode_note`` (A-15, a mode switch). With
     all three at their defaults the page is byte-identical to the pre-08.2 page.
+
+    ``tripwire`` (``evaluate_tripwire``'s output, D-04) renders the ``## Crash Tripwire`` section
+    directly before the trades heading: one bullet per signal with its state, value, threshold
+    and as-of date, then the escalation over current signals (``_tripwire_section``). Advisory:
+    nothing else on the page reads it. None (the default) renders nothing.
     """
     probs = pd.Series(regime_probs, dtype=float)
 
@@ -674,6 +681,9 @@ def assemble_weekly_report(
             scored_as_of_note=scored_as_of_note,
             input_sensitivity_note=input_sensitivity_note,
         ))
+
+    if tripwire is not None:
+        lines.extend(_tripwire_section(tripwire))
 
     # ── 4. Target-vs-current + trades implied, per account ────────────────
     lines.append("## Target vs. Current — Trades Implied")
@@ -716,6 +726,72 @@ def assemble_weekly_report(
         lines.append("")
 
     return "\n".join(lines)
+
+
+_DATA_BUILD_COMMAND = "python scripts/build_platform_data.py"
+_TRIPWIRE_HEADING = "## Crash Tripwire (advisory — changes no weight)"
+
+
+def _tripwire_value(name: str, sig: dict) -> str:
+    """A signal's value and trip level, in its own units."""
+    value, threshold = sig["value"], sig["threshold"]
+    if name == "vol_spike":
+        return f"{value:.2f}x short/baseline EWMA vol (trips above {threshold:.2f}x)"
+    if name == "credit_velocity":
+        return f"{value:+.0f} bps widening (trips at {threshold:+.0f} bps)"
+    return f"{value:.2%} (trips at {threshold:.2%})"
+
+
+def _tripwire_section(tripwire: dict) -> list[str]:
+    """The ``## Crash Tripwire`` block (D-04): advisory, per-signal as-of, nothing imputed.
+
+    - current signals read RED or GREEN;
+    - a STALE signal names its date and the rebuild command, and reads "STALE (would be RED)"
+      when its last value trips;
+    - an UNAVAILABLE signal names what is missing and the rebuild command;
+    - the escalation counts current signals only, and reads "none" only when all three are
+      current and green: with no red and fewer than three current it reads UNKNOWN, never an
+      all-clear (T-08.2-08).
+    """
+    signals = tripwire["signals"]
+    run_date = pd.Timestamp(tripwire["run_date"]).date().isoformat()
+    n_days = int(tripwire["stale_business_days"])
+    n_total = len(signals)
+    lines = [_TRIPWIRE_HEADING, ""]
+    for name, sig in signals.items():
+        state = sig["state"]
+        if state == "unavailable":
+            lines.append(
+                f"- {sig['label']}: UNAVAILABLE — {sig['reason']}; nothing is imputed. "
+                f"Build it with `{_DATA_BUILD_COMMAND}`."
+            )
+            continue
+        as_of = pd.Timestamp(sig["as_of"]).date().isoformat()
+        if state == "stale":
+            label = "STALE (would be RED)" if sig["triggered"] else "STALE"
+            lines.append(
+                f"- {sig['label']}: {label} — {_tripwire_value(name, sig)}, as of {as_of}, more than "
+                f"{n_days} business days before the run date {run_date}; refresh with `{_DATA_BUILD_COMMAND}`."
+            )
+            continue
+        lines.append(f"- {sig['label']}: {state.upper()} — {_tripwire_value(name, sig)}, as of {as_of}")
+    lines.append("")
+    n_current = int(tripwire["n_current"])
+    any_red = any(sig["state"] == "red" for sig in signals.values())
+    if not any_red and n_current < n_total:
+        lines.append(f"Escalation: UNKNOWN ({n_current} of {n_total} signals current — not green)")
+    else:
+        lines.append(
+            f"Escalation: {tripwire['escalation'].value} ({n_current} of {n_total} signals current; "
+            "nothing is imputed)"
+        )
+    lines.append("")
+    lines.append(
+        f"Run date {run_date}. A signal older than {n_days} business days is STALE and a missing input "
+        "UNAVAILABLE; neither counts as green. The tripwire changes no weight on this page."
+    )
+    lines.append("")
+    return lines
 
 
 def _suspended_regime_view(scored_as_of_note: str | None, input_sensitivity_note: str | None) -> list[str]:
@@ -1120,6 +1196,48 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     }
 
 
+def build_weekly_page(cfg: dict, cm=None, *, output_dir: Path | None = None) -> tuple[str, Path]:
+    """Run the allocation cycle, evaluate the tripwire, assemble the page and write it.
+
+    The page ``main`` writes, with the checkpoint manager and the output directory explicit, so
+    a notebook or a smoke can build it in a scratch copy (N4) without touching the tracked
+    namespace. Order: ``_build_report_inputs`` (load -> advance -> save of the belief, the
+    hysteresis and the executed book), then ``evaluate_tripwire`` on the same ``cm`` at
+    ``_run_date()``, then ``assemble_weekly_report`` and ``write_weekly_report(output_dir=...)``.
+    The tripwire is read after the book is executed and feeds only its own section (D-04).
+
+    Returns ``(markdown, path)``.
+    """
+    cm = cm or get_platform_checkpoint_manager()
+    report_cfg = cfg.get("report", {})
+    inputs = _build_report_inputs(cfg, cm)
+    tripwire = evaluate_tripwire(cfg, cm, run_date=_run_date())
+    markdown = assemble_weekly_report(
+        regime_probs=inputs["regime_probs"],
+        regime_belief=inputs.get("regime_belief"),
+        active_regime=inputs["active_regime"],
+        transition_matrix=inputs["transition_matrix"],
+        returns_by_regime=inputs["returns_by_regime"],
+        target_weights=inputs["target_weights"],
+        accounts=report_cfg.get("accounts", []),
+        cash=inputs["cash"],
+        no_trade_band=inputs.get("no_trade_band"),
+        min_obs_flag=report_cfg.get("min_obs_flag", _DEFAULT_MIN_OBS_FLAG),
+        trade_threshold_pct=report_cfg.get("trade_threshold_pct", _DEFAULT_TRADE_THRESHOLD_PCT),
+        scored_as_of_note=inputs.get("scored_as_of_note"),
+        input_sensitivity_note=inputs.get("input_sensitivity_note"),
+        stale_series=inputs.get("stale_series"),
+        stale_expected_through=inputs.get("stale_expected_through"),
+        last_week_weights=inputs.get("last_week_weights"),
+        asset_classes=_class_by_ticker(cfg),
+        regime_view_suspended=inputs.get("allocation_mode") == "no_regime",
+        allocation_mode=inputs.get("allocation_mode"),
+        mode_note=inputs.get("mode_note"),
+        tripwire=tripwire,
+    )
+    return markdown, write_weekly_report(markdown, output_dir=output_dir)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: assemble + always write the markdown; email opt-in.
 
@@ -1140,33 +1258,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO)
 
     cfg = load_platform_config()
-    report_cfg = cfg.get("report", {})
-    accounts = report_cfg.get("accounts", [])
-
-    inputs = _build_report_inputs(cfg)
-    markdown = assemble_weekly_report(
-        regime_probs=inputs["regime_probs"],
-        regime_belief=inputs.get("regime_belief"),
-        active_regime=inputs["active_regime"],
-        transition_matrix=inputs["transition_matrix"],
-        returns_by_regime=inputs["returns_by_regime"],
-        target_weights=inputs["target_weights"],
-        accounts=accounts,
-        cash=inputs["cash"],
-        no_trade_band=inputs.get("no_trade_band"),
-        min_obs_flag=report_cfg.get("min_obs_flag", _DEFAULT_MIN_OBS_FLAG),
-        trade_threshold_pct=report_cfg.get("trade_threshold_pct", _DEFAULT_TRADE_THRESHOLD_PCT),
-        scored_as_of_note=inputs.get("scored_as_of_note"),
-        input_sensitivity_note=inputs.get("input_sensitivity_note"),
-        stale_series=inputs.get("stale_series"),
-        stale_expected_through=inputs.get("stale_expected_through"),
-        last_week_weights=inputs.get("last_week_weights"),
-        asset_classes=_class_by_ticker(cfg),
-        regime_view_suspended=inputs.get("allocation_mode") == "no_regime",
-        allocation_mode=inputs.get("allocation_mode"),
-        mode_note=inputs.get("mode_note"),
-    )
-    report_path = write_weekly_report(markdown)
+    _, report_path = build_weekly_page(cfg)
 
     if args.send_email:
         subject, body = build_weekly_email_body(
