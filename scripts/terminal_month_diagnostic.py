@@ -71,7 +71,7 @@ from trading_crab_lib.platform.honesty.holdout import (  # noqa: E402
     split_by_holdout_boundary,
 )
 from trading_crab_lib.platform.honesty.walkforward import expanding_steps  # noqa: E402
-from trading_crab_lib.platform.labeling.classifier2 import classifier2_config  # noqa: E402
+from trading_crab_lib.platform.parked.classifier2 import classifier2_config  # noqa: E402
 from trading_crab_lib.platform.parked.joint_driver import _refit_classifier2  # noqa: E402
 
 log = logging.getLogger(__name__)

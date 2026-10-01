@@ -20,7 +20,7 @@ import pytest
 
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.evaluation.report import _reference_label_columns
-from trading_crab_lib.platform.labeling.classifier2 import (
+from trading_crab_lib.platform.parked.classifier2 import (
     CLASSIFIER2_CANDIDATE_COLUMNS,
     CLASSIFIER2_LABELS_CHECKPOINT,
     classifier2_config,

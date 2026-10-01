@@ -179,12 +179,12 @@ from trading_crab_lib.platform.evaluation.kpis import max_drawdown_and_duration,
 from trading_crab_lib.platform.honesty import registry
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
 from trading_crab_lib.platform.honesty.walkforward import expanding_steps
-from trading_crab_lib.platform.labeling.classifier2 import classifier2_config
 from trading_crab_lib.platform.labeling.jump_model import (
     canonicalize_states,
     fit_jump_model,
     standardize_features,
 )
+from trading_crab_lib.platform.parked.classifier2 import classifier2_config
 from trading_crab_lib.platform.prediction.regime_filter import (
     filter_step,
     predict_only_step,

@@ -40,6 +40,7 @@ FORBIDDEN_EXACT = {
 PARKED_MODULES = {
     "stability": f"{PKG}.labeling.stability",
     "joint_driver": f"{PKG}.backtest.joint_driver",
+    "classifier2": f"{PKG}.labeling.classifier2",
 }
 
 

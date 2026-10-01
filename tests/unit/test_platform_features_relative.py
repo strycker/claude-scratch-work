@@ -23,7 +23,7 @@ from trading_crab_lib.platform.features.relative import (
     compute_rolling_cross_correlation,
     compute_trailing_momentum,
 )
-from trading_crab_lib.platform.labeling.classifier2 import freeze_classifier2_columns
+from trading_crab_lib.platform.parked.classifier2 import freeze_classifier2_columns
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 N_MONTHS = 60

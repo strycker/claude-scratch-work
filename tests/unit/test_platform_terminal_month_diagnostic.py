@@ -344,7 +344,7 @@ class TestPersistedRecord:
         ``08-CONTEXT.md`` D-07 names.
         """
         from trading_crab_lib.platform.config import load_platform_config
-        from trading_crab_lib.platform.labeling.classifier2 import classifier2_config
+        from trading_crab_lib.platform.parked.classifier2 import classifier2_config
 
         cfg = load_platform_config()
         block = record[key]
