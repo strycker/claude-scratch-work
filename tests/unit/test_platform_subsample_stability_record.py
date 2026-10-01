@@ -32,7 +32,7 @@ from run_subsample_stability import (
 
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.labeling.classifier2 import classifier2_config
-from trading_crab_lib.platform.labeling.stability import (
+from trading_crab_lib.platform.parked.stability import (
     DEFAULT_STABILITY_SEED,
     StabilityFit,
     fit_for_stability,

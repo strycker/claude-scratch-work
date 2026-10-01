@@ -36,7 +36,7 @@ from trading_crab_lib.platform.labeling.jump_model import (
     _recompute_centroids,
     standardize_features,
 )
-from trading_crab_lib.platform.labeling.stability import (
+from trading_crab_lib.platform.parked.stability import (
     BLOCK_LENGTH_LADDER,
     DEFAULT_STABILITY_SEED,
     EVAPORATED_OCCUPANCY_MONTHS,
@@ -650,7 +650,7 @@ class TestRunStability:
 
 class TestNoThresholdAndNoVerdict:
     def test_the_module_defines_no_persistence_threshold_and_emits_no_verdict(self):
-        from trading_crab_lib.platform.labeling import stability
+        from trading_crab_lib.platform.parked import stability
 
         row = stability_row(
             classifier="c", scheme="s", state=0, subsample_occupancy_months=40,

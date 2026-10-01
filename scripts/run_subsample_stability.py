@@ -96,7 +96,7 @@ from trading_crab_lib.platform.labeling.classifier2 import (
     classifier2_config,
     freeze_classifier2_columns,
 )
-from trading_crab_lib.platform.labeling.stability import (
+from trading_crab_lib.platform.parked.stability import (
     BLOCK_LENGTH_LADDER,
     DEFAULT_STABILITY_SEED,
     EVAPORATED_OCCUPANCY_MONTHS,
