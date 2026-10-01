@@ -133,6 +133,7 @@ from trading_crab_lib.platform.prediction.regime_filter import (
 )
 from trading_crab_lib.platform.prediction.transition_matrix import empirical_transition_matrix
 from trading_crab_lib.platform.report.holdings import load_account_weights
+from trading_crab_lib.platform.report.scoreboard import format_scoreboard, scoreboard_table
 from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND, SERVING_CLASS_PRIOR
 from trading_crab_lib.platform.tripwire.monitor import evaluate_tripwire
 
@@ -622,6 +623,7 @@ def assemble_weekly_report(
     allocation_mode: str | None = None,
     mode_note: str | None = None,
     tripwire: dict | None = None,
+    scoreboard: list[str] | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -660,7 +662,8 @@ def assemble_weekly_report(
     ``tripwire`` (``evaluate_tripwire``'s output, D-04) renders the ``## Crash Tripwire`` section
     directly before the trades heading: one bullet per signal with its state, value, threshold
     and as-of date, then the escalation over current signals (``_tripwire_section``). Advisory:
-    nothing else on the page reads it. None (the default) renders nothing.
+    nothing else on the page reads it. None (the default) renders nothing. ``scoreboard``
+    (``format_scoreboard``'s lines, D-05) follows it, still before the trades heading.
     """
     probs = pd.Series(regime_probs, dtype=float)
 
@@ -684,6 +687,8 @@ def assemble_weekly_report(
 
     if tripwire is not None:
         lines.extend(_tripwire_section(tripwire))
+    if scoreboard is not None:
+        lines.extend(scoreboard)
 
     # ── 4. Target-vs-current + trades implied, per account ────────────────
     lines.append("## Target vs. Current — Trades Implied")
@@ -1203,8 +1208,9 @@ def build_weekly_page(cfg: dict, cm=None, *, output_dir: Path | None = None) -> 
     a notebook or a smoke can build it in a scratch copy (N4) without touching the tracked
     namespace. Order: ``_build_report_inputs`` (load -> advance -> save of the belief, the
     hysteresis and the executed book), then ``evaluate_tripwire`` on the same ``cm`` at
-    ``_run_date()``, then ``assemble_weekly_report`` and ``write_weekly_report(output_dir=...)``.
-    The tripwire is read after the book is executed and feeds only its own section (D-04).
+    ``_run_date()``, then the static scoreboard (``scoreboard_table`` on the same ``cm``, D-05),
+    then ``assemble_weekly_report`` and ``write_weekly_report(output_dir=...)``. The tripwire and
+    the scoreboard are read after the book is executed and feed only their own sections.
 
     Returns ``(markdown, path)``.
     """
@@ -1234,6 +1240,7 @@ def build_weekly_page(cfg: dict, cm=None, *, output_dir: Path | None = None) -> 
         allocation_mode=inputs.get("allocation_mode"),
         mode_note=inputs.get("mode_note"),
         tripwire=tripwire,
+        scoreboard=format_scoreboard(scoreboard_table(cfg, cm)),
     )
     return markdown, write_weekly_report(markdown, output_dir=output_dir)
 

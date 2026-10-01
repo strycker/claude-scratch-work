@@ -69,6 +69,7 @@ Usage::
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -76,6 +77,9 @@ import pandas as pd
 
 from trading_crab_lib.platform.backtest.costs import apply_transaction_cost, compute_turnover
 from trading_crab_lib.platform.backtest.driver import run_backtest
+from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+
+log = logging.getLogger(__name__)
 
 _SUPPORTED_REBALANCE_CONVENTIONS = ("monthly",)
 
@@ -289,6 +293,72 @@ def no_regime_ablation(
         frozen_l1_features=frozen_l1_features,
         trial_tag=trial_tag,
     )
+
+
+# ── The three deterministic baseline legs from monthly_raw (plan 08.2-03) ────
+
+
+def baseline_curves(monthly_raw: pd.DataFrame, cfg: dict) -> dict[str, pd.Series]:
+    """Re-derive the three deterministic baseline return series, dev-bounded.
+
+    Moved verbatim from ``plotting/backtest.py::recompute_baseline_curves`` (which now
+    delegates here) so the weekly page's static scoreboard (``report/scoreboard.py``) can use
+    it without importing the plotting package. Same data flow as
+    ``evaluation/report.py::run_full_backtest_evaluation``, through public functions only:
+    ``build_core_research_series`` -> ``compute_monthly_returns`` -> the equity / bond / cash
+    research names from ``cfg["splice"]`` -> ``split_by_holdout_boundary`` at
+    ``DEFAULT_HOLDOUT_CUTOFF`` -> ``spy_buy_hold`` / ``sixty_forty`` / ``faber_sma`` with
+    ``cfg["backtest"]``'s ``cost_bps`` and rebalance convention. Deterministic price arithmetic
+    with no tunable parameter: no registry trial.
+
+    Returns:
+        ``{"spy_buy_hold", "sixty_forty", "faber_sma"}`` -> monthly net-of-cost return Series,
+        each bounded at or before the holdout cutoff.
+    """
+    # Imported at call time so this module's import graph stays shallow for
+    # the D-01 boundary scan and so a notebook that never plots baselines
+    # never pays for the splice/returns import chain.
+    from trading_crab_lib.platform.assets.returns import compute_monthly_returns
+    from trading_crab_lib.platform.splice import build_core_research_series
+
+    splice_cfg = cfg["splice"]
+    research = build_core_research_series(monthly_raw, cfg)
+    returns = compute_monthly_returns(research)
+
+    equity_name = splice_cfg["equities"]["research_name"]
+    bond_name = splice_cfg["long_duration"]["research_name"]
+    cash_name = splice_cfg["cash"]["research_name"]
+
+    equity_ret = returns[equity_name]
+    bond_ret = returns[bond_name]
+    cash_ret = returns[cash_name]
+    equity_level = research[equity_name]
+
+    backtest_cfg = cfg.get("backtest", {})
+    rebalance = backtest_cfg.get("sixty_forty_rebalance", "monthly")
+    cost_bps = backtest_cfg.get("cost_bps", 10)
+    baseline_cost_bps = cost_bps if backtest_cfg.get("apply_cost_to_baselines", True) else 0.0
+
+    dev_equity_ret, _ = split_by_holdout_boundary(equity_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_bond_ret, _ = split_by_holdout_boundary(bond_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_cash_ret, _ = split_by_holdout_boundary(cash_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_equity_level, _ = split_by_holdout_boundary(equity_level, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+
+    curves = {
+        "spy_buy_hold": spy_buy_hold(dev_equity_ret),
+        "sixty_forty": sixty_forty(
+            dev_equity_ret, dev_bond_ret, rebalance=rebalance, cost_bps=baseline_cost_bps
+        ),
+        "faber_sma": faber_sma(dev_equity_level, dev_cash_ret, cost_bps=baseline_cost_bps),
+    }
+    log.info(
+        "Re-derived %d deterministic baseline legs (cost_bps=%s, rebalance=%s), dev-bounded at %s",
+        len(curves),
+        baseline_cost_bps,
+        rebalance,
+        DEFAULT_HOLDOUT_CUTOFF,
+    )
+    return curves
 
 
 if __name__ == "__main__":
