@@ -17,10 +17,15 @@ Usage:
 
 from __future__ import annotations
 
-from trading_crab_lib import DATA_DIR
+from trading_crab_lib import DATA_DIR, OUTPUT_DIR
 from trading_crab_lib.checkpoints import CheckpointManager
 
 PLATFORM_CHECKPOINT_DIR = DATA_DIR / "checkpoints" / "platform"
+
+#: Where the platform's report artifacts live (the tracked backtest outputs among them). Exposed
+#: here so platform modules that only READ them (``report/scoreboard.py``) need no import of
+#: the legacy package root (the legacy-import ratchet, criterion 8).
+PLATFORM_REPORT_DIR = OUTPUT_DIR / "reports" / "platform"
 
 
 def get_platform_checkpoint_manager() -> CheckpointManager:

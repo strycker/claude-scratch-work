@@ -70,7 +70,7 @@ from trading_crab_lib.platform.assets.returns import (
     tradable_asset_returns,
 )
 from trading_crab_lib.platform.backtest.driver import fit_l2_nowcaster
-from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+from trading_crab_lib.platform.checkpoints import CheckpointManager, get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty import registry
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
@@ -247,8 +247,6 @@ def build_scratch_serving(cfg: dict[str, Any], scratch_dir: Path, *, source_dir:
 
     Returns the scratch ``CheckpointManager`` (pass it to ``weekly.build_weekly_page``).
     """
-    from trading_crab_lib.checkpoints import CheckpointManager
-
     source = Path(source_dir) if source_dir is not None else platform_checkpoints.PLATFORM_CHECKPOINT_DIR
     scratch_dir = Path(scratch_dir)
     target = scratch_dir / "checkpoints"

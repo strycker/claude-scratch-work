@@ -375,7 +375,9 @@ class TestOnThePage:
 
         world = _no_regime_world(tmp_path / "w", monkeypatch)
         board_world = _world(tmp_path / "board")
-        monkeypatch.setattr(scoreboard, "OUTPUT_DIR", board_world["reports"].parent / "out_unused")
+        import trading_crab_lib.platform.checkpoints as platform_ckpt
+
+        monkeypatch.setattr(platform_ckpt, "PLATFORM_REPORT_DIR", board_world["reports"].parent / "out_unused")
         markdown, _ = weekly.build_weekly_page(world["cfg"], get_platform_checkpoint_manager(),
                                                output_dir=tmp_path / "page")
         assert "## Scoreboard (static — last budgeted run)" in markdown

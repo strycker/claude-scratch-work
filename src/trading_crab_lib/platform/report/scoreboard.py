@@ -44,7 +44,7 @@ from typing import Any
 
 import pandas as pd
 
-from trading_crab_lib import OUTPUT_DIR
+from trading_crab_lib.platform import checkpoints as platform_checkpoints
 from trading_crab_lib.platform.backtest.baselines import baseline_curves
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.evaluation.kpis import max_drawdown_and_duration, terminal_log_wealth
@@ -119,8 +119,8 @@ def scoreboard_table(
         cfg: platform config (``splice`` and ``backtest`` for the baselines; ``report.
             scoreboard_trial_tag``).
         cm: checkpoint manager holding ``monthly_raw`` (default: the platform namespace).
-        reports_dir: where the KPI table and curves live (default ``OUTPUT_DIR/reports/platform``,
-            the tracked outputs).
+        reports_dir: where the KPI table and curves live (default ``PLATFORM_REPORT_DIR``,
+            i.e. ``OUTPUT_DIR/reports/platform``: the tracked outputs, read at call time).
         registry_path: the trial registry (default: the live ledger), read only.
 
     Returns a dict: ``available`` / ``reason``; ``legs`` (one dict per leg in page order:
@@ -128,7 +128,7 @@ def scoreboard_table(
     ``mdd_own``, ``own_start``); ``window_start``, ``window_end``, ``n_steps``, ``cost_bps``;
     ``reconciled``; ``run_date``, ``git_sha``, ``trial_tag``, ``n_tagged_rows``.
     """
-    reports = Path(reports_dir) if reports_dir is not None else OUTPUT_DIR / "reports" / "platform"
+    reports = Path(reports_dir) if reports_dir is not None else platform_checkpoints.PLATFORM_REPORT_DIR
     tag = str(cfg.get("report", {}).get("scoreboard_trial_tag", DEFAULT_SCOREBOARD_TRIAL_TAG))
     board: dict[str, Any] = {
         "available": False, "reason": None, "legs": [], "window_start": None, "window_end": None,
