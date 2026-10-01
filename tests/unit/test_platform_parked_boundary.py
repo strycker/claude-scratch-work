@@ -39,6 +39,7 @@ FORBIDDEN_EXACT = {
 # module -> its pre-08.2-02 path (must no longer import)
 PARKED_MODULES = {
     "stability": f"{PKG}.labeling.stability",
+    "joint_driver": f"{PKG}.backtest.joint_driver",
 }
 
 
@@ -127,3 +128,12 @@ def test_no_src_module_outside_parked_imports_parked():
 def test_module_lives_only_under_parked(name, old_path):
     assert importlib.util.find_spec(f"{PARKED}.{name}") is not None
     assert importlib.util.find_spec(old_path) is None
+
+
+def test_quality_tier_moved_not_copied():
+    """The A11 gate lives in evaluation/deflated_sharpe.py; parked code re-imports the same objects."""
+    from trading_crab_lib.platform.evaluation import deflated_sharpe
+    from trading_crab_lib.platform.parked import joint_driver
+
+    for name in ("quality_tier", "annualized_sharpe", "QUALITY_TIER_RULE"):
+        assert getattr(joint_driver, name) is getattr(deflated_sharpe, name), name

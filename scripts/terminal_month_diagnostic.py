@@ -65,7 +65,6 @@ from trading_crab_lib.platform.backtest.driver import (  # noqa: E402
     _L2_DEGRADE_EXCEPTIONS,
     _refit_l1,
 )
-from trading_crab_lib.platform.backtest.joint_driver import _refit_classifier2  # noqa: E402
 from trading_crab_lib.platform.config import load_platform_config  # noqa: E402
 from trading_crab_lib.platform.honesty.holdout import (  # noqa: E402
     DEFAULT_HOLDOUT_CUTOFF,
@@ -73,6 +72,7 @@ from trading_crab_lib.platform.honesty.holdout import (  # noqa: E402
 )
 from trading_crab_lib.platform.honesty.walkforward import expanding_steps  # noqa: E402
 from trading_crab_lib.platform.labeling.classifier2 import classifier2_config  # noqa: E402
+from trading_crab_lib.platform.parked.joint_driver import _refit_classifier2  # noqa: E402
 
 log = logging.getLogger(__name__)
 

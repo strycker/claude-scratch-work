@@ -564,7 +564,7 @@ class TestTheA11QualityTierIsInTheLiftTable:
     def test_a_sharpe_above_the_hurdle_passes_and_one_below_fails(self):
         """Both sides of the gate, in one table: without the passing arm the gate could
         be a constant False; without the failing arm, a constant True."""
-        from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
+        from trading_crab_lib.platform.parked.joint_driver import joint_lift_table
 
         strong, weak = _gate_curve(0.05, 0.02), _gate_curve(0.005, 0.04)
         out = joint_lift_table(strong, weak, n_trials=44, sharpe_variance=1.0)
@@ -575,7 +575,7 @@ class TestTheA11QualityTierIsInTheLiftTable:
 
     @pytest.mark.parametrize("n_trials", [2, 42, 44, 1000])
     def test_the_hurdle_is_expected_max_sharpe_at_the_count_passed(self, n_trials):
-        from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
+        from trading_crab_lib.platform.parked.joint_driver import joint_lift_table
         from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
 
         out = joint_lift_table(_gate_curve(0.01, 0.03), _gate_curve(0.01, 0.03, seed=8), n_trials=n_trials,
@@ -590,7 +590,7 @@ class TestTheA11QualityTierIsInTheLiftTable:
     def test_without_counts_the_hurdle_is_read_live_not_from_a_literal(self, monkeypatch):
         """08-A11.md §5.3: 'The hurdle may not be written as a literal'. A patched
         registry count must move the hurdle; a frozen 2.208694 would not."""
-        from trading_crab_lib.platform.backtest import joint_driver as jd
+        from trading_crab_lib.platform.parked import joint_driver as jd
         from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
 
         curve = _gate_curve(0.01, 0.03)
@@ -604,15 +604,17 @@ class TestTheA11QualityTierIsInTheLiftTable:
     def test_the_boundary_is_exclusive(self, monkeypatch):
         """A DSR of exactly 0.5 is a Sharpe EQUAL to the hurdle: equalling the bar is
         not clearing it. Mutating ``>`` to ``>=`` turns this red."""
-        from trading_crab_lib.platform.backtest import joint_driver as jd
+        from trading_crab_lib.platform.evaluation import deflated_sharpe
+        from trading_crab_lib.platform.parked import joint_driver as jd
 
-        monkeypatch.setattr(jd, "deflated_sharpe_ratio", lambda **kw: 0.5)
+        # 08.2-02 (2026-10-01): patch target follows quality_tier's move to evaluation/deflated_sharpe.py; assertion unchanged
+        monkeypatch.setattr(deflated_sharpe, "deflated_sharpe_ratio", lambda **kw: 0.5)
         assert jd.quality_tier(_gate_curve(0.05, 0.02)["return"], n_trials=44, sharpe_variance=1.0)["ok"] is False
 
     def test_a_leg_with_no_sharpe_does_not_pass(self):
         """A constant leg has no Sharpe; it is reported undefined, and a hurdle cannot
         be cleared by a number that does not exist."""
-        from trading_crab_lib.platform.backtest.joint_driver import quality_tier
+        from trading_crab_lib.platform.parked.joint_driver import quality_tier
 
         idx = pd.date_range("1990-01-31", periods=24, freq="ME")
         q = quality_tier(pd.Series(0.01, index=idx), n_trials=44, sharpe_variance=1.0)
@@ -621,7 +623,7 @@ class TestTheA11QualityTierIsInTheLiftTable:
 
     def test_the_four_plausibility_bands_were_not_retuned(self):
         """A11 promoted the DSR hurdle and ruled NO band change (08-A11.md §5.3)."""
-        from trading_crab_lib.platform.backtest import joint_driver as jd
+        from trading_crab_lib.platform.parked import joint_driver as jd
 
         assert (jd.WEALTH_DELTA_UNIVERSAL, jd.WEALTH_DELTA_DOMAIN) == (15.0, 5.0)
         assert (jd.DD_DELTA_UNIVERSAL, jd.DD_DELTA_DOMAIN) == ((-1.0, 1.0), 0.5)
@@ -686,7 +688,7 @@ def _rederived(suffix: str) -> tuple[dict, dict]:
     trial count and variance, plus each leg's mean turnover from its own ``turnover`` column.
     ``recorded`` is the same nine keys read from the committed record.
     """
-    from trading_crab_lib.platform.backtest.joint_driver import joint_lift_table
+    from trading_crab_lib.platform.parked.joint_driver import joint_lift_table
 
     rec = _record(suffix)
     joint, base = _curve(suffix, "joint"), _curve(suffix, "baseline")

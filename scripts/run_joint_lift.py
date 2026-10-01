@@ -68,15 +68,6 @@ from typing import Any
 import pandas as pd
 
 from trading_crab_lib.platform.assets.returns import compute_monthly_returns
-from trading_crab_lib.platform.backtest.joint_driver import (
-    QUALITY_TIER_RULE,
-    ROUTING_L1_ONLY,
-    ROUTING_L2_NOWCAST,
-    annualized_sharpe,
-    joint_lift_table,
-    quality_tier,
-    run_joint_backtest,
-)
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.evaluation.churn import churn_rate, state_change_count, write_probability_matrix
@@ -93,6 +84,15 @@ from trading_crab_lib.platform.honesty.registry import NO_REGISTRY, total_trial_
 from trading_crab_lib.platform.labeling.classifier2 import (
     classifier2_config,
     freeze_classifier2_columns,
+)
+from trading_crab_lib.platform.parked.joint_driver import (
+    QUALITY_TIER_RULE,
+    ROUTING_L1_ONLY,
+    ROUTING_L2_NOWCAST,
+    annualized_sharpe,
+    joint_lift_table,
+    quality_tier,
+    run_joint_backtest,
 )
 from trading_crab_lib.platform.splice import build_core_research_series
 from trading_crab_lib.platform.taxonomy import lean_feature_set

@@ -129,7 +129,7 @@ plausibility bands are unchanged and remain plausibility-only.
 
 Usage::
 
-    from trading_crab_lib.platform.backtest.joint_driver import (
+    from trading_crab_lib.platform.parked.joint_driver import (
         joint_lift_table, run_joint_backtest,
     )
 
@@ -170,9 +170,9 @@ from trading_crab_lib.platform.backtest.driver import (
     _refit_l2,
 )
 from trading_crab_lib.platform.evaluation.deflated_sharpe import (
-    _VERDICT_HURDLE,
-    deflated_sharpe_ratio,
-    expected_max_sharpe,
+    QUALITY_TIER_RULE,
+    annualized_sharpe,
+    quality_tier,
     registry_sharpe_variance,
 )
 from trading_crab_lib.platform.evaluation.kpis import max_drawdown_and_duration, terminal_log_wealth
@@ -770,69 +770,6 @@ def run_joint_backtest(
         "registry_row_written": registry_path != registry.NO_REGISTRY,
     }
     return equity_curve, metadata
-
-
-#: ADR-0003's gate, as a string carried in every record that reports it.
-QUALITY_TIER_RULE: str = (
-    "observed_sharpe > expected_max_sharpe(total_trial_count(), sharpe_variance) "
-    "<=> deflated_sharpe_ratio > 0.5 (ADR-0003; 08-A11.md b-promote-dsr)"
-)
-
-
-def annualized_sharpe(returns: pd.Series) -> float:
-    """``assets/returns.py``'s convention: ``(mean / std) * sqrt(12)`` over non-null months.
-
-    ``NaN`` when the standard deviation is zero — a constant series has no Sharpe.
-    """
-    clean = returns.dropna()
-    sd = float(clean.std())
-    return float((clean.mean() / sd) * np.sqrt(12)) if sd > 0 else float("nan")
-
-
-def quality_tier(returns: pd.Series, *, n_trials: int, sharpe_variance: float) -> dict[str, Any]:
-    """The A11 gate for ONE leg: does its Sharpe clear the multiple-testing hurdle?
-
-    PASSES iff ``deflated_sharpe_ratio(...) > _VERDICT_HURDLE`` (0.5), which is the
-    same statement as ``observed_sharpe > expected_max_sharpe(n_trials,
-    sharpe_variance)``. ``_VERDICT_HURDLE`` is imported, never re-declared.
-
-    A leg without a defined Sharpe (fewer than two months, or zero variance) or
-    with a non-finite DSR does NOT pass: a hurdle cannot be cleared by a number
-    that does not exist. It is reported with ``defined: False`` so the reason is
-    visible rather than folded into a plain ``False``.
-
-    Raises:
-        ValueError: propagated from ``deflated_sharpe_ratio`` when the leg's own
-            moments give a non-positive PSR denominator — a broken measurement,
-            not a verdict.
-    """
-    clean = returns.dropna()
-    hurdle = expected_max_sharpe(n_trials, sharpe_variance)
-    sharpe = annualized_sharpe(clean)
-    out: dict[str, Any] = {
-        "observed_sharpe": sharpe,
-        "hurdle": hurdle,
-        "n_trials": int(n_trials),
-        "sharpe_variance": float(sharpe_variance),
-        "n_obs": int(len(clean)),
-        "dsr": float("nan"),
-        "ok": False,
-        "defined": False,
-    }
-    if len(clean) < 2 or not np.isfinite(sharpe):
-        return out
-    dsr = deflated_sharpe_ratio(
-        observed_sharpe=sharpe,
-        n_trials=n_trials,
-        sharpe_variance=sharpe_variance,
-        skew=float(clean.skew()),
-        kurtosis=float(clean.kurtosis() + 3.0),  # pandas reports EXCESS kurtosis
-        n_obs=int(len(clean)),
-    )
-    if not np.isfinite(dsr):
-        return out
-    out.update(dsr=dsr, ok=bool(dsr > _VERDICT_HURDLE), defined=True)
-    return out
 
 
 def joint_lift_table(

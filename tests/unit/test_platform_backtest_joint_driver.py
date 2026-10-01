@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import trading_crab_lib.platform.backtest.joint_driver as jd
+import trading_crab_lib.platform.parked.joint_driver as jd
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF
 from trading_crab_lib.platform.honesty.registry import NO_REGISTRY, read_trials
 
