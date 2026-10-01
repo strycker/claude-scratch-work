@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08.2
 current_phase_name: Lean MVP — Simplify, Modularize, Notebook-Gate
-status: planning
-stopped_at: Phase 08.2 context gathered 2026-10-01 (5 questions; A-13, A-14, G-07); next /gsd-plan-phase 8.2
+status: planned
+stopped_at: Phase 08.2 PLANNED 2026-10-01 (3 lean plans; checker 2 blockers + 4 warnings fixed); awaiting Glenn approval before /gsd-execute-phase 8.2
 last_updated: "2026-09-30T22:36:16.801Z"
 progress:
   total_phases: 10
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.2 — Lean MVP — Simplify, Modularize, Notebook-Gate
-Status: Context gathered (2026-10-01) — MVP-1 on the no-regime path, regime view suspended, tripwire + static scoreboard, park classifier #2/joint driver/stability, module map, notebooks N4/N6/N7; budget 0. Ready for /gsd-plan-phase 8.2.
+Status: **Planned** (2026-10-01) — 08.2-01 no-regime page + suspended regime view, 08.2-02 park + module map (wave 1); 08.2-03 tripwire + static scoreboard + notebooks P7–P9 (wave 2). Budget 0. Awaiting Glenn approval.
 **Phase 08.1 closed 2026-09-30.** Point-in-time data: a measured `publication_lags` table (M2SL 1, TOTALSL 2,
 div_yield 3, pre-1991 GDP fallback 3, others 0 or vintage-aligned), applied once in ingestion and guarded by a
 point-in-time test with a mutation proof. Weekly page: per-series STALE banner (A-12) and an always-printed
