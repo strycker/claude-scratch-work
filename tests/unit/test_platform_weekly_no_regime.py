@@ -14,7 +14,9 @@ tracked platform checkpoints into a tmp dir and passes ``NO_REGISTRY`` to every 
 
 from __future__ import annotations
 
+import hashlib
 import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -23,11 +25,21 @@ from test_platform_report_serving import _serving_world  # tests/unit is on sys.
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.report import weekly
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REAL_REGISTRY = _REPO_ROOT / "registry" / "trials.jsonl"
+_TRACKED_PLATFORM = _REPO_ROOT / "data" / "checkpoints" / "platform"
+_TRACKED_OUTPUTS = _REPO_ROOT / "outputs" / "reports" / "platform"
+_DEV_END = pd.Timestamp("2020-12-31")
+
 _D03_SENTENCE = (
     "Regime view: suspended — the served nowcaster is input-independent (fixed in the regime "
     "rebuild); the allocation does not use it."
 )
 _REGIME_LINES = ("- regime ", "Filtered Regime Belief", "Active Regime", "Trajectory", "Per-Asset Signals")
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _report(world: dict) -> str:
@@ -260,3 +272,115 @@ class TestModeSwitch:
         _run_at(world, monkeypatch, "2021-05-31", "no_regime")
         assert not (world["platform_dir"] / "allocation_mode.parquet").exists()
         assert not (world["platform_dir"] / "executed_weights.parquet").exists()
+
+
+# ── parity with the measured ablation leg (D-01) ─────────────────────────────
+
+
+def _spy(monkeypatch, module, name: str) -> list:
+    """Wrap ``module.name`` so every call's return value is recorded, in order."""
+    real = getattr(module, name)
+    calls: list = []
+
+    def wrapper(*args, **kwargs):
+        out = real(*args, **kwargs)
+        calls.append(out)
+        return out
+
+    monkeypatch.setattr(module, name, wrapper)
+    return calls
+
+
+class TestParityWithTheAblationLeg:
+    def test_synthetic_parity_weekly_steps_equal_the_ablation_driver(self, tmp_path, monkeypatch):
+        """Weekly, driven once per walk-forward step in order, holds what the tilt-off driver
+        holds: pre-band target == the driver's tilt, executed book == the driver's rebalance.
+        Fails if weekly tilts on the belief, conditions on the regime table, or reads served
+        returns past the scored month (they run to 2021-06 here)."""
+        from trading_crab_lib.platform.backtest import driver
+        from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
+        from trading_crab_lib.platform.honesty.walkforward import expanding_steps
+        from trading_crab_lib.platform.report import serving
+
+        world = _serving_world(tmp_path, monkeypatch)
+        cfg = world["cfg"]
+        assert serving.main([]) == 0
+        from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+
+        asset_returns = get_platform_checkpoint_manager().load("asset_returns")
+        assert asset_returns.index.max() > _DEV_END, "precondition: served returns run past the dev window"
+        dev = world["dev"]
+        min_train = len(dev) - 8
+        cfg["backtest"].update({"min_train_months": min_train, "skip_l1l2_for_ablation": True, "cost_bps": 10})
+        cfg["report"]["allocation_mode"] = "no_regime"
+
+        tilts = _spy(monkeypatch, driver, "vol_targeted_tilt")
+        rebalances = _spy(monkeypatch, driver, "execute_rebalance")
+        curve, _ = driver.run_backtest(dev, asset_returns, cfg, use_regime_tilt=False, registry_path=NO_REGISTRY)
+        steps = list(expanding_steps(dev.index, min_train=min_train))
+        assert len(curve) == len(steps) == len(tilts) == len(rebalances) == 8
+        assert not curve["degraded"].any()
+
+        for (_t, train_index, _test), tilt, rebalance in zip(steps, tilts, rebalances):
+            as_of = pd.Timestamp(train_index[-1])
+            cut = world["full"].loc[:as_of]
+            monkeypatch.setattr(weekly, "load_full_span", lambda name, cut=cut: cut)
+            inputs = weekly._build_report_inputs(cfg)
+            assert inputs["allocation_mode"] == "no_regime"
+            assert inputs["mode_note"] is None
+            _same(inputs["pre_band_target_weights"], tilt["weights"])
+            assert inputs["pre_band_cash"] == pytest.approx(tilt["cash"], rel=1e-9, abs=0)
+            _same(inputs["target_weights"], rebalance["weights"])
+            assert inputs["cash"] == pytest.approx(rebalance["cash"], rel=1e-9, abs=0)
+
+    def test_tracked_data_parity_ablation_rerun_matches_the_tracked_curve_and_weekly(self, tmp_path, monkeypatch):
+        """On the tracked data: a NO_REGISTRY ablation re-run reproduces the tracked ablation curve
+        (``return``, ``scale``) and its final-step tilt is the weekly no-regime target at 2020-11-30.
+        Also pins that D-05's tracked ablation numbers still match the code and the data; a later
+        rebuild that changes rows <= 2020-12 turns this red, and that is informative."""
+        import shutil
+
+        import trading_crab_lib.platform.assets.returns as returns_mod
+        from trading_crab_lib.checkpoints import CheckpointManager
+        from trading_crab_lib.platform.assets.returns import compute_monthly_returns, tradable_asset_returns
+        from trading_crab_lib.platform.backtest import driver
+        from trading_crab_lib.platform.backtest.baselines import no_regime_ablation
+        from trading_crab_lib.platform.honesty import registry
+        from trading_crab_lib.platform.report import serving
+        from trading_crab_lib.platform.splice import build_core_research_series
+
+        sha_before = _sha256(_REAL_REGISTRY)
+        count_before = registry.total_trial_count(_REAL_REGISTRY)
+        assert count_before == 46
+
+        tmp_ckpt = tmp_path / "platform"
+        tmp_ckpt.mkdir()
+        for name in ("monthly_features", "monthly_raw", "regime_labels"):
+            for suffix in (".parquet", ".meta.json"):
+                shutil.copy2(_TRACKED_PLATFORM / f"{name}{suffix}", tmp_ckpt / f"{name}{suffix}")
+        monkeypatch.setattr(returns_mod, "OUTPUT_DIR", tmp_path / "out")
+        cm = CheckpointManager(checkpoint_dir=tmp_ckpt)
+        cfg = load_platform_config()
+        assert cfg["backtest"].get("skip_l1l2_for_ablation", True) is True, "precondition: the measured leg skipped L1/L2"
+        serving.build_serving_artifacts(cfg, cm=cm, output_dir=tmp_path / "out")
+
+        # The ablation inputs exactly as run_full_backtest_evaluation builds them.
+        returns = compute_monthly_returns(build_core_research_series(cm.load("monthly_raw"), cfg))
+        asset_returns = tradable_asset_returns(returns, cfg["splice"])
+        cash_ret = returns[cfg["splice"]["cash"]["research_name"]]
+        tilts = _spy(monkeypatch, driver, "vol_targeted_tilt")
+        curve, _ = no_regime_ablation(
+            cm.load("monthly_features"), asset_returns, cfg, cash_returns=cash_ret, registry_path=registry.NO_REGISTRY,
+        )
+
+        tracked = pd.read_parquet(_TRACKED_OUTPUTS / "backtest_equity_curve_ablation.parquet")
+        assert list(curve.index) == list(tracked.index)
+        for column in ("return", "scale"):
+            pd.testing.assert_series_equal(curve[column], tracked[column], rtol=1e-9, atol=0, check_freq=False)
+
+        weekly_target = weekly.no_regime_target(cm.load("asset_returns"), pd.Timestamp("2020-11-30"), cfg)
+        _same(weekly_target["weights"], tilts[-1]["weights"])
+        assert weekly_target["cash"] == pytest.approx(tilts[-1]["cash"], rel=1e-9, abs=0)
+
+        assert _sha256(_REAL_REGISTRY) == sha_before
+        assert registry.total_trial_count(_REAL_REGISTRY) == count_before == 46
