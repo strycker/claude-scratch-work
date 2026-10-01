@@ -13,7 +13,9 @@ existed). Re-running this script refreshes them, so
 
 This script runs ``build_monthly_spine()`` once to fetch the real sources and
 write ``daily_raw``, ``monthly_raw``, and ``monthly_features`` into the platform
-checkpoint namespace, so the report CLI can then run end-to-end.
+checkpoint namespace, so the report CLI can then run end-to-end. It then runs
+``fetch_fred_daily()`` to write ``fred_daily_raw`` (DAAA/DBAA, the weekly tripwire's
+credit signal); a failure there only warns (plan 08.2-03).
 
 Data sources (all free; only FRED needs a key):
   - FRED           (needs FRED_API_KEY in your environment / .env)
@@ -95,6 +97,28 @@ def main() -> int:
     log.info("Building monthly spine %s → %s (fetching FRED + multpl + macrotrends + yfinance)...", start, end)
 
     monthly_features = build_monthly_spine(cfg)
+
+    # The weekly page's crash tripwire reads fred_daily_raw (DAAA/DBAA) for its credit signal
+    # (plan 08.2-03, ruling A1). The tripwire is advisory, so a failed fetch warns and leaves
+    # the exit code alone: the page then shows that signal UNAVAILABLE or STALE, never green.
+    from trading_crab_lib.platform.ingestion.macro_daily import fetch_fred_daily
+
+    try:
+        fred_daily = fetch_fred_daily(cfg)
+    except Exception as exc:  # noqa: BLE001 — network ingestion; fredapi raises various types
+        log.warning(
+            "fred_daily_raw fetch failed (%s): the weekly tripwire's credit signal will read "
+            "UNAVAILABLE (no checkpoint) or STALE (an old one). The rest of the build is unaffected.",
+            exc,
+        )
+    else:
+        if fred_daily.empty:
+            log.warning(
+                "fred_daily_raw: no series fetched; the weekly tripwire's credit signal will read "
+                "UNAVAILABLE or STALE."
+            )
+        else:
+            log.info("fred_daily_raw: %d days, last date %s", len(fred_daily), fred_daily.index.max().date())
 
     cm = get_platform_checkpoint_manager()
 
