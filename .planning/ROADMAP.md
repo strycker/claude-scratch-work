@@ -30,6 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run (completed 2026-09-30)
 - [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
+- [ ] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -764,6 +765,38 @@ Plans:
 - [x] 08.2-02-PLAN.md — **Park + module map.** `quality_tier` extracted to `evaluation/deflated_sharpe.py`; classifier2 / joint_driver / stability `git mv`'d to `platform/parked/` (no shims, import-only edits to record tests); boundary test (subprocess `sys.modules` + AST scan); `platform_design/MODULE-MAP.md` (M0–M7, M8, M9+, Parked) — wave 1
 - [x] 08.2-03-PLAN.md — **Tripwire, scoreboard, notebooks.** `evaluate_tripwire` (per-signal as-of; STALE after 5 business days; UNAVAILABLE, never green) + `fred_daily_raw` in the build; static scoreboard (`report/scoreboard.py`, common 1972–2020 window, E-07 line); `build_weekly_page`; notebooks P7 (N4) / P8 (N6) / P9 (N7) run headless with pending sign-offs; real-data scratch smoke; DECISIONS A-14 built, G-08 — wave 2
 
+### Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure (INSERTED)
+
+**Goal:** The honest scoreboard is measured on returns a trader could actually earn. Today `equities_tr`
+(multpl S&P monthly **average**), `oil` (WTISPLC monthly average) and `long_duration_tr` (GS10 monthly
+average) produce next-month returns that include part of the move month-end features already saw
+(DECISIONS E-07), which can flatter trend and tilt rules. Rebuild these research series from **month-end**
+prices where a free point-in-time source exists, then re-measure the scoreboard (no-regime ablation,
+regime tilt, SPY, 60/40, Faber) once, under a declared ADR-0004 budget, before/after side by side.
+**Why first (Glenn, 2026-10-02):** first step of the regime rebuild, because its answer can change MVP-1's
+core-mix choice (no-regime ablation vs Faber, A-13) and is the baseline every later regime module is judged against.
+**Lean mode:** one module (M3 returns + scoreboard), ≤ 3 plans, ≤ 5 discuss questions, decisions as
+`DECISIONS.md` rows; rigor (mutation proof, before/after) only for the decision-bearing re-measurement.
+**Candidate success criteria (to be confirmed at discuss-phase):**
+
+  1. Equity / oil / long-duration monthly returns are month-end-to-month-end (or documented as a
+     bounded exception), applied once in the splice, with a test that fails on an averaged series.
+  2. One budgeted re-measurement: before (8.1 numbers) vs after, all five legs, common 1972–2020 window,
+     10 bps; DSR at the live count; one-sentence answers to "does the tilt beat the ablation?" and
+     "does MVP-1's core mix stand?" recorded in DECISIONS.
+  3. The weekly page, scoreboard and P9 reflect the new numbers; the E-07 caveat is removed or narrowed.
+  4. Full suite green on Python 3.10 (pandas 2) and 3.11+ (pandas 3); point-in-time test still green.
+
+**Requirements**: TBD
+**Depends on:** Phase 08.2
+**Later regime-rebuild phases (not yet inserted; one module each):** L2 recipe + distinct-output check
+(M6), CR-02 cross-refit state alignment (M5), A-03 hysteresis revisit, REG-01 second axis.
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 08.3 to break down)
+
 ### Phase 9: Migration to Public Repo
 
 **Goal**: The validated platform lives in `strycker/trading-crab`, the public/PyPI
@@ -796,7 +829,8 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 9
+(8.3 inserted by Glenn 2026-10-02: the regime rebuild starts with E-07 before migration.)
 (Order confirmed by Glenn 2026-09-30: 8.1 before 8.2 — 8.1's outcome shapes 8.2's design.)
 (Phase 7 gates internally: wave 2 does not start unless wave 1 passes.)
 
@@ -812,4 +846,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
+| 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

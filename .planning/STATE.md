@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 9
-current_phase_name: Migration to Public Repo
+current_phase: 08.3
+current_phase_name: Regime Rebuild I — month-end returns (E-07) and re-measure
 status: planning
-stopped_at: Phase 08.2 COMPLETE 2026-10-02 (3/3 plans; verified; Mac run passed; P7–P9 signed off). MVP-1 in use. Next: Glenn chooses regime rebuild (E-07 first) or Phase 9 migration
+stopped_at: Phase 08.3 inserted 2026-10-02 (regime rebuild starts with E-07); discuss-phase in progress
 last_updated: "2026-10-02T15:23:51.560Z"
 progress:
   total_phases: 10
@@ -28,8 +28,8 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 9 — Migration to Public Repo
-Status: Ready to plan
+Phase: 08.3 — Regime Rebuild I — month-end returns (E-07) and re-measure
+Status: Inserted 2026-10-02 (Glenn); discussing. Phase 9 follows.
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
