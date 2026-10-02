@@ -53,8 +53,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from trading_crab_lib.platform.backtest.baselines import faber_sma, sixty_forty, spy_buy_hold
-from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+from trading_crab_lib.platform.backtest.baselines import baseline_curves
 from trading_crab_lib.platform.plotting import core
 
 log = logging.getLogger(__name__)
@@ -97,6 +96,9 @@ def _no_data_figure(title: str, *, save_path: Path | None, show: bool) -> core.p
 def recompute_baseline_curves(monthly_raw: pd.DataFrame, cfg: dict) -> dict[str, pd.Series]:
     """Re-derive the three deterministic baseline return series, dev-bounded.
 
+    Delegates to :func:`trading_crab_lib.platform.backtest.baselines.baseline_curves` (plan
+    08.2-03), so the weekly page's scoreboard and the notebooks share one derivation.
+
     This is a **read-only re-derivation** of the baseline construction inside
     ``platform/evaluation/report.py::run_full_backtest_evaluation`` — never an
     import of that private logic. It follows the same data flow using only
@@ -123,50 +125,7 @@ def recompute_baseline_curves(monthly_raw: pd.DataFrame, cfg: dict) -> dict[str,
         to that leg's monthly net-of-cost return ``pd.Series``, each bounded
         at or before the holdout cutoff.
     """
-    # Imported at call time so this module's import graph stays shallow for
-    # the D-01 boundary scan and so a notebook that never plots baselines
-    # never pays for the splice/returns import chain.
-    from trading_crab_lib.platform.assets.returns import compute_monthly_returns
-    from trading_crab_lib.platform.splice import build_core_research_series
-
-    splice_cfg = cfg["splice"]
-    research = build_core_research_series(monthly_raw, cfg)
-    returns = compute_monthly_returns(research)
-
-    equity_name = splice_cfg["equities"]["research_name"]
-    bond_name = splice_cfg["long_duration"]["research_name"]
-    cash_name = splice_cfg["cash"]["research_name"]
-
-    equity_ret = returns[equity_name]
-    bond_ret = returns[bond_name]
-    cash_ret = returns[cash_name]
-    equity_level = research[equity_name]
-
-    backtest_cfg = cfg.get("backtest", {})
-    rebalance = backtest_cfg.get("sixty_forty_rebalance", "monthly")
-    cost_bps = backtest_cfg.get("cost_bps", 10)
-    baseline_cost_bps = cost_bps if backtest_cfg.get("apply_cost_to_baselines", True) else 0.0
-
-    dev_equity_ret, _ = split_by_holdout_boundary(equity_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    dev_bond_ret, _ = split_by_holdout_boundary(bond_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    dev_cash_ret, _ = split_by_holdout_boundary(cash_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    dev_equity_level, _ = split_by_holdout_boundary(equity_level, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-
-    curves = {
-        "spy_buy_hold": spy_buy_hold(dev_equity_ret),
-        "sixty_forty": sixty_forty(
-            dev_equity_ret, dev_bond_ret, rebalance=rebalance, cost_bps=baseline_cost_bps
-        ),
-        "faber_sma": faber_sma(dev_equity_level, dev_cash_ret, cost_bps=baseline_cost_bps),
-    }
-    log.info(
-        "Re-derived %d deterministic baseline legs (cost_bps=%s, rebalance=%s), dev-bounded at %s",
-        len(curves),
-        baseline_cost_bps,
-        rebalance,
-        DEFAULT_HOLDOUT_CUTOFF,
-    )
-    return curves
+    return baseline_curves(monthly_raw, cfg)
 
 
 # ── Equity curves — all five legs on one chart ───────────────────────────────
@@ -512,4 +471,48 @@ def plot_sojourn_lag_headline(
         wrap=True,
         bbox={"boxstyle": "round", "facecolor": "#fff3cd", "edgecolor": "#d39e00"},
     )
+    return core._save_or_show(fig, save_path=save_path, show=show)
+
+
+# ── Sharpe vs the deflated-Sharpe hurdle (N7, plan 08.2-03) ──────────────────
+
+
+def plot_sharpe_vs_hurdle(
+    sharpes: dict[str, float],
+    hurdle: float,
+    *,
+    n_trials: int,
+    title: str = "Annualized Sharpe vs the multiple-testing hurdle",
+    save_path: Path | None = None,
+    show: bool = False,
+) -> core.plt.Figure:
+    """One bar per leg's annualized Sharpe and a horizontal line at the hurdle.
+
+    The hurdle is ``expected_max_sharpe(n_trials, sharpe_variance)`` (ADR-0003, the A11 gate):
+    a leg clears it only if its bar rises above the line. ``n_trials`` (the live registry count)
+    is printed in the title, because the hurdle means nothing without it. Pure: nothing is
+    computed here beyond drawing.
+    """
+    drawable = {name: float(v) for name, v in sharpes.items() if v is not None and np.isfinite(v)}
+    full_title = f"{title} (hurdle {hurdle:.2f} at {int(n_trials)} trials)"
+    if not drawable:
+        return _no_data_figure(full_title, save_path=save_path, show=show)
+
+    names = list(drawable)
+    positions = np.arange(len(names))
+    colors = [_LEG_STYLE.get(n, {}).get("color", core._regime_color(i)) for i, n in enumerate(names)]
+    fig, ax = core.plt.subplots(figsize=(10, 4.6))
+    ax.bar(positions, [drawable[n] for n in names], color=colors, edgecolor="#333333", linewidth=0.6)
+    ax.axhline(hurdle, color="#d00000", linestyle="--", linewidth=1.4, label=f"hurdle {hurdle:.2f}")
+    for pos, name in zip(positions, names):
+        ax.annotate(f"{drawable[name]:.2f}", xy=(pos, drawable[name]), xytext=(0, 4),
+                    textcoords="offset points", ha="center", fontsize=9)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(names, rotation=30, ha="right", fontsize=9)
+    ax.set_ylabel("annualized Sharpe")
+    ax.set_ylim(min(0.0, min(drawable.values())) * 1.2, max(hurdle, max(drawable.values())) * 1.2)
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(loc="upper left", frameon=False)
+    ax.set_title(full_title)
+    fig.tight_layout()
     return core._save_or_show(fig, save_path=save_path, show=show)

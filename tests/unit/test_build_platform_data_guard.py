@@ -39,3 +39,67 @@ def test_check_price_coverage_passes_for_populated_frame():
     )
     msg = build.check_price_coverage(frame)
     assert msg is None
+
+
+# ── fred_daily_raw in the build (plan 08.2-03, ruling A1) ────────────────────
+
+
+def _drive_main(monkeypatch, tmp_path, fetch):
+    """Run build.main() with every source patched: no network, no tracked write, no .env read."""
+    import logging
+
+    import dotenv
+
+    import trading_crab_lib.platform.checkpoints as platform_ckpt
+    import trading_crab_lib.platform.honesty.holdout as holdout_mod
+    import trading_crab_lib.platform.ingestion.macro_daily as macro_daily
+    import trading_crab_lib.platform.transforms_monthly as transforms_monthly
+    from trading_crab_lib.checkpoints import CheckpointManager
+
+    monkeypatch.setenv("FRED_API_KEY", "x")
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)
+    cm = CheckpointManager(checkpoint_dir=tmp_path / "platform")
+    cm.save(pd.DataFrame({"SPY": [400.0, 401.0]}, index=pd.date_range("2026-09-01", periods=2)), "daily_raw")
+    spine_cfgs = []
+
+    def spine(cfg):
+        spine_cfgs.append(cfg)
+        return pd.DataFrame({"x": [1.0, 2.0]}, index=pd.date_range("2020-10-31", periods=2, freq="ME"))
+
+    monkeypatch.setattr(transforms_monthly, "build_monthly_spine", spine)
+    monkeypatch.setattr(platform_ckpt, "get_platform_checkpoint_manager", lambda: cm)
+    monkeypatch.setattr(holdout_mod, "assert_dev_checkpoint_within_boundary", lambda *a, **k: None)
+    monkeypatch.setattr(macro_daily, "fetch_fred_daily", fetch)
+    logging.getLogger("build_platform_data").propagate = True
+    return build.main(), spine_cfgs
+
+
+def test_main_fetches_fred_daily_once_with_the_build_cfg(monkeypatch, tmp_path):
+    calls = []
+
+    def fetch(cfg):
+        calls.append(cfg)
+        return pd.DataFrame({"fred_daaa": [4.5], "fred_dbaa": [5.5]}, index=pd.to_datetime(["2026-09-30"]))
+
+    code, spine_cfgs = _drive_main(monkeypatch, tmp_path, fetch)
+    assert code == 0
+    assert len(calls) == 1
+    assert calls[0] is spine_cfgs[0]
+
+
+def test_a_failed_fred_daily_fetch_warns_and_keeps_the_exit_code(monkeypatch, tmp_path, caplog):
+    import logging
+
+    def ok(cfg):
+        return pd.DataFrame({"fred_daaa": [4.5], "fred_dbaa": [5.5]}, index=pd.to_datetime(["2026-09-30"]))
+
+    def boom(cfg):
+        raise ConnectionError("FRED unreachable")
+
+    ok_code, _ = _drive_main(monkeypatch, tmp_path / "ok", ok)
+    with caplog.at_level(logging.WARNING, logger="build_platform_data"):
+        bad_code, _ = _drive_main(monkeypatch, tmp_path / "bad", boom)
+    assert bad_code == ok_code == 0
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "fred_daily_raw" in r.getMessage()]
+    assert warnings, [r.getMessage() for r in caplog.records]
+    assert "UNAVAILABLE" in warnings[0].getMessage()

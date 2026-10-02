@@ -362,7 +362,7 @@ class TestRegimeBeliefAtServe:
         copied implementation. A divergent cold start is the only way train/serve skew
         can enter this design."""
         import trading_crab_lib.platform.backtest.driver as d
-        import trading_crab_lib.platform.backtest.joint_driver as j
+        import trading_crab_lib.platform.parked.joint_driver as j
         from trading_crab_lib.platform.prediction import regime_filter
 
         for module in (d, j, weekly):

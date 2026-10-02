@@ -65,7 +65,7 @@ def compute_monthly_returns(monthly_prices: pd.DataFrame) -> pd.DataFrame:
     (before its first observed level, and the pct_change of its first
     observation) — its column is never dropped.
     """
-    return monthly_prices.pct_change()
+    return monthly_prices.pct_change(fill_method=None)
 
 
 def tradable_asset_returns(returns: pd.DataFrame, splice_cfg: dict[str, Any]) -> pd.DataFrame:

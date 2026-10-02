@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Regime Representation** - Resolve A13/A15 (one feature policy for driver and report), then add an independent leadership-axis classifier on relative/invariant features (absorbs INV-01). **Closed 2026-09-21: INV-01 delivered in full; REG-01 delivered PARTIALLY — criterion 6's dependence verdict is UNRESOLVED and no independent second axis is established**
 - [x] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run (completed 2026-09-30)
 - [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
-- [ ] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning
+- [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -699,9 +699,11 @@ across refits whose state ids are not aligned) and the input-independent L2 reci
 **Order decided (Glenn, 2026-09-30): 08.1 runs BEFORE 08.2** — 8.1's re-measured answer to "does the
 regime tilt beat the no-regime ablation on point-in-time data?" shapes 8.2's MVP design.
 **Two usability fixes ride along (Glenn, 2026-09-30)**, found in his 2026-09-30 Mac weekly report:
+
   - **Report always prints the target allocation.** Today the target/executed book appears only
     per configured account; with no account configured the page never says what to hold. Print the
     executed target book unconditionally; per-account trades stay as an extra section.
+
   - **Staleness cap measured per series, not against the newest raw row.** The 2026-09-30 build
     appended a mostly-empty current-month row (16 series missing), so the scored month (June) sat
     exactly at the 3-month-end cap and next month's run would likely refuse. Base the cap on the
@@ -754,11 +756,13 @@ mutation proofs / ruling records / amendments only for **decision-bearing** numb
 **Depends on:** Phase 8
 **Order:** after 08.1 (decided by Glenn 2026-09-30). 08.2's modules are the natural units for Phase 9's
 module-by-module migration.
-**Plans:** 0 plans
+**Plans:** 3/3 plans complete (2 waves; lean mode; budget 0, registry stays 46). MVP-1 delivered: weekly page on the no-regime path, regime view suspended, tripwire, static scoreboard; classifier #2 / joint driver / stability parked; MODULE-MAP; notebooks P7–P9 signed off.
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 08.2 to break down)
+- [x] 08.2-01-PLAN.md — **Page on the no-regime path.** `report.allocation_mode` (live `no_regime`, code default `regime_tilt`); weekly target = the ablation's own functions (parity with `run_backtest(use_regime_tilt=False)` at rel 1e-9, synthetic + tracked data); regime view suspended (D-03); mode checkpoint + A-15 switch rule (held=None, note); DECISIONS A-13 built, A-15 — wave 1
+- [x] 08.2-02-PLAN.md — **Park + module map.** `quality_tier` extracted to `evaluation/deflated_sharpe.py`; classifier2 / joint_driver / stability `git mv`'d to `platform/parked/` (no shims, import-only edits to record tests); boundary test (subprocess `sys.modules` + AST scan); `platform_design/MODULE-MAP.md` (M0–M7, M8, M9+, Parked) — wave 1
+- [x] 08.2-03-PLAN.md — **Tripwire, scoreboard, notebooks.** `evaluate_tripwire` (per-signal as-of; STALE after 5 business days; UNAVAILABLE, never green) + `fred_daily_raw` in the build; static scoreboard (`report/scoreboard.py`, common 1972–2020 window, E-07 line); `build_weekly_page`; notebooks P7 (N4) / P8 (N6) / P9 (N7) run headless with pending sign-offs; real-data scratch smoke; DECISIONS A-14 built, G-08 — wave 2
 
 ### Phase 9: Migration to Public Repo
 
@@ -807,5 +811,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Regime Representation | 12/12 | Complete (closed 2026-09-21; ADR-0002 Accepted; criterion 6 UNRESOLVED, no tie-break) | 2026-09-21 |
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
-| 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 0/TBD | Not started | - |
+| 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

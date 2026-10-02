@@ -293,7 +293,7 @@ def build_equity_total_return(price: pd.Series, div_yield: pd.Series, cfg: dict[
     params = cfg["splice"]["equities"]
     price = price.dropna()
     div = div_yield.reindex(price.index).ffill()
-    monthly_returns = (price.pct_change() + div / 12).dropna()
+    monthly_returns = (price.pct_change(fill_method=None) + div / 12).dropna()
     index_level = pd.concat([pd.Series([1.0], index=[price.index[0]]), (1 + monthly_returns).cumprod()])
     index_level.name = params["research_name"]
     return index_level

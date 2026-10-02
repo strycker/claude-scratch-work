@@ -56,19 +56,21 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from trading_crab_lib.platform import checkpoints as platform_checkpoints
 from trading_crab_lib.platform.assets.returns import (
     compute_monthly_returns,
     report_returns_by_regime,
     tradable_asset_returns,
 )
 from trading_crab_lib.platform.backtest.driver import fit_l2_nowcaster
-from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+from trading_crab_lib.platform.checkpoints import CheckpointManager, get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty import registry
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
@@ -89,6 +91,10 @@ _WEEKLY_COMMAND = "python -m trading_crab_lib.platform.report.weekly"
 #: The artifact holding the served model's training class prior (CR-01). ``weekly.py`` loads
 #: it beside the model and divides the posterior by it.
 SERVING_CLASS_PRIOR = "nowcaster_class_prior"
+
+#: What ``build_scratch_serving`` copies into a scratch namespace (each only if present): the
+#: serving builder's inputs, plus the daily checkpoints the weekly page's tripwire reads.
+SCRATCH_SERVING_INPUTS = ("monthly_features", "monthly_raw", "regime_labels", "daily_raw", "fred_daily_raw")
 
 
 def _training_block(
@@ -227,6 +233,37 @@ def build_serving_artifacts(
         "returns_by_regime_rows": rbr_rows,
         "registry_row_written": False,
     }
+
+
+def build_scratch_serving(cfg: dict[str, Any], scratch_dir: Path, *, source_dir: Path | None = None) -> Any:
+    """Copy the serving inputs into ``scratch_dir/"checkpoints"`` and build serving there.
+
+    For notebook N4 and real-data smokes: ``shutil.copy2`` the parquet and meta of each
+    ``SCRATCH_SERVING_INPUTS`` checkpoint present in ``source_dir`` (default: the tracked
+    platform namespace, read at call time), then ``build_serving_artifacts(cfg, cm=scratch,
+    output_dir=scratch_dir/"out")``. Every write lands in the scratch tree: ``source_dir`` is
+    only read, and the serving fit is still not a registry trial (``NO_REGISTRY``). The weekly
+    page's full-span features come from ``load_full_span``, which only reads.
+
+    Returns the scratch ``CheckpointManager`` (pass it to ``weekly.build_weekly_page``).
+    """
+    source = Path(source_dir) if source_dir is not None else platform_checkpoints.PLATFORM_CHECKPOINT_DIR
+    scratch_dir = Path(scratch_dir)
+    target = scratch_dir / "checkpoints"
+    target.mkdir(parents=True, exist_ok=True)
+    if target.resolve() == Path(source).resolve():
+        raise ValueError(f"scratch checkpoint dir {target} is the source dir; refusing to build serving in place")
+    copied = []
+    for name in SCRATCH_SERVING_INPUTS:
+        for suffix in (".parquet", ".meta.json"):
+            path = Path(source) / f"{name}{suffix}"
+            if path.exists():
+                shutil.copy2(path, target / path.name)
+                copied.append(path.name)
+    log.info("scratch serving: copied %s from %s into %s", copied, source, target)
+    scratch = CheckpointManager(checkpoint_dir=target)
+    build_serving_artifacts(cfg, cm=scratch, output_dir=scratch_dir / "out")
+    return scratch
 
 
 def main(argv: list[str] | None = None) -> int:

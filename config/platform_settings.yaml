@@ -572,6 +572,9 @@ tripwire:
   credit_velocity_lookback_days: 5    # BAA-AAA spread widening measured over this many trading days
   credit_velocity_bps:          25    # widening (in bps) over the lookback window that trips the signal — provisional (A3)
   spy_drawdown_pct:              0.10 # SPY drawdown-from-peak that trips the signal — provisional (A3)
+  stale_business_days:           5    # 08.2 ruling A1 (provisional): on the weekly page a signal whose last
+                                      # observation is older than this many business days before the run
+                                      # date is STALE, never green; a missing input is UNAVAILABLE (D-04)
 
 # ── Report (L4-02) — weekly report assembly knobs ────────────────────────────
 # Read via cfg.get("report", {}); not added to _REQUIRED_PLATFORM_SECTIONS.
@@ -585,6 +588,12 @@ report:
   staleness_grace_days: 7    # 08.1 ruling 4: FRED posts monthly averages 1-2 business days
                               # into m+1, so a series is judged late only once the run date is
                               # more than this many days past the month it should cover.
+  allocation_mode: no_regime # DECISIONS A-13 (08.2 D-01): the weekly page trades the measured
+                              # no-regime ablation leg. regime_tilt stays available but off
+                              # (G-06). An absent key means regime_tilt, so synthetic test configs
+                              # keep the Phase 8 path; a test pins this value.
+  scoreboard_trial_tag: "08.1-pit-tilt-vs-ablation"  # 08.2 D-05: the registry tag whose rows date the
+                              # static scoreboard (the last budgeted run); read, never written
 
 # ── Backtest & evaluation (EVAL-01..04, D-03) — honest walk-forward 1972-2020 ─
 # Read defensively via cfg.get("backtest", {}) everywhere; deliberately NOT

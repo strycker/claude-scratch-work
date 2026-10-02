@@ -91,12 +91,12 @@ from trading_crab_lib.platform.evaluation.report import _reference_label_columns
 from trading_crab_lib.platform.features.relative import add_relative_features
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
 from trading_crab_lib.platform.honesty.registry import total_trial_count
-from trading_crab_lib.platform.labeling.classifier2 import (
+from trading_crab_lib.platform.parked.classifier2 import (
     CLASSIFIER2_LABELS_CHECKPOINT,
     classifier2_config,
     freeze_classifier2_columns,
 )
-from trading_crab_lib.platform.labeling.stability import (
+from trading_crab_lib.platform.parked.stability import (
     BLOCK_LENGTH_LADDER,
     DEFAULT_STABILITY_SEED,
     EVAPORATED_OCCUPANCY_MONTHS,

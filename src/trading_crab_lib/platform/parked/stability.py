@@ -61,7 +61,7 @@ to the trial ledger and nothing here may re-pin K or lambda.
 
 Usage::
 
-    from trading_crab_lib.platform.labeling.stability import (
+    from trading_crab_lib.platform.parked.stability import (
         fit_for_stability, run_stability, scheme_drop_first_decade,
     )
     ref = fit_for_stability(X_df, K=6, lam=10.0, n_restarts=10,

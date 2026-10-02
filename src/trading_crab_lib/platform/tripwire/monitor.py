@@ -155,7 +155,7 @@ def run_tripwire(
             daaa = daaa if daaa is not None else fred_daily_raw["fred_daaa"]
             dbaa = dbaa if dbaa is not None else fred_daily_raw["fred_dbaa"]
     if daily_returns is None:
-        daily_returns = spy_prices.pct_change().dropna()
+        daily_returns = spy_prices.pct_change(fill_method=None).dropna()
 
     vol_spike = realized_vol_spike(
         daily_returns,
@@ -175,6 +175,208 @@ def run_tripwire(
     print(f"Tripwire escalation: {escalation.value}")  # noqa: T201 — first-class daily-run output
 
     return escalation
+
+
+# ── The weekly page's per-signal view (plan 08.2-03, D-04) ───────────────────
+#
+# ``run_tripwire`` above returns only the enum. The page needs, per signal, the value, the
+# threshold and the date it is computed as of, and it must never read a missing or old input as
+# green. The helpers below return the NUMBERS behind the bool functions (NaN when undefined);
+# ``evaluate_tripwire`` takes ``triggered`` from the bool functions themselves, on the same
+# cleaned inputs, so the page and ``run_tripwire`` cannot disagree on a current signal.
+
+# A signal whose last observation is older than this many business days before the run date is
+# STALE. Provisional (ruling A1, Glenn 2026-10-01); config key ``tripwire.stale_business_days``.
+_DEFAULT_STALE_BUSINESS_DAYS = 5
+
+_SIGNAL_LABELS = {
+    "vol_spike": "Realized-vol spike (SPY)",
+    "credit_velocity": "Credit-spread velocity (BAA-AAA)",
+    "spy_drawdown": "Drawdown from peak (SPY)",
+}
+
+
+def vol_spike_ratio(
+    daily_returns: pd.Series, *, short_window: int, baseline_window: int, halflife: float
+) -> float:
+    """Recent short-window EWMA vol over its trailing baseline EWMA vol: the number
+    ``realized_vol_spike`` compares with its ratio threshold. NaN when undefined."""
+    recent = daily_returns.tail(short_window)
+    baseline = daily_returns.iloc[-(short_window + baseline_window) : -short_window]
+    if len(recent) < 2 or len(baseline) < 2:
+        return float("nan")
+    recent_vol = ewma_vol(recent, halflife=halflife, annualization_factor=DAILY_ANNUALIZATION).iloc[-1]
+    baseline_vol = ewma_vol(baseline, halflife=halflife, annualization_factor=DAILY_ANNUALIZATION).iloc[-1]
+    if not np.isfinite(baseline_vol) or baseline_vol == 0 or not np.isfinite(recent_vol):
+        return float("nan")
+    return float(recent_vol / baseline_vol)
+
+
+def credit_widening_bps(spread_bps: pd.Series, *, lookback_days: int) -> float:
+    """BAA-AAA spread change in bps over the last ``lookback_days`` observations: the number
+    ``credit_spread_velocity`` compares with its bps threshold. NaN when undefined."""
+    if len(spread_bps) <= lookback_days:
+        return float("nan")
+    return float(spread_bps.iloc[-1] - spread_bps.iloc[-1 - lookback_days])
+
+
+def drawdown_from_peak(prices: pd.Series) -> float:
+    """Latest price against its running peak, as a (non-positive) fraction: the number
+    ``spy_drawdown_from_peak`` compares with its threshold. NaN when undefined."""
+    if len(prices) == 0:
+        return float("nan")
+    peak = float(prices.cummax().iloc[-1])
+    if peak == 0 or not np.isfinite(peak):
+        return float("nan")
+    return float((prices.iloc[-1] - peak) / peak)
+
+
+def _unavailable(name: str, source: str, threshold: float, reason: str) -> dict[str, Any]:
+    return {
+        "label": _SIGNAL_LABELS[name], "state": "unavailable", "triggered": None, "value": float("nan"),
+        "threshold": float(threshold), "as_of": None, "source": source, "reason": reason,
+    }
+
+
+def _reading(
+    name: str, source: str, *, value: float, threshold: float, triggered: bool, as_of: pd.Timestamp,
+    stale_before: pd.Timestamp,
+) -> dict[str, Any]:
+    """One signal's row. A value that cannot be computed is UNAVAILABLE (never green); an
+    as-of date before ``stale_before`` is STALE whatever the value says."""
+    if not np.isfinite(value):
+        return _unavailable(name, source, threshold, f"too little data in '{source}' to compute it")
+    if as_of < stale_before:
+        state = "stale"
+    else:
+        state = "red" if triggered else "green"
+    return {
+        "label": _SIGNAL_LABELS[name], "state": state, "triggered": bool(triggered), "value": float(value),
+        "threshold": float(threshold), "as_of": pd.Timestamp(as_of), "source": source, "reason": None,
+    }
+
+
+def evaluate_tripwire(cfg: dict[str, Any], cm: Any = None, *, run_date: pd.Timestamp) -> dict[str, Any]:
+    """The three signals as the weekly page shows them: state, value, threshold, as-of date.
+
+    Inputs are the checkpoints ``run_tripwire`` reads, ``daily_raw["SPY"]`` and
+    ``fred_daily_raw[["fred_daaa", "fred_dbaa"]]``, each loaded on its own: a missing checkpoint
+    or column (FileNotFoundError, KeyError) makes the signals that need it UNAVAILABLE and never
+    raises. NaNs are dropped per series and DAAA/DBAA are aligned on the days both exist, so a
+    NaN tail can never read as "not triggered" (T-08.2-08); a signal's ``as_of`` is the last day
+    it actually used. Nothing is imputed.
+
+    Per signal (``vol_spike``, ``credit_velocity``, ``spy_drawdown``, in that order)::
+
+        {"label", "state", "triggered", "value", "threshold", "as_of", "source", "reason"}
+
+    - ``state``: ``red`` / ``green`` (current), ``stale`` (``as_of`` older than
+      ``tripwire.stale_business_days`` business days before ``run_date``, default 5, ruling A1)
+      or ``unavailable`` (missing input, or too little data to compute the value);
+    - ``triggered``: the existing bool function's answer on the cleaned inputs (None when
+      unavailable); a stale signal keeps it, so the page can say what it would read;
+    - ``value`` / ``threshold`` in the same units: the vol ratio (trips when ``value >
+      threshold``), the widening in bps (``>=``), the drawdown as a negative fraction (``<=``).
+
+    ``escalation`` is ``escalate()`` over the CURRENT signals only (stale and unavailable count
+    as not triggered), returned with ``n_current``; whether that may be shown as an all-clear is
+    the page's call (it may not unless all three are current). Thresholds come from
+    ``cfg["tripwire"]`` with this module's defaults, exactly as in ``run_tripwire``.
+    """
+    tripwire_cfg = cfg.get("tripwire", {})
+    halflife = tripwire_cfg.get("vol_halflife_days", _DEFAULT_VOL_HALFLIFE_DAYS)
+    short_window = tripwire_cfg.get("vol_spike_short_window_days", _DEFAULT_VOL_SHORT_WINDOW_DAYS)
+    baseline_window = tripwire_cfg.get("vol_spike_baseline_days", _DEFAULT_VOL_BASELINE_DAYS)
+    vol_ratio = tripwire_cfg.get("vol_spike_ratio", _DEFAULT_VOL_SPIKE_RATIO)
+    credit_lookback = tripwire_cfg.get("credit_velocity_lookback_days", _DEFAULT_CREDIT_LOOKBACK_DAYS)
+    credit_bps = tripwire_cfg.get("credit_velocity_bps", _DEFAULT_CREDIT_VELOCITY_BPS)
+    drawdown_pct = tripwire_cfg.get("spy_drawdown_pct", _DEFAULT_SPY_DRAWDOWN_PCT)
+    stale_days = int(tripwire_cfg.get("stale_business_days", _DEFAULT_STALE_BUSINESS_DAYS))
+
+    run_date = pd.Timestamp(run_date).normalize()
+    stale_before = run_date - pd.offsets.BDay(stale_days)
+    cm = cm or get_platform_checkpoint_manager()
+    signals: dict[str, dict[str, Any]] = {}
+
+    # Price family (vol spike + drawdown): daily_raw["SPY"], NaNs dropped.
+    spy: pd.Series | None = None
+    spy_reason = ""
+    try:
+        spy = cm.load("daily_raw")["SPY"].dropna().sort_index()
+    except FileNotFoundError:
+        spy_reason = "checkpoint 'daily_raw' is missing"
+    except KeyError:
+        spy_reason = "column 'SPY' is missing from 'daily_raw'"
+    if spy is not None and spy.empty:
+        spy, spy_reason = None, "'daily_raw' has no SPY observation"
+
+    if spy is None:
+        signals["vol_spike"] = _unavailable("vol_spike", "daily_raw", vol_ratio, spy_reason)
+    else:
+        daily_returns = spy.pct_change(fill_method=None).dropna()
+        signals["vol_spike"] = _reading(
+            "vol_spike", "daily_raw",
+            value=vol_spike_ratio(daily_returns, short_window=short_window, baseline_window=baseline_window,
+                                  halflife=halflife),
+            threshold=vol_ratio,
+            triggered=realized_vol_spike(daily_returns, short_window=short_window, baseline_window=baseline_window,
+                                         ratio_threshold=vol_ratio, halflife=halflife),
+            as_of=pd.Timestamp(spy.index[-1]),
+            stale_before=stale_before,
+        )
+
+    # Credit family: DAAA and DBAA aligned on the days both exist.
+    aligned: pd.DataFrame | None = None
+    credit_reason = ""
+    try:
+        frame = cm.load("fred_daily_raw")
+        aligned = pd.concat([frame["fred_daaa"], frame["fred_dbaa"]], axis=1).dropna().sort_index()
+    except FileNotFoundError:
+        credit_reason = "checkpoint 'fred_daily_raw' is missing"
+    except KeyError as exc:
+        credit_reason = f"column {exc} is missing from 'fred_daily_raw'"
+    if aligned is not None and aligned.empty:
+        aligned, credit_reason = None, "'fred_daily_raw' has no day with both DAAA and DBAA"
+
+    if aligned is None:
+        signals["credit_velocity"] = _unavailable("credit_velocity", "fred_daily_raw", credit_bps, credit_reason)
+    else:
+        daaa, dbaa = aligned["fred_daaa"], aligned["fred_dbaa"]
+        signals["credit_velocity"] = _reading(
+            "credit_velocity", "fred_daily_raw",
+            value=credit_widening_bps((dbaa - daaa) * 100.0, lookback_days=credit_lookback),
+            threshold=credit_bps,
+            triggered=credit_spread_velocity(daaa, dbaa, lookback_days=credit_lookback, bps_threshold=credit_bps),
+            as_of=pd.Timestamp(aligned.index[-1]),
+            stale_before=stale_before,
+        )
+
+    if spy is None:
+        signals["spy_drawdown"] = _unavailable("spy_drawdown", "daily_raw", -drawdown_pct, spy_reason)
+    else:
+        signals["spy_drawdown"] = _reading(
+            "spy_drawdown", "daily_raw",
+            value=drawdown_from_peak(spy),
+            threshold=-drawdown_pct,
+            triggered=spy_drawdown_from_peak(spy, drawdown_threshold=drawdown_pct),
+            as_of=pd.Timestamp(spy.index[-1]),
+            stale_before=stale_before,
+        )
+
+    current = {name: sig["state"] in ("red", "green") for name, sig in signals.items()}
+    escalation = escalate(*(current[n] and bool(signals[n]["triggered"]) for n in _SIGNAL_LABELS))
+    result = {
+        "run_date": run_date,
+        "stale_business_days": stale_days,
+        "signals": signals,
+        "escalation": escalation,
+        "n_current": int(sum(current.values())),
+    }
+    log.info(
+        "Tripwire (page): %s; escalation over %d current signal(s) -> %s",
+        {n: s["state"] for n, s in signals.items()}, result["n_current"], escalation.value,
+    )
+    return result
 
 
 if __name__ == "__main__":

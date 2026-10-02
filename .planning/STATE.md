@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 08.2
-current_phase_name: Lean MVP — Simplify, Modularize, Notebook-Gate
+current_phase: 9
+current_phase_name: Migration to Public Repo
 status: planning
-stopped_at: Phase 08.1 COMPLETE 2026-09-30 (3/3 plans; verified; Mac run passed); E-06 NO; regime view stays advisory in 8.2 (G-06); next /gsd-discuss-phase 8.2
-last_updated: "2026-09-30T22:36:16.801Z"
+stopped_at: Phase 08.2 COMPLETE 2026-10-02 (3/3 plans; verified; Mac run passed; P7–P9 signed off). MVP-1 in use. Next: Glenn chooses regime rebuild (E-07 first) or Phase 9 migration
+last_updated: "2026-10-02T15:23:51.560Z"
 progress:
   total_phases: 10
-  completed_phases: 8
-  total_plans: 70
-  completed_plans: 69
-last_activity: 2026-09-30
-last_activity_desc: "Phase 08.1 executed: publication-lag table + PIT test (mutation proven), weekly STALE banner + always-on allocation table, tracked data migrated, D-04 re-measured — tilt does NOT beat ablation on point-in-time data (before +0.1677, after -0.1515). Registry 46."
+  completed_phases: 9
+  total_plans: 73
+  completed_plans: 72
+last_activity: 2026-10-02
+last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."
 ---
 
 # Project State
@@ -28,8 +28,16 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 08.2 — Lean MVP — Simplify, Modularize, Notebook-Gate
+Phase: 9 — Migration to Public Repo
 Status: Ready to plan
+
+**Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
+switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
+common-window scoreboard with the E-07 caveat (A-14). Classifier #2, joint driver and stability parked in
+`platform/parked/` behind an import-boundary test; `platform_design/MODULE-MAP.md` maps M0–M7. Notebooks P7 (serving),
+P8 (filtered belief), P9 (does the regime layer pay rent? — No) signed off by Glenn. Suite 2640; registry 46 (budget 0).
+**Open choice for Glenn:** insert a regime-rebuild phase (E-07 month-end returns first, then L2 recipe, CR-02, A-03,
+REG-01) before or alongside Phase 9, which can now migrate module by module per MODULE-MAP.
 **Phase 08.1 closed 2026-09-30.** Point-in-time data: a measured `publication_lags` table (M2SL 1, TOTALSL 2,
 div_yield 3, pre-1991 GDP fallback 3, others 0 or vintage-aligned), applied once in ingestion and guarded by a
 point-in-time test with a mutation proof. Weekly page: per-series STALE banner (A-12) and an always-printed

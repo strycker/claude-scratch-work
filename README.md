@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-2550%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2640%20passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
@@ -480,7 +480,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ 2550 tests (unit + integration), all passing
+- ✓ 2640 tests (unit + integration), all passing
 - ✓ Exploration notebooks (01–12)
 
 ---
@@ -530,7 +530,8 @@ Three commands, in this order:
 
 ```bash
 # 1. The data. Reads FRED (needs FRED_API_KEY) and the web sources; writes the platform
-#    checkpoints (data/checkpoints/platform/, and the 2021+ holdout under data/holdout/).
+#    checkpoints (data/checkpoints/platform/, and the 2021+ holdout under data/holdout/),
+#    including fred_daily_raw (DAAA/DBAA) for the tripwire's credit signal.
 python scripts/build_platform_data.py
 
 # 2. The serving artifacts. Reads the DEV monthly_features and regime_labels (to 2020-12-31)
@@ -556,8 +557,30 @@ each newer row lacks, and it never imputes. A series later than its publication 
 on the run date (`report.staleness_grace_days`, 7) puts a STALE DATA banner at the top naming
 it and its months late; the report still runs. The page always shows a target-allocation
 table (class, ticker, target %, last week's %, change), with or without an account file.
-Under the distribution it prints how many distinct posteriors the model gives across history;
-on today's data that is 1, and the page says the distribution does not depend on the features.
+
+What the page shows now (Phase 8.2):
+
+- **Allocation mode.** `report.allocation_mode` is `no_regime` (DECISIONS A-13): the target is
+  the measured no-regime ablation leg (constant one-state belief, the same `vol_targeted_tilt`,
+  the 5pp band). The page prints the mode under the trades heading; on the run that switches
+  mode it adds a note and trades the new target in full (A-15).
+- **Regime view: suspended.** One status line instead of a distribution, belief or posture,
+  because the served nowcaster gives 1 distinct posterior across history (it does not depend on
+  the features). The count is still printed.
+- **Crash tripwire (advisory).** Realized-vol spike, BAA-AAA credit velocity and SPY drawdown,
+  each RED or GREEN with its value, threshold and own as-of date. A signal older than 5
+  business days (`tripwire.stale_business_days`) reads STALE, a missing input UNAVAILABLE, and
+  the escalation reads UNKNOWN unless all three are current; it changes no weight. Step 1
+  writes `fred_daily_raw` for the credit signal.
+- **Static scoreboard.** From the last budgeted run (registry tag `08.1-pit-tilt-vs-ablation`):
+  regime tilt, no-regime ablation, SPY, 60/40 and Faber, terminal log wealth and max drawdown
+  on the common 1972–2020 window, own-span values in a footnote, the run date, and the E-07
+  caveat (returns use monthly-average prices, which may flatter trend and tilt rules).
+
+Notebooks P7 (serving and the weekly page, built twice in scratch), P8 (the filtered belief vs
+the served posterior) and P9 (does the regime layer pay rent) are the review gates for this page;
+each ends in a sign-off cell. Run one headless with
+`jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=900 --inplace notebooks/platform/P7_serving_report.ipynb`.
 
 To also see trades implied against your real holdings (optional; the file is gitignored and
 never committed):

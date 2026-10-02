@@ -61,7 +61,7 @@ Usage::
     from trading_crab_lib.platform.config import load_platform_config
     from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
     from trading_crab_lib.platform.features.relative import add_relative_features
-    from trading_crab_lib.platform.labeling.classifier2 import label_leadership_regimes
+    from trading_crab_lib.platform.parked.classifier2 import label_leadership_regimes
 
     cfg = load_platform_config()
     monthly_raw = get_platform_checkpoint_manager().load("monthly_raw")
