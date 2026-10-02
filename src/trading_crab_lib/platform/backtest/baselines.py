@@ -56,7 +56,7 @@ Usage::
         faber_sma, no_regime_ablation, sixty_forty, spy_buy_hold,
     )
 
-    spy_ret = spy_buy_hold(research["equities_tr"].pct_change())
+    spy_ret = spy_buy_hold(research["equities_tr"].pct_change(fill_method=None))
     sixty_forty_ret = sixty_forty(
         equity_ret, bond_ret, rebalance=cfg["backtest"]["sixty_forty_rebalance"],
         cost_bps=cfg["backtest"]["cost_bps"] if cfg["backtest"]["apply_cost_to_baselines"] else 0.0,
@@ -213,7 +213,7 @@ def faber_sma(
         pd.Series: net-of-cost monthly returns.
     """
     position = _faber_position(equity_level, window=window)
-    equity_ret = equity_level.pct_change()
+    equity_ret = equity_level.pct_change(fill_method=None)
 
     common = equity_ret.index.intersection(cash_ret.index).intersection(position.index)
     position = position.loc[common]
@@ -371,8 +371,8 @@ if __name__ == "__main__":
     _idx = pd.date_range("2010-01-31", periods=48, freq="ME")
     _equity_level = pd.Series(100 * (1 + _rng.normal(0.006, 0.03, 48)).cumprod(), index=_idx)
     _bond_level = pd.Series(100 * (1 + _rng.normal(0.001, 0.01, 48)).cumprod(), index=_idx)
-    _equity_ret = _equity_level.pct_change()
-    _bond_ret = _bond_level.pct_change()
+    _equity_ret = _equity_level.pct_change(fill_method=None)
+    _bond_ret = _bond_level.pct_change(fill_method=None)
     _cash_ret = pd.Series(_rng.normal(0.001, 0.0005, 48), index=_idx)
 
     _spy = spy_buy_hold(_equity_ret)

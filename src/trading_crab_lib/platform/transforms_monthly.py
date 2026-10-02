@@ -277,9 +277,9 @@ def compute_lean_features(monthly_raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.
         features["oil"] = monthly_raw["oil"]
 
     if "equities_tr" in cols:
-        equity_returns = monthly_raw["equities_tr"].pct_change()
+        equity_returns = monthly_raw["equities_tr"].pct_change(fill_method=None)
         features["trailing_return_1m"] = equity_returns
-        features["trailing_return_3m"] = monthly_raw["equities_tr"].pct_change(3)
+        features["trailing_return_3m"] = monthly_raw["equities_tr"].pct_change(3, fill_method=None)
         # ponytail: naive single-period vol proxy (|1m return|) for
         # realized_vol_1m — true intra-period vol needs daily equity prices,
         # not available for the multpl-derived monthly equities_tr research
@@ -298,7 +298,7 @@ def compute_lean_features(monthly_raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.
         # align_agency_monthly). No free 1962+ market-cap source exists yet
         # for buffett_indicator (see taxonomy.slow comment in
         # config/platform_settings.yaml) — real_rate_level has no such gap.
-        cpi_yoy_pct = monthly_raw["fred_cpi"].pct_change(periods=12) * 100.0
+        cpi_yoy_pct = monthly_raw["fred_cpi"].pct_change(periods=12, fill_method=None) * 100.0
         features["real_rate_level"] = monthly_raw["fred_gs10"] - cpi_yoy_pct
 
     if not features:

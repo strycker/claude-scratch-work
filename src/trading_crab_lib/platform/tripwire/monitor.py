@@ -155,7 +155,7 @@ def run_tripwire(
             daaa = daaa if daaa is not None else fred_daily_raw["fred_daaa"]
             dbaa = dbaa if dbaa is not None else fred_daily_raw["fred_dbaa"]
     if daily_returns is None:
-        daily_returns = spy_prices.pct_change().dropna()
+        daily_returns = spy_prices.pct_change(fill_method=None).dropna()
 
     vol_spike = realized_vol_spike(
         daily_returns,
@@ -313,7 +313,7 @@ def evaluate_tripwire(cfg: dict[str, Any], cm: Any = None, *, run_date: pd.Times
     if spy is None:
         signals["vol_spike"] = _unavailable("vol_spike", "daily_raw", vol_ratio, spy_reason)
     else:
-        daily_returns = spy.pct_change().dropna()
+        daily_returns = spy.pct_change(fill_method=None).dropna()
         signals["vol_spike"] = _reading(
             "vol_spike", "daily_raw",
             value=vol_spike_ratio(daily_returns, short_window=short_window, baseline_window=baseline_window,

@@ -164,7 +164,7 @@ def compute_trailing_momentum(
             continue
         for w in windows:
             name = f"{col}_mom_{w}m"
-            result[name] = result[col].pct_change(periods=w)
+            result[name] = result[col].pct_change(periods=w, fill_method=None)
             added += 1
 
     if added > 0:
@@ -211,8 +211,8 @@ def compute_rolling_cross_correlation(
         if col_a not in result.columns or col_b not in result.columns:
             log.debug("Skipping correlation %s/%s: column missing", col_a, col_b)
             continue
-        ret_a = result[col_a].pct_change()
-        ret_b = result[col_b].pct_change()
+        ret_a = result[col_a].pct_change(fill_method=None)
+        ret_b = result[col_b].pct_change(fill_method=None)
         name = f"corr_{col_a}_{col_b}_{window}m"
         result[name] = ret_a.rolling(window=window, min_periods=max(4, window // 2)).corr(ret_b)
         added += 1

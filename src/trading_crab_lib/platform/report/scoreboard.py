@@ -170,7 +170,8 @@ def scoreboard_table(
                     f"MDD {mdd!r} vs {own[leg][1]!r})"
                 )
             sliced = s.loc[(s.index >= window[0]) & (s.index <= window[-1])].dropna()
-            if not sliced.index.equals(window):
+            # Compare dates, not datetime resolution: pandas 2 and 3 can return ns vs us indexes.
+            if not pd.DatetimeIndex(sliced.index).as_unit("ns").equals(window.as_unit("ns")):
                 problems.append(f"{leg} covers {len(sliced)} of the window's {len(window)} months")
             row["tlw_common"], row["mdd_common"] = _kpis(sliced)
         board["legs"].append(row)

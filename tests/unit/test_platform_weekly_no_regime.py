@@ -376,6 +376,10 @@ class TestParityWithTheAblationLeg:
 
         tracked = pd.read_parquet(_TRACKED_OUTPUTS / "backtest_equity_curve_ablation.parquet")
         assert list(curve.index) == list(tracked.index)
+        # Datetime resolution differs by pandas major (2.x reads ns, 3.x keeps us); the dates
+        # themselves are pinned above, so compare at one resolution.
+        curve = curve.set_axis(curve.index.as_unit("ns"))
+        tracked = tracked.set_axis(tracked.index.as_unit("ns"))
         for column in ("return", "scale"):
             pd.testing.assert_series_equal(curve[column], tracked[column], rtol=1e-9, atol=0, check_freq=False)
 
