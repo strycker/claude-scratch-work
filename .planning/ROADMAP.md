@@ -31,6 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
 - [ ] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands
+- [ ] **Phase 08.4: Cold-Start Rebuild & Learnings Before Migration** *(INSERTED 2026-10-02)* - Fresh pull, all models refit from scratch, actionable weekly predictions; learnings folded into the guide/roadmap so Phase 9 knows what to migrate and in what order
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -789,13 +790,45 @@ core-mix choice (no-regime ablation vs Faber, A-13) and is the baseline every la
 
 **Requirements**: TBD
 **Depends on:** Phase 08.2
-**Later regime-rebuild phases (not yet inserted; one module each):** L2 recipe + distinct-output check
-(M6), CR-02 cross-refit state alignment (M5), A-03 hysteresis revisit, REG-01 second axis.
+**Later regime-rebuild items:** the L2 recipe with a distinct-output check (M6), CR-02 cross-refit state alignment (M5),
+A-03 hysteresis revisit and REG-01 second axis. Phase 08.4's discussion decides which fold into the cold start.
 **Plans:** 0 plans
 
 Plans:
 
 - [ ] TBD (run /gsd-plan-phase 08.3 to break down)
+
+### Phase 08.4: Cold-Start Rebuild & Learnings Before Migration (INSERTED)
+
+**Goal (Glenn, 2026-10-02):** Before anything migrates, prove the platform works end to end **from a cold
+start**: a fresh data pull, every model refit from scratch, the evaluation re-run, and the honesty framework
+(registry, DSR) set up deliberately. The result is an actual working, useful model with actionable weekly
+predictions. Then fold what we've learned (and anything new this surfaces) back into the planning
+docs (`REBUILD-FROM-SCRATCH-GUIDE.md`, `MODULE-MAP.md`, `DECISIONS.md`, `MIGRATION-PLAN.md`, ROADMAP) so Phase 9
+knows **what to migrate, in what order, and what to leave behind**.
+**Why before Phase 9:** migrating a stack that has only ever run incrementally risks carrying hidden state
+(merged checkpoints, pinned artefacts, stale labels) into the public repo. A cold start shows what the
+platform really needs from scratch.
+**Open questions for discuss-phase (not decided):**
+
+  - **Registry / DSR on a cold start.** The append-only ledger and the D-16 "whole registry since project start"
+    denominator are standing rules (ADR-0002, ADR-0004). A "reset" would need an ADR. Options: continue the count,
+    or start a new declared epoch with the prior count carried as `prior_genuine_trials`.
+  - **Which later regime-rebuild items fold in here** versus wait: the L2 recipe with a distinct-output check (M6),
+    CR-02 cross-refit alignment (M5), A-03 hysteresis, REG-01.
+  - **What "actionable" means for the weekly page**, so the phase has a testable exit: for example a regime view that
+    is input-responsive and beats the ablation, or else a documented "no-regime is the product" outcome.
+  - **Fresh-pull reproducibility.** The same results on Glenn's Mac and in CI; data provenance recorded.
+
+**Lean mode:** at most 3 plans per module. If this grows past one module, split it into 8.4 / 8.5 at discuss time.
+**Requirements**: TBD
+**Depends on:** Phase 08.3
+**Blocks:** Phase 9 (Migration): its order and scope come from 8.4's learnings.
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-discuss-phase 08.4 after 08.3 closes)
 
 ### Phase 9: Migration to Public Repo
 
@@ -829,8 +862,9 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 8.4 → 9
 (8.3 inserted by Glenn 2026-10-02: the regime rebuild starts with E-07 before migration.)
+(8.4 inserted by Glenn 2026-10-02: cold-start rebuild and learnings before any migration.)
 (Order confirmed by Glenn 2026-09-30: 8.1 before 8.2 — 8.1's outcome shapes 8.2's design.)
 (Phase 7 gates internally: wave 2 does not start unless wave 1 passes.)
 
@@ -847,4 +881,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 0/TBD | Not started | - |
+| 08.4 Cold-Start Rebuild & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
