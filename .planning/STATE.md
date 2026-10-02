@@ -5,7 +5,7 @@ milestone_name: milestone
 current_phase: 08.3
 current_phase_name: Regime Rebuild I — month-end returns (E-07) and re-measure
 status: planning
-stopped_at: Phase 08.3 inserted 2026-10-02 (regime rebuild starts with E-07); discuss-phase in progress
+stopped_at: Phase 08.3 context gathered 2026-10-02 (4 questions; E-08, E-09, G-09; budget 2 rows, ceiling 48); next /gsd-plan-phase 8.3
 last_updated: "2026-10-02T15:23:51.560Z"
 progress:
   total_phases: 10
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.3 — Regime Rebuild I — month-end returns (E-07) and re-measure
-Status: Inserted 2026-10-02 (Glenn); discussing. Phase 9 follows.
+Status: Context gathered (2026-10-02) — P&L returns to month-end (features unchanged), oil pre-1986 average as bounded exception, pre-declared core-mix rule (E-09), one 2-row re-measurement. Ready for /gsd-plan-phase 8.3.
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
