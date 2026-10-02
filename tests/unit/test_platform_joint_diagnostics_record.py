@@ -575,8 +575,8 @@ class TestTheA11QualityTierIsInTheLiftTable:
 
     @pytest.mark.parametrize("n_trials", [2, 42, 44, 1000])
     def test_the_hurdle_is_expected_max_sharpe_at_the_count_passed(self, n_trials):
-        from trading_crab_lib.platform.parked.joint_driver import joint_lift_table
         from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
+        from trading_crab_lib.platform.parked.joint_driver import joint_lift_table
 
         out = joint_lift_table(_gate_curve(0.01, 0.03), _gate_curve(0.01, 0.03, seed=8), n_trials=n_trials,
                                sharpe_variance=1.0)
@@ -590,8 +590,8 @@ class TestTheA11QualityTierIsInTheLiftTable:
     def test_without_counts_the_hurdle_is_read_live_not_from_a_literal(self, monkeypatch):
         """08-A11.md §5.3: 'The hurdle may not be written as a literal'. A patched
         registry count must move the hurdle; a frozen 2.208694 would not."""
-        from trading_crab_lib.platform.parked import joint_driver as jd
         from trading_crab_lib.platform.evaluation.deflated_sharpe import expected_max_sharpe
+        from trading_crab_lib.platform.parked import joint_driver as jd
 
         curve = _gate_curve(0.01, 0.03)
         monkeypatch.setattr(jd.registry, "total_trial_count", lambda *a, **k: 1000)
