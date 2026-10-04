@@ -88,7 +88,7 @@ from trading_crab_lib.platform.honesty.gap_lag import compute_gap
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
 from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
 from trading_crab_lib.platform.labeling.jump_model import canonicalize_states, fit_jump_model, standardize_features
-from trading_crab_lib.platform.splice import build_core_research_series
+from trading_crab_lib.platform.splice import build_core_research_series, build_pnl_research_series
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
@@ -419,6 +419,13 @@ def assemble_backtest_report(
         "every rebalancing leg (strategy, 60/40, Faber) via "
         "`backtest/costs.py::apply_transaction_cost` — only SPY buy-and-hold "
         "is cost-free by construction (no rebalancing ever occurs)."
+    )
+    lines.append(
+        "Returns convention (08.3): P&L (strategy, ablation) and the SPY / 60-40 / Faber "
+        "baselines, including Faber's SMA signal, read `splice.build_pnl_research_series` "
+        "(month-end prices; oil is the WTISPLC monthly average before 1986-01, E-08); the "
+        "tilt's inputs (regime return stats, EWMA vol target) read "
+        "`splice.build_core_research_series` (E-10)."
     )
     if excluded_assets:
         lines.append(
@@ -829,15 +836,23 @@ def run_full_backtest_evaluation(
     splice_cfg = cfg["splice"]
     research = build_core_research_series(monthly_raw, cfg)
     returns = compute_monthly_returns(research)
+    # P&L series (phase 08.3, E-08): what the held book EARNS — month-end once
+    # cfg has a `pnl_splice` block, identical to `research` without one. The legs'
+    # decision inputs (asset_returns, cash_ret) stay on `research` (E-10 / D-09);
+    # the baselines read P&L for returns AND Faber's signal (D-08).
+    pnl = build_pnl_research_series(monthly_raw, cfg)
+    pnl_ret = compute_monthly_returns(pnl)
+    pnl_assets = tradable_asset_returns(pnl_ret, splice_cfg)
 
     equity_name = splice_cfg["equities"]["research_name"]
     bond_name = splice_cfg["long_duration"]["research_name"]
     cash_name = splice_cfg["cash"]["research_name"]
 
-    equity_ret = returns[equity_name]
-    bond_ret = returns[bond_name]
     cash_ret = returns[cash_name]
-    equity_level = research[equity_name]
+    equity_ret = pnl_ret[equity_name]
+    bond_ret = pnl_ret[bond_name]
+    baseline_cash_ret = pnl_ret[cash_name]
+    equity_level = pnl[equity_name]
 
     # (a) Investable asset universe for run_backtest — the risk classes only
     # (excludes "cash": cash is never tilted into as a position, it is the
@@ -857,6 +872,7 @@ def run_full_backtest_evaluation(
     equity_curve, per_step_metrics = run_backtest(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True,
         registry_path=registry_path, frozen_l1_features=ref_cols, trial_tag=trial_tag,
+        pnl_returns=pnl_assets,
     )
 
     # Permanent guard (07-01/D-01): first_decision was derived from the index
@@ -889,14 +905,14 @@ def run_full_backtest_evaluation(
     # untagged registry row.
     ablation_curve, _ablation_metrics = no_regime_ablation(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, registry_path=registry_path,
-        frozen_l1_features=ref_cols, trial_tag=trial_tag,
+        frozen_l1_features=ref_cols, trial_tag=trial_tag, pnl_returns=pnl_assets,
     )
 
     # (c) Three price baselines — the report layer holdout-bounds them
     # (baselines.py does not enforce the cutoff internally).
     dev_equity_ret, _ = split_by_holdout_boundary(equity_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
     dev_bond_ret, _ = split_by_holdout_boundary(bond_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    dev_cash_ret, _ = split_by_holdout_boundary(cash_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_cash_ret, _ = split_by_holdout_boundary(baseline_cash_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
     dev_equity_level, _ = split_by_holdout_boundary(equity_level, cutoff=DEFAULT_HOLDOUT_CUTOFF)
 
     spy_ret = spy_buy_hold(dev_equity_ret)

@@ -310,11 +310,16 @@ def baseline_curves(monthly_raw: pd.DataFrame, cfg: dict) -> dict[str, pd.Series
     delegates here) so the weekly page's static scoreboard (``report/scoreboard.py``) can use
     it without importing the plotting package. Same data flow as
     ``evaluation/report.py::run_full_backtest_evaluation``, through public functions only:
-    ``build_core_research_series`` -> ``compute_monthly_returns`` -> the equity / bond / cash
+    ``build_pnl_research_series`` -> ``compute_monthly_returns`` -> the equity / bond / cash
     research names from ``cfg["splice"]`` -> ``split_by_holdout_boundary`` at
     ``DEFAULT_HOLDOUT_CUTOFF`` -> ``spy_buy_hold`` / ``sixty_forty`` / ``faber_sma`` with
     ``cfg["backtest"]``'s ``cost_bps`` and rebalance convention. Deterministic price arithmetic
     with no tunable parameter: no registry trial.
+
+    P&L series (phase 08.3, D-08): the legs' returns AND Faber's SMA signal read
+    ``build_pnl_research_series`` (month-end once ``pnl_splice`` exists; identical to
+    ``build_core_research_series`` without it), the same series the report uses, so the
+    scoreboard reconciles.
 
     Returns:
         ``{"spy_buy_hold", "sixty_forty", "faber_sma"}`` -> monthly net-of-cost return Series,
@@ -324,10 +329,10 @@ def baseline_curves(monthly_raw: pd.DataFrame, cfg: dict) -> dict[str, pd.Series
     # the D-01 boundary scan and so a notebook that never plots baselines
     # never pays for the splice/returns import chain.
     from trading_crab_lib.platform.assets.returns import compute_monthly_returns
-    from trading_crab_lib.platform.splice import build_core_research_series
+    from trading_crab_lib.platform.splice import build_pnl_research_series
 
     splice_cfg = cfg["splice"]
-    research = build_core_research_series(monthly_raw, cfg)
+    research = build_pnl_research_series(monthly_raw, cfg)
     returns = compute_monthly_returns(research)
 
     equity_name = splice_cfg["equities"]["research_name"]

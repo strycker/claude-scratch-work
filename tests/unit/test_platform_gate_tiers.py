@@ -79,10 +79,10 @@ RECORDED_N_TRIALS = 42
 RECORDED_TRIAL_CEILING = 44
 # The LIVE ledger is checked against the currently declared ceiling, not the
 # historical one: phase 08.1 declared a 2-row budget, 44 -> 46 (DECISIONS G-05,
-# ADR-0004 § Consequences). A machine-readable budget file is out of lean scope,
-# so the next budget declaration edits this line. The recorded arithmetic above
-# stays pinned at 44.
-DECLARED_TRIAL_CEILING = 46
+# ADR-0004 § Consequences), then phase 08.3 declared 2 more, 46 -> 48 (DECISIONS
+# G-09). A machine-readable budget file is out of lean scope, so the next budget
+# declaration edits this line. The recorded arithmetic above stays pinned at 44.
+DECLARED_TRIAL_CEILING = 48
 RECORDED_HURDLE = 2.2086935028832686
 
 RECORDED_N_OBS = 588
@@ -201,7 +201,7 @@ class TestTheHurdleIsDerivedFromTheTrialCount:
         live = total_trial_count()
         assert live <= DECLARED_TRIAL_CEILING, (
             f"live trial count {live} exceeds the declared ceiling {DECLARED_TRIAL_CEILING} "
-            "(DECISIONS G-05); exceeding it requires a written budget amendment first (ADR-0004)"
+            "(DECISIONS G-09); exceeding it requires a written budget amendment first (ADR-0004)"
         )
         assert expected_max_sharpe(live, DEGENERATE_SHARPE_VARIANCE) >= RECORDED_HURDLE
 

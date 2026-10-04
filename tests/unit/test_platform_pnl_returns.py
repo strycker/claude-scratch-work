@@ -463,6 +463,165 @@ class TestRunBacktestPnlReturns:
             )
 
 
+# ── 3b. Measurement only (V3): P&L moves the return column and nothing else ─
+
+
+DECISION_COLUMNS = ["turnover", "scale", "active_regime", "degraded"]
+
+
+def _assert_measurement_only(pnl_curve: pd.DataFrame, default_curve: pd.DataFrame) -> None:
+    pd.testing.assert_index_equal(pnl_curve.index, default_curve.index)
+    pd.testing.assert_frame_equal(pnl_curve[DECISION_COLUMNS], default_curve[DECISION_COLUMNS], check_exact=True)
+    # cost = gross - net = turnover * bps: the subtraction rounds differently per gross (rel 1e-9, abs 0).
+    pd.testing.assert_series_equal(
+        pnl_curve["cost"], default_curve["cost"], check_exact=False, rtol=1e-9, atol=0.0
+    )
+    assert not np.allclose(pnl_curve["return"].to_numpy(), default_curve["return"].to_numpy())
+
+
+class TestMeasurementOnly:
+    @pytest.fixture(scope="class")
+    def world(self):
+        cfg = _cfg()
+        raw = _raw()
+        features = transforms_monthly.features_from_raw(raw, cfg)
+        assets = _asset_returns(raw, cfg)
+        # A synthetic P&L frame far enough from asset_returns that routing it into the
+        # decision inputs would move the weights (an affine copy keeps the tilt's ranking).
+        noise = np.random.default_rng(99).normal(0.0, 0.05, assets.shape)
+        pnl = (assets + noise).where(assets.notna())
+        pnl["USO"] = -pnl["USO"]
+        cash = compute_monthly_returns(splice.build_core_research_series(raw, cfg))["cash"]
+        return cfg, features, assets, pnl, cash
+
+    def test_strategy_moves_only_its_return(self, world):
+        cfg, features, assets, pnl, cash = world
+        default_curve, default_metrics = driver.run_backtest(
+            features, assets, cfg, cash_returns=cash, registry_path=NO_REGISTRY
+        )
+        pnl_curve, pnl_metrics = driver.run_backtest(
+            features, assets, cfg, cash_returns=cash, registry_path=NO_REGISTRY, pnl_returns=pnl
+        )
+        assert (~default_curve["degraded"]).sum() > 0, "every step degraded — nothing was measured"
+        _assert_measurement_only(pnl_curve, default_curve)
+        assert pnl_metrics["dates"] == default_metrics["dates"]
+        assert pnl_metrics["classes"] == default_metrics["classes"]
+        for a, b in zip(pnl_metrics["proba"], default_metrics["proba"]):
+            np.testing.assert_array_equal(a, b)
+
+    def test_ablation_moves_only_its_return(self, world):
+        from trading_crab_lib.platform.backtest.baselines import no_regime_ablation
+
+        cfg, features, assets, pnl, cash = world
+        default_curve, _ = no_regime_ablation(features, assets, cfg, cash_returns=cash, registry_path=NO_REGISTRY)
+        pnl_curve, _ = no_regime_ablation(
+            features, assets, cfg, cash_returns=cash, registry_path=NO_REGISTRY, pnl_returns=pnl
+        )
+        _assert_measurement_only(pnl_curve, default_curve)
+
+
+# ── 3c. Baselines and the report read the P&L series (D-08) ─────────────────
+
+
+def _dev(series: pd.Series) -> pd.Series:
+    from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+
+    return split_by_holdout_boundary(series, cutoff=DEFAULT_HOLDOUT_CUTOFF)[0]
+
+
+class TestBaselinesReadPnl:
+    def _expected(self, research: pd.DataFrame) -> dict[str, pd.Series]:
+        from trading_crab_lib.platform.backtest.baselines import faber_sma, sixty_forty, spy_buy_hold
+
+        ret = compute_monthly_returns(research)
+        return {
+            "spy_buy_hold": spy_buy_hold(_dev(ret["equities_tr"])),
+            "sixty_forty": sixty_forty(
+                _dev(ret["equities_tr"]), _dev(ret["long_duration_tr"]), rebalance="monthly", cost_bps=10
+            ),
+            "faber_sma": faber_sma(_dev(research["equities_tr"]), _dev(ret["cash"]), cost_bps=10),
+        }
+
+    def test_without_a_block_every_curve_is_unchanged(self):
+        from trading_crab_lib.platform.backtest.baselines import baseline_curves
+
+        cfg, raw = _cfg(), _raw()
+        curves = baseline_curves(raw, cfg)
+        for name, expected in self._expected(splice.build_core_research_series(raw, cfg)).items():
+            pd.testing.assert_series_equal(curves[name], expected, check_exact=True)
+
+    def test_with_a_block_spy_6040_and_faber_signal_and_returns_are_month_end(self):
+        from trading_crab_lib.platform.backtest.baselines import baseline_curves
+
+        cfg, raw = _cfg(pnl_splice=EQUITIES_ONLY), _raw()
+        curves = baseline_curves(raw, cfg)
+        pnl_expected = self._expected(splice.build_pnl_research_series(raw, cfg))
+        core_expected = self._expected(splice.build_core_research_series(raw, cfg))
+        for name, expected in pnl_expected.items():
+            pd.testing.assert_series_equal(curves[name], expected, check_exact=True)
+            assert not curves[name].equals(core_expected[name]), name
+
+
+class TestReportWiring:
+    def _run(self, cfg: dict, tmp_path: Path) -> tuple[dict, list, list]:
+        from trading_crab_lib.platform.evaluation import report
+
+        raw = _raw()
+        features = transforms_monthly.features_from_raw(raw, cfg)
+        strategy_calls, ablation_calls = [], []
+        real_rb, real_abl = report.run_backtest, report.no_regime_ablation
+
+        def rb(*args, **kwargs):
+            strategy_calls.append((args, kwargs))
+            return real_rb(*args, **kwargs)
+
+        def abl(*args, **kwargs):
+            ablation_calls.append((args, kwargs))
+            return real_abl(*args, **kwargs)
+
+        with patch.object(report, "run_backtest", rb), patch.object(report, "no_regime_ablation", abl):
+            result = report.run_full_backtest_evaluation(
+                features, raw, cfg, registry_path=NO_REGISTRY, output_dir=tmp_path
+            )
+        return result, strategy_calls, ablation_calls
+
+    def test_both_legs_get_the_same_pnl_object_and_baselines_match_baseline_curves(self, tmp_path):
+        from trading_crab_lib.platform.backtest.baselines import baseline_curves
+        from trading_crab_lib.platform.evaluation.kpis import terminal_log_wealth
+
+        cfg = _cfg(pnl_splice=EQUITIES_ONLY)
+        raw = _raw()
+        result, strategy_calls, ablation_calls = self._run(cfg, tmp_path)
+
+        (s_args, s_kwargs), = strategy_calls
+        (a_args, a_kwargs), = ablation_calls
+        assert s_kwargs["pnl_returns"] is a_kwargs["pnl_returns"]
+        expected_pnl = tradable_asset_returns(
+            compute_monthly_returns(splice.build_pnl_research_series(raw, cfg)), cfg["splice"]
+        )
+        pd.testing.assert_frame_equal(s_kwargs["pnl_returns"], expected_pnl, check_exact=True)
+        # The legs' decision inputs stay on the feature series (D-09).
+        pd.testing.assert_frame_equal(s_args[1], _asset_returns(raw, cfg), check_exact=True)
+        assert s_args[1] is a_args[1]
+        # The scoreboard reconciles: the report's baselines are baseline_curves' (rel 1e-9).
+        curves = baseline_curves(raw, cfg)
+        for name, kpis in result["baseline_kpis"].items():
+            assert np.isclose(kpis["terminal_log_wealth"], terminal_log_wealth(curves[name]), rtol=1e-9, atol=0), name
+
+    def test_without_a_block_pnl_returns_equal_the_asset_returns(self, tmp_path):
+        cfg = _cfg()
+        _, strategy_calls, ablation_calls = self._run(cfg, tmp_path)
+        (s_args, s_kwargs), = strategy_calls
+        pd.testing.assert_frame_equal(s_kwargs["pnl_returns"], s_args[1], check_exact=True)
+        assert ablation_calls[0][1]["pnl_returns"] is s_kwargs["pnl_returns"]
+
+    def test_the_conventions_section_names_both_builders(self, tmp_path):
+        result, _, _ = self._run(_cfg(), tmp_path)
+        markdown = result["report_path"].read_text(encoding="utf-8")
+        assert "build_pnl_research_series" in markdown and "build_core_research_series" in markdown
+        assert "E-08" in markdown and "E-10" in markdown
+
+
 # ── 4. Ingestion: the index month-end fetch ─────────────────────────────────
 
 
