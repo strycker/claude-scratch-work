@@ -475,7 +475,8 @@ def test_live_config_carries_the_stale_threshold_and_scoreboard_tag():
 
     cfg = load_platform_config()
     assert cfg["tripwire"]["stale_business_days"] == 5
-    assert cfg["report"]["scoreboard_trial_tag"] == "08.1-pit-tilt-vs-ablation"
+    # 08.3 (2026-10-04): "08.1-pit-tilt-vs-ablation" -> "08.3-monthend-tilt-vs-ablation"
+    assert cfg["report"]["scoreboard_trial_tag"] == "08.3-monthend-tilt-vs-ablation"
 
 
 class TestServedPosteriorPath:

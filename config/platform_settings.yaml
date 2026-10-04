@@ -637,8 +637,9 @@ report:
                               # no-regime ablation leg. regime_tilt stays available but off
                               # (G-06). An absent key means regime_tilt, so synthetic test configs
                               # keep the Phase 8 path; a test pins this value.
-  scoreboard_trial_tag: "08.1-pit-tilt-vs-ablation"  # 08.2 D-05: the registry tag whose rows date the
-                              # static scoreboard (the last budgeted run); read, never written
+  scoreboard_trial_tag: "08.3-monthend-tilt-vs-ablation"  # 08.2 D-05: the registry tag whose rows date the
+                              # static scoreboard (the last budgeted run); read, never written.
+                              # 08.3 (2026-10-04): 08.1-pit-tilt-vs-ablation -> 08.3-monthend-tilt-vs-ablation
 
 # ── Backtest & evaluation (EVAL-01..04, D-03) — honest walk-forward 1972-2020 ─
 # Read defensively via cfg.get("backtest", {}) everywhere; deliberately NOT

@@ -348,11 +348,12 @@ class TestParityWithTheAblationLeg:
         from trading_crab_lib.platform.backtest.baselines import no_regime_ablation
         from trading_crab_lib.platform.honesty import registry
         from trading_crab_lib.platform.report import serving
-        from trading_crab_lib.platform.splice import build_core_research_series
+        from trading_crab_lib.platform.splice import build_core_research_series, build_pnl_research_series
 
         sha_before = _sha256(_REAL_REGISTRY)
         count_before = registry.total_trial_count(_REAL_REGISTRY)
-        assert count_before == 46
+        # 08.3 (2026-10-04): 46 -> 48 (the 08.3-monthend-tilt-vs-ablation rows)
+        assert count_before == 48
 
         tmp_ckpt = tmp_path / "platform"
         tmp_ckpt.mkdir()
@@ -369,9 +370,16 @@ class TestParityWithTheAblationLeg:
         returns = compute_monthly_returns(build_core_research_series(cm.load("monthly_raw"), cfg))
         asset_returns = tradable_asset_returns(returns, cfg["splice"])
         cash_ret = returns[cfg["splice"]["cash"]["research_name"]]
+        # 08.3 (2026-10-04): the tracked curve is booked on month-end P&L (E-08), so the re-run
+        # passes pnl_returns built exactly as report.py builds it; the decision inputs above are
+        # unchanged (D-09), so the weekly-target half below is unchanged.
+        pnl_assets = tradable_asset_returns(
+            compute_monthly_returns(build_pnl_research_series(cm.load("monthly_raw"), cfg)), cfg["splice"]
+        )
         tilts = _spy(monkeypatch, driver, "vol_targeted_tilt")
         curve, _ = no_regime_ablation(
             cm.load("monthly_features"), asset_returns, cfg, cash_returns=cash_ret, registry_path=registry.NO_REGISTRY,
+            pnl_returns=pnl_assets,
         )
 
         tracked = pd.read_parquet(_TRACKED_OUTPUTS / "backtest_equity_curve_ablation.parquet")
@@ -388,7 +396,7 @@ class TestParityWithTheAblationLeg:
         assert weekly_target["cash"] == pytest.approx(tilts[-1]["cash"], rel=1e-9, abs=0)
 
         assert _sha256(_REAL_REGISTRY) == sha_before
-        assert registry.total_trial_count(_REAL_REGISTRY) == count_before == 46
+        assert registry.total_trial_count(_REAL_REGISTRY) == count_before == 48  # 08.3 (2026-10-04): 46 -> 48
 
 
 class TestSuspendedView:

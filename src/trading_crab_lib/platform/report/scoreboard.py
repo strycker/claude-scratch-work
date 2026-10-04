@@ -14,7 +14,7 @@ nothing here fits, tunes, selects or writes, and no registry row is appended.
   (deterministic price arithmetic, no registry trial), the derivation the KPI table used.
 - The own-span TLW and MDD: ``backtest_kpi_table.parquet``.
 - The run date and git sha: the registry rows whose ``config.trial_tag`` is
-  ``report.scoreboard_trial_tag`` (``08.1-pit-tilt-vs-ablation``); no parquet carries a date.
+  ``report.scoreboard_trial_tag`` (``08.3-monthend-tilt-vs-ablation``); no parquet carries a date.
 
 **The common window (ruling A3).** The KPI table is not like-for-like: the baselines start in
 1962, the walk-forward legs in 1972. The headline columns therefore put all five legs on the
@@ -61,8 +61,9 @@ E07_CAVEAT = (
 #: The budgeted run that writes every number the scoreboard reads. Never run it to refresh the page.
 REPORT_BUILD_COMMAND = "python -m trading_crab_lib.platform.evaluation.report"
 
-#: ``report.scoreboard_trial_tag`` default: 8.1's D-04 run.
-DEFAULT_SCOREBOARD_TRIAL_TAG = "08.1-pit-tilt-vs-ablation"
+#: ``report.scoreboard_trial_tag`` default: 8.3's month-end run (was 8.1's D-04 run,
+#: ``08.1-pit-tilt-vs-ablation``, until 2026-10-04).
+DEFAULT_SCOREBOARD_TRIAL_TAG = "08.3-monthend-tilt-vs-ablation"
 
 #: (leg id in the KPI table, page label), in page order.
 LEG_LABELS: tuple[tuple[str, str], ...] = (
