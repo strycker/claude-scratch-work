@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.3 — Regime Rebuild I — month-end returns (E-07) and re-measure
-Status: Context gathered (2026-10-02) — P&L returns to month-end (features unchanged), oil pre-1986 average as bounded exception, pre-declared core-mix rule (E-09), one 2-row re-measurement. **Planned** (3 plans, waves 1–3; blocking checkpoint before the 2-row run). Awaiting Glenn approval.
+Status: **Executed + verified, human_needed** (2026-10-04) — P&L on month-end returns; E-12: tilt does not beat ablation (−0.2336), core mix (no-regime) stands, Faber's edge was mostly the averaging artifact. Registry 48. Awaiting Glenn Mac run + P7/P9 sign-offs.
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
