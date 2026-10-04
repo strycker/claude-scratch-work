@@ -528,6 +528,8 @@ def _smoothed_hindsight_perf(
     cash_ret: pd.Series,
     decision_dates: list,
     allocation_cfg: dict[str, Any],
+    *,
+    pnl_returns: pd.DataFrame | None = None,
 ) -> float:
     """Terminal log wealth of a hindsight oracle that knows the FULL-SAMPLE
     smoothed regime label at every decision date (but not future returns) —
@@ -551,7 +553,15 @@ def _smoothed_hindsight_perf(
     skips NaN), silently distorting the very gap this function measures. The
     walk-forward driver has no such problem because it derives its stats from
     the train window only (``driver.py``: ``dev_asset_returns.loc[train_index]``).
+
+    ``pnl_returns`` (phase 08.3, E-08) is what the held book EARNS, read only at
+    the realized-return line, exactly as ``run_backtest(pnl_returns=)`` does for
+    the filtered leg this oracle is compared with: the stats, the EWMA vol and
+    the per-step universe stay on ``asset_returns`` (E-10 / D-09), so the gap
+    compares like with like. ``None`` means ``asset_returns`` (identical to the
+    P&L frame whenever ``cfg`` has no ``pnl_splice`` block).
     """
+    realized = asset_returns if pnl_returns is None else pnl_returns
     smoothed_stats = returns_by_regime_stats(asset_returns, full_sample_states)
     # Inception date per asset, computed once — an asset is tradable at t only
     # once it has at least one observation on or before t.
@@ -569,8 +579,8 @@ def _smoothed_hindsight_perf(
             halflife=allocation_cfg.get("ewma_halflife_months", 6),
             min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
         )
-        common = tilt["weights"].index.intersection(asset_returns.columns)
-        asset_leg = float((tilt["weights"][common] * asset_returns.loc[t, common]).sum()) if len(common) else 0.0
+        common = tilt["weights"].index.intersection(realized.columns)
+        asset_leg = float((tilt["weights"][common] * realized.loc[t, common]).sum()) if len(common) else 0.0
         cash_leg = tilt["cash"] * float(cash_ret.loc[t]) if t in cash_ret.index else 0.0
         step_returns.append(asset_leg + cash_leg)
 
@@ -1004,6 +1014,7 @@ def run_full_backtest_evaluation(
 
     smoothed_perf = _smoothed_hindsight_perf(
         full_sample_states, asset_returns, cash_ret, list(per_step_metrics["dates"]), allocation_cfg,
+        pnl_returns=pnl_assets,
     )
     filtered_perf = strategy_kpis["terminal_log_wealth"]
     gap = compute_gap(smoothed_perf, filtered_perf)

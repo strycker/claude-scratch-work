@@ -795,3 +795,121 @@ class TestMigrationScriptGuards:
         with patch.object(mig, "fetch_month_end_columns") as fetch, pytest.raises(SystemExit, match="runs once"):
             mig.migrate(load_platform_config(), dry_run=True)
         fetch.assert_not_called()
+
+
+# ── 6. The smoothed-vs-filtered gap's hindsight oracle earns the P&L series ──
+
+PIT_08_3_BEFORE = REPO_ROOT / "outputs" / "reports" / "platform" / "pit_08.3" / "before"
+
+
+def _oracle_inputs(raw: pd.DataFrame, cfg: dict) -> tuple[pd.Series, pd.DataFrame, pd.Series]:
+    returns = compute_monthly_returns(splice.build_core_research_series(raw, cfg))
+    states = pd.Series(np.arange(len(raw)) // 6 % 3, index=raw.index, name="state")
+    return states, tradable_asset_returns(returns, cfg["splice"]), returns[cfg["splice"]["cash"]["research_name"]]
+
+
+class TestHindsightOracleReadsPnl:
+    """``report._smoothed_hindsight_perf``: decisions on ``asset_returns`` (E-10 / D-09), the
+    realized return on ``pnl_returns`` — the same split ``run_backtest`` makes for the
+    filtered leg the gap compares it with (carried forward from 08.3-01)."""
+
+    ALLOCATION = {"target_vol_annual": 0.10, "ewma_halflife_months": 6, "portfolio_vol_min_obs": 12}
+
+    def test_pnl_equal_to_the_asset_returns_is_byte_identical(self):
+        from trading_crab_lib.platform.evaluation.report import _smoothed_hindsight_perf
+
+        cfg = _cfg()
+        states, assets, cash = _oracle_inputs(_raw(), cfg)
+        dates = list(assets.index[24:])
+        default = _smoothed_hindsight_perf(states, assets, cash, dates, self.ALLOCATION)
+        same = _smoothed_hindsight_perf(states, assets, cash, dates, self.ALLOCATION, pnl_returns=assets.copy())
+        assert np.isfinite(default) and same == default
+
+    def test_only_the_realized_return_reads_pnl(self):
+        from trading_crab_lib.platform.evaluation import report
+        from trading_crab_lib.platform.evaluation.kpis import terminal_log_wealth
+
+        cfg = _cfg()
+        raw = _raw()
+        states, assets, cash = _oracle_inputs(raw, cfg)
+        pnl = assets + pd.DataFrame(
+            np.random.default_rng(5).normal(0, 0.05, assets.shape), index=assets.index, columns=assets.columns
+        )
+        pnl[assets.columns[0]] = -pnl[assets.columns[0]]
+        dates = list(assets.index[24:])
+        tilts: dict[str, list] = {"default": [], "pnl": []}
+        real_tilt = report.vol_targeted_tilt
+
+        def spy(key):
+            def _tilt(*args, **kwargs):
+                out = real_tilt(*args, **kwargs)
+                tilts[key].append(out)
+                return out
+            return _tilt
+
+        with patch.object(report, "vol_targeted_tilt", spy("default")):
+            default = report._smoothed_hindsight_perf(states, assets, cash, dates, self.ALLOCATION)
+        with patch.object(report, "vol_targeted_tilt", spy("pnl")):
+            got = report._smoothed_hindsight_perf(states, assets, cash, dates, self.ALLOCATION, pnl_returns=pnl)
+
+        # Decision side unchanged: the same weights and cash at every date.
+        for a, b in zip(tilts["default"], tilts["pnl"], strict=True):
+            pd.testing.assert_series_equal(a["weights"], b["weights"], check_exact=True)
+            assert a["cash"] == b["cash"]
+        # Realized side: the pnl frame, booked with those weights.
+        steps = [
+            float((t["weights"] * pnl.loc[d, t["weights"].index]).sum()) + t["cash"] * float(cash.loc[d])
+            for t, d in zip(tilts["pnl"], dates, strict=True)
+        ]
+        assert got == pytest.approx(terminal_log_wealth(pd.Series(steps)), rel=1e-12, abs=0)
+        assert got != default
+
+    def test_the_report_passes_the_same_pnl_object_as_the_legs(self, tmp_path):
+        from trading_crab_lib.platform.evaluation import report
+
+        cfg = _cfg(pnl_splice=EQUITIES_ONLY)
+        raw = _raw()
+        features = transforms_monthly.features_from_raw(raw, cfg)
+        seen: dict[str, list] = {"oracle": [], "legs": []}
+        real_oracle, real_rb = report._smoothed_hindsight_perf, report.run_backtest
+
+        def oracle(*args, **kwargs):
+            seen["oracle"].append(kwargs)
+            return real_oracle(*args, **kwargs)
+
+        def rb(*args, **kwargs):
+            seen["legs"].append(kwargs)
+            return real_rb(*args, **kwargs)
+
+        with patch.object(report, "_smoothed_hindsight_perf", oracle), patch.object(report, "run_backtest", rb):
+            report.run_full_backtest_evaluation(features, raw, cfg, registry_path=NO_REGISTRY, output_dir=tmp_path)
+        (kwargs,) = seen["oracle"]
+        assert kwargs["pnl_returns"] is seen["legs"][0]["pnl_returns"]
+
+    def test_before_the_switch_on_the_tracked_gap_cannot_move(self):
+        """Real data, no pnl_splice block: the P&L frame IS the asset frame, so the oracle (and the
+        gap the 08.3 before run recorded) is unchanged by reading it."""
+        import re
+
+        from trading_crab_lib.platform.evaluation.report import _smoothed_hindsight_perf
+
+        cfg = {k: v for k, v in load_platform_config().items() if k != "pnl_splice"}
+        raw = pd.read_parquet(TRACKED_RAW)
+        returns = compute_monthly_returns(splice.build_core_research_series(raw, cfg))
+        assets = tradable_asset_returns(returns, cfg["splice"])
+        pnl = tradable_asset_returns(compute_monthly_returns(splice.build_pnl_research_series(raw, cfg)), cfg["splice"])
+        pd.testing.assert_frame_equal(pnl, assets, check_exact=True)
+
+        states = pd.read_parquet(PIT_08_3_BEFORE / "backtest_full_sample_states.parquet")["state"]
+        # The oracle visits the driver's non-degraded DECISION dates (per_step_metrics["dates"]),
+        # which are the persisted filtered_state_probs index, not the curve's booking dates.
+        dates = list(pd.read_parquet(PIT_08_3_BEFORE / "backtest_filtered_state_probs.parquet").index)
+        cash = returns[cfg["splice"]["cash"]["research_name"]]
+        allocation = cfg.get("allocation", {})
+        default = _smoothed_hindsight_perf(states, assets, cash, dates, allocation)
+        assert _smoothed_hindsight_perf(states, assets, cash, dates, allocation, pnl_returns=pnl) == default
+
+        kpi = pd.read_parquet(PIT_08_3_BEFORE / "backtest_kpi_table.parquet").set_index("leg")
+        text = (PIT_08_3_BEFORE / "backtest_report.md").read_text(encoding="utf-8")
+        recorded = float(re.search(r"real-time filtered performance\): (-?[0-9.]+)", text).group(1))
+        assert round(default - float(kpi.loc["strategy", "terminal_log_wealth"]), 4) == recorded
