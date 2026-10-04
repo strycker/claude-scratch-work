@@ -149,6 +149,7 @@ def assemble_backtest_report(
     gap: float,
     excluded_assets: list[str] | None = None,
     policy_comparison: dict | None = None,
+    pnl_month_end: bool = False,
 ) -> str:
     """Assemble the honest backtest report markdown from precomputed inputs.
 
@@ -198,6 +199,10 @@ def assemble_backtest_report(
             ``max_drawdown``.
         gap: the smoothed-vs-filtered performance gap
             (``honesty/gap_lag.py::compute_gap`` output).
+        pnl_month_end: whether the run's config carries a ``pnl_splice`` block
+            (phase 08.3, E-08). The Conventions note says P&L reads month-end
+            prices only when it does; otherwise it says P&L and the tilt's
+            inputs read the same (monthly-average) research series.
 
     Returns:
         str: the assembled markdown.
@@ -420,13 +425,21 @@ def assemble_backtest_report(
         "`backtest/costs.py::apply_transaction_cost` — only SPY buy-and-hold "
         "is cost-free by construction (no rebalancing ever occurs)."
     )
-    lines.append(
-        "Returns convention (08.3): P&L (strategy, ablation) and the SPY / 60-40 / Faber "
-        "baselines, including Faber's SMA signal, read `splice.build_pnl_research_series` "
-        "(month-end prices; oil is the WTISPLC monthly average before 1986-01, E-08); the "
-        "tilt's inputs (regime return stats, EWMA vol target) read "
-        "`splice.build_core_research_series` (E-10)."
-    )
+    if pnl_month_end:
+        lines.append(
+            "Returns convention (08.3): P&L (strategy, ablation) and the SPY / 60-40 / Faber "
+            "baselines, including Faber's SMA signal, read `splice.build_pnl_research_series` "
+            "(month-end prices; oil is the WTISPLC monthly average before 1986-01, E-08); the "
+            "tilt's inputs (regime return stats, EWMA vol target) read "
+            "`splice.build_core_research_series` (E-10)."
+        )
+    else:
+        lines.append(
+            "Returns convention (08.3): no `pnl_splice` block is configured, so P&L (strategy, "
+            "ablation), the SPY / 60-40 / Faber baselines and the tilt's inputs all read "
+            "`splice.build_core_research_series` (`splice.build_pnl_research_series` returns it "
+            "unchanged): monthly-average prices for equities, long duration and oil (E-07)."
+        )
     if excluded_assets:
         lines.append(
             "**⚠ Excluded assets:** the following research classes were EXCLUDED "
@@ -1058,6 +1071,7 @@ def run_full_backtest_evaluation(
         gap=gap,
         excluded_assets=_excluded,
         policy_comparison=policy_comparison,
+        pnl_month_end=bool(cfg.get("pnl_splice")),
     )
     full_sample_states_df = full_sample_states.to_frame()
     filtered_state_probs_df = filtered_probs_matrix.rename(

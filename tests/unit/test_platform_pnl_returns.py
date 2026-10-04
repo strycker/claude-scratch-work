@@ -616,10 +616,18 @@ class TestReportWiring:
         assert ablation_calls[0][1]["pnl_returns"] is s_kwargs["pnl_returns"]
 
     def test_the_conventions_section_names_both_builders(self, tmp_path):
-        result, _, _ = self._run(_cfg(), tmp_path)
+        result, _, _ = self._run(_cfg(pnl_splice=EQUITIES_ONLY), tmp_path)
         markdown = result["report_path"].read_text(encoding="utf-8")
         assert "build_pnl_research_series" in markdown and "build_core_research_series" in markdown
+        assert "month-end prices" in markdown
         assert "E-08" in markdown and "E-10" in markdown
+
+    def test_without_a_block_the_conventions_section_does_not_claim_month_end(self, tmp_path):
+        # 08.3-02 checkpoint finding 1: the before run's report claimed month-end P&L with no block.
+        result, _, _ = self._run(_cfg(), tmp_path)
+        markdown = result["report_path"].read_text(encoding="utf-8")
+        assert "month-end prices" not in markdown
+        assert "no `pnl_splice` block is configured" in markdown and "E-07" in markdown
 
 
 # ── 4. Ingestion: the index month-end fetch ─────────────────────────────────
