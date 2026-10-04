@@ -572,10 +572,11 @@ What the page shows now (Phase 8.2):
   business days (`tripwire.stale_business_days`) reads STALE, a missing input UNAVAILABLE, and
   the escalation reads UNKNOWN unless all three are current; it changes no weight. Step 1
   writes `fred_daily_raw` for the credit signal.
-- **Static scoreboard.** From the last budgeted run (registry tag `08.1-pit-tilt-vs-ablation`):
+- **Static scoreboard.** From the last budgeted run (registry tag `08.3-monthend-tilt-vs-ablation`):
   regime tilt, no-regime ablation, SPY, 60/40 and Faber, terminal log wealth and max drawdown
   on the common 1972–2020 window, own-span values in a footnote, the run date, and the E-07
-  caveat (returns use monthly-average prices, which may flatter trend and tilt rules).
+  caveat. Returns are month-end to month-end (E-08); the one exception, named in the caveat, is
+  oil before 1986, which uses monthly-average WTI.
 
 Notebooks P7 (serving and the weekly page, built twice in scratch), P8 (the filtered belief vs
 the served posterior) and P9 (does the regime layer pay rent) are the review gates for this page;
