@@ -757,6 +757,43 @@ class TestTrackedMigration:
             apply_publication_lags(raw, cfg)
 
 
+# ── 5b. The live P&L series on tracked data (08.3-02 Task 3; V2, V6) ───────
+
+
+class TestTrackedPnlSeries:
+    """The live config's P&L series on the tracked monthly_raw, 1972-2020 (return statistics only)."""
+
+    @pytest.fixture(scope="class")
+    def series(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        cfg = load_platform_config()
+        raw = pd.read_parquet(TRACKED_RAW)
+        feature = compute_monthly_returns(splice.build_core_research_series(raw, cfg))
+        pnl = compute_monthly_returns(splice.build_pnl_research_series(raw, cfg))
+        return raw, feature, pnl
+
+    @staticmethod
+    def _passes(own: pd.Series, feature: pd.Series) -> bool:
+        """V2: no own lag-1 persistence, and next month's AVERAGE return leads this month's return."""
+        own, feature = own.loc["1972-01-31":"2020-12-31"], feature.loc["1972-01-31":"2020-12-31"]
+        return abs(own.shift(-1).corr(own)) < 0.15 and feature.shift(-1).corr(own) > 0.3
+
+    @pytest.mark.parametrize("col", ["equities_tr", "long_duration_tr", "oil"])
+    def test_month_end_pnl_passes_and_the_averaged_series_fails(self, series, col):
+        _, feature, pnl = series
+        assert self._passes(pnl[col], feature[col]), col
+        # SC1: the same check on the averaged series fails (its own lag-1 is the leak).
+        assert not self._passes(feature[col], feature[col]), col
+
+    def test_oil_is_average_over_average_through_the_join_and_close_over_close_after(self, series):
+        raw, _, pnl = series
+        jan = raw.loc["1986-01-31", "wti_fred"] / raw.loc["1985-12-31", "wti_fred"] - 1
+        feb = raw.loc["1986-02-28", "wti_me"] / raw.loc["1986-01-31", "wti_me"] - 1
+        # rel 1e-9, not exact: ratio_splice rescales the level (08.3-02 finding 3).
+        assert pnl.loc["1986-01-31", "oil"] == pytest.approx(jan, rel=1e-9, abs=0)
+        assert pnl.loc["1986-02-28", "oil"] == pytest.approx(feb, rel=1e-9, abs=0)
+        assert np.isnan(raw.loc["1985-12-31", "wti_me"])
+
+
 class TestMigrationScriptGuards:
     """``scripts/migrate_month_end_columns.py``: the checks it raises on before saving."""
 
