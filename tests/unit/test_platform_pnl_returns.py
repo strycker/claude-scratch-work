@@ -18,7 +18,9 @@ the D-03 core-mix rule was declared before any "after" number exists.
 
 from __future__ import annotations
 
+import ast
 import copy
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -33,6 +35,7 @@ from test_platform_point_in_time import (  # tests/unit is on sys.path (prepend 
 )
 
 from trading_crab_lib.platform import splice, transforms_monthly
+from trading_crab_lib.platform.assets.returns import compute_monthly_returns, tradable_asset_returns
 from trading_crab_lib.platform.backtest import driver
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
@@ -42,8 +45,16 @@ from trading_crab_lib.platform.ingestion import macro_monthly
 #: the live block is pinned against. Each value overrides the keys of the same
 #: class under ``splice:``; ``splice:`` itself is never edited (pitfall 2).
 PNL_SPLICE_OVERLAYS: dict[str, dict] = {
+    # ^GSPC month-end close + the existing div-yield accrual (div_yield still lagged 3).
     "equities": {"price_col": "sp500_close_me"},
+    # DGS10 month-end yield through the existing CMT par-bond repricing (yield_units percent, inherited).
+    "long_duration": {"yield_col": "dgs10_me"},
+    # D-02: WTISPLC monthly average through 1986-01, DCOILWTICO month-end close from 1986-02.
+    # ratio_splice splices RETURNS (avg/avg, then close/close), never a mixed close/avg month.
+    "oil": {"method": "ratio_splice", "old_col": "wti_fred", "new_col": "wti_me", "join_date": "1986-01-31"},
 }
+EQUITIES_ONLY = {"equities": PNL_SPLICE_OVERLAYS["equities"]}
+OIL_JOIN = pd.Timestamp(PNL_SPLICE_OVERLAYS["oil"]["join_date"])
 
 LEAN_COLS = [
     "curve_10y3m", "curve_10y2y", "credit_spread_baa_aaa", "fred_vix", "gold", "oil",
@@ -129,8 +140,6 @@ def _raw(n: int = 48, start: str = "2010-01-31", seed: int = 7) -> pd.DataFrame:
 
 
 def _asset_returns(raw: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    from trading_crab_lib.platform.assets.returns import compute_monthly_returns, tradable_asset_returns
-
     return tradable_asset_returns(compute_monthly_returns(splice.build_core_research_series(raw, cfg)), cfg["splice"])
 
 
@@ -140,7 +149,8 @@ def _asset_returns(raw: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 class TestFeaturesNeverCarryPnlColumns:
     def test_pnl_only_columns_reads_the_flags_and_the_overlay(self):
         cfg = _cfg(pnl_splice=PNL_SPLICE_OVERLAYS)
-        assert splice.pnl_only_columns(cfg) == {"sp500_close_me"}
+        # wti_fred is the oil overlay's old leg but a feature-side source: it stays a feature.
+        assert splice.pnl_only_columns(cfg) == {"sp500_close_me", "dgs10_me", "wti_me"}
         # Config-driven: holds with no pnl_splice block at all (the live state after 08.3-01).
         assert splice.pnl_only_columns(_cfg()) == {"sp500_close_me"}
         # A config with neither block (e.g. the recompute tests' taxonomy-only cfg) has none.
@@ -234,7 +244,7 @@ class TestBuildPnlResearchSeries:
         )
 
     def test_equities_overlay_reads_the_month_end_close_and_nothing_else_moves(self):
-        cfg = _cfg(pnl_splice=PNL_SPLICE_OVERLAYS)
+        cfg = _cfg(pnl_splice=EQUITIES_ONLY)
         raw = _raw()
         pnl = splice.build_pnl_research_series(raw, cfg)
         core = splice.build_core_research_series(raw, cfg)
@@ -246,13 +256,13 @@ class TestBuildPnlResearchSeries:
             pd.testing.assert_series_equal(pnl[col], core[col], check_exact=True)
 
     def test_the_feature_splice_block_is_never_edited(self):
-        cfg = _cfg(pnl_splice=PNL_SPLICE_OVERLAYS)
+        cfg = _cfg(pnl_splice=EQUITIES_ONLY)
         before = copy.deepcopy(cfg)
         splice.build_pnl_research_series(_raw(), cfg)
         assert cfg == before
 
     def test_a_missing_month_end_column_raises_naming_it(self):
-        cfg = _cfg(pnl_splice=PNL_SPLICE_OVERLAYS)
+        cfg = _cfg(pnl_splice=EQUITIES_ONLY)
         with pytest.raises(ValueError, match="sp500_close_me"):
             splice.build_pnl_research_series(_raw().drop(columns=["sp500_close_me"]), cfg)
 
@@ -266,6 +276,151 @@ class TestBuildPnlResearchSeries:
         cfg = _cfg(pnl_splice={"equities": {"price_col": ["sp500_close_me", "sp500"]}})
         with pytest.raises(ValueError, match="scalar"):
             splice.build_pnl_research_series(_raw(), cfg)
+
+
+# ── 2b. All three overlays: long duration and oil (D-02) ────────────────────
+
+
+def _raw_1980(seed: int = 11) -> pd.DataFrame:
+    """1980-1995 raw spanning the oil join: wti_fred is a monthly AVERAGE level,
+    wti_me a month-end CLOSE that only starts at the join month (as DCOILWTICO does)
+    and differs from the average there."""
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("1980-01-31", "1995-12-31", freq="ME", name="date")
+    n = len(idx)
+    raw = _raw(n=n, start="1980-01-31", seed=seed)
+    raw["dgs10_me"] = (raw["fred_gs10"] + rng.normal(0, 0.15, n)).to_numpy()
+    wti_me = raw["wti_fred"] * np.exp(rng.normal(0, 0.05, n))
+    raw["wti_me"] = wti_me.where(idx >= OIL_JOIN)
+    return raw
+
+
+class TestAllOverlays:
+    def test_each_overlaid_class_reads_its_month_end_source_and_the_rest_are_unchanged(self):
+        cfg = _cfg(pnl_splice=PNL_SPLICE_OVERLAYS)
+        raw = _raw_1980()
+        pnl = splice.build_pnl_research_series(raw, cfg)
+        core = splice.build_core_research_series(raw, cfg)
+
+        pd.testing.assert_series_equal(
+            pnl["equities_tr"], splice.build_equity_total_return(raw["sp500_close_me"], raw["div_yield"], cfg),
+            check_exact=True,
+        )
+        pd.testing.assert_series_equal(
+            pnl["long_duration_tr"], splice.build_treasury_tr_synthetic(raw["dgs10_me"], cfg), check_exact=True
+        )
+        pd.testing.assert_series_equal(pnl["cash"], core["cash"], check_exact=True)
+        for col in ("equities_tr", "long_duration_tr", "oil"):
+            assert not pnl[col].dropna().equals(core[col].dropna()), col
+
+    def test_a_percent_yield_misread_as_decimal_still_trips_the_units_guard(self):
+        """The overlay inherits splice.long_duration's yield_units; DGS10 is percent."""
+        cfg = _cfg(pnl_splice={"long_duration": {"yield_col": "dgs10_me", "yield_units": "decimal"}})
+        with pytest.raises(ValueError, match="yield_units"):
+            splice.build_pnl_research_series(_raw_1980(), cfg)
+
+
+class TestOilSplice:
+    """V6: avg/avg returns through the join month, close/close after, no mixed month, no gap."""
+
+    @pytest.fixture
+    def oil(self):
+        cfg = _cfg(pnl_splice=PNL_SPLICE_OVERLAYS)
+        raw = _raw_1980()
+        returns = compute_monthly_returns(splice.build_pnl_research_series(raw, cfg))["oil"]
+        return raw, returns
+
+    def test_returns_through_the_join_month_are_average_over_average(self, oil):
+        raw, returns = oil
+        expected = raw["wti_fred"].pct_change(fill_method=None)
+        before = returns.index <= OIL_JOIN
+        np.testing.assert_allclose(returns[before].iloc[1:], expected[before].iloc[1:], rtol=1e-9, atol=0)
+
+    def test_returns_after_the_join_month_are_close_over_close(self, oil):
+        raw, returns = oil
+        expected = raw["wti_me"].pct_change(fill_method=None)
+        after = returns.index > OIL_JOIN
+        assert after.sum() > 100
+        np.testing.assert_allclose(returns[after], expected[after], rtol=1e-9, atol=0)
+
+    def test_the_mixed_close_over_average_return_occurs_nowhere(self, oil):
+        raw, returns = oil
+        mixed = raw.loc[OIL_JOIN, "wti_me"] / raw.loc[OIL_JOIN - pd.offsets.MonthEnd(1), "wti_fred"] - 1.0
+        assert not np.isclose(returns.dropna().to_numpy(), mixed, rtol=1e-9, atol=0).any()
+
+    def test_no_nan_between_the_first_old_month_and_the_last_new_month(self, oil):
+        raw, returns = oil
+        span = returns.loc[raw["wti_fred"].first_valid_index():raw["wti_me"].last_valid_index()]
+        assert span.iloc[1:].notna().all()  # the first month has no prior level, by definition
+
+
+# ── 2c. SC1: the averaged series fails the no-leak check the month-end one passes ──
+
+
+def _lead_corr(pnl_returns: pd.Series, known_close_returns: pd.Series) -> float:
+    """corr(pnl_{t+1}, close_t): how much of next month's P&L return was already
+    visible in the month-end move at t. The E-07 leak, as one number."""
+    frame = pd.concat([pnl_returns.shift(-1), known_close_returns], axis=1).dropna()
+    return float(frame.iloc[:, 0].corr(frame.iloc[:, 1]))
+
+
+class TestAveragedSeriesIsCaught:
+    N_MONTHS = 600
+
+    @pytest.fixture(scope="class")
+    def world(self):
+        rng = np.random.default_rng(2026)
+        days = pd.bdate_range("1960-01-01", periods=self.N_MONTHS * 22)
+        daily = pd.Series(1000.0 * np.exp(np.cumsum(rng.normal(0.0002, 0.01, len(days)))), index=days)
+        closes, averages = daily.resample("ME").last(), daily.resample("ME").mean()
+        closes, averages = closes.iloc[: self.N_MONTHS], averages.iloc[: self.N_MONTHS]
+        n = len(closes)
+        raw = _raw(n=n, start=str(closes.index[0].date()), seed=5)
+        raw.index = closes.index.rename("date")
+        raw["sp500_close_me"], raw["sp500_avg"] = closes.to_numpy(), averages.to_numpy()
+        raw["div_yield"] = 0.02
+        return raw
+
+    def _pnl_equity_returns(self, raw: pd.DataFrame, price_col: str) -> pd.Series:
+        cfg = _cfg(pnl_splice={"equities": {"price_col": price_col}})
+        return compute_monthly_returns(splice.build_pnl_research_series(raw, cfg))["equities_tr"]
+
+    def test_month_end_pnl_passes(self, world):
+        known = world["sp500_close_me"].pct_change(fill_method=None)
+        assert abs(_lead_corr(self._pnl_equity_returns(world, "sp500_close_me"), known)) < 0.15
+
+    def test_the_same_builder_on_averages_fails(self, world):
+        known = world["sp500_close_me"].pct_change(fill_method=None)
+        assert _lead_corr(self._pnl_equity_returns(world, "sp500_avg"), known) > 0.3
+
+
+# ── 2d. pandas 2/3 independence ─────────────────────────────────────────────
+
+
+class TestPandasIndependence:
+    def test_an_interior_gap_is_nan_never_forward_filled(self):
+        """pandas 2's default pct_change pads the gap (a 0 return, then a 2-month one);
+        fill_method=None keeps both NaN. Green on pandas 2 and 3."""
+        cfg = _cfg(pnl_splice=EQUITIES_ONLY)
+        raw = _raw()
+        gap = raw.index[20]
+        raw.loc[gap, "sp500_close_me"] = np.nan
+        returns = compute_monthly_returns(splice.build_pnl_research_series(raw, cfg))["equities_tr"]
+        after = raw.index[21]
+        assert np.isnan(returns[gap]) and np.isnan(returns[after])
+        assert returns.drop([gap, after]).iloc[1:].notna().all()
+
+    def test_every_platform_pct_change_passes_fill_method(self):
+        root = Path(splice.__file__).resolve().parent
+        bad = [
+            f"{path.relative_to(root)}:{node.lineno}"
+            for path in sorted(root.rglob("*.py"))
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "attr", "") == "pct_change"
+            and not any(k.arg == "fill_method" for k in node.keywords)
+        ]
+        assert root.name == "platform" and bad == [], bad
 
 
 # ── 3. The wealth line: run_backtest(pnl_returns=...) ───────────────────────
@@ -338,7 +493,13 @@ class TestIndexMonthEndFetch:
     def test_live_config_has_the_fetch_and_lag_entries_but_no_pnl_splice_block(self):
         cfg = load_platform_config()
         assert cfg["index_monthly"]["^GSPC"] == {"name": "sp500_close_me", "pnl_only": True}
-        assert cfg["publication_lags"]["sp500_close_me"] == 0
+        assert cfg["fred_monthly"]["series"]["DGS10"] == {"name": "dgs10_me", "pnl_only": True}
+        assert cfg["fred_monthly"]["series"]["DCOILWTICO"] == {"name": "wti_me", "pnl_only": True}
+        for name in ("sp500_close_me", "dgs10_me", "wti_me"):
+            assert cfg["publication_lags"][name] == 0, name
+        assert splice.pnl_only_columns(cfg) == {"sp500_close_me", "dgs10_me", "wti_me"}
+        # The overlay's sources are exactly the live P&L-only columns plus feature-side wti_fred.
+        assert splice.pnl_only_columns({**cfg, "pnl_splice": PNL_SPLICE_OVERLAYS}) == splice.pnl_only_columns(cfg)
         assert "^GSPC" not in str(cfg["universe"])
         assert "pnl_splice" not in cfg  # 08.3-02 writes it after the before run and the migration
 
