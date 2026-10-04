@@ -662,3 +662,136 @@ class TestIndexMonthEndFetch:
         assert "^GSPC" not in str(cfg["universe"])
         assert "pnl_splice" not in cfg  # 08.3-02 writes it after the before run and the migration
 
+
+
+# ── 5. The tracked migration (08.3-02 Task 1; V1, V4) ───────────────────────
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TRACKED_RAW = REPO_ROOT / "data" / "checkpoints" / "platform" / "monthly_raw.parquet"
+TRACKED_DEV_FEATURES = REPO_ROOT / "data" / "checkpoints" / "platform" / "monthly_features.parquet"
+TRACKED_HOLDOUT_FEATURES = REPO_ROOT / "data" / "holdout" / "monthly_features.parquet"
+TRACKED_MARKER = REPO_ROOT / "data" / "checkpoints" / "platform" / "publication_lags.json"
+#: The pre-08.3 data commit: the tracked monthly_raw before the additive migration.
+PRE_08_3_DATA_COMMIT = "b2907787694fdc04dacaa1e11cf82b8395923533"
+MONTH_END_COLUMNS = ["sp500_close_me", "dgs10_me", "wti_me"]
+
+
+def _pre_migration_raw() -> pd.DataFrame | None:
+    """The tracked monthly_raw at the pre-08.3 data commit, or None if git/the blob is unreachable."""
+    import io
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "show", f"{PRE_08_3_DATA_COMMIT}:data/checkpoints/platform/monthly_raw.parquet"],
+            capture_output=True, check=True, cwd=REPO_ROOT,
+        ).stdout
+        return pd.read_parquet(io.BytesIO(out))
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError, ValueError):
+        return None
+
+
+class TestTrackedMigration:
+    def test_the_47_existing_columns_equal_the_pre_08_3_blob_exactly(self):
+        before = _pre_migration_raw()
+        if before is None:
+            pytest.skip(f"git blob {PRE_08_3_DATA_COMMIT[:8]} unreachable")
+        raw = pd.read_parquet(TRACKED_RAW)
+        assert before.shape == (776, 47)
+        assert raw.shape == (776, 50)
+        assert raw.index.equals(before.index)
+        assert list(raw.columns) == list(before.columns) + MONTH_END_COLUMNS
+        pd.testing.assert_frame_equal(raw[before.columns], before, check_exact=True)
+
+    def test_coverage_of_the_month_end_columns(self):
+        raw = pd.read_parquet(TRACKED_RAW)
+        assert raw["sp500_close_me"].notna().all() and raw["dgs10_me"].notna().all()
+        assert raw.loc[raw.index < OIL_JOIN, "wti_me"].isna().all()
+        assert raw.loc[raw.index >= OIL_JOIN, "wti_me"].notna().all()
+
+    def test_features_rebuilt_from_the_tracked_raw_equal_dev_and_holdout_exactly(self):
+        """D-01 neutrality on real data: the migration moved no feature."""
+        from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
+
+        cfg = load_platform_config()
+        raw = pd.read_parquet(TRACKED_RAW)
+        assert set(MONTH_END_COLUMNS) <= set(raw.columns)
+        rebuilt = transforms_monthly.features_from_raw(raw, cfg)
+        assert not (set(MONTH_END_COLUMNS) & set(rebuilt.columns))
+        dev, holdout = split_by_holdout_boundary(rebuilt, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+        pd.testing.assert_frame_equal(dev, pd.read_parquet(TRACKED_DEV_FEATURES), check_exact=True, check_freq=False)
+        pd.testing.assert_frame_equal(
+            holdout, pd.read_parquet(TRACKED_HOLDOUT_FEATURES), check_exact=True, check_freq=False
+        )
+
+    def test_the_tracked_marker_matches_the_live_lag_table(self):
+        from trading_crab_lib.platform.ingestion.publication_lags import lag_marker_matches
+
+        assert lag_marker_matches(TRACKED_MARKER, load_platform_config())
+
+    @pytest.mark.parametrize("dropped", MONTH_END_COLUMNS)
+    def test_dropping_a_lag_entry_makes_apply_publication_lags_raise(self, dropped):
+        from trading_crab_lib.platform.ingestion.publication_lags import apply_publication_lags
+
+        cfg = copy.deepcopy(load_platform_config())
+        raw = pd.read_parquet(TRACKED_RAW)[MONTH_END_COLUMNS]
+        apply_publication_lags(raw, cfg)  # the live table lists all three
+        del cfg["publication_lags"][dropped]
+        with pytest.raises(ValueError, match=dropped):
+            apply_publication_lags(raw, cfg)
+
+
+class TestMigrationScriptGuards:
+    """``scripts/migrate_month_end_columns.py``: the checks it raises on before saving."""
+
+    def _frames(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        raw = pd.read_parquet(TRACKED_RAW)
+        return raw, raw.drop(columns=MONTH_END_COLUMNS)
+
+    def test_the_tracked_raw_passes_every_check(self):
+        from migrate_month_end_columns import check_migrated
+
+        new, existing = self._frames()
+        corrs = check_migrated(new, existing)
+        assert all(v >= 0.98 for v in corrs.values()), corrs
+
+    def test_a_changed_existing_cell_raises(self):
+        from migrate_month_end_columns import check_migrated
+
+        new, existing = self._frames()
+        new = new.copy()
+        new.iloc[100, new.columns.get_loc("sp500")] *= 1 + 1e-12
+        with pytest.raises(AssertionError):
+            check_migrated(new, existing)
+
+    def test_merge_style_column_reordering_raises(self):
+        from migrate_month_end_columns import check_migrated
+
+        new, existing = self._frames()
+        reordered = new[MONTH_END_COLUMNS + list(existing.columns)]  # what merge=True's ordered_cols does
+        with pytest.raises(AssertionError, match="column order"):
+            check_migrated(reordered, existing)
+
+    def test_an_added_row_raises(self):
+        from migrate_month_end_columns import check_migrated
+
+        new, existing = self._frames()
+        extra = pd.DataFrame(np.nan, index=[pd.Timestamp("2026-09-30")], columns=new.columns)
+        with pytest.raises(AssertionError, match="index"):
+            check_migrated(pd.concat([new, extra]), existing)
+
+    def test_wti_values_before_the_join_raise(self):
+        from migrate_month_end_columns import check_migrated
+
+        new, existing = self._frames()
+        new = new.copy()
+        new.loc[pd.Timestamp("1985-12-31"), "wti_me"] = 26.0
+        with pytest.raises(AssertionError, match="wti_me"):
+            check_migrated(new, existing)
+
+    def test_a_second_run_is_refused_before_any_fetch(self):
+        import migrate_month_end_columns as mig
+
+        with patch.object(mig, "fetch_month_end_columns") as fetch, pytest.raises(SystemExit, match="runs once"):
+            mig.migrate(load_platform_config(), dry_run=True)
+        fetch.assert_not_called()
