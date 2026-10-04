@@ -649,7 +649,9 @@ class TestIndexMonthEndFetch:
                 assert macro_monthly._fetch_index_month_end(cfg) == {}
         assert "sp500_close_me" in caplog.text
 
-    def test_live_config_has_the_fetch_and_lag_entries_but_no_pnl_splice_block(self):
+    def test_live_config_has_the_fetch_and_lag_entries_and_the_pnl_splice_block(self):
+        # 08.3 (2026-10-04): `"pnl_splice" not in cfg` -> the live block equals PNL_SPLICE_OVERLAYS
+        # (08.3-02 Task 3 wrote it after the before run, the migration and Glenn's "Run").
         cfg = load_platform_config()
         assert cfg["index_monthly"]["^GSPC"] == {"name": "sp500_close_me", "pnl_only": True}
         assert cfg["fred_monthly"]["series"]["DGS10"] == {"name": "dgs10_me", "pnl_only": True}
@@ -660,7 +662,13 @@ class TestIndexMonthEndFetch:
         # The overlay's sources are exactly the live P&L-only columns plus feature-side wti_fred.
         assert splice.pnl_only_columns({**cfg, "pnl_splice": PNL_SPLICE_OVERLAYS}) == splice.pnl_only_columns(cfg)
         assert "^GSPC" not in str(cfg["universe"])
-        assert "pnl_splice" not in cfg  # 08.3-02 writes it after the before run and the migration
+        # The live block is the constant, verbatim; join_date stays a string (quoted in the YAML).
+        assert cfg["pnl_splice"] == PNL_SPLICE_OVERLAYS
+        assert isinstance(cfg["pnl_splice"]["oil"]["join_date"], str)
+        # The feature-side splice block is untouched by the overlay (D-01).
+        assert cfg["splice"]["equities"]["price_col"] == "sp500"
+        assert cfg["splice"]["long_duration"]["yield_col"] == "fred_gs10"
+        assert cfg["splice"]["oil"]["source_col"] == ["wti_fred", "wti_crude"]
 
 
 

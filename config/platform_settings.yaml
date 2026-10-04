@@ -323,6 +323,23 @@ splice:
     yield_units:   percent   # FRED TB3MS is percent (3.72), not decimal
     tradable:      FZFXX
 
+# ── P&L returns on month-end prices (08.3; DECISIONS E-08, D-02) ─────────────
+# Overlaid onto `splice:` for P&L only: the strategy/ablation wealth line and
+# the SPY / 60-40 / Faber baselines, Faber's SMA signal included (E-10 a).
+# `splice:` itself, and so every feature and L1/L2 input, is unchanged (D-01,
+# E-10 b). Each class here is forced non-optional and takes one scalar source,
+# so a missing month-end column raises instead of reading an average.
+pnl_splice:
+  equities:
+    price_col: sp500_close_me    # ^GSPC month-end close + div_yield accrual (div_yield lag 3 unchanged)
+  long_duration:
+    yield_col: dgs10_me          # DGS10 month-end yield; CMT par-bond repricing, yield_units percent inherited
+  oil:                           # D-02: WTISPLC avg/avg through 1986-01, DCOILWTICO close/close from 1986-02
+    method:    ratio_splice
+    old_col:   wti_fred
+    new_col:   wti_me
+    join_date: "1986-01-31"      # quoted: an unquoted date would load as datetime.date
+
 # ── Universe (tickers) ─────────────────────────────────────────────────────────
 universe:
   core_classes:
