@@ -4,15 +4,15 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08.3
 current_phase_name: Regime Rebuild I — month-end returns (E-07) and re-measure
-status: planned
-stopped_at: Phase 08.3 PLANNED 2026-10-02 (3 plans; checker PASS, 5 warnings fixed); Phase 08.4 inserted; awaiting Glenn approval before /gsd-execute-phase 8.3
+status: verifying
+stopped_at: Phase 08.3 EXECUTED + VERIFIED (human_needed) 2026-10-04 — 3/3 plans; E-12: tilt still loses (3.8789 vs 4.1124), core mix stands; registry 46->48; suite 2699 on pandas 2+3; awaiting Glenn Mac run + P7/P9 sign-offs
 last_updated: "2026-10-02T15:23:51.560Z"
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 73
   completed_plans: 72
-last_activity: 2026-10-02
+last_activity: 2026-10-04
 last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."
 ---
 

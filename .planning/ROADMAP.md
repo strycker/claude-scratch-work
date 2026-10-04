@@ -796,9 +796,9 @@ A-03 hysteresis revisit and REG-01 second axis. Phase 08.4's discussion decides 
 
 Plans:
 
-- [ ] 08.3-01-PLAN.md — **Month-end P&L, built but off.** ^GSPC / DGS10 / DCOILWTICO month-end columns (P&L-only, lag 0); one `features_from_raw` drop shared by the build and the recompute script, with a mutation-proved no-leak check on `monthly_features` and on the L2 fit; `build_pnl_research_series` + `pnl_splice` overlay (oil ratio-spliced to WTISPLC at 1986-01, D-02); `run_backtest(pnl_returns=)` at the wealth line only, with the ablation getting the same frame; baselines and report wiring (Faber month-end signal and returns, D-08; tilt inputs unchanged, D-09); ceiling test sites 46 → 48. The live P&L stays unchanged until 08.3-02 — wave 1
-- [ ] 08.3-02-PLAN.md — **Before, migrate, decide, run.** NO_REGISTRY before run on HEAD reproduces 8.1 at rel 1e-9 (`pit_08.3/before/`); additive `monthly_raw` migration (+3 columns; the 47 existing columns exact; merge=False; marker) plus a feature-neutrality check; checkpoint; `pnl_splice` activated and one 2-row run (46 → 48, tag `08.3-monthend-tilt-vs-ablation`); DECISIONS E-07 done, E-08 built, E-12 before|after with DSR at 48 vs 2.2606 and the E-06 / E-09 answers; scoreboard tag and tracked re-pins so the suite ends green — wave 2, checkpoint
-- [ ] 08.3-03-PLAN.md — **Page and notebooks.** E-07 caveat narrowed to oil before 1986; real-data scratch page (same book, 55 model columns, 08.3 scoreboard); P9 (N7) and P7 re-executed headless; README and recorded counts; full suite on pandas 3 and pandas 2 — wave 3
+- [x] 08.3-01-PLAN.md — **Month-end P&L, built but off.** ^GSPC / DGS10 / DCOILWTICO month-end columns (P&L-only, lag 0); one `features_from_raw` drop shared by the build and the recompute script, with a mutation-proved no-leak check on `monthly_features` and on the L2 fit; `build_pnl_research_series` + `pnl_splice` overlay (oil ratio-spliced to WTISPLC at 1986-01, D-02); `run_backtest(pnl_returns=)` at the wealth line only, with the ablation getting the same frame; baselines and report wiring (Faber month-end signal and returns, D-08; tilt inputs unchanged, D-09); ceiling test sites 46 → 48. The live P&L stays unchanged until 08.3-02 — wave 1
+- [x] 08.3-02-PLAN.md — **Before, migrate, decide, run.** NO_REGISTRY before run on HEAD reproduces 8.1 at rel 1e-9 (`pit_08.3/before/`); additive `monthly_raw` migration (+3 columns; the 47 existing columns exact; merge=False; marker) plus a feature-neutrality check; checkpoint; `pnl_splice` activated and one 2-row run (46 → 48, tag `08.3-monthend-tilt-vs-ablation`); DECISIONS E-07 done, E-08 built, E-12 before|after with DSR at 48 vs 2.2606 and the E-06 / E-09 answers; scoreboard tag and tracked re-pins so the suite ends green — wave 2, checkpoint
+- [x] 08.3-03-PLAN.md — **Page and notebooks.** E-07 caveat narrowed to oil before 1986; real-data scratch page (same book, 55 model columns, 08.3 scoreboard); P9 (N7) and P7 re-executed headless; README and recorded counts; full suite on pandas 3 and pandas 2 — wave 3
 
 ### Phase 08.4: Cold-Start Rebuild & Learnings Before Migration (INSERTED)
 
@@ -882,6 +882,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
-| 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 0/3 | Planned | - |
+| 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Verified — human_needed (Mac run + P7/P9 sign-offs) | - |
 | 08.4 Cold-Start Rebuild & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
