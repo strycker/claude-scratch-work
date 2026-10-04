@@ -368,6 +368,24 @@ def to_monthly_spine(daily_df: pd.DataFrame, monthly_freq: str = "ME") -> pd.Dat
 
 # ── public API ───────────────────────────────────────────────────────────────
 
+def fetch_yfinance_month_end(tickers: list[str], start: str, end: str, monthly_freq: str = "ME") -> pd.DataFrame:
+    """Month-end closes for `tickers` straight from yfinance (no Tiingo, no Stooq).
+
+    For indexes such as ``^GSPC`` that the universe chain cannot serve (Tiingo
+    leads it and has no indexes; the chain only reaches yfinance when Tiingo
+    returns nothing). Same SSL-bypass session as the universe chain (P22).
+
+    Returns:
+        Month-end DataFrame, one column per recovered ticker; empty if none.
+    """
+    results = _batch_yfinance_daily(tickers, start, end, session=_ssl_bypass_curl_session())
+    if not results:
+        return pd.DataFrame()
+    daily = pd.concat(results.values(), axis=1)
+    daily.index.name = "date"
+    return to_monthly_spine(daily, monthly_freq)
+
+
 def fetch_universe_prices(cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Fetch daily universe prices and derive a monthly spine.
 

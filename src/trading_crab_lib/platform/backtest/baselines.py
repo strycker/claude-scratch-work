@@ -242,6 +242,7 @@ def no_regime_ablation(
     registry_path: Any = None,
     frozen_l1_features: list[str] | None = None,
     trial_tag: str | None = None,
+    pnl_returns: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """The no-regime ablation — a ONE-LINE delegation to the tilt-off driver path.
 
@@ -279,6 +280,9 @@ def no_regime_ablation(
     degenerate single-state) model path, and therefore is part of the
     multiple-testing surface the registry bounds.
 
+    ``pnl_returns`` (08.3) is passed straight through so both legs earn the
+    identical P&L series.
+
     Returns:
         tuple[pd.DataFrame, dict[str, list]]: the SAME
         ``(equity_curve, per_step_metrics)`` contract as ``run_backtest``.
@@ -292,6 +296,7 @@ def no_regime_ablation(
         registry_path=registry_path,
         frozen_l1_features=frozen_l1_features,
         trial_tag=trial_tag,
+        pnl_returns=pnl_returns,
     )
 
 

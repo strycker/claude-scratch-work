@@ -511,3 +511,102 @@ def build_core_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.Dat
     result = pd.concat(columns, axis=1)
     result.attrs["splice_provenance"] = provenance
     return result
+
+
+# ── P&L series (phase 08.3, DECISIONS E-08) ──────────────────────────────────
+#
+# P&L (strategy, ablation, baselines) is measured on month-end-to-month-end
+# returns; features and the tilt's inputs stay on ``build_core_research_series``
+# (D-01, D-09). The P&L builder is that same function run on a config whose
+# ``splice`` classes are overlaid by ``pnl_splice``. Raw columns only P&L reads
+# are dropped before ``monthly_features`` is assembled
+# (``transforms_monthly.features_from_raw``) so they never become L2 inputs.
+
+# Every key under a splice class that names a raw column the FEATURE side reads.
+_FEATURE_SOURCE_KEYS: tuple[str, ...] = (
+    "source_col", "fallback_col", "yield_col", "price_col", "div_yield_col", "old_col", "new_col",
+    "cross_check_col",
+)
+
+
+def _class_source_columns(params: dict[str, Any]) -> set[str]:
+    return {col for key in _FEATURE_SOURCE_KEYS for col in source_candidates(params, key)}
+
+
+def pnl_only_columns(cfg: dict[str, Any]) -> set[str]:
+    """Raw columns that only P&L may read — never features, never L2.
+
+    The union of (a) the names flagged ``pnl_only: true`` under
+    ``fred_monthly.series`` and ``index_monthly`` and (b) the ``pnl_splice``
+    source columns, minus every column the feature-side ``splice`` block reads.
+    Config-driven: holds whether or not a ``pnl_splice`` block is present.
+
+    Raises:
+        ValueError: if a ``pnl_only`` flag names a column the feature-side splice
+            reads — dropping it would change the features.
+    """
+    flagged = {
+        meta["name"]
+        for block in (cfg.get("fred_monthly", {}).get("series", {}), cfg.get("index_monthly") or {})
+        for meta in block.values()
+        if meta.get("pnl_only", False)
+    }
+    feature_sources: set[str] = set()
+    for params in cfg.get("splice", {}).values():
+        feature_sources |= _class_source_columns(params)
+    clash = flagged & feature_sources
+    if clash:
+        raise ValueError(
+            f"pnl_only_columns: {sorted(clash)} flagged pnl_only but read by the feature-side `splice` block; "
+            "dropping them from monthly_features would change the features."
+        )
+    overlay_sources: set[str] = set()
+    for params in (cfg.get("pnl_splice") or {}).values():
+        overlay_sources |= _class_source_columns(params)
+    return flagged | (overlay_sources - feature_sources)
+
+
+def pnl_splice_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
+    """``cfg`` with each ``pnl_splice[cls]`` shallow-merged onto ``splice[cls]``.
+
+    Returns a new dict; ``cfg`` (and its ``splice`` block) is never edited
+    (pitfall 2: editing ``splice.oil`` would move the features). Overlaid
+    classes are forced non-optional and their overlaid source keys must be
+    scalars, so a missing month-end column raises in the preflight instead of
+    falling back to an average series (pitfall 5).
+
+    Raises:
+        ValueError: on an overlay class absent from ``splice``, or a list-valued
+            (chained) source key in an overlay.
+    """
+    overlays: dict[str, dict[str, Any]] = cfg.get("pnl_splice") or {}
+    splice_cfg = cfg["splice"]
+    unknown = sorted(set(overlays) - set(splice_cfg))
+    if unknown:
+        raise ValueError(f"pnl_splice: unknown class(es) {unknown}; expected a subset of {sorted(splice_cfg)}")
+    merged: dict[str, Any] = {}
+    for class_name, params in splice_cfg.items():
+        overlay = overlays.get(class_name)
+        if overlay is None:
+            merged[class_name] = params
+            continue
+        chained = [key for key in _FEATURE_SOURCE_KEYS if isinstance(overlay.get(key), list)]
+        if chained:
+            raise ValueError(
+                f"pnl_splice.{class_name}: {chained} must be a scalar column — P&L sources have no "
+                "fallback chain, so a missing month-end column raises instead of reading an average."
+            )
+        merged[class_name] = {**params, **overlay, "optional": False}
+    return {**cfg, "splice": merged}
+
+
+def build_pnl_research_series(raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+    """The research series P&L is measured on (phase 08.3, DECISIONS E-08).
+
+    Without a ``pnl_splice`` block this IS ``build_core_research_series(raw, cfg)``.
+    With one, the overlaid classes read their month-end sources (``pnl_splice_cfg``);
+    the rest are unchanged. Features and the tilt's inputs never call this (D-09).
+    """
+    if not cfg.get("pnl_splice"):
+        return build_core_research_series(raw, cfg)
+    return build_core_research_series(raw, pnl_splice_cfg(cfg))

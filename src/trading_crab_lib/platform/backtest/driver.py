@@ -441,6 +441,28 @@ def _realized_return(
     return asset_leg + cash_weight * cash_return
 
 
+def _check_pnl_returns(
+    pnl_returns: pd.DataFrame, asset_returns: pd.DataFrame, decision_dates: list[pd.Timestamp]
+) -> None:
+    """Refuse a ``pnl_returns`` frame that cannot stand in for ``asset_returns`` at the
+    realized-return row: different columns, a missing decision date, or a NaN where
+    ``asset_returns`` has a value (that NaN would silently book 0 for that asset)."""
+    if set(pnl_returns.columns) != set(asset_returns.columns):
+        raise ValueError(
+            f"pnl_returns columns {sorted(pnl_returns.columns)} != asset_returns columns "
+            f"{sorted(asset_returns.columns)}"
+        )
+    dates = pd.DatetimeIndex(decision_dates)
+    missing = dates.difference(pnl_returns.index)
+    if len(missing):
+        raise ValueError(f"pnl_returns has no row for decision date(s) {list(missing[:5])}")
+    have = asset_returns.reindex(dates).notna()
+    gap = have & pnl_returns.reindex(index=dates, columns=asset_returns.columns).isna()
+    if gap.to_numpy().any():
+        where = [(str(d.date()), c) for d, c in gap.stack().loc[lambda x: x].index[:5]]
+        raise ValueError(f"pnl_returns is NaN where asset_returns has a value on decision date(s): {where}")
+
+
 def run_backtest(
     monthly_features: pd.DataFrame,
     asset_returns: pd.DataFrame,
@@ -453,6 +475,7 @@ def run_backtest(
     frozen_l1_features: list[str] | None = None,
     trial_tag: str | None = None,
     use_regime_filter: bool = True,
+    pnl_returns: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, dict[str, list]]:
     """Run the L1->L4 expanding-window walk-forward loop, log exactly one trial.
 
@@ -516,6 +539,12 @@ def run_backtest(
             ``config["use_regime_filter"]`` (CR-05). A ``run_backtest`` row
             WITHOUT the key ran unfiltered: every such row in both ledgers
             predates ec354b1 (2026-09-23T20:10:50Z), when the filter arrived.
+        pnl_returns: the returns the held book EARNS (phase 08.3, E-08), read
+            only at the realized-return row. ``None`` (default) = ``asset_returns``,
+            byte-identical to before. Turnover, scale, active regime, cost and
+            degraded never read it: ``returns_by_regime_stats`` and the vol target
+            keep ``asset_returns`` (D-09). Must have ``asset_returns``' columns and
+            be non-NaN on every decision date wherever ``asset_returns`` is.
 
     Returns:
         tuple[pd.DataFrame, dict[str, list]]: ``(equity_curve, per_step_metrics)``.
@@ -546,6 +575,10 @@ def run_backtest(
     # and no reliance on the config end_date to bound the loop.
     dev_features, _ = split_by_holdout_boundary(monthly_features, cutoff=DEFAULT_HOLDOUT_CUTOFF)
     dev_asset_returns, _ = split_by_holdout_boundary(asset_returns, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    if pnl_returns is None:
+        dev_pnl_returns = dev_asset_returns
+    else:
+        dev_pnl_returns, _ = split_by_holdout_boundary(pnl_returns, cutoff=DEFAULT_HOLDOUT_CUTOFF)
 
     records: list[dict[str, Any]] = []
     per_step_metrics: dict[str, list] = {
@@ -569,6 +602,8 @@ def run_backtest(
     # silent sklearn work — without this the process looks hung, especially
     # after the early degraded-refit warnings stop and output goes quiet.
     steps = list(expanding_steps(dev_features.index, min_train=min_train))
+    if pnl_returns is not None:
+        _check_pnl_returns(dev_pnl_returns, dev_asset_returns, [test_index[0] for _, _, test_index in steps])
     total_steps = len(steps)
     started = time.monotonic()
     log.info(
@@ -671,7 +706,7 @@ def run_backtest(
 
         turnover = compute_turnover(prev_weights, new_weights)
         test_date = test_index[0]
-        asset_return_row = dev_asset_returns.loc[test_date]
+        asset_return_row = dev_pnl_returns.loc[test_date]  # the ONE P&L read (08.3)
         cash_ret = float(cash_returns.loc[test_date]) if cash_returns is not None else 0.0
         gross = _realized_return(new_weights, new_cash, asset_return_row, cash_return=cash_ret)
         net = apply_transaction_cost(gross, turnover, cost_bps)

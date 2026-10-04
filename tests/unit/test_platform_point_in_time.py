@@ -63,6 +63,7 @@ def _macro_names(cfg: dict) -> list[str]:
         *(meta["name"] for meta in cfg["fred_monthly"]["series"].values()),
         *(row[0] for row in cfg["multpl_monthly"]["datasets"]),
         *(entry["name"] for entry in cfg["macrotrends_monthly"]["series"]),
+        *(meta["name"] for meta in cfg["index_monthly"].values()),
     ]
 
 

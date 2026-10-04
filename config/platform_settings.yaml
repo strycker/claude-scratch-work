@@ -60,6 +60,18 @@ fred_monthly:
     TOTALSL:
       name:  "fred_totalsl"
 
+# ── Index month-end closes (phase 08.3, DECISIONS E-08) ───────────────────────
+# Daily index closes from yfinance, resampled to the month-end close
+# (prices_daily.fetch_yfinance_month_end). `pnl_only: true` = P&L only: the
+# column lands in monthly_raw (the P&L builder reads it there) but
+# transforms_monthly.features_from_raw drops it, so it never becomes a feature
+# or an L2 input (08.3 L2 leak guard). Not in `universe`: Tiingo leads that
+# chain and has no indexes. Absent block = no fetch.
+index_monthly:
+  "^GSPC":
+    name:     "sp500_close_me"   # S&P 500 month-end close, 1927-12+
+    pnl_only: true
+
 # ── FRED daily-frequency credit series (L4-04, Phase 4 Pitfall 2) ─────────────
 # BAA/AAA above are monthly-only on FRED; the tripwire's credit-spread-velocity
 # signal needs genuinely daily data. DAAA/DBAA are FRED's daily counterparts
@@ -198,6 +210,8 @@ publication_lags:
   GDX:  0
   UNG:  0
   UEC:  0
+  # Index month-end close (index_monthly, 08.3, P&L only) — real-time.
+  sp500_close_me: 0
   # Splice research series: lagged through their inputs (equities_tr through
   # div_yield). Shifting them would double-lag and misalign the P&L.
   equities_tr:      derived
