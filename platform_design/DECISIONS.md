@@ -108,11 +108,12 @@ recommendation (2026-09-29) and **not yet ruled on**. Glenn edits it.
 | E-04 | Relative verdicts (the sign of wealth_delta and dd_delta, and the dependence verdict) are **not** guaranteed under the CR-03 look-ahead. Absolute verdicts stand. | Look-ahead flatters each leg, but differently | 07-VERIFICATION-WAVE2 | record. **Resolved by E-06** (2026-09-30): the point-in-time re-measurement |
 | E-05 | Superseded numbers are never overwritten: amend with old → new and a dated pointer. | Audit trail | Phase 7 D-05; 08-MEASUREMENTS §11 | SIMPLIFY (git history does most of this) |
 | E-06 | **The 8.1 answer: NO.** On point-in-time data the regime tilt does **not** beat the no-regime ablation: terminal log wealth 3.8909 vs 4.0424 (delta −0.1515) net of 10 bps, same run; its drawdown is 4.07 pp deeper; neither leg clears the DSR hurdle 2.2442. Detail table below. | The pre-declared D-04 rule (tilt beats ablation iff strategy TLW > ablation TLW); resolves E-04 | 08.1-03 Task 4; 08.1-CONTEXT D-04/D-06; registry rows 45–46 | record |
-| E-07 | Returns built from **monthly-average prices** (`equities_tr` from multpl sp500, `oil` from WTISPLC, `long_duration_tr` from GS10) contain an intra-month move that month-end features already see. Publication lags do not fix it, and it may flatter the tilt over the ablation. | Residual look-ahead in the P&L, not in the features | Ruling 3; 08.1-03 | **DEFER** to 8.2 |
-| E-08 | **P&L returns on month-end prices (Phase 08.3).** Strategy/ablation P&L and the SPY/60-40/Faber baselines use month-end-to-month-end returns (`^GSPC` + div accrual; DGS10 repricing; DCOILWTICO from 1986, WTISPLC monthly average before 1986 as a bounded exception). Features and L1 labels unchanged. | Fixes E-07 without mixing a measurement fix with a model change | Glenn 2026-10-02; Phase 08.3 | to build |
+| E-07 | Returns built from **monthly-average prices** (`equities_tr` from multpl sp500, `oil` from WTISPLC, `long_duration_tr` from GS10) contain an intra-month move that month-end features already see. Publication lags do not fix it, and it may flatter the tilt over the ablation. | Residual look-ahead in the P&L, not in the features | Ruling 3; 08.1-03 | ~~**DEFER** to 8.2~~ **done** (08.3) — CHANGED 2026-10-04 (08.3-02, Glenn chose "Run"): P&L is on month-end prices (E-08), answer in E-12. **Bounded exception (D-02):** oil before 1986-01 stays on the WTISPLC monthly average. Computed from the tracked `monthly_raw`: WTISPLC changed in 84 of 287 months 1962-02..1985-12 (29.3%; 8 of 131 before 1973, 6.1%); the Jan-86 average 22.945 vs close 19.58, an avg→close move of −14.67%, is never booked (Jan-86 is booked avg/avg −15.73%, Feb-86 close/close −32.43%) |
+| E-08 | **P&L returns on month-end prices (Phase 08.3).** Strategy/ablation P&L and the SPY/60-40/Faber baselines use month-end-to-month-end returns (`^GSPC` + div accrual; DGS10 repricing; DCOILWTICO from 1986, WTISPLC monthly average before 1986 as a bounded exception). Features and L1 labels unchanged. | Fixes E-07 without mixing a measurement fix with a model change | Glenn 2026-10-02; Phase 08.3 | ~~to build~~ **built** — CHANGED 2026-10-04 (08.3-01 code switched off; 08.3-02 additive `monthly_raw` migration (+ `sp500_close_me`, `dgs10_me`, `wti_me`, lag 0) and the live `pnl_splice` block) |
 | E-09 | **Core-mix rule (pre-declared 2026-10-02, before any 8.3 'after' number):** MVP-1's core leaves the no-regime mix (A-13) only if Faber, 60/40 or SPY beats it on BOTH terminal log wealth AND max drawdown, common 1972–2020 window, net 10 bps, same measurement; ties → higher TLW. Tilt-vs-ablation keeps E-06's rule. A triggered switch is implemented in the next phase. | Decide the core on returns a trader could earn, with the rule fixed in advance | Glenn 2026-10-02; Phase 08.3 | record |
 | E-10 | **8.3 measurement details (pre-declared 2026-10-02, before any after-number):** (a) Faber's 10-month SMA uses **month-end** prices for its signal and its returns (canonical Faber, as a switched core would trade); (b) the tilt's model inputs (`returns_by_regime`, EWMA vol target) stay on the current average-price series, matching what serving delivers, so only P&L moves (E-08). | Fair E-09 candidate; measurement fix kept separate from a model change | Glenn 2026-10-02; Phase 08.3 | record |
 | E-11 | **Vol target is estimated on average prices**, which understate monthly vol by ~13–17% (8.3 research), so realized strategy vol runs above the 10% target once P&L is month-end. DEFER to the cold start (08.4): re-estimate the vol/return inputs on month-end returns as a deliberate model change. | Measured in 08.3 research | Phase 08.3 research | DEFER (08.4) |
+| E-12 | **The 8.3 answers, on month-end P&L (E-08).** Tilt vs ablation (E-06 rule): **NO** — terminal log wealth 3.8789 vs 4.1124 (delta −0.2336, was −0.1515) net of 10 bps, same run; drawdown 6.35 pp deeper. Core mix (E-09 rule): **stands** — no candidate beats the no-regime mix on both TLW and MDD (Faber, SPY and 60/40 all earn more but draw down deeper). Neither leg clears the DSR hurdle 2.2606 (n = 48). Detail table below. | The two pre-declared rules applied mechanically to the one budgeted run | 08.3-02 Task 3; registry rows 47–48, tag `08.3-monthend-tilt-vs-ablation` (2026-10-04) | record |
 
 **E-06 detail — before | after (recorded 2026-09-30, 08.1-03).** Harness as configured: L2-posterior-driven
 (ruling 2), not the L1-only routing of E-02. Window 1972-01-31 → 2020-12-31, **588** monthly decision
@@ -153,6 +154,46 @@ tracked record → before reflects Phase 8 code; before → after reflects the l
 served weekly nowcaster is still input-independent (1 distinct posterior over 233 months); that is the
 deferred L2 recipe (8.2, L2-02), not part of this answer.
 
+**E-12 detail — before | after (recorded 2026-10-04, 08.3-02).** Same harness as E-06 (L2-posterior-driven,
+ruling 2). Common window 1972-01-31 → 2020-12-31, **588** monthly decision steps, 10 bps per rebalance.
+BEFORE = the D-05 `NO_REGISTRY` run on HEAD with no `pnl_splice` block (P&L on monthly averages, equal to the
+8.1 outputs at rel 0.0; `outputs/reports/platform/pit_08.3/before/`); AFTER = the one budgeted run with the
+block (registry 46 → 48, tag `08.3-monthend-tilt-vs-ablation`, `outputs/reports/platform/`). Both on the same
+features, labels and decisions (turnover, scale, active regime and degraded steps unchanged, D-09), so
+before → after isolates the P&L prices. Baselines are rebuilt by `baseline_curves` from `monthly_raw`; Faber's
+signal moves to month-end too (E-10 a).
+
+| Leg (common window 1972–2020) | TLW before | TLW after | MDD before | MDD after | Sharpe / DSR before (n 48) | Sharpe / DSR after (n 48) |
+|---|---|---|---|---|---|---|
+| Strategy (regime tilt) | 3.8909 | **3.8789** | −23.90% | −26.96% | 1.0685 / 7.8e-72, fails | 0.9149 / 1.4e-124, fails |
+| No-regime ablation (A-13 core) | 4.0424 | **4.1124** | −19.83% | −20.60% | 1.0529 / 1.1e-10, fails | 0.9885 / 1.3e-18, fails |
+| SPY buy & hold | 5.0022 | 4.9900 | −49.17% | −51.09% | 0.8738 / 1.9e-83, fails | 0.7477 / 1.4e-156, fails |
+| 60/40 | 4.4799 | 4.5098 | −27.15% | −29.49% | 1.1638 / 1.1e-50, fails | 0.9898 / 4.3e-109, fails |
+| Faber 10-month SMA | 5.5451 | 4.9759 | −18.98% | −23.38% | 1.2722 / 4.6e-23, fails | 0.9407 / 7.7e-72, fails |
+| **Wealth delta (strategy − ablation)** | −0.1515 | **−0.2336** | | | | |
+| **Drawdown delta (strategy − ablation)** | | | −4.07 pp | −6.35 pp | | |
+| Strategy degraded steps | 86 | 86 | | | | |
+
+Own span (baselines from 1962; the strategy and ablation own span is the common window): SPY 5.6882 → 5.7471
+(MDD −49.17% → −51.09%), 60/40 5.0404 → 5.1187 (−27.15% → −29.49%), Faber 6.4285 → 5.7114 (−18.98% → −23.38%).
+DSR: `evaluation.deflated_sharpe.quality_tier(returns, n_trials=48, sharpe_variance=1.0)` on each leg's
+common-window returns (the method of E-06, which reproduces its n = 46 values); variance 1.0 is the ADR-0002
+placeholder, so every column faces the same hurdle 2.2606170. Realized annualized vol rose from 7.73% to 9.13%
+(strategy) and from 8.15% to 8.89% (ablation): the inputs still estimate vol on averages (E-11).
+E-09 check (qualifier = TLW > 4.1124 AND MDD shallower than −20.60%): Faber +0.8634 TLW but −2.78 pp deeper;
+SPY +0.8775 but −30.48 pp; 60/40 +0.3974 but −8.89 pp; no qualifier. On the before numbers Faber would have
+qualified (0.86 pp shallower); that is the flattering 08.3-CONTEXT warned E-07 might cause.
+
+**Answer, tilt vs ablation (one sentence):** No — on month-end P&L the L2-posterior-driven regime tilt
+(ruling 2) ends at terminal log wealth 3.8789 against the no-regime ablation's 4.1124 net of 10 bps in the
+same run (delta −0.2336, wider than 8.1's −0.1515), so it does not beat the ablation, with its inputs still
+estimated on average prices (E-10 b; the vol-target miscalibration is E-11, deferred to 08.4).
+
+**Answer, core mix (one sentence):** The core mix stands: on the common 1972–2020 window no candidate beats
+the no-regime mix (4.1124, −20.60%) on both measures, because Faber (4.9759, −23.38%), SPY (4.9900, −51.09%)
+and 60/40 (4.5098, −29.49%) all earn more but draw down deeper, so A-13 stays `no_regime` and no switch is
+built.
+
 ## Process
 
 | ID | Decision | Why | Source | Lean |
@@ -164,6 +205,6 @@ deferred L2 recipe (8.2, L2-02), not part of this answer.
 | G-06 | **Phase 8.2 MVP keeps the regime view advisory.** The allocation runs on the no-regime path; the regime distribution is shown for information only. A rebuilt regime model (L2 recipe, CR-02, average-price returns E-07) must first beat the no-regime ablation on point-in-time data, walk-forward ≤2020-12, before it gets any weight. | E-06 NO: on point-in-time data the tilt loses to the ablation (−0.1515 TLW, 4.07 pp deeper drawdown) | Glenn, 2026-09-30 (8.1 close) | record |
 | G-07 | **Phase 8.2 scope:** MVP-1 page (A-13/A-14) + park classifier #2, joint driver, stability suite (moved, not deleted; weekly path must not import them) + module-map doc + notebooks N4 (serving), N6 (filtered belief), N7 (does the regime layer pay rent). Budget **0** rows (opening 46). E-07 fix and the regime rebuild come after. | Usable product first; regime work on its own track | Glenn 2026-10-01 | record; **built** (08.2-01..03, 2026-10-01), budget held at 0 (46 rows) |
 | G-08 | **Parked code lives in `platform/parked/`** (classifier #2, the joint driver, the stability suite). Active `src` must not import it, enforced by `tests/unit/test_platform_parked_boundary.py` (a fresh-interpreter `sys.modules` check plus an AST scan). To un-park: `git mv` the module back and edit its imports. The map is `platform_design/MODULE-MAP.md`. | Keep the weekly path small without deleting research code | Glenn 2026-10-01; Phase 08.2 (08.2-02) | KEEP (cheap to reverse) |
-| G-09 | **Phase 08.3 inserted (Regime Rebuild I):** E-07 month-end returns + one re-measurement before Phase 9. Budget **2 rows** (opening 46, ceiling 48, hurdle 2.2606). Later rebuild phases (L2 recipe/M6, CR-02/M5, A-03, REG-01) one module each, not yet inserted. | The regime rebuild starts with the measurement every later module is judged against | Glenn 2026-10-02 | record |
+| G-09 | **Phase 08.3 inserted (Regime Rebuild I):** E-07 month-end returns + one re-measurement before Phase 9. Budget **2 rows** (opening 46, ceiling 48, hurdle 2.2606). Later rebuild phases (L2 recipe/M6, CR-02/M5, A-03, REG-01) one module each, not yet inserted. **Spent 2026-10-04: 46 → 48**, tag `08.3-monthend-tilt-vs-ablation` (Glenn chose "Run" at the 08.3-02 checkpoint; CHANGED 2026-10-04). | The regime rebuild starts with the measurement every later module is judged against | Glenn 2026-10-02 | record |
 | G-10 | **Phase 08.4 inserted: Cold-Start Rebuild & Learnings, before Phase 9.** A fresh data pull, every model refit from scratch, actionable weekly predictions, and the learnings folded into REBUILD-FROM-SCRATCH-GUIDE / MODULE-MAP / MIGRATION-PLAN / ROADMAP, so Phase 9's migration order is evidence-based. Registry/DSR treatment on a cold start is an open question for 8.4's discussion: the append-only ledger and the D-16 denominator are standing rules, so any 'reset' needs an ADR. | Don't migrate a stack that has only run incrementally | Glenn 2026-10-02 | record |
 | G-03 | The planning volume per phase is out of proportion (see the ratio table in `REBUILD-FROM-SCRATCH-GUIDE.md` §1). | Planning had become coding | Glenn, 2026-09-29 | **CHANGE**: Phase 8.2 lean-MVP mode |
