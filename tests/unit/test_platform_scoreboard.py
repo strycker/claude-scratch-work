@@ -217,9 +217,12 @@ class TestFormatScoreboard:
         assert lines[-2] == scoreboard.E07_CAVEAT or scoreboard.E07_CAVEAT in lines
 
     def test_e07_caveat_is_the_d02_sentence(self):
+        # 08.3 (2026-10-04): narrowed to the oil-before-1986 exception. Old sentence: "Caveat (E-07):
+        # scoreboard returns use monthly-average prices for equities, oil and long duration, which may
+        # flatter trend and tilt rules."
         assert scoreboard.E07_CAVEAT == (
-            "Caveat (E-07): scoreboard returns use monthly-average prices for equities, oil and long "
-            "duration, which may flatter trend and tilt rules."
+            "Caveat (E-07): scoreboard returns are month-end to month-end, except oil before 1986, which "
+            "uses monthly-average WTI (a bounded exception, E-08; D-02)."
         )
 
     def test_page_text_avoids_regime_section_markers(self, tmp_path):

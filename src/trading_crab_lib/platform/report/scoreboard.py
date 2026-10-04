@@ -27,9 +27,9 @@ fails (or ``monthly_raw`` cannot be read) the common columns are withheld with t
 the page shows the KPI table's own-span values. A missing KPI table or curve is an
 ``unavailable`` scoreboard that names the command that writes it, never an exception.
 
-**E-07 (D-02).** Every rendering carries ``E07_CAVEAT``: the returns are built from
-monthly-average prices, which may flatter trend and tilt rules. Fixing that is deferred to the
-regime-rebuild phase; nothing here changes how returns are built.
+**E-07 (D-02).** Every rendering carries ``E07_CAVEAT``. Since 08.3 the P&L returns are
+month-end to month-end (E-08); the one remaining exception is oil before 1986, which keeps
+the monthly-average WTI (a bounded exception). Nothing here changes how returns are built.
 
 No matplotlib and no ``platform.plotting`` import: the weekly page must not need the optional
 plotting extra (the Sharpe-vs-hurdle figure lives in ``plotting/backtest.py``, G-02).
@@ -52,10 +52,11 @@ from trading_crab_lib.platform.honesty import registry
 
 log = logging.getLogger(__name__)
 
-#: D-02's one-line caveat, shared by the page and N7.
+#: D-02's one-line caveat, shared by the page and N7. Narrowed in 08.3-03 (2026-10-04) from
+#: "monthly-average prices for equities, oil and long duration, which may flatter trend and tilt rules".
 E07_CAVEAT = (
-    "Caveat (E-07): scoreboard returns use monthly-average prices for equities, oil and long "
-    "duration, which may flatter trend and tilt rules."
+    "Caveat (E-07): scoreboard returns are month-end to month-end, except oil before 1986, which "
+    "uses monthly-average WTI (a bounded exception, E-08; D-02)."
 )
 
 #: The budgeted run that writes every number the scoreboard reads. Never run it to refresh the page.
