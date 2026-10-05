@@ -6,11 +6,11 @@ current_phase: 08.4
 current_phase_name: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
 status: planning
 stopped_at: "Phase 08.4 context re-gathered (tooling: archive/reset/restore/promote + fail-loud build); 08.5 context captured (clean-slate reset)"
-last_updated: "2026-10-05T18:29:44.546Z"
+last_updated: "2026-10-05T20:16:08.812Z"
 progress:
-  total_phases: 12
+  total_phases: 13
   completed_phases: 10
-  total_plans: 76
+  total_plans: 79
   completed_plans: 75
 last_activity: 2026-10-05
 last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."

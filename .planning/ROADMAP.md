@@ -783,9 +783,11 @@ core-mix choice (no-regime ablation vs Faber, A-13) and is the baseline every la
 
   1. Equity / oil / long-duration monthly returns are month-end-to-month-end (or documented as a
      bounded exception), applied once in the splice, with a test that fails on an averaged series.
+
   2. One budgeted re-measurement: before (8.1 numbers) vs after, all five legs, common 1972–2020 window,
      10 bps; DSR at the live count; one-sentence answers to "does the tilt beat the ablation?" and
      "does MVP-1's core mix stand?" recorded in DECISIONS.
+
   3. The weekly page, scoreboard and P9 reflect the new numbers; the E-07 caveat is removed or narrowed.
   4. Full suite green on Python 3.10 (pandas 2) and 3.11+ (pandas 3); point-in-time test still green.
 
@@ -824,9 +826,13 @@ any time**. Chosen archives can be version-controlled in git as tagged model sna
 **Plans:** 3 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 08.4-01-PLAN.md — **Fail-loud build and a model-free page (D-T6..D-T9, D-T7).** Merge-on-save takes derived columns verbatim (`replace_columns`). A fallback-splice gate and a source gate run before any write, under `build.fail_loud` (true, pinned) with `allow_missing_sources` / `allow_fallback` as escape hatches. The build writes `build_provenance.json`. A failed FRED daily fetch exits 1 (the A1 test flips, dated). The closing hint names the page. A 221defc regression with paired controls and one mutation. The no_regime page needs no nowcaster, labels or belief, and shows "Scoreboard: not yet measured" — wave 1
 - [ ] 08.4-02-PLAN.md — **State package: archive, list, reset (D-T1, D-T2, D-T4, D-T10).** `python -m trading_crab_lib.platform.state` over injectable `StatePaths` (ratchet stays 31). The archive is a deterministic `state.tar.gz` plus a manifest (per-file sha, commit, config sha, registry count and sha, data range, serving block), over all of data/ and outputs/, with no pickles. Deep `verify_archive`. Reset auto-archives, verifies, empties the trees and never touches the registry. `archives/*` is gitignored except `promoted/` — wave 1
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 08.4-03-PLAN.md — **Restore, promote, docs (D-T3, D-T5).** Restore goes into empty trees: verify, stage, move, then refit in-process and verify at rel 1e-9 against the manifest. Promote writes `archives/promoted/<name>` without G-11 live state, pickles or scratch, commits it and tags `model/<name>`, and never pushes. Pre-commit exclusion; README state section; DECISIONS G-12, D-08 built, A-14 changed; full suite. Mac checks go to UAT — wave 2
 
 ### Phase 08.5: Clean-Slate Reset & Learnings Before Migration (INSERTED)
@@ -838,6 +844,7 @@ Plans:
 - Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
 - From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page, run twice with identical output, then
   the N4 sign-off.
+
 - Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
 - Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
 
