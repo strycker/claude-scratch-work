@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run (completed 2026-09-30)
 - [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
-- [ ] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands
+- [x] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands (completed 2026-10-05)
 - [ ] **Phase 08.4: Cold-Start Rebuild & Learnings Before Migration** *(INSERTED 2026-10-02)* - Fresh pull, all models refit from scratch, actionable weekly predictions; learnings folded into the guide/roadmap so Phase 9 knows what to migrate and in what order
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
@@ -792,7 +792,7 @@ core-mix choice (no-regime ablation vs Faber, A-13) and is the baseline every la
 **Depends on:** Phase 08.2
 **Later regime-rebuild items:** the L2 recipe with a distinct-output check (M6), CR-02 cross-refit state alignment (M5),
 A-03 hysteresis revisit and REG-01 second axis. Phase 08.4's discussion decides which fold into the cold start.
-**Plans:** 3 plans (3 waves; lean mode; ADR-0004 budget 2 rows, 46 → 48, spent only by 08.3-02 after Glenn's checkpoint)
+**Plans:** 3/3 plans complete
 
 Plans:
 
@@ -821,6 +821,8 @@ platform really needs from scratch.
   - **What "actionable" means for the weekly page**, so the phase has a testable exit: for example a regime view that
     is input-responsive and beats the ablation, or else a documented "no-regime is the product" outcome.
   - **Fresh-pull reproducibility.** The same results on Glenn's Mac and in CI; data provenance recorded.
+  - **D-08 first (found at the 08.3 close):** a failed source fetch must fail the build, not silently splice. Merge-on-save
+    filled a fallback-spliced `gold` and produced a −98% month. Fix this before 8.4's fresh pull.
 
 **Lean mode:** at most 3 plans per module. If this grows past one module, split it into 8.4 / 8.5 at discuss time.
 **Requirements**: TBD
@@ -882,6 +884,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
-| 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Verified — human_needed (Mac run + P7/P9 sign-offs) | - |
+| 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
 | 08.4 Cold-Start Rebuild & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

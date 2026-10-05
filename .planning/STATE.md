@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 08.3
-current_phase_name: Regime Rebuild I — month-end returns (E-07) and re-measure
-status: verifying
-stopped_at: Phase 08.3 EXECUTED + VERIFIED (human_needed) 2026-10-04 — 3/3 plans; E-12: tilt still loses (3.8789 vs 4.1124), core mix stands; registry 46->48; suite 2699 on pandas 2+3; awaiting Glenn Mac run + P7/P9 sign-offs
-last_updated: "2026-10-02T15:23:51.560Z"
+current_phase: 08.4
+current_phase_name: Cold-Start Rebuild & Learnings Before Migration
+status: planning
+stopped_at: Phase 08.3 CLOSED 2026-10-05 — Mac run passed; P7/P8/P9 signed off (approve); Mac data commit 221defc reverted (gold fallback -98% month, D-08); live weekly state untracked (G-11); next: discuss 08.4
+last_updated: "2026-10-05T15:26:28.339Z"
 progress:
-  total_phases: 10
-  completed_phases: 9
-  total_plans: 73
-  completed_plans: 72
-last_activity: 2026-10-04
+  total_phases: 12
+  completed_phases: 10
+  total_plans: 76
+  completed_plans: 75
+last_activity: 2026-10-05
 last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."
 ---
 
@@ -28,8 +28,8 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 08.3 — Regime Rebuild I — month-end returns (E-07) and re-measure
-Status: **Executed + verified, human_needed** (2026-10-04) — P&L on month-end returns; E-12: tilt does not beat ablation (−0.2336), core mix (no-regime) stands, Faber's edge was mostly the averaging artifact. Registry 48. Awaiting Glenn Mac run + P7/P9 sign-offs.
+Phase: 08.4 — Cold-Start Rebuild & Learnings Before Migration
+Status: Ready to discuss (`/gsd-discuss-phase 8.4`, on a new branch off main after 08.3 merges). 08.3 closed 2026-10-05: E-12 stands (tilt 3.8789 < ablation 4.1124; core mix no_regime). Registry 48. Open first: D-08 (fetch failures must fail the build).
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
