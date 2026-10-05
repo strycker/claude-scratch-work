@@ -1,13 +1,13 @@
 {
   "name": "fred_daily_raw",
-  "created": "2026-10-02T09:45:35.725261",
+  "created": "2026-10-05T08:32:31.353332",
   "config_hash": "6c209fad",
-  "rows": 11413,
+  "rows": 11414,
   "columns": 2,
   "col_names": [
     "fred_dbaa",
     "fred_daaa"
   ],
   "index_start": "1983-01-03 00:00:00",
-  "index_end": "2026-09-30 00:00:00"
+  "index_end": "2026-10-01 00:00:00"
 }

@@ -1,0 +1,12 @@
+{
+  "name": "hysteresis_state",
+  "created": "2026-10-05T08:48:07.118253",
+  "config_hash": "6c209fad",
+  "rows": 1,
+  "columns": 1,
+  "col_names": [
+    "active_regime"
+  ],
+  "index_start": "0",
+  "index_end": "0"
+}

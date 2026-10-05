@@ -1,0 +1,14 @@
+{
+  "name": "allocation_mode",
+  "created": "2026-10-05T08:48:07.160372",
+  "config_hash": "6c209fad",
+  "rows": 1,
+  "columns": 3,
+  "col_names": [
+    "mode",
+    "as_of",
+    "changed_from"
+  ],
+  "index_start": "0",
+  "index_end": "0"
+}

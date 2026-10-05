@@ -1,0 +1,15 @@
+{
+  "name": "executed_weights",
+  "created": "2026-10-05T08:48:07.157379",
+  "config_hash": "6c209fad",
+  "rows": 4,
+  "columns": 4,
+  "col_names": [
+    "asset",
+    "weight",
+    "basis",
+    "as_of"
+  ],
+  "index_start": "0",
+  "index_end": "3"
+}
