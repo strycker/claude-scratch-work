@@ -28,6 +28,7 @@ recommendation (2026-09-29) and **not yet ruled on**. Glenn edits it.
 | P-04 | Free data sources only in v1; paid providers (Norgate, Tiingo, EODHD) are placeholder adapters. | Cost; splice quality is acceptable | Phase 1 | KEEP |
 | P-05 | Build in `claude-scratch-work`, then migrate the validated platform to `strycker/trading-crab`. The legacy quarterly pipeline stays behind. | Heavy-dev tooling here, clean public repo there | MIGRATION-PLAN.md, ROADMAP Phase 9 | KEEP |
 | P-06 | Tracer-bullet build: every layer present and naive first, then upgrade modules. | A usable skeleton early | design §14 | KEEP (the most important one) |
+| P-07 | **KISS: keep it simple.** This governs every phase. The platform must be readable, editable and testable by one person (Glenn) with Python scripts and notebooks. Prefer the simplest design that is honest: fewer modules, fewer config switches, fewer bespoke checks, and plain files a human can open. Rigor (mutation proofs, ruling records, 1e-9 verification apparatus) is spent only on decision-bearing numbers. When rigor and readability conflict elsewhere, readability wins. | We drifted toward hedge-fund-grade machinery that a single user cannot easily read or maintain | Glenn 2026-10-05 | KEEP |
 
 ## L0 — Data
 

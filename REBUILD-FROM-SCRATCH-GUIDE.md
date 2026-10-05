@@ -193,6 +193,8 @@ Current file mapping: `platform_design/MODULE-MAP.md` (08.2-02).
 
 ## 5. How to plan in lean mode (GSD or not)
 
+- **KISS first (P-07).** If a plan needs a new config switch, a bespoke verification layer or a new abstraction, ask
+  whether a plainer version would do. One person must be able to read every module and notebook.
 - **One module per phase.** Two or three plans at most.
 - **Discussion:** at most 5 questions. Decisions go straight into `DECISIONS.md` as rows, not
   prose documents.
