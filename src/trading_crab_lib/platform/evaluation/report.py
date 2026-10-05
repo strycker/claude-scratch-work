@@ -88,7 +88,7 @@ from trading_crab_lib.platform.honesty.gap_lag import compute_gap
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
 from trading_crab_lib.platform.honesty.registry import NO_REGISTRY
 from trading_crab_lib.platform.labeling.jump_model import canonicalize_states, fit_jump_model, standardize_features
-from trading_crab_lib.platform.splice import build_core_research_series
+from trading_crab_lib.platform.splice import build_core_research_series, build_pnl_research_series
 from trading_crab_lib.platform.taxonomy import lean_feature_set
 
 log = logging.getLogger(__name__)
@@ -149,6 +149,7 @@ def assemble_backtest_report(
     gap: float,
     excluded_assets: list[str] | None = None,
     policy_comparison: dict | None = None,
+    pnl_month_end: bool = False,
 ) -> str:
     """Assemble the honest backtest report markdown from precomputed inputs.
 
@@ -198,6 +199,10 @@ def assemble_backtest_report(
             ``max_drawdown``.
         gap: the smoothed-vs-filtered performance gap
             (``honesty/gap_lag.py::compute_gap`` output).
+        pnl_month_end: whether the run's config carries a ``pnl_splice`` block
+            (phase 08.3, E-08). The Conventions note says P&L reads month-end
+            prices only when it does; otherwise it says P&L and the tilt's
+            inputs read the same (monthly-average) research series.
 
     Returns:
         str: the assembled markdown.
@@ -420,6 +425,21 @@ def assemble_backtest_report(
         "`backtest/costs.py::apply_transaction_cost` — only SPY buy-and-hold "
         "is cost-free by construction (no rebalancing ever occurs)."
     )
+    if pnl_month_end:
+        lines.append(
+            "Returns convention (08.3): P&L (strategy, ablation) and the SPY / 60-40 / Faber "
+            "baselines, including Faber's SMA signal, read `splice.build_pnl_research_series` "
+            "(month-end prices; oil is the WTISPLC monthly average before 1986-01, E-08); the "
+            "tilt's inputs (regime return stats, EWMA vol target) read "
+            "`splice.build_core_research_series` (E-10)."
+        )
+    else:
+        lines.append(
+            "Returns convention (08.3): no `pnl_splice` block is configured, so P&L (strategy, "
+            "ablation), the SPY / 60-40 / Faber baselines and the tilt's inputs all read "
+            "`splice.build_core_research_series` (`splice.build_pnl_research_series` returns it "
+            "unchanged): monthly-average prices for equities, long duration and oil (E-07)."
+        )
     if excluded_assets:
         lines.append(
             "**⚠ Excluded assets:** the following research classes were EXCLUDED "
@@ -521,6 +541,8 @@ def _smoothed_hindsight_perf(
     cash_ret: pd.Series,
     decision_dates: list,
     allocation_cfg: dict[str, Any],
+    *,
+    pnl_returns: pd.DataFrame | None = None,
 ) -> float:
     """Terminal log wealth of a hindsight oracle that knows the FULL-SAMPLE
     smoothed regime label at every decision date (but not future returns) —
@@ -544,7 +566,15 @@ def _smoothed_hindsight_perf(
     skips NaN), silently distorting the very gap this function measures. The
     walk-forward driver has no such problem because it derives its stats from
     the train window only (``driver.py``: ``dev_asset_returns.loc[train_index]``).
+
+    ``pnl_returns`` (phase 08.3, E-08) is what the held book EARNS, read only at
+    the realized-return line, exactly as ``run_backtest(pnl_returns=)`` does for
+    the filtered leg this oracle is compared with: the stats, the EWMA vol and
+    the per-step universe stay on ``asset_returns`` (E-10 / D-09), so the gap
+    compares like with like. ``None`` means ``asset_returns`` (identical to the
+    P&L frame whenever ``cfg`` has no ``pnl_splice`` block).
     """
+    realized = asset_returns if pnl_returns is None else pnl_returns
     smoothed_stats = returns_by_regime_stats(asset_returns, full_sample_states)
     # Inception date per asset, computed once — an asset is tradable at t only
     # once it has at least one observation on or before t.
@@ -562,8 +592,8 @@ def _smoothed_hindsight_perf(
             halflife=allocation_cfg.get("ewma_halflife_months", 6),
             min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
         )
-        common = tilt["weights"].index.intersection(asset_returns.columns)
-        asset_leg = float((tilt["weights"][common] * asset_returns.loc[t, common]).sum()) if len(common) else 0.0
+        common = tilt["weights"].index.intersection(realized.columns)
+        asset_leg = float((tilt["weights"][common] * realized.loc[t, common]).sum()) if len(common) else 0.0
         cash_leg = tilt["cash"] * float(cash_ret.loc[t]) if t in cash_ret.index else 0.0
         step_returns.append(asset_leg + cash_leg)
 
@@ -829,15 +859,23 @@ def run_full_backtest_evaluation(
     splice_cfg = cfg["splice"]
     research = build_core_research_series(monthly_raw, cfg)
     returns = compute_monthly_returns(research)
+    # P&L series (phase 08.3, E-08): what the held book EARNS — month-end once
+    # cfg has a `pnl_splice` block, identical to `research` without one. The legs'
+    # decision inputs (asset_returns, cash_ret) stay on `research` (E-10 / D-09);
+    # the baselines read P&L for returns AND Faber's signal (D-08).
+    pnl = build_pnl_research_series(monthly_raw, cfg)
+    pnl_ret = compute_monthly_returns(pnl)
+    pnl_assets = tradable_asset_returns(pnl_ret, splice_cfg)
 
     equity_name = splice_cfg["equities"]["research_name"]
     bond_name = splice_cfg["long_duration"]["research_name"]
     cash_name = splice_cfg["cash"]["research_name"]
 
-    equity_ret = returns[equity_name]
-    bond_ret = returns[bond_name]
     cash_ret = returns[cash_name]
-    equity_level = research[equity_name]
+    equity_ret = pnl_ret[equity_name]
+    bond_ret = pnl_ret[bond_name]
+    baseline_cash_ret = pnl_ret[cash_name]
+    equity_level = pnl[equity_name]
 
     # (a) Investable asset universe for run_backtest — the risk classes only
     # (excludes "cash": cash is never tilted into as a position, it is the
@@ -857,6 +895,7 @@ def run_full_backtest_evaluation(
     equity_curve, per_step_metrics = run_backtest(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, use_regime_tilt=True,
         registry_path=registry_path, frozen_l1_features=ref_cols, trial_tag=trial_tag,
+        pnl_returns=pnl_assets,
     )
 
     # Permanent guard (07-01/D-01): first_decision was derived from the index
@@ -889,14 +928,14 @@ def run_full_backtest_evaluation(
     # untagged registry row.
     ablation_curve, _ablation_metrics = no_regime_ablation(
         monthly_features, asset_returns, cfg, cash_returns=cash_ret, registry_path=registry_path,
-        frozen_l1_features=ref_cols, trial_tag=trial_tag,
+        frozen_l1_features=ref_cols, trial_tag=trial_tag, pnl_returns=pnl_assets,
     )
 
     # (c) Three price baselines — the report layer holdout-bounds them
     # (baselines.py does not enforce the cutoff internally).
     dev_equity_ret, _ = split_by_holdout_boundary(equity_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
     dev_bond_ret, _ = split_by_holdout_boundary(bond_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    dev_cash_ret, _ = split_by_holdout_boundary(cash_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
+    dev_cash_ret, _ = split_by_holdout_boundary(baseline_cash_ret, cutoff=DEFAULT_HOLDOUT_CUTOFF)
     dev_equity_level, _ = split_by_holdout_boundary(equity_level, cutoff=DEFAULT_HOLDOUT_CUTOFF)
 
     spy_ret = spy_buy_hold(dev_equity_ret)
@@ -988,6 +1027,7 @@ def run_full_backtest_evaluation(
 
     smoothed_perf = _smoothed_hindsight_perf(
         full_sample_states, asset_returns, cash_ret, list(per_step_metrics["dates"]), allocation_cfg,
+        pnl_returns=pnl_assets,
     )
     filtered_perf = strategy_kpis["terminal_log_wealth"]
     gap = compute_gap(smoothed_perf, filtered_perf)
@@ -1031,6 +1071,7 @@ def run_full_backtest_evaluation(
         gap=gap,
         excluded_assets=_excluded,
         policy_comparison=policy_comparison,
+        pnl_month_end=bool(cfg.get("pnl_splice")),
     )
     full_sample_states_df = full_sample_states.to_frame()
     filtered_state_probs_df = filtered_probs_matrix.rename(

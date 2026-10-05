@@ -1,9 +1,9 @@
 {
   "name": "monthly_raw",
-  "created": "2026-09-30T20:59:40.684546",
+  "created": "2026-10-04T17:21:33.144125",
   "config_hash": "6c209fad",
   "rows": 776,
-  "columns": 47,
+  "columns": 50,
   "col_names": [
     "fred_gs10",
     "wti_fred",
@@ -51,7 +51,10 @@
     "fred_cpi",
     "fred_gdp",
     "fred_payems",
-    "fred_indpro"
+    "fred_indpro",
+    "sp500_close_me",
+    "dgs10_me",
+    "wti_me"
   ],
   "index_start": "1962-01-31 00:00:00",
   "index_end": "2026-08-31 00:00:00"

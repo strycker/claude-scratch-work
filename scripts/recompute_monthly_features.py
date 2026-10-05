@@ -42,10 +42,7 @@ from trading_crab_lib.platform.honesty.holdout import (
     split_by_holdout_boundary,
     write_monthly_features_split,
 )
-from trading_crab_lib.platform.transforms_monthly import (
-    compute_lean_features,
-    tag_feature_columns,
-)
+from trading_crab_lib.platform.transforms_monthly import features_from_raw
 
 log = logging.getLogger(__name__)
 
@@ -53,27 +50,16 @@ log = logging.getLogger(__name__)
 def rebuild_monthly_features(monthly_raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
     """Reproduce ``build_monthly_spine``'s tail EXACTLY, from a cached ``monthly_raw``.
 
-    Computes the lean feature set, concatenates it onto ``monthly_raw``, and
-    dedupes duplicate column labels keeping the lean copy (``keep="last"``) —
-    the identical assembly ``build_monthly_spine`` performs before writing
-    ``monthly_features``. Any divergence from this exact sequence means the
-    recomputed checkpoint would not be shape-identical to what a genuine full
-    rebuild would produce.
+    A one-line delegate to ``transforms_monthly.features_from_raw`` — the single
+    assembly ``build_monthly_spine`` also calls (drop the P&L-only columns, compute
+    the lean set, concatenate onto the raw columns, dedupe keeping the lean copy),
+    so the recompute and a genuine full rebuild cannot drift apart (08.3).
 
-    Does NOT invoke ``compute_lean_features()``'s output alone: that would
-    silently drop every raw column ``compute_lean_features`` does not itself
-    derive (40 of the real checkpoint's 53 columns) — the exact bug this
-    script exists to avoid.
+    Never write ``compute_lean_features()``'s output alone: that would silently
+    drop every raw column it does not itself derive (40 of the real checkpoint's
+    53 columns) — the exact bug this script exists to avoid.
     """
-    lean = compute_lean_features(monthly_raw, cfg)
-    tag_feature_columns(lean, cfg)  # WARNING-only defensive taxonomy-coverage check
-
-    monthly_features = pd.concat([monthly_raw, lean], axis=1)
-    # Passthrough lean columns (gold/oil/fred_vix/cape_shiller/div_yield) are
-    # identical to their monthly_raw source — dedupe, keeping the lean copy.
-    monthly_features = monthly_features.loc[:, ~monthly_features.columns.duplicated(keep="last")]
-    monthly_features.index.name = "date"
-    return monthly_features
+    return features_from_raw(monthly_raw, cfg)
 
 
 def _non_nan_counts(df: pd.DataFrame) -> dict[str, int]:

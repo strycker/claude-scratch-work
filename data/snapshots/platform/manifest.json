@@ -1,10 +1,10 @@
 {
-  "captured_at": "2026-09-30T21:02:22.604178+00:00",
-  "git_commit": "519687b9a55a4d7d1cda97345d470d796581a224",
+  "captured_at": "2026-10-04T17:21:45.294332+00:00",
+  "git_commit": "e2883601e4af78c06e0518cad43d5ded2e281049",
   "names": {
     "monthly_raw": {
       "rows": 776,
-      "columns": 47,
+      "columns": 50,
       "col_names": [
         "fred_gs10",
         "wti_fred",
@@ -52,7 +52,10 @@
         "fred_cpi",
         "fred_gdp",
         "fred_payems",
-        "fred_indpro"
+        "fred_indpro",
+        "sp500_close_me",
+        "dgs10_me",
+        "wti_me"
       ],
       "index_start": "1962-01-31 00:00:00",
       "index_end": "2026-08-31 00:00:00"

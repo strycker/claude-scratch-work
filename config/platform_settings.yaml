@@ -59,6 +59,29 @@ fred_monthly:
       name:  "fred_m2sl"
     TOTALSL:
       name:  "fred_totalsl"
+    # Phase 08.3 (DECISIONS E-08): month-end market prices for P&L ONLY.
+    # fetch_fred_monthly's .resample("ME").last() turns the daily series into the
+    # month-end close. `pnl_only: true` keeps them out of monthly_features (and so
+    # out of L2): transforms_monthly.features_from_raw drops them. Read by the
+    # P&L builder (splice.build_pnl_research_series) once `pnl_splice` exists.
+    DGS10:
+      name:     "dgs10_me"     # 10Y CMT, daily, 1962-01-02+ -> month-end yield
+      pnl_only: true
+    DCOILWTICO:
+      name:     "wti_me"       # WTI Cushing spot, daily, 1986-01-02+ -> month-end close
+      pnl_only: true
+
+# ── Index month-end closes (phase 08.3, DECISIONS E-08) ───────────────────────
+# Daily index closes from yfinance, resampled to the month-end close
+# (prices_daily.fetch_yfinance_month_end). `pnl_only: true` = P&L only: the
+# column lands in monthly_raw (the P&L builder reads it there) but
+# transforms_monthly.features_from_raw drops it, so it never becomes a feature
+# or an L2 input (08.3 L2 leak guard). Not in `universe`: Tiingo leads that
+# chain and has no indexes. Absent block = no fetch.
+index_monthly:
+  "^GSPC":
+    name:     "sp500_close_me"   # S&P 500 month-end close, 1927-12+
+    pnl_only: true
 
 # ── FRED daily-frequency credit series (L4-04, Phase 4 Pitfall 2) ─────────────
 # BAA/AAA above are monthly-only on FRED; the tripwire's credit-spread-velocity
@@ -198,6 +221,11 @@ publication_lags:
   GDX:  0
   UNG:  0
   UEC:  0
+  # Month-end market prices for P&L only (08.3): index_monthly and fred_monthly
+  # pnl_only series — observed at the month's close, real-time.
+  sp500_close_me: 0
+  dgs10_me:       0
+  wti_me:         0
   # Splice research series: lagged through their inputs (equities_tr through
   # div_yield). Shifting them would double-lag and misalign the P&L.
   equities_tr:      derived
@@ -294,6 +322,23 @@ splice:
     yield_col:     fred_tb3ms
     yield_units:   percent   # FRED TB3MS is percent (3.72), not decimal
     tradable:      FZFXX
+
+# ── P&L returns on month-end prices (08.3; DECISIONS E-08, D-02) ─────────────
+# Overlaid onto `splice:` for P&L only: the strategy/ablation wealth line and
+# the SPY / 60-40 / Faber baselines, Faber's SMA signal included (E-10 a).
+# `splice:` itself, and so every feature and L1/L2 input, is unchanged (D-01,
+# E-10 b). Each class here is forced non-optional and takes one scalar source,
+# so a missing month-end column raises instead of reading an average.
+pnl_splice:
+  equities:
+    price_col: sp500_close_me    # ^GSPC month-end close + div_yield accrual (div_yield lag 3 unchanged)
+  long_duration:
+    yield_col: dgs10_me          # DGS10 month-end yield; CMT par-bond repricing, yield_units percent inherited
+  oil:                           # D-02: WTISPLC avg/avg through 1986-01, DCOILWTICO close/close from 1986-02
+    method:    ratio_splice
+    old_col:   wti_fred
+    new_col:   wti_me
+    join_date: "1986-01-31"      # quoted: an unquoted date would load as datetime.date
 
 # ── Universe (tickers) ─────────────────────────────────────────────────────────
 universe:
@@ -592,8 +637,9 @@ report:
                               # no-regime ablation leg. regime_tilt stays available but off
                               # (G-06). An absent key means regime_tilt, so synthetic test configs
                               # keep the Phase 8 path; a test pins this value.
-  scoreboard_trial_tag: "08.1-pit-tilt-vs-ablation"  # 08.2 D-05: the registry tag whose rows date the
-                              # static scoreboard (the last budgeted run); read, never written
+  scoreboard_trial_tag: "08.3-monthend-tilt-vs-ablation"  # 08.2 D-05: the registry tag whose rows date the
+                              # static scoreboard (the last budgeted run); read, never written.
+                              # 08.3 (2026-10-04): 08.1-pit-tilt-vs-ablation -> 08.3-monthend-tilt-vs-ablation
 
 # ── Backtest & evaluation (EVAL-01..04, D-03) — honest walk-forward 1972-2020 ─
 # Read defensively via cfg.get("backtest", {}) everywhere; deliberately NOT

@@ -54,6 +54,7 @@ except ImportError as _err:
 from trading_crab_lib.ingestion import macrotrends, multpl
 from trading_crab_lib.ingestion.browser import fetch_page_html
 from trading_crab_lib.ingestion.http import browser_session, http_get
+from trading_crab_lib.platform.ingestion import prices_daily
 
 log = logging.getLogger(__name__)
 
@@ -403,14 +404,47 @@ def _fetch_macrotrends_monthly_all(cfg: dict[str, Any]) -> dict[str, pd.Series]:
     return results
 
 
+# ── Index month-end closes (08.3, P&L only) ────────────────────────────────
+
+
+def _fetch_index_month_end(cfg: dict[str, Any]) -> dict[str, pd.Series]:
+    """Fetch every ticker in ``cfg['index_monthly']`` as a month-end close, renamed.
+
+    A no-op when the block is absent. A failed or empty fetch logs a WARNING and
+    the column is simply absent, as for every other source. These columns are
+    P&L only (``pnl_only: true``): ``transforms_monthly.features_from_raw`` drops
+    them before ``monthly_features`` is assembled.
+    """
+    index_cfg: dict = cfg.get("index_monthly") or {}
+    if not index_cfg:
+        return {}
+    start = cfg["data"]["start_date"]
+    end = cfg["data"].get("end_date") or str(date.today())
+    monthly_freq = cfg["data"].get("monthly_freq", "ME")
+    try:
+        monthly = prices_daily.fetch_yfinance_month_end(list(index_cfg), start, end, monthly_freq)
+    except Exception as exc:  # noqa: BLE001 — network libraries raise various types
+        log.warning("Failed to fetch index month-end closes %s: %s", list(index_cfg), exc)
+        return {}
+
+    results: dict[str, pd.Series] = {}
+    for ticker, meta in index_cfg.items():
+        name = meta["name"]
+        if ticker not in monthly.columns or monthly[ticker].dropna().empty:
+            log.warning("Index month-end fetch returned nothing for %s (%s) — column absent", name, ticker)
+            continue
+        results[name] = monthly[ticker].rename(name)
+    return results
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 
 def fetch_macro_monthly(cfg: dict[str, Any]) -> pd.DataFrame:
     """
-    Fetch FRED monthly market series, multpl valuation anchors, and
-    macrotrends long-history commodities, then merge ALL series into ONE
-    wide monthly DataFrame.
+    Fetch FRED monthly market series, multpl valuation anchors, macrotrends
+    long-history commodities and index month-end closes (``index_monthly``),
+    then merge ALL series into ONE wide monthly DataFrame.
 
     Merges exclusively via ``pd.concat([...], axis=1)`` (outer join —
     NULL-tolerant, RESEARCH Pitfall 5) — never ``pd.merge``/``DataFrame.join``
@@ -428,6 +462,7 @@ def fetch_macro_monthly(cfg: dict[str, Any]) -> pd.DataFrame:
 
     frames.extend(_scrape_multpl_monthly(cfg).values())
     frames.extend(_fetch_macrotrends_monthly_all(cfg).values())
+    frames.extend(_fetch_index_month_end(cfg).values())
 
     if not frames:
         log.warning("macro_monthly: no series fetched successfully")

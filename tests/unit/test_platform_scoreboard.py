@@ -217,9 +217,12 @@ class TestFormatScoreboard:
         assert lines[-2] == scoreboard.E07_CAVEAT or scoreboard.E07_CAVEAT in lines
 
     def test_e07_caveat_is_the_d02_sentence(self):
+        # 08.3 (2026-10-04): narrowed to the oil-before-1986 exception. Old sentence: "Caveat (E-07):
+        # scoreboard returns use monthly-average prices for equities, oil and long duration, which may
+        # flatter trend and tilt rules."
         assert scoreboard.E07_CAVEAT == (
-            "Caveat (E-07): scoreboard returns use monthly-average prices for equities, oil and long "
-            "duration, which may flatter trend and tilt rules."
+            "Caveat (E-07): scoreboard returns are month-end to month-end, except oil before 1986, which "
+            "uses monthly-average WTI (a bounded exception, E-08; D-02)."
         )
 
     def test_page_text_avoids_regime_section_markers(self, tmp_path):
@@ -313,13 +316,17 @@ class TestTrackedScoreboard:
         )
         assert board["reconciled"] is True, board["reason"]
         common = [row["tlw_common"] for row in board["legs"]]
-        assert common == pytest.approx([3.8909, 4.0424, 5.0022, 4.4799, 5.5451], rel=1e-4)
+        # 08.3 (2026-10-04): [3.8909, 4.0424, 5.0022, 4.4799, 5.5451] -> the month-end run's
+        # [3.8789, 4.1124, 4.9900, 4.5098, 4.9759] (registry rows 47-48, DECISIONS E-12)
+        assert common == pytest.approx([3.8789, 4.1124, 4.9900, 4.5098, 4.9759], rel=1e-4)
         kpi = pd.read_parquet(reports / "backtest_kpi_table.parquet").set_index("leg")
         for row in board["legs"]:
             assert row["tlw_own"] == pytest.approx(kpi.loc[row["leg"], "terminal_log_wealth"], rel=1e-9, abs=0)
         assert (board["window_start"], board["window_end"], board["n_steps"]) == (
             pd.Timestamp("1972-01-31"), pd.Timestamp("2020-12-31"), 588)
-        assert board["run_date"].date().isoformat() == "2026-09-30"
+        # 08.3 (2026-10-04): "2026-09-30" -> "2026-10-04" (the 08.3-monthend-tilt-vs-ablation rows)
+        assert board["trial_tag"] == "08.3-monthend-tilt-vs-ablation"
+        assert board["run_date"].date().isoformat() == "2026-10-04"
         assert _sha(registry_path) == before
 
 

@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-2640%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2699%20passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
@@ -480,7 +480,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ 2640 tests (unit + integration), all passing
+- ✓ 2699 tests (unit + integration), all passing
 - ✓ Exploration notebooks (01–12)
 
 ---
@@ -572,10 +572,11 @@ What the page shows now (Phase 8.2):
   business days (`tripwire.stale_business_days`) reads STALE, a missing input UNAVAILABLE, and
   the escalation reads UNKNOWN unless all three are current; it changes no weight. Step 1
   writes `fred_daily_raw` for the credit signal.
-- **Static scoreboard.** From the last budgeted run (registry tag `08.1-pit-tilt-vs-ablation`):
+- **Static scoreboard.** From the last budgeted run (registry tag `08.3-monthend-tilt-vs-ablation`):
   regime tilt, no-regime ablation, SPY, 60/40 and Faber, terminal log wealth and max drawdown
   on the common 1972–2020 window, own-span values in a footnote, the run date, and the E-07
-  caveat (returns use monthly-average prices, which may flatter trend and tilt rules).
+  caveat. Returns are month-end to month-end (E-08); the one exception, named in the caveat, is
+  oil before 1986, which uses monthly-average WTI.
 
 Notebooks P7 (serving and the weekly page, built twice in scratch), P8 (the filtered belief vs
 the served posterior) and P9 (does the regime layer pay rent) are the review gates for this page;

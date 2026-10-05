@@ -321,6 +321,31 @@ def tag_feature_columns(features_df: pd.DataFrame, cfg: dict[str, Any]) -> dict[
     return {col: taxonomy.classify_feature(col, cfg) for col in columns}
 
 
+def features_from_raw(monthly_raw: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+    """The ONE ``monthly_features`` assembly, shared by ``build_monthly_spine`` and
+    ``scripts/recompute_monthly_features.rebuild_monthly_features``.
+
+    Drops the P&L-only raw columns (``splice.pnl_only_columns``) FIRST — the 08.3
+    L2 leak guard: L2 fits on every ``monthly_features`` column, so a month-end
+    close here would be a new model input (D-01 keeps features unchanged).
+    ``monthly_raw`` itself keeps them; the P&L builder reads them there. Then the
+    lean features are computed, concatenated onto the raw columns, and duplicate
+    labels deduped keeping the lean copy.
+    """
+    pnl_only = splice.pnl_only_columns(cfg)
+    raw = monthly_raw.drop(columns=[c for c in monthly_raw.columns if c in pnl_only])
+
+    lean = compute_lean_features(raw, cfg)
+    tag_feature_columns(lean, cfg)  # WARNING-only defensive taxonomy-coverage check
+
+    monthly_features = pd.concat([raw, lean], axis=1)
+    # Passthrough lean columns (gold/oil/fred_vix/cape_shiller/div_yield) are
+    # identical to their monthly_raw source — dedupe, keeping the lean copy.
+    monthly_features = monthly_features.loc[:, ~monthly_features.columns.duplicated(keep="last")]
+    monthly_features.index.name = "date"
+    return monthly_features
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 
@@ -435,14 +460,7 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     monthly_raw = pd.read_parquet(raw_path).reindex(monthly_index)
     monthly_raw.index.name = "date"
 
-    lean = compute_lean_features(monthly_raw, cfg)
-    tag_feature_columns(lean, cfg)  # WARNING-only defensive taxonomy-coverage check
-
-    monthly_features = pd.concat([monthly_raw, lean], axis=1)
-    # Passthrough lean columns (gold/oil/fred_vix/cape_shiller/div_yield) are
-    # identical to their monthly_raw source — dedupe, keeping the lean copy.
-    monthly_features = monthly_features.loc[:, ~monthly_features.columns.duplicated(keep="last")]
-    monthly_features.index.name = "date"
+    monthly_features = features_from_raw(monthly_raw, cfg)
 
     # HON-01: carve at the holdout boundary rather than writing one unfenced
     # checkpoint. Dev rows (<= 2020-12) land in the default platform namespace;
@@ -453,7 +471,7 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     write_monthly_features_split(monthly_features, "monthly_features")
 
     log.info(
-        "build_monthly_spine: assembled %d months, %d columns (monthly_features, %d lean)",
-        len(monthly_features), len(monthly_features.columns), len(lean.columns),
+        "build_monthly_spine: assembled %d months, %d columns (monthly_features)",
+        len(monthly_features), len(monthly_features.columns),
     )
     return monthly_features

@@ -30,6 +30,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Regime Persistence & Stability** - The nowcaster carries state memory, hysteresis gates allocation, and §4.4 criterion 3 is actually run (completed 2026-09-30)
 - [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
+- [x] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands (completed 2026-10-05)
+- [ ] **Phase 08.4: Cold-Start Rebuild & Learnings Before Migration** *(INSERTED 2026-10-02)* - Fresh pull, all models refit from scratch, actionable weekly predictions; learnings folded into the guide/roadmap so Phase 9 knows what to migrate and in what order
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -764,6 +766,74 @@ Plans:
 - [x] 08.2-02-PLAN.md — **Park + module map.** `quality_tier` extracted to `evaluation/deflated_sharpe.py`; classifier2 / joint_driver / stability `git mv`'d to `platform/parked/` (no shims, import-only edits to record tests); boundary test (subprocess `sys.modules` + AST scan); `platform_design/MODULE-MAP.md` (M0–M7, M8, M9+, Parked) — wave 1
 - [x] 08.2-03-PLAN.md — **Tripwire, scoreboard, notebooks.** `evaluate_tripwire` (per-signal as-of; STALE after 5 business days; UNAVAILABLE, never green) + `fred_daily_raw` in the build; static scoreboard (`report/scoreboard.py`, common 1972–2020 window, E-07 line); `build_weekly_page`; notebooks P7 (N4) / P8 (N6) / P9 (N7) run headless with pending sign-offs; real-data scratch smoke; DECISIONS A-14 built, G-08 — wave 2
 
+### Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure (INSERTED)
+
+**Goal:** The honest scoreboard is measured on returns a trader could actually earn. Today `equities_tr`
+(multpl S&P monthly **average**), `oil` (WTISPLC monthly average) and `long_duration_tr` (GS10 monthly
+average) produce next-month returns that include part of the move month-end features already saw
+(DECISIONS E-07), which can flatter trend and tilt rules. Rebuild these research series from **month-end**
+prices where a free point-in-time source exists, then re-measure the scoreboard (no-regime ablation,
+regime tilt, SPY, 60/40, Faber) once, under a declared ADR-0004 budget, before/after side by side.
+**Why first (Glenn, 2026-10-02):** first step of the regime rebuild, because its answer can change MVP-1's
+core-mix choice (no-regime ablation vs Faber, A-13) and is the baseline every later regime module is judged against.
+**Lean mode:** one module (M3 returns + scoreboard), ≤ 3 plans, ≤ 5 discuss questions, decisions as
+`DECISIONS.md` rows; rigor (mutation proof, before/after) only for the decision-bearing re-measurement.
+**Candidate success criteria (to be confirmed at discuss-phase):**
+
+  1. Equity / oil / long-duration monthly returns are month-end-to-month-end (or documented as a
+     bounded exception), applied once in the splice, with a test that fails on an averaged series.
+  2. One budgeted re-measurement: before (8.1 numbers) vs after, all five legs, common 1972–2020 window,
+     10 bps; DSR at the live count; one-sentence answers to "does the tilt beat the ablation?" and
+     "does MVP-1's core mix stand?" recorded in DECISIONS.
+  3. The weekly page, scoreboard and P9 reflect the new numbers; the E-07 caveat is removed or narrowed.
+  4. Full suite green on Python 3.10 (pandas 2) and 3.11+ (pandas 3); point-in-time test still green.
+
+**Requirements**: TBD
+**Depends on:** Phase 08.2
+**Later regime-rebuild items:** the L2 recipe with a distinct-output check (M6), CR-02 cross-refit state alignment (M5),
+A-03 hysteresis revisit and REG-01 second axis. Phase 08.4's discussion decides which fold into the cold start.
+**Plans:** 3/3 plans complete
+
+Plans:
+
+- [x] 08.3-01-PLAN.md — **Month-end P&L, built but off.** ^GSPC / DGS10 / DCOILWTICO month-end columns (P&L-only, lag 0); one `features_from_raw` drop shared by the build and the recompute script, with a mutation-proved no-leak check on `monthly_features` and on the L2 fit; `build_pnl_research_series` + `pnl_splice` overlay (oil ratio-spliced to WTISPLC at 1986-01, D-02); `run_backtest(pnl_returns=)` at the wealth line only, with the ablation getting the same frame; baselines and report wiring (Faber month-end signal and returns, D-08; tilt inputs unchanged, D-09); ceiling test sites 46 → 48. The live P&L stays unchanged until 08.3-02 — wave 1
+- [x] 08.3-02-PLAN.md — **Before, migrate, decide, run.** NO_REGISTRY before run on HEAD reproduces 8.1 at rel 1e-9 (`pit_08.3/before/`); additive `monthly_raw` migration (+3 columns; the 47 existing columns exact; merge=False; marker) plus a feature-neutrality check; checkpoint; `pnl_splice` activated and one 2-row run (46 → 48, tag `08.3-monthend-tilt-vs-ablation`); DECISIONS E-07 done, E-08 built, E-12 before|after with DSR at 48 vs 2.2606 and the E-06 / E-09 answers; scoreboard tag and tracked re-pins so the suite ends green — wave 2, checkpoint
+- [x] 08.3-03-PLAN.md — **Page and notebooks.** E-07 caveat narrowed to oil before 1986; real-data scratch page (same book, 55 model columns, 08.3 scoreboard); P9 (N7) and P7 re-executed headless; README and recorded counts; full suite on pandas 3 and pandas 2 — wave 3
+
+### Phase 08.4: Cold-Start Rebuild & Learnings Before Migration (INSERTED)
+
+**Goal (Glenn, 2026-10-02):** Before anything migrates, prove the platform works end to end **from a cold
+start**: a fresh data pull, every model refit from scratch, the evaluation re-run, and the honesty framework
+(registry, DSR) set up deliberately. The result is an actual working, useful model with actionable weekly
+predictions. Then fold what we've learned (and anything new this surfaces) back into the planning
+docs (`REBUILD-FROM-SCRATCH-GUIDE.md`, `MODULE-MAP.md`, `DECISIONS.md`, `MIGRATION-PLAN.md`, ROADMAP) so Phase 9
+knows **what to migrate, in what order, and what to leave behind**.
+**Why before Phase 9:** migrating a stack that has only ever run incrementally risks carrying hidden state
+(merged checkpoints, pinned artefacts, stale labels) into the public repo. A cold start shows what the
+platform really needs from scratch.
+**Open questions for discuss-phase (not decided):**
+
+  - **Registry / DSR on a cold start.** The append-only ledger and the D-16 "whole registry since project start"
+    denominator are standing rules (ADR-0002, ADR-0004). A "reset" would need an ADR. Options: continue the count,
+    or start a new declared epoch with the prior count carried as `prior_genuine_trials`.
+  - **Which later regime-rebuild items fold in here** versus wait: the L2 recipe with a distinct-output check (M6),
+    CR-02 cross-refit alignment (M5), A-03 hysteresis, REG-01.
+  - **What "actionable" means for the weekly page**, so the phase has a testable exit: for example a regime view that
+    is input-responsive and beats the ablation, or else a documented "no-regime is the product" outcome.
+  - **Fresh-pull reproducibility.** The same results on Glenn's Mac and in CI; data provenance recorded.
+  - **D-08 first (found at the 08.3 close):** a failed source fetch must fail the build, not silently splice. Merge-on-save
+    filled a fallback-spliced `gold` and produced a −98% month. Fix this before 8.4's fresh pull.
+
+**Lean mode:** at most 3 plans per module. If this grows past one module, split it into 8.4 / 8.5 at discuss time.
+**Requirements**: TBD
+**Depends on:** Phase 08.3
+**Blocks:** Phase 9 (Migration): its order and scope come from 8.4's learnings.
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-discuss-phase 08.4 after 08.3 closes)
+
 ### Phase 9: Migration to Public Repo
 
 **Goal**: The validated platform lives in `strycker/trading-crab`, the public/PyPI
@@ -796,7 +866,9 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 8.4 → 9
+(8.3 inserted by Glenn 2026-10-02: the regime rebuild starts with E-07 before migration.)
+(8.4 inserted by Glenn 2026-10-02: cold-start rebuild and learnings before any migration.)
 (Order confirmed by Glenn 2026-09-30: 8.1 before 8.2 — 8.1's outcome shapes 8.2's design.)
 (Phase 7 gates internally: wave 2 does not start unless wave 1 passes.)
 
@@ -812,4 +884,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Regime Persistence & Stability | 19/19 | Complete (verified 12/12; Mac human checks passed) | 2026-09-30 |
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
+| 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
+| 08.4 Cold-Start Rebuild & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
