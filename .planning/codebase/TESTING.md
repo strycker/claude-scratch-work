@@ -1,337 +1,331 @@
-> **STALE (flagged 2026-09-29):** generated 2026-07-09, before the monthly `platform/` package was built (Phases 1–8). It describes the legacy quarterly codebase. For the platform see `REBUILD-FROM-SCRATCH-GUIDE.md` §3 and `platform_design/DECISIONS.md`; regenerate with `/gsd-map-codebase` before relying on it.
-
 # Testing Patterns
 
-**Analysis Date:** 2026-07-09
+**Analysis Date:** 2026-10-05
 
 ## Test Framework
 
 **Runner:**
-- pytest ~8.0+ (specified in `requirements-dev.txt` and `pyproject.toml`)
-- Config: `pyproject.toml` `[tool.pytest.ini_options]` with testpaths, pythonpath, and filterwarnings
+- pytest 8.0+ (configured in `pyproject.toml` `[tool.pytest.ini_options]`)
+- Test paths: `tests/` (root), `tests/unit/`, `tests/integration/`
+- Entry point: `pytest tests/ -v --tb=short` (short traceback for readability)
 
 **Assertion Library:**
-- pytest native assertions (`assert`, `assert ... in ...`)
-- pandas testing utilities: `pd.testing.assert_series_equal()`, `pd.testing.assert_frame_equal()`, `pd.testing.assert_index_equal()`
-- NumPy approximate assertions: `pytest.approx()`, `np.testing.assert_allclose()`
+- pytest built-in assertions: `assert condition`, `assert x == y`
+- pandas testing: `pd.testing.assert_series_equal()`, `pd.testing.assert_frame_equal()`
+- NumPy testing: `np.testing.assert_array_almost_equal()`, etc.
 
-**Run Commands:**
-```bash
-# All tests
-pytest tests/ -v
-
-# Watch mode (if pytest-watch installed)
-pytest tests/ -v --watch
-
-# Coverage report
-pytest tests/ --cov=src/trading_crab_lib --cov-report=html
-
-# Specific test file or class
-pytest tests/unit/test_transforms.py -v
-pytest tests/unit/test_clustering.py::TestReducePca -v
-
-# Skip tests that require optional deps
-pytest tests/ --co -q  # collect-only to see which tests are marked skip
-```
+**Configuration:**
+- `pythonpath = ["src", "scripts"]` (allows importing from `src/` without installation)
+- Markers: `@pytest.mark.network`, `@pytest.mark.real_browser` (for tests needing live resources)
+- Filter warnings: statsmodels overflow warnings suppressed (harmless numerical artifacts in synthetic test data)
+- Collect info: `pytest --collect-only -q` shows all test names; **2699 tests collected** as of 2026-10-05
 
 ## Test File Organization
 
 **Location:**
-- Unit tests: `tests/unit/test_<module>.py` (covers a single module or class in isolation)
-- Integration tests: `tests/integration/test_<feature>.py` (covers multi-step workflows)
-- Pipeline smoke tests: `tests/test_pipelines_<name>.py` (at tests/ root level)
-- Model/behavior tests: `tests/test_models_<area>.py` (at tests/ root level for cross-module tests)
-- Email/reporting tests: `tests/test_<service>.py` (at tests/ root level)
+- `tests/conftest.py` — Shared fixtures (checkpoint isolation, synthetic data, logging setup)
+- `tests/unit/test_*.py` — Unit tests for specific modules (~60+ test_platform_*.py files)
+- `tests/integration/test_*.py` — Integration tests (mini pipeline, wheel smoke tests)
+- `tests/test_*.py` — Root-level tests (CLI smoke, pipeline smoke, email, constraints, scripts)
 
 **Naming:**
-- Test files: `test_*.py`
-- Test functions: `test_<behavior_description>()`
-- Test classes: `Test<ComponentName>` (groups related tests with shared fixtures)
-- Fixture functions: lowercase with underscores, typically defined in `conftest.py` or inline with `@pytest.fixture`
+- Module-focused: `test_<module_name>.py` matches the module it tests
+  - Example: `test_transforms.py` → tests `src/trading_crab_lib/transforms.py`
+  - Example: `test_platform_transforms.py` → tests `src/trading_crab_lib/platform/transforms_monthly.py`
 
-**Structure:**
-```
-tests/
-├── conftest.py                          ← shared fixtures (session/function scope)
-├── fixtures/                            ← test data files (currently empty)
-├── unit/
-│   ├── test_transforms.py               ← transform function tests
-│   ├── test_clustering.py               ← clustering module tests
-│   ├── test_ingestion.py                ← HTTP-mocked ingestion tests
-│   ├── test_prediction_flat.py          ← flat prediction API tests
-│   ├── test_email_weekly.py             ← email delivery tests
-│   └── ... (35+ unit test files)
-├── integration/
-│   ├── __init__.py
-│   └── test_mini_pipeline.py            ← synthetic end-to-end (steps 2-4)
-├── test_pipelines_ingest_features.py    ← pipeline steps 1-2 smoke tests
-├── test_models_regime.py                ← regime classifier bundle API
-├── test_models_behavior.py              ← behavior model tests
-└── ... (5+ top-level test files)
-```
-
-## Test Structure
-
-**Suite Organization:**
-```python
-# Example from tests/unit/test_clustering.py
-
-class TestReducePca:
-    """Group of tests for reduce_pca function."""
-    def test_output_shape(self, feature_df):
-        pca_df, _, _ = reduce_pca(feature_df, n_components=5)
-        assert pca_df.shape == (len(feature_df), 5)
-
-    def test_index_preserved(self, feature_df):
-        pca_df, _, _ = reduce_pca(feature_df, n_components=5)
-        pd.testing.assert_index_equal(pca_df.index, feature_df.index)
-
-class TestFitClusters:
-    """Separate class for different function."""
-    def test_both_columns_present(self, feature_df):
-        result = fit_clusters(feature_df, best_k=3, balanced_k=5)
-        assert "cluster" in result.columns
-```
-
-**Patterns:**
-- **Arrange-Act-Assert:** Each test has explicit setup, action, verification
+**Structure — Class-based with descriptive names:**
+- `class TestFunctionName:` for each function or feature
+- `def test_<behavior>():` with explicit behavior description
+- Example:
   ```python
-  def test_gap_fill_idempotent(self, quarterly_index):
-      # Arrange
-      df = self._make_gapped_df(quarterly_index)
-      # Act
-      result1 = apply_gap_fill(df.copy())
-      result2 = apply_gap_fill(df.copy())
-      # Assert
-      pd.testing.assert_frame_equal(result1, result2)
+  class TestAddCrossRatios:
+      def test_all_ten_columns_added(self, raw_macro_df):
+          result = add_cross_ratios(raw_macro_df)
+          expected = ["div_yield2", "price_div", ...]
+          for col in expected:
+              assert col in result.columns
   ```
 
-- **No setup/teardown:** Fixtures handle all initialization; no `setUp()` / `tearDown()` methods
-- **Fixtures over test data files:** Temporary data synthesized in fixtures (`_synthesize_macro_raw()`, `_synthesize_features()`) rather than committed to repo
-- **Isolation via fixtures:** Session-scoped `_isolated_checkpoint_dir` redirects all checkpoint I/O to pytest temp directory — production data never written during tests
+**Inline configuration (not from settings.yaml):**
+- Platform tests use inline config dicts to stay isolated from concurrent settings.yaml edits
+- Example from `test_platform_transforms.py`:
+  ```python
+  SPLICE_CFG: dict = {
+      "equities": {
+          "research_name": "equities_tr",
+          "method": "total_return_from_price_div",
+          ...
+      },
+      ...
+  }
+  ```
 
-## Mocking
+## Fixture Architecture
 
-**Framework:** `unittest.mock` (stdlib) — `patch`, `MagicMock`
+**Session-scoped checkpoint isolation (autouse, critical):**
+- Fixture: `_isolated_checkpoint_dir` in `conftest.py` (lines 159–241)
+- Scope: `autouse=True, scope="session"`
+- Behavior:
+  1. Creates a session-scoped temporary directory
+  2. Copies production checkpoints from `data/checkpoints/` into it (read-fallback)
+  3. Patches `trading_crab_lib.checkpoints.CHECKPOINT_DIR` → session temp dir
+  4. Sets env var `TC_CHECKPOINT_DIR` so subprocesses also use session dir
+  5. **CRITICAL:** Also patches `trading_crab_lib.platform.checkpoints.PLATFORM_CHECKPOINT_DIR` and `trading_crab_lib.platform.honesty.holdout.HOLDOUT_CHECKPOINT_DIR` to protect the 2021+ holdout dataset from being overwritten by tests
+  6. Synthesizes minimal checkpoints if production copies unavailable (ensures constraint tests always run)
+  7. Restores original paths on session teardown
 
-**Patterns:**
-```python
-# Example from tests/unit/test_ingestion.py
+**Why this matters:**
+- Production data is **never** read from or written to during `pytest`
+- Non-deterministic behavior eliminated: pytest runs don't interfere with pipeline runs
+- 2021+ holdout dataset (the one the honesty framework protects) is preserved—test writes go only to session temp dir
 
-@patch("trading_crab_lib.ingestion.multpl.time.sleep")
-@patch("trading_crab_lib.ingestion.multpl.requests.get")
-def test_multpl_scrape_raw_rows(mock_get, mock_sleep):
-    """Mock HTTP calls for scraper tests — no real network access."""
-    mock_get.return_value = _FakeResponse(SAMPLE_MULTPL_HTML)
-    rows = _scrape_raw_rows("https://example.com/table")
-    assert len(rows) == 3
+**Synthetic data generators (fallback when production data unavailable):**
+- `_synthesize_macro_raw(session_dir)` → `macro_raw.parquet` (100 quarters, synthetic columns)
+- `_synthesize_features(session_dir)` → `features_noncausal.parquet` + `features_causal.parquet`
+  - Calls `engineer_all()` if config + dependencies available; falls back to minimal DataFrame
+- `_synthesize_asset_prices(session_dir)` → `asset_prices.parquet` (8 tickers, quarterly index)
+  - Uses configured ETF list from `config/platform_settings.yaml`
 
-# Mocking FRED API
-@patch("trading_crab_lib.ingestion.fred.Fred")
-def test_fred_fetch_all_basic(mock_fred_cls):
-    """Mock fredapi.Fred() constructor and .get_series() method."""
-    mock_fred = MagicMock()
-    mock_fred.get_series.return_value = _make_mock_fred_series()
-    mock_fred_cls.return_value = mock_fred
-    
-    df = fetch_all(cfg)
-    assert "fred_gdp" in df.columns
-```
+**Seeded random data:**
+- `np.random.default_rng(0)` for reproducibility
+- Quarterly indices: `pd.date_range("2000-03-31", periods=N, freq="QE")`
+- Ensures tests pass identically across runs
 
-**What to Mock:**
-- Network calls: `requests.get`, `fredapi.Fred`, `yfinance.download`
-- External services: any HTTP/API endpoint
-- Time-sensitive operations: `time.sleep` (for rate-limiting tests)
-- File I/O across checkpoint boundaries: handled by `conftest.py` fixture isolation, not individual test mocks
+## Test Structure Patterns
 
-**What NOT to Mock:**
-- Core business logic functions: call the real implementation to verify behavior
-- Transformations (gap fill, derivatives, log transforms): test with synthetic data, not mocks
-- Clustering algorithms: call sklearn directly to verify geometry
+**Mocking network calls (no live API access):**
+- unittest.mock.patch for ingestion modules
+- Example from `test_platform_transforms.py`:
+  ```python
+  @patch('trading_crab_lib.platform.ingestion.macro_monthly.fetch_macro_monthly')
+  def test_build_monthly_spine(self, mock_fetch_macro):
+      mock_fetch_macro.return_value = _make_synthetic_macro(idx)
+      ...
+  ```
 
-**Fixture patterns:**
-```python
-# From conftest.py
+**Monkeypatching module constants:**
+- Example from `test_platform_transforms.py`:
+  ```python
+  @pytest.fixture(autouse=True)
+  def _redirect_platform_checkpoints(tmp_path, monkeypatch):
+      from trading_crab_lib.platform import checkpoints as platform_checkpoints
+      monkeypatch.setattr(platform_checkpoints, "PLATFORM_CHECKPOINT_DIR", tmp_path / "platform")
+  ```
 
-@pytest.fixture(autouse=True, scope="session")
-def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
-    """Session-scoped: redirect all checkpoint I/O to tmp dir.
-    
-    autouse=True means every test session gets this fixture automatically.
-    Production data/checkpoints/ is never touched.
-    """
-    session_dir = tmp_path_factory.mktemp("checkpoints", numbered=False)
-    # Copy production checkpoints into session_dir for read-based tests
-    # Patch CHECKPOINT_DIR module variable + env var
-    # Synthesize minimal stand-in checkpoints when production data missing
-    yield session_dir
-    # Restore on teardown
+**Determinism regression tests:**
+- Synthetic data with fixed seeds: `rng = np.random.default_rng(0)`
+- Verify output is identical on repeated calls
+- Example: `test_derivatives_independent_of_market_code` (guard against label-pattern leakage)
 
-@pytest.fixture
-def feature_df(quarterly_index):
-    """Per-test fixture: fresh feature matrix."""
-    rng = np.random.default_rng(42)
-    n = 70
-    index = pd.date_range("2000-03-31", periods=n, freq="QE")
-    return pd.DataFrame(rng.standard_normal((n, 10)), index=index, columns=[f"f{i}" for i in range(10)])
-```
+**Input mutation guards:**
+- Verify functions don't modify input DataFrames
+- Example:
+  ```python
+  def test_does_not_mutate_input(self, raw_macro_df):
+      original_cols = list(raw_macro_df.columns)
+      add_cross_ratios(raw_macro_df)
+      assert list(raw_macro_df.columns) == original_cols
+  ```
 
-## Fixtures and Factories
+**DataFrame equality assertions:**
+- `pd.testing.assert_series_equal(result["col"], expected, check_names=False)` (allows index/name mismatch)
+- `pd.testing.assert_frame_equal(result, expected)` (strict: index, columns, dtypes, values)
+- Useful for testing computed features match expected formulas
 
-**Test Data:**
-```python
-# Minimal fixtures in conftest.py
+## Platform-Specific Testing
 
-@pytest.fixture
-def quarterly_index():
-    """DatetimeIndex with quarterly frequency for test DataFrames."""
-    return pd.date_range("2000-03-31", periods=300, freq="QE")
+**Platform test suite:** ~60 test files dedicated to `src/trading_crab_lib/platform/`
+- `test_platform_transforms.py` — Monthly feature-table assembly (DATA-01, DATA-03, DATA-04)
+- `test_platform_labeling.py` — Regime classification (labeling/ submodule)
+- `test_platform_evaluation_*.py` — Evaluation metrics, deflated Sharpe, churn, disagreement
+- `test_platform_backtest_*.py` — Backtest driver, baseline, joint driver, costs
+- `test_platform_plotting_*.py` — Visualization (allocation, backtest, drift, features, history, regime, etc.)
+- `test_platform_walkforward.py` — Walk-forward validation harness
+- `test_platform_honesty_registry.py` — Honesty framework (trial registry, locked holdout)
+- `test_platform_cv.py` — Cross-validation split logic
+- `test_build_platform_data_guard.py` — Data integrity guards (point-in-time, publication lags)
 
-@pytest.fixture
-def raw_macro_df(quarterly_index):
-    """Synthetic macro DataFrame matching the schema ingested by step 1."""
-    rng = np.random.default_rng(0)
-    n = len(quarterly_index)
-    return pd.DataFrame({
-        "sp500": np.abs(rng.uniform(300, 5000, n)) + 200,
-        "dividend": rng.uniform(10, 80, n),
-        "fred_gdp": rng.uniform(5000, 25000, n),
-        "fred_gnp": rng.uniform(4800, 24000, n),
-        # ... more columns matching ingestion output
-    }, index=quarterly_index)
-```
+**Data dependencies for platform tests:**
+- Real data: Copied from `data/checkpoints/platform/` into session temp dir (read-fallback)
+- Synthetic data: Used when real data unavailable; structure matches production
+- Monthly spine: Tests verify consistency across monthly/quarterly resamplings
+- Holdout dataset: Protected by autouse fixture; never overwritten by test writes
 
-**Factories (helper functions):**
-```python
-# From conftest.py (synthesis functions)
+## Mocking Strategy
 
-def _synthesize_macro_raw(session_dir: Path) -> None:
-    """Write a minimal synthetic macro_raw checkpoint."""
-    # Mirrors ingestion output structure for constraint tests
+**No live network calls — all ingestion is mocked:**
+- `unittest.mock.patch` for:
+  - `trading_crab_lib.ingestion.fred.fetch_all()` → synthetic FRED time series
+  - `trading_crab_lib.ingestion.multpl.fetch_all()` → synthetic multpl data
+  - `trading_crab_lib.ingestion.assets.fetch_universe_prices()` → synthetic prices
+  - `trading_crab_lib.platform.ingestion.alfred.fetch_all_vintages()` → synthetic ALFRED vintages
+  - `trading_crab_lib.platform.ingestion.prices_daily.fetch_universe_prices()` → synthetic daily prices
 
-def _synthesize_features(session_dir: Path) -> None:
-    """Write synthetic features checkpoints by running engineer_all()."""
-    # Exact schema matching pipeline output
-```
+**Test data helpers (conftest.py + test modules):**
+- `_make_monthly_index(start, periods)` → `pd.DatetimeIndex` at month-end
+- `_make_quarterly_index(start, periods)` → `pd.DatetimeIndex` at quarter-end
+- `_make_synthetic_macro(idx)` → DataFrame with all required columns (FRED, multpl, macrotrends)
+- `_make_synthetic_features(idx)` → Already-engineered feature DataFrame
 
-**Location:**
-- Shared fixtures: `tests/conftest.py` (session/module/function scope)
-- Per-test-class fixtures: defined inline in the test class with `@pytest.fixture`
-- Temporary data: synthesized via helpers, never committed as files
+**Fixture-provided test data:**
+- `raw_macro_df` (conftest.py) — Real production macro_raw if available, else synthesized
+- `quarterly_index` (conftest.py) — 305-quarter index (1950-Q1 through ~2025-Q4)
+- `cluster_labels`, `profiles_df` — Loaded from checkpoints if available
 
 ## Coverage
 
-**Requirements:** No strict minimum enforced; target is 80%+ for critical paths
+**Measurement:**
+- Tool: pytest-cov (installed via `[dev]` extras)
+- Command: `pytest tests/ --cov=src/ --cov-report=html`
+- Report: Generates `htmlcov/index.html` with per-file coverage
 
-**View Coverage:**
+**Requirements:**
+- **Not enforced:** No minimum coverage threshold in CI/CD
+- **Reported:** CI prints coverage summary but exits zero regardless
+- **Goal:** Trend toward ~80% line coverage; focus on behavior/logic coverage over line coverage
+
+**Coverage gaps (intentional):**
+- Optional dependency fallbacks (`_HMM_AVAILABLE`, `_STATSMODELS_AVAILABLE`) — skipped when deps missing
+- Network retry logic (ingestion modules) — tested with mocks only
+- Rare error paths (corrupt pickle files, disk full) — practical to skip in CI
+- Old legacy code (`legacy/`, `gsd-scratch-work/`) — reference only; not active development
+
+## Running Tests
+
+**Pytest command reference:**
 ```bash
-pytest tests/ --cov=src/trading_crab_lib --cov-report=term-missing
-pytest tests/ --cov=src/trading_crab_lib --cov-report=html  # opens index.html
+# Run all tests
+pytest tests/ -v
+
+# Run with short traceback
+pytest tests/ -v --tb=short
+
+# Run specific test file
+pytest tests/unit/test_platform_transforms.py -v
+
+# Run specific test class
+pytest tests/unit/test_transforms.py::TestAddCrossRatios -v
+
+# Run specific test
+pytest tests/unit/test_transforms.py::TestAddCrossRatios::test_all_ten_columns_added -v
+
+# Run with coverage
+pytest tests/ --cov=src/ --cov-report=html
+
+# Collect tests (don't run)
+pytest --collect-only -q tests/
+
+# Run tests matching a keyword
+pytest tests/ -k "transforms" -v
+
+# Run only markers (network, real_browser)
+pytest tests/ -m network -v
 ```
 
-**Coverage gaps noted in CLAUDE.md:**
-- Some optional-dependency modules skip when libraries unavailable (HMM, Markov, HDBSCAN, LightGBM)
-- Pre-1993 asset data uses proxies only (gold/oil prices unavailable before macrotrends.net backfill)
-- Behavior model tests incomplete in early phases
+**Parallel execution (not recommended for this codebase):**
+- Checkpoint isolation via session fixture makes tests independent at the session level
+- However, individual tests may share in-memory state (fixtures); pytest-xdist parallelization is not tested
+- Use sequential execution (default) for reliability
 
-**CI/CD:** `pytest --cov` runs in GitHub Actions but does not fail on coverage threshold (informational only)
+## CI/CD Pipeline
 
-## Test Types
+**GitHub Actions matrix (.github/workflows/python-package.yml):**
+- Runs on: Every push to main, every PR to main
+- Matrix: Python 3.10, 3.11, 3.12, 3.13 (parallel jobs, fail-fast: false)
+- Installs: Full `[all,dev]` extras + optional packages (k-means-constrained, hdbscan, etc.)
 
-**Unit Tests:**
-- Scope: single function or class in isolation
-- Data: synthetic (fixture-based), no external dependencies
-- File location: `tests/unit/test_<module>.py`
-- Example: `test_gap_fill_interior_nans_filled()` — call `apply_gap_fill()` on synthetic DataFrame with known NaN positions
-- ~500+ unit tests across 30+ test files
+**Build job steps:**
+1. **Lint with flake8** — Syntax errors only: `E9,F63,F7,F82`
+2. **Lint with ruff** — Full checks: `E,F,W,I,UP` (GitHub output format for PR comments)
+3. **Lint with pylint** — Informational only (exit-zero)
+4. **Test with pytest** — `pytest tests/ -v --tb=short` (all 2699 tests)
+5. **Type-check with mypy** — Informational only (exit-zero)
 
-**Integration Tests:**
-- Scope: multi-step workflow (e.g., steps 2-4: features → clustering → regimes)
-- Data: synthetic DataFrames that mimic step outputs
-- No checkpoint I/O; no network calls
-- File location: `tests/integration/test_mini_pipeline.py`
-- Tests: determinism regression, column preservation, NaN handling across pipeline
-- ~14 integration tests verifying end-to-end consistency
+**Build-pkg job:**
+- Verifies both packages build cleanly (sdist + wheel):
+  - `python -m build src/trading_crab_lib/`
+  - `python -m build .`
 
-**Smoke Tests:**
-- Scope: CLI and pipeline entry point dispatch (not full execution)
-- Data: mocked or minimal fixtures
-- File location: `tests/test_pipeline_smoke.py`, `tests/test_cli_smoke.py`
-- Tests: argument parsing, step function dispatch, error handling
-- ~20 smoke tests verifying CLI wiring
+## Test Data & Isolation
 
-**No E2E tests:** Full pipeline requires fresh network data (10 min runtime) — not run in CI; developer runs manually with `tradingcrab --refresh --recompute`
+**Real data (production checkpoints):**
+- Copied into session temp dir on pytest startup
+- Read-fallback for tests that need realistic data
+- Never written back to production directory
+- Location after copy: `session_tmp_dir/macro_raw.parquet`, `session_tmp_dir/features_*.parquet`, etc.
 
-## Common Patterns
+**Synthetic data (generated by conftest.py):**
+- Used when real data unavailable (e.g., yfinance unreachable, data dir cleared)
+- Structure matches production exactly (same columns, same index frequency)
+- Seeded with fixed random state for reproducibility
+- Minimal: 40-100 rows (enough to test algorithms, not slow)
 
-**Async Testing:**
-- Not used; pipeline is synchronous
-- ThreadPoolExecutor used in FRED ingestion but not tested as async (verified with mocked responses)
+**Platform-specific isolation:**
+- `data/checkpoints/platform/` → session temp dir's `platform/` subdirectory
+- `data/checkpoints/holdout/` → session temp dir's `holdout/` subdirectory
+- Protects the 2021+ holdout (the one piece of data the honesty framework exists to preserve)
 
-**Error Testing:**
-```python
-# Example from tests/
+**Pre-migration platform checkpoints (git show, not live working tree):**
+- Tests that verify Phase 7/8 RECORDS (numbers measured on unlagged data) read pre-8.1 checkpoints
+- Loaded via `get_platform_checkpoint_git_show()` (reads from git history, not working tree)
+- Pattern: `conftest.py` lines 243–249
 
-def test_config_missing_required_section():
-    """validate_config raises ValueError with all errors in one message."""
-    cfg = {"data": {}}  # missing "fred", "multpl", etc.
-    with pytest.raises(ValueError) as exc_info:
-        validate_config(cfg)
-    assert "validation error(s)" in str(exc_info.value)
-    assert "Missing required section" in str(exc_info.value)
+## Special Test Patterns
 
-def test_checkpoint_not_found():
-    """CheckpointManager.load raises FileNotFoundError with path."""
-    cm = CheckpointManager(checkpoint_dir=tmp_path)
-    with pytest.raises(FileNotFoundError) as exc_info:
-        cm.load("nonexistent")
-    assert "Checkpoint not found" in str(exc_info.value)
+**Fixture parametrization (when needed):**
+- Example: Testing multiple k values for clustering
+  ```python
+  @pytest.mark.parametrize("k", [2, 3, 4, 5])
+  def test_silhouette_score_improves(k):
+      ...
+  ```
+
+**Skipping tests conditionally:**
+- Missing optional dependency:
+  ```python
+  @pytest.mark.skipif(not _HMM_AVAILABLE, reason="hmmlearn not installed")
+  def test_hmm_labels():
+      ...
+  ```
+- Slow or network-dependent:
+  ```python
+  @pytest.mark.network
+  def test_fred_api_call():
+      ...
+  ```
+
+**Fixtures with setup/teardown:**
+- Example: Redirect checkpoints, restore on cleanup
+  ```python
+  @pytest.fixture(autouse=True)
+  def _redirect_platform_checkpoints(tmp_path, monkeypatch):
+      monkeypatch.setattr(platform_checkpoints, "PLATFORM_CHECKPOINT_DIR", tmp_path / "platform")
+      yield
+      # Cleanup happens automatically on session end
+  ```
+
+**Test markers (in pyproject.toml):**
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "network: test deliberately makes a real network request",
+    "real_browser: test launches a real browser",
+]
 ```
 
-**Determinism Tests:**
-```python
-# Example from tests/unit/test_transforms.py
+## Best Practices
 
-class TestGapFillDeterminism:
-    """Verify gap fill is idempotent and independent of market_code."""
-    
-    def test_gap_fill_idempotent(self, quarterly_index):
-        """Running gap fill twice gives identical output."""
-        df = self._make_gapped_df(quarterly_index)
-        result1 = apply_gap_fill(df.copy())
-        result2 = apply_gap_fill(df.copy())
-        pd.testing.assert_frame_equal(result1, result2)
-    
-    def test_gap_fill_independent_of_market_code(self, quarterly_index):
-        """Gap fill on col X must not change when market_code is added/changed."""
-        df_no_mc = self._make_gapped_df(quarterly_index)
-        result_no_mc = apply_gap_fill(df_no_mc.copy())
-        
-        df_with_mc = df_no_mc.copy()
-        df_with_mc["market_code"] = [0 if i % 2 == 0 else 1 for i in range(len(df_no_mc))]
-        result_with_mc = apply_gap_fill(df_with_mc.copy())
-        
-        # Feature column should be identical regardless of market_code presence
-        pd.testing.assert_series_equal(result_no_mc["x"], result_with_mc["x"])
-```
-
-**Optional Dependency Skipping:**
-```python
-# Example from tests/unit/test_hmm.py
-
-@pytest.mark.skipif(not _HMM_AVAILABLE, reason="hmmlearn not installed")
-def test_fit_hmm_returns_scores():
-    """Skip entire test if hmmlearn unavailable."""
-    result = fit_hmm(pca_df, k_range=range(2, 4))
-    assert "k" in result.columns
-    assert "bic" in result.columns
-```
-
-**Warning Suppression:**
-- Configured in `pyproject.toml` `[tool.pytest.ini_options] filterwarnings` for warnings that occur across multiple test runs (statsmodels overflow warnings, numpy divide-by-zero, etc.)
-- Per-test suppression via `@pytest.mark.filterwarnings("ignore::...")` when specific to one test
-- Rationale: third-party libraries generate harmless numerical artefacts on synthetic data
+1. **Keep tests focused:** One behavior per test, descriptive name
+2. **Use fixtures heavily:** Avoid duplication of setup code via conftest.py
+3. **Mock external resources:** No live API calls, network, browser launches (except marked tests)
+4. **Seed randomness:** Use `np.random.default_rng(seed)` for reproducibility
+5. **Test both happy path and edge cases:** Empty inputs, NaN rows, missing columns, etc.
+6. **Preserve input:** Verify functions don't mutate DataFrame arguments
+7. **Use parametrize for variants:** Test same logic with different inputs
+8. **Comment non-obvious tests:** Why this edge case matters (e.g., "tests look-ahead bias guard")
+9. **Checkpoint isolation:** Trust the session fixture; don't create your own tmp_path teardown logic
+10. **Real data is precious:** Use synthetic data for unit tests; reserve real data for integration tests
 
 ---
 
-*Testing analysis: 2026-07-09*
+*Testing analysis: 2026-10-05*
