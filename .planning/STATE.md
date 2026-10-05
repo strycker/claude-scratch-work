@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 08.4
-current_phase_name: Cold-Start Rebuild & Learnings Before Migration
+current_phase_name: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
 status: planning
-stopped_at: "Phase 08.4 context gathered (reframed: clean-slate reset; everything out; registry true zero; rebuild in target repo 9.x)"
+stopped_at: "Phase 08.4 context re-gathered (tooling: archive/reset/restore/promote + fail-loud build); 08.5 context captured (clean-slate reset)"
 last_updated: "2026-10-05T18:29:44.546Z"
 progress:
   total_phases: 12
@@ -28,8 +28,8 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 08.4 — Cold-Start Rebuild & Learnings Before Migration (reframed 2026-10-05: clean-slate reset)
-Status: Context gathered (2026-10-05) — ready to plan (`/gsd-plan-phase 8.4`). Everything generated leaves git (tag `archive/pre-reset-2026-10` first); registry true-zero epoch (ADR-0005, caveat disclosed); fail-loud build + MVP-1 page from empty; rebuild M0→M7 moves to the target repo as Phase 9.x. Budget 0 rows.
+Phase: 08.4 — Cold-Start Tooling: Archive, Reset, Restore & Fail-Loud Build (re-scoped 2026-10-05)
+Status: Context gathered (2026-10-05) — ready to plan (`/gsd-plan-phase 8.4`). Tooling: archive/list/reset/restore/promote (local archives, promote → git tag `model/<name>`, reset auto-archives, no pickles — refit on restore), fail-loud build (D-08), no_regime page without regime models. Budget 0. Then 08.5 (context also gathered): the production reset using this tooling — everything out of git, registry true-zero epoch (ADR-0005), MVP-1 from a fresh clone, Phase 9.x rebuild order.
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
@@ -794,7 +794,7 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-10-05T18:29:44.403Z
-Stopped at: Phase 08.4 context gathered (reframed: clean-slate reset; everything out; registry true zero; rebuild in target repo 9.x)
+Stopped at: Phase 08.4 context re-gathered (tooling) + 08.5 context captured (reset)
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
 acceptance — the thirteen items Phase 7 carries forward, and the starting point for Phase 8.
 **Read § ACCEPTANCE 2026-09-21 first: criterion 6 is unresolved and REG-01 is only partially

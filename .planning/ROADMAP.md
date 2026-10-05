@@ -31,7 +31,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
 - [x] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands (completed 2026-10-05)
-- [ ] **Phase 08.4: Cold-Start Rebuild & Learnings Before Migration** *(INSERTED 2026-10-02)* - Fresh pull, all models refit from scratch, actionable weekly predictions; learnings folded into the guide/roadmap so Phase 9 knows what to migrate and in what order
+- [ ] **Phase 08.4: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build** *(INSERTED 2026-10-02; re-scoped 2026-10-05)* - Archive/reset/restore/promote state at will, tagged model archives under git; the build fails loud and runs from empty
+- [ ] **Phase 08.5: Clean-Slate Reset & Learnings Before Migration** *(INSERTED 2026-10-05)* - Use the 8.4 tooling for the production reset (everything generated out of git, registry true-zero epoch), MVP-1 from a fresh clone, learnings and the Phase 9.x rebuild order
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -800,31 +801,56 @@ Plans:
 - [x] 08.3-02-PLAN.md — **Before, migrate, decide, run.** NO_REGISTRY before run on HEAD reproduces 8.1 at rel 1e-9 (`pit_08.3/before/`); additive `monthly_raw` migration (+3 columns; the 47 existing columns exact; merge=False; marker) plus a feature-neutrality check; checkpoint; `pnl_splice` activated and one 2-row run (46 → 48, tag `08.3-monthend-tilt-vs-ablation`); DECISIONS E-07 done, E-08 built, E-12 before|after with DSR at 48 vs 2.2606 and the E-06 / E-09 answers; scoreboard tag and tracked re-pins so the suite ends green — wave 2, checkpoint
 - [x] 08.3-03-PLAN.md — **Page and notebooks.** E-07 caveat narrowed to oil before 1986; real-data scratch page (same book, 55 model columns, 08.3 scoreboard); P9 (N7) and P7 re-executed headless; README and recorded counts; full suite on pandas 3 and pandas 2 — wave 3
 
-### Phase 08.4: Cold-Start Rebuild & Learnings Before Migration (INSERTED)
+### Phase 08.4: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build (INSERTED)
 
-**Goal (reframed by Glenn, 2026-10-05): a production clean-slate reset.**
-- Freeze the current state under the git tag `archive/pre-reset-2026-10`.
-- Clear **everything** generated out of git: data (raw included), outputs, labels, models, notebook outputs.
-- Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
-- Prove that the code starts from an empty checkout: a fail-loud fresh build (D-08), then the MVP-1 no-regime weekly
-  page, run twice with identical output, and the N4 sign-off on Glenn's Mac.
-- Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
-- Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
+**Goal (Glenn, 2026-10-05):** the platform can archive its datasets, outputs and models, and **cold-start or reset at
+any time**. Chosen archives can be version-controlled in git as tagged model snapshots.
 
-**Not in 8.4:** rebuilding any regime model. That covers E-11 (M3), the L2 recipe (M6), CR-02 (M5), A-03 and REG-01.
-**Why before Phase 9:** migrating a stack that has only ever run incrementally risks carrying hidden state (merged
-checkpoints, pinned artefacts, stale labels) into the public repo.
-**Context:** `.planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md` (D-01..D-07). Budget: 0 rows.
+- `archive`, `list`, `reset`, `restore` and `promote` commands, each archive carrying a manifest:
+  - sha256 per file;
+  - code commit;
+  - config hash;
+  - registry count and hash;
+  - data date range.
+- Archives are local and gitignored. `promote` commits one into git with the tag `model/<name>`.
+- `reset` always auto-archives first and never touches the registry.
+- No pickles in any archive: `restore` refits the serving model and verifies it against the manifest (P27).
+- Live book state (G-11) never enters a promoted archive.
+- The data build fails loud (D-08) and runs from an empty `data/`. In `no_regime` mode the weekly path needs no regime
+  model.
 
-**Lean mode:** at most 3 plans per module. If this grows past one module, split it into 8.4 / 8.5 at discuss time.
-**Requirements**: TBD
+**Context:** `.planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md`. Budget: 0 rows.
 **Depends on:** Phase 08.3
-**Blocks:** Phase 9 (Migration): its order and scope come from 8.4's learnings.
 **Plans:** 0 plans
 
 Plans:
 
 - [ ] TBD (run /gsd-plan-phase 8.4)
+
+### Phase 08.5: Clean-Slate Reset & Learnings Before Migration (INSERTED)
+
+**Goal (reframed by Glenn, 2026-10-05): a production clean-slate reset, done with 8.4's tooling.**
+
+- Archive and promote the current state as `model/pre-reset-2026-10`.
+- Clear **everything** generated out of git: data (raw included), outputs, labels, models, notebook outputs.
+- Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
+- From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page, run twice with identical output, then
+  the N4 sign-off.
+- Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
+- Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
+
+**Not in 8.5:** rebuilding any regime model: E-11 (M3), the L2 recipe (M6), CR-02 (M5), A-03, REG-01.
+**Why before Phase 9:** migrating a stack that has only ever run incrementally risks carrying hidden state into the
+public repo.
+**Context:** `.planning/phases/08.5-clean-slate-reset-learnings-before-migration/08.5-CONTEXT.md` (captured in the 8.4
+discussion). Budget: 0 rows of measurement, plus the deliberate epoch reset.
+**Depends on:** Phase 08.4
+**Blocks:** Phase 9 (Migration): its order and scope come from 8.5's learnings.
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 8.5)
 
 ### Phase 9: Migration to Public Repo
 
@@ -858,7 +884,7 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 8.4 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 9
 (8.3 inserted by Glenn 2026-10-02: the regime rebuild starts with E-07 before migration.)
 (8.4 inserted by Glenn 2026-10-02: cold-start rebuild and learnings before any migration.)
 (Order confirmed by Glenn 2026-09-30: 8.1 before 8.2 — 8.1's outcome shapes 8.2's design.)
@@ -877,5 +903,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
-| 08.4 Cold-Start Rebuild & Learnings (INSERTED) | 0/TBD | Not started | - |
+| 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 0/TBD | Not started | - |
+| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
