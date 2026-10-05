@@ -36,6 +36,19 @@ data/checkpoints/platform_notebook/
 # (SERVING_BUILD_COMMAND); it is never committed. Loading an unverified pickle is
 # arbitrary code execution (P27), so a pickle must never arrive through git.
 data/checkpoints/platform/*.pkl
+# Live weekly/serving STATE in the tracked platform namespace (08.3 close, Glenn 2026-10-05).
+# These hold the operator's actual book and per-machine serving state, rewritten by every
+# weekly/serving run on the Mac. They are machine-local, like the pickles above, and must never
+# ride along on a `git add data/` (the 08.3 Mac commit is why this rule exists).
+data/checkpoints/platform/allocation_mode.*
+data/checkpoints/platform/asset_returns.*
+data/checkpoints/platform/executed_weights.*
+data/checkpoints/platform/hysteresis_state.*
+data/checkpoints/platform/nowcaster_class_prior.*
+data/checkpoints/platform/regime_belief.*
+data/checkpoints/platform/returns_by_regime.*
+outputs/reports/platform/returns_by_regime.parquet
+outputs/reports/platform/weekly_report.md
 # data/processed/
 # data/regimes/
 # outputs/figures/
