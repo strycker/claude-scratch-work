@@ -1,444 +1,489 @@
-> **STALE (flagged 2026-09-29):** generated 2026-07-09, before the monthly `platform/` package was built (Phases 1–8). It describes the legacy quarterly codebase. For the platform see `REBUILD-FROM-SCRATCH-GUIDE.md` §3 and `platform_design/DECISIONS.md`; regenerate with `/gsd-map-codebase` before relying on it.
-
 # Codebase Structure
 
-**Analysis Date:** 2026-07-09
+**Analysis Date:** 2026-10-05
 
 ## Directory Layout
 
 ```
-trading-crab/
-├── .planning/                       ← GSD planning outputs (this repo's docs)
-├── .claude/                         ← Claude Code tooling (keybindings, settings)
-├── CLAUDE.md                        ← Project guide (read first)
-├── README.md                        ← User-facing overview
-├── ROADMAP.md                       ← Prioritized backlog
-├── STATE.md                         ← Pipeline status + test counts
-├── platform_design/                 ← 5-layer L0-L4 architecture vision (design phase)
-│   └── platform_design.md
-├── .env.example                     ← Copy to .env, fill FRED_API_KEY
-├── pyproject.toml                   ← Root workspace + app package
-├── Makefile                         ← Dev shortcuts
+trading-crab/ (repo root)
 │
-├── config/                          ← All tuneable parameters
-│   ├── settings.yaml                ← Master config (data ranges, FRED series, features, clustering k, model depths)
-│   └── regime_labels.yaml           ← Manual regime name curation (edit after step 3/4)
+├── .claude/, .codex/, .cursor/          # Editor configs (ignore)
+├── .github/                              # GitHub Actions CI/CD workflows
+├── gsd-scratch-work/                     # Git submodule: GSD-framework version (read-only reference)
+├── trading-crab/                         # Git submodule: public PyPI version (read-only reference)
+├── trading-crab-lib/                     # Git submodule: library PyPI version (read-only reference)
 │
-├── data/                            ← Runtime output (gitignored)
-│   ├── raw/                         ← Cached raw data
-│   │   ├── macro_raw.parquet        ← Step 1 output (FRED + multpl + macrotrends + ETF prices merged)
-│   │   └── asset_prices.parquet     ← ETF prices cached from step 1, reused by step 6
-│   ├── processed/                   ← Derived datasets
-│   │   ├── features.parquet         ← Step 2 output (centered derivatives, for clustering)
-│   │   └── features_supervised.parquet  ← Step 2 output (causal derivatives, for supervised learning)
-│   ├── regimes/                     ← Step 3-4 outputs
-│   │   ├── cluster_labels.parquet   ← Step 3 output (both `cluster` and `balanced_cluster` columns)
-│   │   ├── kmeans_scores.parquet    ← Silhouette/CH/DB scores from k-sweep
-│   │   └── profiles.parquet         ← Step 4 output (per-regime means, stds, transition matrix)
-│   └── checkpoints/                 ← CheckpointManager directory (parquet + .meta.json pairs)
-│       ├── {name}.parquet
-│       ├── {name}.meta.json
-│       ├── macro_raw_secondary.parquet  ← Preservation checkpoint: full columns pre-dropna
-│       ├── features_secondary.parquet   ← Preservation checkpoint: all engineered features
-│       ├── features_supervised_secondary.parquet  ← Preservation checkpoint: causal versions
-│       └── market_code_*.parquet    ← External labels (grok, clustered, predicted)
+├── config/                               # Configuration files
+│   ├── settings.yaml                     # Frozen incumbent quarterly pipeline config (D-02: read-only)
+│   ├── platform_settings.yaml            # Platform monthly pipeline config (M0, D-02)
+│   ├── email.example.yaml                # Email template (optional, read-only)
+│   ├── regime_labels.yaml                # Manually pinned regime names (D-02: not platform)
+│   ├── portfolio.yaml                    # ETF allocation blueprint (D-02: not platform)
+│   └── accounts/                         # Account-specific settings (Glenn's Fidelity holdings)
 │
-├── outputs/                         ← Final outputs (gitignored)
-│   ├── models/                      ← Pickled sklearn models
-│   │   ├── current_regime.pkl       ← Step 5: RandomForestClassifier for nowcasting
-│   │   ├── dt_current.pkl           ← Step 5: DecisionTreeClassifier (optional)
-│   │   ├── lgbm_current.pkl         ← Step 5: LightGBM (optional, requires lightgbm)
-│   │   └── forward_*.pkl            ← Step 5: Forward classifiers (1Q/2Q/4Q/8Q)
-│   ├── plots/                       ← PNG/PDF figures (per-step)
-│   │   ├── 01_*.png                 ← Step 1 plots (raw series coverage)
-│   │   ├── 02_*.png                 ← Step 2 plots (gap-fill, variance, centered vs causal)
-│   │   ├── 03_*.png                 ← Step 3 plots (PCA, elbow, silhouette, method comparison)
-│   │   ├── 04_*.png                 ← Step 4 plots (regime timeline, transition matrix, forward probs)
-│   │   ├── 05_*.png                 ← Step 5 plots (feature importance, CV accuracy, calibration)
-│   │   ├── 06_*.png                 ← Step 6 plots (asset returns by regime, heatmap)
-│   │   ├── 08_*.png                 ← Step 8 plots (RRG scatter, rolling z-scores)
-│   │   └── 09_*.png                 ← Step 9 plots (tactics summary)
-│   └── reports/                     ← CSV/text outputs
-│       ├── dashboard.csv            ← Step 7: regime + asset signals (machine-readable)
-│       ├── weekly_report.md         ← Weekly automation: regime + portfolio + email draft
-│       ├── email_body.txt           ← Step 7 (optional): HTML/plain-text email body
-│       ├── diagnostics/
-│       │   ├── rrg_quadrants.csv    ← Step 8: RRG classification
-│       │   └── rolling_ratios.csv   ← Step 8: rolling z-scores
-│       └── tactics.csv              ← Step 9: buy_hold/swing/stand_aside per asset
+├── data/                                 # Data storage (gitignored except checkpoints)
+│   ├── raw/                              # Raw ingestion (gitignored; sourced live)
+│   ├── checkpoints/
+│   │   ├── <incumbent-quarterly>/        # Frozen incumbent step outputs (read-only)
+│   │   └── platform/                     # Platform phase outputs (tracked in git, safe to refresh)
+│   │       ├── monthly_raw.parquet       # M1 output: raw monthly series
+│   │       ├── monthly_features.parquet  # M2 output: causal features
+│   │       ├── regime_labels.parquet     # M5 output: hard regime assignments
+│   │       ├── nowcaster_model.pkl       # M6 output: fitted RandomForest
+│   │       ├── regime_belief.parquet     # Weekly state: current posterior belief
+│   │       ├── executed_weights.parquet  # Weekly state: post-hysteresis book
+│   │       └── <other>_*.parquet         # Intermediate checkpoints (profiles, matrices, etc.)
+│   ├── holdout/                          # 2021-01-01 onward (M8, locked, evaluated once)
+│   └── snapshots/                        # Daily snapshots (price updates)
 │
-├── legacy/                          ← Reference (DO NOT MODIFY)
-│   └── unified_script.py            ← Original 1249-line monolith; algorithm ground truth
+├── legacy/                               # Frozen incumbent quarterly pipeline (do NOT modify)
+│   └── unified_script.py                 # THE reference: all legacy logic must reach this
 │
-├── pipelines/                       ← Simplified step entry points (for minimal use cases)
-│   ├── 01_ingest.py                 ← Runs step1_ingest() directly (no RunConfig)
-│   ├── 02_features.py               ← Runs step2_features() directly
-│   ├── 03_cluster.py
-│   ├── 04_regime_label.py
-│   ├── 05_predict.py
-│   ├── 06_asset_returns.py
-│   ├── 07_dashboard.py
-│   ├── 08_diagnostics.py
-│   └── 09_tactics.py
+├── src/trading_crab/                     # App package (pip name: trading-crab)
+│   ├── __init__.py
+│   ├── cli.py                            # Entry point: tradingcrab CLI
+│   └── pipeline.py                       # Incumbent quarterly pipeline orchestration
 │
-├── notebooks/                       ← Jupyter exploration (one per pipeline stage + comparisons)
-│   ├── 01_ingestion.ipynb           ← Raw series inspection
-│   ├── 02_features.ipynb            ← Gap-fill diagnostics, variance ranking, centered vs causal
-│   ├── 03_clustering.ipynb          ← PCA, silhouette, GMM/DBSCAN/Spectral comparison
-│   ├── 04_regimes.ipynb             ← Regime profiles, transition matrix, HMM comparison
-│   ├── 05_prediction.ipynb          ← CV diagnostics, model comparison, calibration
-│   ├── 06_assets.ipynb              ← Per-regime violin plots, Sharpe table, ETF coverage
-│   ├── 07_pairplot.ipynb            ← Triple-colored pairplots (unsupervised/grok/RF)
-│   ├── 08_raw_series.ipynb          ← Raw series exploration
-│   ├── 09_diagnostics.ipynb         ← RRG scatter, rolling z-scores, quadrant rotation
-│   ├── 10_model_comparison.ipynb    ← KMeans vs GMM vs HMM vs Spectral; soft probs
-│   ├── 11_feature_selection.ipynb   ← RF importance curves, dead-feature detector, what-if
-│   └── 12_divergence_momentum.ipynb ← Divergence z-scores, momentum dashboard
+├── src/trading_crab_lib/                 # Library package (pip name: trading-crab-lib)
+│   ├── __init__.py                       # Path resolution, convenience imports
+│   ├── config.py                         # Incumbent quarterly config (frozen)
+│   ├── runtime.py                        # RunConfig dataclass
+│   ├── checkpoints.py                    # CheckpointManager (frozen incumbent's)
+│   ├── <incumbent modules>.py            # Frozen: transforms, clustering, prediction, reporting, etc.
+│   ├── ingestion/                        # Frozen incumbent fetchers (fred, multpl, macrotrends, assets)
+│   ├── prediction/                       # Frozen incumbent classifiers + bundle API
+│   ├── plotting/                         # Frozen incumbent visualization
+│   └── platform/                         # NEW: Platform monthly pipeline (active development)
+│       ├── __init__.py
+│       ├── config.py                     # Platform config loader (independent schema)
+│       ├── checkpoints.py                # Platform-namespace checkpoint manager
+│       ├── snapshots.py                  # Daily snapshot persistence
+│       ├── taxonomy.py                   # Feature tier classification (fast/slow/agency)
+│       ├── splice.py                     # Data splicing engine (ratio_splice, TR synthesis)
+│       ├── transforms_monthly.py         # Resample, publication lags, monthly features
+│       ├── ingestion/                    # M1: Data sources
+│       │   ├── __init__.py
+│       │   ├── alfred.py                 # ALFRED macro (vintage-corrected)
+│       │   ├── macro_monthly.py          # FRED monthly aggregates
+│       │   ├── macro_daily.py            # FRED daily rates
+│       │   ├── prices_daily.py           # Equity/ETF prices (yfinance)
+│       │   ├── eodhd.py, tiingo.py       # Alternative price sources
+│       │   ├── norgate.py                # Norgate price data
+│       │   └── publication_lags.py       # Apply D-07 publication-lag shifts
+│       ├── labeling/                     # M5: Regime labeling (L1)
+│       │   ├── __init__.py
+│       │   ├── jump_model.py             # Preferred: k-means + jump-penalty
+│       │   └── diagnostics.py            # Occupancy, sojourn, stability validation
+│       ├── features/                     # Feature engineering (M2 details)
+│       │   ├── __init__.py
+│       │   ├── invariants.py             # Causal feature pipeline
+│       │   └── relative.py               # Relative ratios (parked-helper)
+│       ├── prediction/                   # M6: Nowcaster + filter (L2)
+│       │   ├── __init__.py
+│       │   ├── nowcaster.py              # P(regime | causal features)
+│       │   ├── regime_filter.py          # Bayesian filter, belief persistence
+│       │   └── transition_matrix.py      # Empirical transition matrix
+│       ├── assets/                       # L3: Asset returns + vol (M3, M7)
+│       │   ├── __init__.py
+│       │   ├── returns.py                # Quarterly returns by regime
+│       │   └── vol.py                    # Vol, covariance, GARCH/EWMA
+│       ├── allocation/                   # L4: Weights (M4, M7)
+│       │   ├── __init__.py
+│       │   ├── tilt.py                   # Vol-targeted regime-conditional weights
+│       │   ├── hysteresis.py             # No-trade band execution
+│       │   └── joint_tilt.py             # Parked-helper (joint classifier)
+│       ├── backtest/                     # Walk-forward backtest + baselines
+│       │   ├── __init__.py
+│       │   ├── driver.py                 # Monthly rebalance loop, ablations
+│       │   ├── baselines.py              # 60/40, Faber, vol-parity
+│       │   ├── costs.py                  # Rebalance costs
+│       │   └── joint_driver.py           # Parked: joint-classifier backtest
+│       ├── report/                       # L4: Output & serve (M4)
+│       │   ├── __init__.py
+│       │   ├── weekly.py                 # Markdown report assembly + email
+│       │   ├── serving.py                # Live model serving, cold-start belief
+│       │   ├── holdings.py               # Account-specific holdings
+│       │   ├── scoreboard.py             # Asset performance heatmap (added 08.2-03)
+│       │   └── deduce_live.py            # Infer current holdings (dev tool)
+│       ├── evaluation/                   # Metrics, DSR, model comparison
+│       │   ├── __init__.py
+│       │   ├── kpis.py                   # Sharpe, Calmar, max DD
+│       │   ├── deflated_sharpe.py        # Multiple-testing adjustment + quality tier (M8)
+│       │   ├── model_metrics.py          # Per-model CV diagnostics
+│       │   ├── report.py                 # High-level evaluation report
+│       │   ├── sojourn_lag.py            # Regime duration analysis
+│       │   ├── churn.py                  # Label refresh churn (parked-helper)
+│       │   └── dependence.py             # State dependence analysis (parked-helper)
+│       ├── honesty/                      # M8: Trial registry, CV, holdout
+│       │   ├── __init__.py
+│       │   ├── cv.py                     # TimeSeriesSplit, embargo
+│       │   ├── gap_lag.py                # 6–12 month embargo for L1 labels
+│       │   ├── holdout.py                # 2021-01-01 onward lockdown
+│       │   ├── registry.py               # Trial row persistence + DSR check
+│       │   ├── walkforward.py            # Walk-forward split definitions
+│       │   └── gating.py                 # Quality tier decision logic
+│       ├── tripwire/                     # M9: Monitoring (advisory post-08.2-03)
+│       │   ├── __init__.py
+│       │   └── monitor.py                # Weekly credit spread alerts (DAAA/DBAA)
+│       ├── plotting/                     # Diagnostics + visuals per layer
+│       │   ├── __init__.py
+│       │   ├── core.py                   # Base plotting utilities (colors, layout)
+│       │   ├── data.py                   # M1 ingestion visuals
+│       │   ├── features.py               # M2 feature diagnostics
+│       │   ├── regime.py                 # M5 labeling visuals
+│       │   ├── nowcaster.py              # M6 nowcaster diagnostics
+│       │   ├── backtest.py               # M3/M7 backtest equity curves
+│       │   ├── allocation.py             # M4/M7 weight heatmaps
+│       │   ├── history.py                # Historical comparison plots
+│       │   ├── drift.py                  # Model drift analysis
+│       │   └── loaders.py                # Checkpoint → plotting data
+│       └── parked/                       # Deferred (out of weekly path)
+│           ├── __init__.py
+│           ├── classifier2.py            # Parked: Leadership/relative classifier (L1-04)
+│           ├── joint_driver.py           # Parked: Two-classifier backtest (E-02/E-03)
+│           └── stability.py              # Parked: Subsample stability suite (G-07)
 │
-├── scripts/                         ← Automation + setup
-│   ├── setup.sh                     ← Automated environment setup
-│   ├── jupyter_notebook_local.sh    ← Local notebook launcher helper
-│   └── run_weekly_report.py         ← Weekly report automation (pipeline + archive + email)
+├── notebooks/                            # Exploration & diagnostics
+│   ├── platform/                         # Platform pipeline diagnostics (P1–P9)
+│   │   ├── P1_data_spine.ipynb           # M1: Ingestion, splice validation
+│   │   ├── P2_features_taxonomy.ipynb    # M2: Feature engineering, tier validation
+│   │   ├── P3_regime_labeling.ipynb      # M5: Jump model grid search, profiles
+│   │   ├── P4_nowcaster.ipynb            # M6: Classifier fit, CV diagnostics
+│   │   ├── P5_assets_allocation.ipynb    # M3: Baseline returns, vol targeting
+│   │   ├── P6_backtest_evaluation.ipynb  # M3/M7: Walk-forward curves vs SPY
+│   │   ├── P7_serving_report.ipynb       # M4: Weekly report assembly (added 08.2-03)
+│   │   ├── P8_filtered_belief.ipynb      # M6: Bayesian filter, belief evolution (added 08.2-03)
+│   │   └── P9_does_regime_pay.ipynb      # M7: Regime tilt vs baseline ablation (added 08.2-03)
+│   └── <incumbent>/                      # Frozen quarterly pipeline notebooks (read-only)
 │
-├── tests/                           ← pytest test suite (~769 tests)
-│   ├── conftest.py                  ← Shared fixtures (quarterly_index, raw_macro_df, etc.)
-│   ├── fixtures/                    ← Test data (currently empty)
+├── scripts/                              # Automation & utilities
+│   ├── build_platform_data.py            # M1: Fetch all sources → checkpoints (main entry)
+│   ├── run_weekly_report.py              # Serve: Load state → report → email (cron target)
+│   ├── run_policy_trials.py              # Execute trial configuration (phase budget sweep)
+│   ├── recompute_monthly_features.py     # M2: Re-engineer features (dev)
+│   ├── migrate_publication_lags.py       # D-07: Apply publication lags to raw (one-time)
+│   ├── diagnose_*.py                     # Various ingestion diagnostics
+│   ├── run_joint_lift.py                 # Parked: Two-classifier comparison (dev)
+│   ├── run_subsample_stability.py        # Parked: Stability analysis (dev)
+│   ├── terminal_month_diagnostic.py      # Parked: Month-end edge diagnostics (dev)
+│   ├── joint_lift_diagnostics.py         # Parked: Joint lift analysis (dev)
+│   └── platform_snapshot.py              # Checkpoint → snapshot (archive)
+│
+├── registry/                             # Trial registry (M8, tracked in git)
+│   ├── trials.jsonl                      # One row per trial (K, λ, features, results, DSR)
+│   └── archive/                          # Old trial records (reference)
+│
+├── outputs/                              # Runtime outputs (gitignored)
+│   ├── reports/platform/                 # Weekly report markdown
+│   │   └── weekly_report.md              # Glenn reads this before trading
+│   ├── models/                           # Pickled model files
+│   └── plots/                            # Diagnostics figures
+│
+├── platform_design/                      # Design documents (read-only reference)
+│   ├── platform_design.md                # v1.8 design (math + architecture)
+│   ├── MODULE-MAP.md                     # M0–M9+ module map + parked list (D-07)
+│   ├── DECISIONS.md                      # Phase 1–8 ruling index (D-08+)
+│   └── adr/                              # Architecture decision records
+│       ├── 0001-l1-feature-policy.md     # L1 feature classification (D-04)
+│       ├── 0002-l1-second-classifier.md  # Why classifier #2 was deferred (L1-04)
+│       ├── 0003-quality-gate-tier.md     # DSR as the one quality gate (M8)
+│       └── 0004-trial-budgeting-policy.md # Per-phase trial budgets (ADR-0004)
+│
+├── docs/                                 # Reference documentation
+│   ├── splicing_rules.md                 # D-04: Splice methods per core asset (data lineage)
+│   ├── archive/STATE.md                  # Historical state snapshots (legacy)
+│   └── archive/                          # Frozen docs (reference only)
+│
+├── tests/                                # Test suite (pytest)
+│   ├── unit/
+│   │   ├── platform/                     # Platform unit tests (100+ test modules)
+│   │   │   ├── test_platform_config.py
+│   │   │   ├── test_platform_checkpoints.py
+│   │   │   ├── test_taxonomy.py
+│   │   │   ├── test_ingestion_*.py       # M1 ingestion tests
+│   │   │   ├── test_labeling_*.py        # M5 labeling tests
+│   │   │   ├── test_prediction_*.py      # M6 nowcaster tests
+│   │   │   ├── test_allocation_*.py      # M4/M7 allocation tests
+│   │   │   ├── test_backtest_*.py        # Backtest tests
+│   │   │   ├── test_evaluation_*.py      # Metrics tests
+│   │   │   ├── test_honesty_*.py         # M8 registry/DSR tests
+│   │   │   ├── test_report_*.py          # M4 report tests
+│   │   │   ├── test_plotting_*.py        # Plotting tests
+│   │   │   ├── test_monitoring_*.py      # Tripwire tests
+│   │   │   ├── test_platform_parked_boundary.py  # M9+: Active code cannot import parked
+│   │   │   └── <incumbent tests>         # Frozen quarterly pipeline tests (read-only)
+│   │   └── <incumbent unit tests>        # Quarterly pipeline unit tests
 │   ├── integration/
-│   │   └── test_mini_pipeline.py    ← Synthetic end-to-end: determinism regression
-│   ├── test_pipeline_smoke.py       ← Pipeline dispatch + step registry tests
-│   ├── test_cli_smoke.py            ← CLI entry-point tests
-│   ├── test_pipelines_ingest_features.py  ← Steps 1-2 smoke tests
-│   ├── test_models_regime.py        ← Bundle API regime tests
-│   ├── test_models_boosting.py      ← GradientBoosting tests
-│   ├── test_models_interpret_tree.py ← Interpretability helpers
-│   ├── test_models_behavior.py      ← Behavior model tests
-│   ├── test_models_reporting.py     ← Metrics aggregation
-│   ├── test_email_weekly.py         ← Email + weekly report tests
-│   ├── test_scripts_weekly_report.py ← run_weekly_report.py tests
-│   ├── test_constraints_etf_universe.py   ← ETF universe validation
-│   ├── test_constraints_frequency.py      ← Data frequency validation
-│   └── unit/                        ← Unit tests for src/trading_crab_lib modules (50+ files)
-│       ├── test_transforms.py       ← engineer_all, gap-fill, derivatives
-│       ├── test_clustering.py       ← KMeans, model selection
-│       ├── test_clustering_exploration.py ← GMM sweep, gap stat, knee detection
-│       ├── test_cluster_comparison.py     ← ARI, feature importance
-│       ├── test_gmm.py
-│       ├── test_hmm.py              ← GaussianHMM (optional)
-│       ├── test_markov.py           ← MarkovRegression (optional)
-│       ├── test_density.py          ← DBSCAN/HDBSCAN
-│       ├── test_spectral.py
-│       ├── test_checkpoints.py      ← CheckpointManager
-│       ├── test_returns.py
-│       ├── test_prediction_flat.py  ← Flat prediction API
-│       ├── test_lightgbm.py         ← LightGBM (optional)
-│       ├── test_ingestion.py        ← HTTP-mocked FRED/multpl/assets
-│       ├── test_macrotrends.py      ← macrotrends scraper (mocked)
-│       ├── test_diagnostics_rrg.py  ← RRG analysis
-│       ├── test_tactics.py          ← Tactical classification
-│       ├── test_config.py           ← Config loading + validation
-│       ├── test_regime.py           ← Regime profiles + transitions
-│       ├── test_yield_curve_features.py
-│       ├── test_divergence.py       ← Cross-asset divergence
-│       ├── test_momentum.py         ← Momentum features
-│       ├── test_indicators.py       ← LEI proxy
-│       ├── test_monitoring.py       ← Pipeline health checks
-│       ├── test_plotting.py         ← All plot functions
-│       ├── test_reporting.py        ← Dashboard, portfolio helpers
-│       ├── test_runtime.py          ← RunConfig
-│       ├── test_init_module.py      ← Env var overrides, convenience imports
-│       └── 20+ more unit test files
+│   │   ├── test_mini_pipeline.py         # End-to-end platform flow (synthetic data)
+│   │   └── <incumbent integration tests>
+│   └── conftest.py                       # Shared fixtures (pytest)
 │
-├── ideas/                           ← Salvaged code + explorations (do not use in production)
-│   └── gsd-salvage/                 ← Code extracted from submodules for reference
-│
-├── src/                             ← Two-package workspace
-│   ├── trading_crab/                ← App package (pip name: trading-crab)
-│   │   ├── __init__.py              ← Version metadata
-│   │   ├── cli.py                   ← CLI entry point
-│   │   └── pipeline.py              ← 9-step pipeline orchestration (1200+ lines)
-│   │
-│   └── trading_crab_lib/            ← Library package (pip name: trading-crab-lib)
-│       ├── pyproject.toml           ← Independent lib pyproject.toml + extras
-│       ├── __init__.py              ← Path resolution (TC_*_DIR env vars), version
-│       ├── config.py                ← load(), validate_config(), load_portfolio()
-│       ├── runtime.py               ← RunConfig dataclass
-│       ├── checkpoints.py           ← CheckpointManager
-│       ├── transforms.py            ← engineer_all(): cross-ratios → log → gap-fill → deriv
-│       ├── clustering.py            ← PCA, KMeans, model selection, gap statistic
-│       ├── gmm.py                   ← Gaussian Mixture Model
-│       ├── hmm.py                   ← Hidden Markov Model (optional)
-│       ├── markov.py                ← Markov regime-switching (optional)
-│       ├── density.py               ← DBSCAN, HDBSCAN
-│       ├── spectral.py              ← Spectral clustering
-│       ├── cluster_comparison.py    ← Pairwise ARI, RF feature importance
-│       ├── regime.py                ← Regime profiling, naming, transitions
-│       ├── asset_returns.py         ← Compute quarterly returns by regime
-│       ├── reporting.py             ← Dashboard signals, portfolio construction
-│       ├── diagnostics.py           ← RRG, rolling z-scores
-│       ├── tactics.py               ← Tactical classification
-│       ├── email.py                 ← Weekly email composition + SMTP
-│       ├── divergence.py            ← Cross-asset divergence features
-│       ├── momentum.py              ← Momentum features
-│       ├── indicators.py            ← Composite indicators (LEI proxy)
-│       ├── yield_curve_features.py  ← Yield curve spreads
-│       ├── ingestion/               ← Data source fetchers
-│       │   ├── __init__.py          ← ingestion_completeness_report()
-│       │   ├── fred.py              ← FRED API (with publication-lag shifts)
-│       │   ├── multpl.py            ← multpl.com scraper (lxml)
-│       │   ├── assets.py            ← yfinance ETF prices
-│       │   ├── macrotrends.py       ← macrotrends.net commodity prices
-│       │   └── grok.py              ← Load external LLM labels
-│       ├── prediction/              ← Regime classifiers
-│       │   ├── __init__.py          ← Flat API (production): RandomForest, DecisionTree, LightGBM
-│       │   ├── classifier.py        ← Bundle API (test-only): per-fold reports, GradientBoosting
-│       │   └── gradient_boosting.py ← GradientBoostingClassifier helpers
-│       ├── plotting/                ← Visualization subpackage
-│       │   ├── __init__.py          ← Re-exports all plot functions + color constants
-│       │   ├── core.py              ← _save_or_show(), _regime_color(), _in_jupyter()
-│       │   ├── ingestion.py         ← Step 1 plots (coverage, sample)
-│       │   ├── features.py          ← Step 2 plots (gap-fill, variance, centered vs causal)
-│       │   ├── clustering.py        ← Step 3 plots (elbow, PCA, silhouette, GMM BIC)
-│       │   ├── regime.py            ← Step 4 plots (timeline, transition matrix, forward probs)
-│       │   ├── prediction.py        ← Step 5 plots (importance, tree, calibration, learning curve)
-│       │   ├── assets.py            ← Step 6 plots (returns by regime, heatmap)
-│       │   └── diagnostics.py       ← Step 8-9 plots (RRG, divergence, momentum)
-│       └── monitoring/              ← Pipeline health + QA checks
-│           ├── __init__.py          ← Re-exports all monitoring functions
-│           ├── ingestion.py         ← Completeness checks, date range validation
-│           ├── features.py          ← Feature quality metrics
-│           ├── clustering.py        ← Regime stability, method comparison
-│           ├── prediction.py        ← CV fold scores, calibration checks
-│           └── pipeline.py          ← Step output validation, health summary
-│
-├── gsd-scratch-work/                ← READ-ONLY submodule (earlier GSD checkpoint)
-├── trading-crab/                    ← READ-ONLY submodule (public/PyPI repo)
-├── trading-crab-lib/                ← READ-ONLY submodule (library repo)
-│
-├── run_pipeline.py                  ← Backward-compat shim (python run_pipeline.py --help)
-├── requirements.txt                 ← Legacy pinned deps (prefer pyproject.toml)
-├── requirements-dev.txt             ← Legacy dev deps (prefer pyproject.toml)
-│
-└── .gitignore                       ← Excludes .env, data/, outputs/, *.pyc
+├── .gitignore                            # Untracked: .env, data/raw/, outputs/
+├── pyproject.toml                        # Build config, dependencies, version
+├── setup.cfg                             # setuptools config (legacy)
+├── setup.py                              # Legacy entry point
+├── MANIFEST.in                           # Package data files
+├── Dockerfile                            # Multi-stage build (base + pipeline)
+├── docker-compose.yml                    # Orchestrated services
+├── CLAUDE.md                             # Developer guide (comprehensive)
+├── README.md                             # User guide
+├── ROADMAP.md                            # Feature backlog (prioritized)
+├── run_pipeline.py                       # Backward-compat shim (quarterly pipeline CLI)
+├── Makefile                              # Common dev shortcuts
+├── requirements.txt                      # Pinned dependencies (legacy incumbent)
+└── requirements-dev.txt                  # Dev extras (legacy)
 ```
 
-## Directory Purposes
+## Key File Locations
 
-**config/**
-- Purpose: Master parameters for the entire pipeline
-- Contains: YAML files (all hand-editable, version-controlled)
-- Key files: `settings.yaml` (data ranges, series lists, feature lists, clustering k, model depths), `regime_labels.yaml` (manual semantic names after clustering)
+**Configuration:**
+- `config/platform_settings.yaml` — All platform tuneable parameters
+- `config/settings.yaml` — Frozen incumbent settings (do not edit)
+- `config/portfolio.yaml` — ETF allocation blueprint
+- `.env` (gitignored) — Secrets (FRED_API_KEY, SMTP credentials)
 
-**data/**
-- Purpose: Runtime intermediate data (gitignored)
-- Contains: Raw, processed, regime, and checkpoint parquet files
-- Special: `checkpoints/` is the CheckpointManager directory (all steps save/load here)
+**Data Checkpoints:**
+- `data/checkpoints/platform/monthly_raw.parquet` — M1 output (raw monthly)
+- `data/checkpoints/platform/monthly_features.parquet` — M2 output (causal features)
+- `data/checkpoints/platform/regime_labels.parquet` — M5 output (hard labels)
+- `data/checkpoints/platform/nowcaster_model.pkl` — M6 output (fitted classifier)
+- `data/checkpoints/platform/regime_belief.parquet` — Weekly state (posterior)
+- `data/checkpoints/platform/executed_weights.parquet` — Weekly state (held book)
 
-**outputs/**
-- Purpose: Final outputs (gitignored)
-- Contains: Pickled models, PNG/PDF plots, CSV/text reports
+**Design & Decisions:**
+- `platform_design/platform_design.md` — Design document (L0–L4, math + architecture)
+- `platform_design/MODULE-MAP.md` — Module map (M0–M9+), parked list, boundary test
+- `platform_design/DECISIONS.md` — Phase 1–8 decisions, all rulings indexed
+- `platform_design/adr/` — ADRs 0001–0004 (policy + exceptions)
 
-**legacy/**
-- Purpose: Algorithm ground truth (DO NOT MODIFY or PUSH)
-- Contains: `unified_script.py` — original 1249-line monolith; reference for every formula, parameter, pipeline order
+**Core Libraries:**
+- `src/trading_crab_lib/platform/config.py` — Config loader + validation
+- `src/trading_crab_lib/platform/checkpoints.py` — Checkpoint manager
+- `src/trading_crab_lib/platform/taxonomy.py` — Feature tier classification
+- `src/trading_crab_lib/platform/splice.py` — Data splicing engine
 
-**pipelines/**
-- Purpose: Simplified entry points (legacy compatibility; minimal use cases)
-- Contains: One script per pipeline step; no RunConfig, hardcoded flags
-- Use: Only if you need to run a single step without the full CLI
+**Layer Implementations:**
+- M1: `src/trading_crab_lib/platform/ingestion/`, `transforms_monthly.py`
+- M2: `src/trading_crab_lib/platform/features/`
+- M3/M7: `src/trading_crab_lib/platform/assets/`, `allocation/`, `backtest/`
+- M4: `src/trading_crab_lib/platform/report/`
+- M5: `src/trading_crab_lib/platform/labeling/`
+- M6: `src/trading_crab_lib/platform/prediction/`
+- M8: `src/trading_crab_lib/platform/honesty/`, `evaluation/`
+- M9+: `src/trading_crab_lib/platform/tripwire/`, `parked/`
 
-**notebooks/**
-- Purpose: Exploration and visualization (Jupyter)
-- Contains: 12 notebooks, one per pipeline stage plus comparisons
-- Pattern: Each notebook imports from `trading_crab_lib` and calls `CheckpointManager` to load checkpoints
+**Scripts:**
+- `scripts/build_platform_data.py` — M1 data fetch (main entry)
+- `scripts/run_weekly_report.py` — M4 serve (production)
+- `scripts/run_policy_trials.py` — Trial execution (tuning)
 
-**scripts/**
-- Purpose: Automation (setup, weekly reports, helper launchers)
-- Contains: `setup.sh` (environment), `run_weekly_report.py` (email automation)
+**Tests:**
+- `tests/unit/platform/` — Platform unit tests (100+ modules)
+- `tests/integration/` — End-to-end flow (synthetic data)
+- `tests/unit/test_platform_parked_boundary.py` — Parked code guard (critical)
 
-**tests/**
-- Purpose: pytest test suite
-- Layout: `test_*.py` files in root; `unit/` subdirectory for library tests; `integration/` for end-to-end
-- Fixture data: `fixtures/` (currently empty; populated as needed)
+**Notebooks:**
+- `notebooks/platform/P1_data_spine.ipynb` — M1 diagnostics
+- `notebooks/platform/P2_features_taxonomy.ipynb` — M2 diagnostics
+- `notebooks/platform/P3_regime_labeling.ipynb` — M5 diagnostics
+- `notebooks/platform/P4_nowcaster.ipynb` — M6 diagnostics
+- `notebooks/platform/P5_assets_allocation.ipynb` — M3 diagnostics
+- `notebooks/platform/P6_backtest_evaluation.ipynb` — M3/M7 diagnostics
+- `notebooks/platform/P7_serving_report.ipynb` — M4 serve (added 08.2-03)
+- `notebooks/platform/P8_filtered_belief.ipynb` — M6 filter (added 08.2-03)
+- `notebooks/platform/P9_does_regime_pay.ipynb` — M7 ablation (added 08.2-03)
 
-**src/trading_crab/**
-- Purpose: CLI app package (pip name: trading-crab)
-- Contents: `cli.py` (entry point), `pipeline.py` (9-step orchestration + step functions)
-- Dependency: Requires `trading-crab-lib>=0.1.2`
-
-**src/trading_crab_lib/**
-- Purpose: Reusable library package (pip name: trading-crab-lib)
-- Independent: No dependency on `trading-crab` (app depends on lib, not vice versa)
-- Extras: `[ingestion]`, `[plotting]`, `[hmm]`, `[clustering-extras]`, `[boosting]`, `[all]`
-- Subpackages: `ingestion/`, `prediction/`, `plotting/`, `monitoring/`
-
-**ideas/gsd-salvage/**
-- Purpose: Reference code extracted from submodules (do not use in production)
-- Contains: Earlier implementations of features, tactics, prediction
-- Use: For design inspiration or historical reference only
+**Output:**
+- `outputs/reports/platform/weekly_report.md` — Weekly report for Glenn (M4)
+- `registry/trials.jsonl` — Trial registry (M8)
 
 ## Naming Conventions
 
-**Files:**
-- `test_*.py` — pytest test file (in tests/ or tests/unit/)
-- `*_test.py` — alternate pytest naming (rare; use test_* prefix)
-- `*.ipynb` — Jupyter notebook (numbered 01–12 in notebooks/)
-- `.meta.json` — Checkpoint metadata (alongside {name}.parquet in checkpoints/)
+### Files
 
-**Directories:**
-- `trading_crab_lib` — package (pip: trading-crab-lib, hyphenated)
-- `trading_crab` — package (pip: trading-crab, hyphenated)
-- `src/`, `data/`, `outputs/` — lowercase, underscore for multi-word (underscore not hyphen)
-- `raw`, `processed`, `regimes`, `checkpoints` — data subdirs, lowercase
-- `ingestion`, `prediction`, `plotting`, `monitoring` — subpackages, lowercase, noun-based
+**Platform modules:**
+- Subpackage: lowercase with underscores (`ingestion/`, `features/`, `labeling/`, `prediction/`, `allocation/`, `backtest/`, `report/`, `evaluation/`, `honesty/`, `tripwire/`, `plotting/`, `parked/`)
+- Module: lowercase with underscores (`config.py`, `checkpoints.py`, `taxonomy.py`, `splice.py`, `transforms_monthly.py`)
+- Private/parked: same convention; `parked/` subdirectory denotes deferred code
+
+**Test files:**
+- Pattern: `test_<module>.py` (e.g., `test_taxonomy.py`, `test_nowcaster.py`)
+- Platform tests: `tests/unit/platform/test_<module>.py`
+- Boundary test: `test_platform_parked_boundary.py` (critical: enforces AST scan + fresh-import)
+
+**Data files:**
+- Checkpoints: `<checkpoint_name>.parquet` or `.pkl` (e.g., `monthly_raw.parquet`, `nowcaster_model.pkl`)
+- Registry: `trials.jsonl` (one row per trial)
+- Report: `weekly_report.md`
+
+**Notebooks:**
+- Pattern: `P<stage>_<description>.ipynb` (e.g., `P1_data_spine.ipynb`, `P3_regime_labeling.ipynb`)
+- Stage numbering: P1–P9 mapped to M0–M8
+
+**Scripts:**
+- Pattern: `<verb>_<noun>.py` (e.g., `build_platform_data.py`, `run_weekly_report.py`, `run_policy_trials.py`)
+- Diagnostic: `diagnose_<issue>.py` (e.g., `diagnose_s1_truncation.py`)
+
+### Code Style
+
+**Modules:**
+- Private (internal): `_<name>` prefix (e.g., `_TIERS`, `_fill_column()`)
+- Public (API): no prefix (e.g., `load_platform_config()`, `fit_jump_model()`)
 
 **Functions:**
-- `add_X()` — adds columns to DataFrame (e.g., `add_cross_ratios()`)
-- `apply_X()` — transforms existing columns (e.g., `apply_log_transforms()`)
-- `compute_X()` — derives new data (e.g., `compute_regime_stability()`)
-- `fit_X()` — trains a model (e.g., `fit_clusters()`)
-- `X_labels()` — extract hard labels from a fitted model (e.g., `gmm_labels()`)
-- `X_probabilities()` — extract soft probabilities (e.g., `hmm_probabilities()`)
-- `plot_X()` — matplotlib visualization (e.g., `plot_elbow_curve()`)
-- `predict_X()` — inference function (e.g., `predict_current()`)
-- `build_X()` — construct complex output (e.g., `build_profiles()`)
-- `save_X()` / `load_X()` — I/O (e.g., `save_dashboard_csv()`)
-- `step1_X()` / `step2_X()` — pipeline steps (e.g., `step1_ingest()`)
-- `_X()` — private helper (leading underscore, not exported)
+- Verb + noun pattern: `fetch_all()`, `build_core_research_series()`, `fit_nowcaster()`
+- Predicates: `is_fresh()`, `should_filter()`, `check_columns_tagged()`
+- Main entry: `main()` (for scripts)
+
+**Classes:**
+- CamelCase: `CheckpointManager`, `RegimeFilter`, `TiltAllocator`
 
 **Variables:**
-- `df` — pandas DataFrame (raw data)
-- `features`, `X` — feature DataFrame for modeling
-- `labels`, `y` — target labels (regime, returns, etc.)
-- `cfg` — configuration dict (from `config.load()`)
-- `run_cfg` — RunConfig instance
-- `cm` — CheckpointManager instance
-- `pca_obj`, `model`, `clf` — fitted sklearn objects
-- `log` — logger instance (per-module: `log = logging.getLogger(__name__)`)
+- DataFrames: noun (e.g., `monthly_raw`, `regime_labels`, `executed_weights`)
+- Series: noun (e.g., `weights`, `returns`, `belief`)
+- Config: `cfg` (dict)
+- Checkpoint manager: `cm` (CheckpointManager)
 
-**Types:**
-- `RegimeProfile` — dict with per-regime statistics (if dataclass, use snake_case)
-- `FoldReport` — namedtuple or dataclass with per-fold CV results
-- `StepValidation` — dataclass with validation results
-
-**Checkpoint names:**
-- `macro_raw` — step 1 output (raw merged data)
-- `features` — step 2 output (centered derivatives)
-- `features_supervised` — step 2 output (causal derivatives)
-- `cluster_labels` — step 3 output
-- `profiles` — step 4 output
-- `*_secondary` — preservation checkpoints (wide versions, `macro_raw_secondary`, etc.)
-- `market_code_grok` — external labels (grok)
-- `market_code_clustered` — saved via `--save-market-code`
-- `market_code_predicted` — auto-saved by step 5
-- `asset_prices` — cached ETF prices (fetched in step 1, reused by step 6)
+**Constants:**
+- UPPER_CASE: `_REQUIRED_SECTIONS`, `_TIERS`, `_BAND_WIDTH`
 
 ## Where to Add New Code
 
-**New Feature for Feature Engineering:**
-- Primary code: `src/trading_crab_lib/transforms.py` (if simple ratios/transforms) or new module `src/trading_crab_lib/{feature_name}.py` (if complex, e.g., `divergence.py`, `momentum.py`)
-- Hook it into `engineer_all()` at the appropriate step (order: cross-ratios → yield-curve → divergence → momentum → log → select → gap-fill → derivatives → select)
-- Tests: `tests/unit/test_{feature_name}.py`
-- Add to `config/settings.yaml` feature lists (`initial_features` or `clustering_features`) to enable
+### New Feature (within active M0–M7 path)
 
-**New Clustering Algorithm:**
-- Location: `src/trading_crab_lib/{algorithm}.py` (e.g., `gmm.py`, `hmm.py`)
-- API: Match existing pattern — `fit_{algorithm}()`, `{algorithm}_labels()`, `{algorithm}_probabilities()` (if applicable)
-- Also add comparison: `cluster_comparison.py` function `compare_X_vs_kmeans()` if valuable for notebooks
-- Tests: `tests/unit/test_{algorithm}.py`
+1. **Feature engineering (M2 enhancement):**
+   - Add to `src/trading_crab_lib/platform/features/invariants.py`
+   - Update `config/platform_settings.yaml` `taxonomy:` blocks (classify into fast/slow/agency)
+   - Add unit test in `tests/unit/platform/test_features_invariants.py`
+   - Update `notebooks/platform/P2_features_taxonomy.ipynb` to visualize
 
-**New Prediction Model Type:**
-- Flat API (production): Add to `src/trading_crab_lib/prediction/__init__.py` as `train_X()` and call from `step5_predict()`
-- Bundle API (test-only): Add to `src/trading_crab_lib/prediction/classifier.py` if tests need per-fold reports
-- Tests: `tests/unit/test_prediction_*.py` (flat) + `tests/test_models_regime.py` (bundle)
-- Model persistence: Save to `outputs/models/{model_name}.pkl` via `joblib.dump()`
+2. **New labeling method (M5 alternative):**
+   - Create `src/trading_crab_lib/platform/labeling/<method>.py`
+   - Implement grid search, acceptance criteria (occupancy, sojourn, stability)
+   - Add diagnostics in `src/trading_crab_lib/platform/labeling/diagnostics.py`
+   - Add unit tests: `tests/unit/platform/test_labeling_<method>.py`
+   - Update `notebooks/platform/P3_regime_labeling.ipynb` to compare methods
 
-**New Plot Function:**
-- Location: `src/trading_crab_lib/plotting/{step_name}.py` (e.g., `features.py`, `clustering.py`)
-- Signature: `plot_X(df, ..., run_cfg: RunConfig) -> None` (mutates matplotlib state)
-- Helper: Use `_save_or_show(fname, run_cfg.save_plots, run_cfg.show_plots)` for consistent save/show
-- Color: Use `CUSTOM_COLORS` (5 regimes) or `REGIME_CMAP` (ListedColormap)
-- Tests: `tests/unit/test_plotting.py`
-- Wire into step: Call from `step{N}_*()` function in `src/trading_crab/pipeline.py` if `run_cfg.generate_plots`
+3. **New nowcaster model (M6 alternative):**
+   - Create `src/trading_crab_lib/platform/prediction/<model>.py`
+   - Implement `fit_<model>(X, y, cfg)` → fitted model
+   - Add TimeSeriesSplit CV wrapper
+   - Add unit tests: `tests/unit/platform/test_prediction_<model>.py`
+   - Update `notebooks/platform/P4_nowcaster.ipynb` to compare
 
-**New Monitoring Check:**
-- Location: `src/trading_crab_lib/monitoring/{aspect}.py` (e.g., `features.py`, `prediction.py`)
-- Pattern: Function returns dataclass (or dict) with check results; logged at INFO
-- Example: `check_regime_probabilities()` in `prediction.py` warns if any regime has <5% predicted probability
-- Wire into step: Call from `step{N}_*()` function before/after key computation
-- Tests: `tests/unit/test_monitoring.py`
+4. **New allocation method (M7 enhancement):**
+   - Create `src/trading_crab_lib/platform/allocation/<method>.py`
+   - Implement weight computation (tilt, no-regime baseline, etc.)
+   - Add unit tests: `tests/unit/platform/test_allocation_<method>.py`
+   - Update backtest driver to dispatch on config switch
+   - Update `notebooks/platform/P5_assets_allocation.ipynb`
 
-**New CLI Flag:**
-- Location: `src/trading_crab/pipeline.py` (argparse setup) + `src/trading_crab_lib/runtime.py` (RunConfig field)
-- Pattern: Add argparse argument in `build_parser()`, add field to `RunConfig` dataclass, populate in `from_args()` factory
-- Example: `--refresh`, `--plots`, `--market-code`
-- Pass `run_cfg` to steps that need the flag
+5. **New evaluation metric (M8 enhancement):**
+   - Create `src/trading_crab_lib/platform/evaluation/<metric>.py`
+   - Implement walk-forward computation + gating logic
+   - Add unit tests: `tests/unit/platform/test_evaluation_<metric>.py`
+   - Update backtest + registry to log the new metric
 
-**New Test:**
-- Location: `tests/unit/test_{module}.py` for library code, `tests/test_{aspect}.py` for integration/pipeline
-- Fixtures: Reuse from `tests/conftest.py` (e.g., `quarterly_index`, `raw_macro_df`) or define locally
-- Mocking: Use `monkeypatch` (pytest) for environment + file I/O redirection; mock HTTP with `responses` or `unittest.mock`
-- Determinism: Set seed at test start: `np.random.seed(42)` + `random.seed(42)`
-- Run: `pytest tests/ -v` or `pytest tests/unit/test_X.py::test_Y -v`
+### New Script (Automation)
 
-**New Notebook:**
-- Location: `notebooks/{step_num}_{description}.ipynb` (e.g., `09_diagnostics.ipynb`)
-- Pattern: Load checkpoints via `CheckpointManager`, call library functions, plot results via `plotting` module
-- Never inline plotting logic — call `plotting.plot_X()` functions
-- Example imports:
-  ```python
-  from trading_crab_lib.checkpoints import CheckpointManager
-  from trading_crab_lib import plotting
-  cm = CheckpointManager()
-  features = cm.load("features")
-  plotting.plot_feature_correlations(features)
-  ```
+1. **Data refresh or re-export:**
+   - Create `scripts/<verb>_<noun>.py`
+   - Import `build_platform_data` patterns if fetching sources
+   - Checkpoint manager for I/O
+   - Add `if __name__ == "__main__": main()` entry
 
-**New Pipeline Step:**
-- When step count grows beyond 9, add to `src/trading_crab/pipeline.py`:
-  1. Define `step{N}_description(cfg, run_cfg) -> None`
-  2. Add to `STEPS` dict: `{N: ("description", step{N}_description)}`
-  3. Add to pipeline loop in `main()` (after step 9 guard)
-  4. Add CLI flag if needed (e.g., `--steps 1,2,10` includes new step 10)
-  5. Create `pipelines/{N:02d}_description.py` shim (if backward-compat needed)
+2. **Diagnostics:**
+   - Create `scripts/diagnose_<issue>.py`
+   - Import relevant checkpoint loaders + plotting
+   - Output to `outputs/` (no git tracking)
 
-**New Configuration Parameter:**
-- Edit: `config/settings.yaml` (all parameters here, never hardcode in Python)
-- Validate: Add to `validate_config()` check in `config.py` if required
-- Reference: Access via `cfg["section"]["key"]` (e.g., `cfg["clustering"]["n_pca_components"]`)
-- Document: Add comment in YAML explaining the parameter and its impact
+3. **Tuning/trials:**
+   - Create `scripts/run_<experiment>.py`
+   - Use `honesty/registry.py` to log trials
+   - Gate on DSR, record results
+
+### New Test
+
+**Unit test for a module:**
+- Create `tests/unit/platform/test_<module>.py`
+- Use `pytest` fixtures from `conftest.py`
+- Mocks for external I/O (ingestion, checkpoints)
+- Example: `tests/unit/platform/test_taxonmy.py`
+
+**Boundary/integration test:**
+- Update `tests/unit/test_platform_parked_boundary.py` if parked boundary changes
+- Update `tests/integration/test_mini_pipeline.py` if end-to-end flow changes
+
+### New Notebook (Exploration)
+
+1. **Stage-specific diagnostics (P<N>):**
+   - Create `notebooks/platform/P<N>_<description>.ipynb`
+   - Load checkpoints via `CheckpointManager`
+   - Leverage `src/trading_crab_lib/platform/plotting/` for consistent visuals
+   - Link to MODULE-MAP.md for context
+
+### New Parked Feature (Out of Scope)
+
+1. **Deferral (like classifier #2, stability, joint driver):**
+   - Create `src/trading_crab_lib/platform/parked/<feature>.py`
+   - Add to `PARKED_MODULES` in `tests/unit/test_platform_parked_boundary.py`
+   - Update MODULE-MAP.md `Parked` table with reason + un-park instructions
+   - Do NOT import `parked/` from active code; enforced by AST scan
 
 ## Special Directories
 
-**data/checkpoints/**
-- Purpose: Parquet checkpoints + JSON metadata (managed by CheckpointManager)
-- Generated: Yes (at runtime, one per pipeline step)
-- Committed: No (gitignored)
-- Lifecycle: `CheckpointManager.save()` writes both `{name}.parquet` and `{name}.meta.json`; `load()` validates metadata before loading
+**data/checkpoints/platform/:**
+- Purpose: Tracked checkpoints (safe to refresh via `build_platform_data.py`; unlike incumbent's gitignored raw)
+- Created by: M1 ingestion, M2 features, M5 labeling, M6 nowcaster, etc.
+- Loaded by: Every downstream layer (CheckpointManager)
+- Git strategy: Tracked for reproducibility; refresh-safe via re-running scripts
 
-**outputs/models/**
-- Purpose: Pickled sklearn models
-- Generated: Yes (step 5)
-- Committed: No (gitignored)
-- Lifecycle: `joblib.dump(model, path)` saves; `joblib.load(path)` or `pickle.load()` loads
+**registry/:**
+- Purpose: Trial registry (one row per hyperparameter configuration)
+- Format: `trials.jsonl` (one trial per line, JSON)
+- Consumed by: DSR gate (honesty/registry.py)
+- Git strategy: Tracked; append-only (historical record)
 
-**outputs/plots/**
-- Purpose: PNG/PDF figures (one per plot function, per step)
-- Generated: Yes (if `--plots` flag)
-- Committed: No (gitignored)
-- Naming: `{step}_{description}.png` (e.g., `03_regime_pca_scatter.png`)
+**outputs/**
+- Purpose: Runtime outputs (weekly report, plots, models)
+- Gitignored: Not tracked
+- Lifecycle: Ephemeral (overwritten weekly)
 
-**outputs/reports/**
-- Purpose: Dashboard, diagnostics, tactics outputs
-- Generated: Yes (steps 7-9)
-- Committed: No (gitignored)
-- Key files: `dashboard.csv` (step 7), `weekly_report.md` (weekly), `diagnostics/` (step 8), `tactics.csv` (step 9)
+**notebooks/platform/:**
+- Purpose: Exploration per stage (P1–P9)
+- Linked to: MODULE-MAP.md notebook column (verification of module implementation)
+- Not code: Executed by humans; checkpoint-based (safe to re-run)
 
-**tests/fixtures/**
-- Purpose: Test data files (fixture data, mock responses, etc.)
-- Generated: No (manually curated or generated by test setup)
-- Committed: Yes (small, representative examples)
-- Current: Empty (tests generate synthetic data inline)
+## Special Files
+
+**platform_settings.yaml:**
+- Purpose: Single source of truth for platform tuneables (M0, D-02)
+- Independent of incumbent `settings.yaml` (no collision risk)
+- Schema validated at load: `load_platform_config()` → `validate_platform_config()`
+- Sections: `data`, `fred_monthly`, `fred_vintage`, `splice`, `universe`, `taxonomy`
+
+**MODULE-MAP.md:**
+- Purpose: Module-to-file mapping (M0–M9+), parked list, acceptance criteria
+- Maintained by: Phase lead after each milestone
+- Consulted by: Developers implementing features (know which file to edit)
+- Parked boundary: Lists all deferred code + un-park instructions
+
+**DECISIONS.md:**
+- Purpose: Index of all Phase 1–8 decisions (rulings, policy, exceptions)
+- Format: One row per decision (phase, who, when, what, why, impact)
+- Consulted by: Code reviewers, future phases (understand context)
+
+**ADR/:**
+- Purpose: Architectural Decision Records (policy + exceptions to design.md)
+- Example: ADR-0003 "DSR is the one quality gate"; ADR-0004 "Per-phase trial budgets"
+- Amends: Specific sections of platform_design.md (§4.3/§4.4, §8, etc.)
+
+**test_platform_parked_boundary.py:**
+- Purpose: Guard against accidental active → parked imports
+- Mechanism: AST scan + fresh-interpreter load test
+- Enforced by: CI (must pass before merge)
+- Modifies when: New code enters/exits `parked/` subdirectory
 
 ---
 
-*Structure analysis: 2026-07-09*
+*Structure analysis: 2026-10-05*
