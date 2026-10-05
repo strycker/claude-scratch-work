@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 08.4
 current_phase_name: Cold-Start Rebuild & Learnings Before Migration
 status: planning
-stopped_at: Phase 08.3 CLOSED 2026-10-05 — Mac run passed; P7/P8/P9 signed off (approve); Mac data commit 221defc reverted (gold fallback -98% month, D-08); live weekly state untracked (G-11); next: discuss 08.4
-last_updated: "2026-10-05T15:26:28.339Z"
+stopped_at: "Phase 08.4 context gathered (reframed: clean-slate reset; everything out; registry true zero; rebuild in target repo 9.x)"
+last_updated: "2026-10-05T18:29:44.546Z"
 progress:
   total_phases: 12
   completed_phases: 10
@@ -28,8 +28,8 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 08.4 — Cold-Start Rebuild & Learnings Before Migration
-Status: Ready to discuss (`/gsd-discuss-phase 8.4`, on a new branch off main after 08.3 merges). 08.3 closed 2026-10-05: E-12 stands (tilt 3.8789 < ablation 4.1124; core mix no_regime). Registry 48. Open first: D-08 (fetch failures must fail the build).
+Phase: 08.4 — Cold-Start Rebuild & Learnings Before Migration (reframed 2026-10-05: clean-slate reset)
+Status: Context gathered (2026-10-05) — ready to plan (`/gsd-plan-phase 8.4`). Everything generated leaves git (tag `archive/pre-reset-2026-10` first); registry true-zero epoch (ADR-0005, caveat disclosed); fail-loud build + MVP-1 page from empty; rebuild M0→M7 moves to the target repo as Phase 9.x. Budget 0 rows.
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
@@ -283,7 +283,7 @@ again to plan wave 2 with real numbers in hand (D-09).
 `deferred_requirements: [INV-01]` (entirely wave 2, D-09 cited). Recorded as a decision, not
 an omission.
 
-**Resume file:** None
+**Resume file:** .planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md
 
 ### ⚠ Carried into execution — three things that are not settled
 
@@ -793,8 +793,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T16:05:00.000Z
-Stopped at: Completed 07-12-PLAN.md — **Phase 7 CLOSED**
+Last session: 2026-10-05T18:29:44.403Z
+Stopped at: Phase 08.4 context gathered (reframed: clean-slate reset; everything out; registry true zero; rebuild in target repo 9.x)
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
 acceptance — the thirteen items Phase 7 carries forward, and the starting point for Phase 8.
 **Read § ACCEPTANCE 2026-09-21 first: criterion 6 is unresolved and REG-01 is only partially

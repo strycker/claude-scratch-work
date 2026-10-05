@@ -802,27 +802,19 @@ Plans:
 
 ### Phase 08.4: Cold-Start Rebuild & Learnings Before Migration (INSERTED)
 
-**Goal (Glenn, 2026-10-02):** Before anything migrates, prove the platform works end to end **from a cold
-start**: a fresh data pull, every model refit from scratch, the evaluation re-run, and the honesty framework
-(registry, DSR) set up deliberately. The result is an actual working, useful model with actionable weekly
-predictions. Then fold what we've learned (and anything new this surfaces) back into the planning
-docs (`REBUILD-FROM-SCRATCH-GUIDE.md`, `MODULE-MAP.md`, `DECISIONS.md`, `MIGRATION-PLAN.md`, ROADMAP) so Phase 9
-knows **what to migrate, in what order, and what to leave behind**.
-**Why before Phase 9:** migrating a stack that has only ever run incrementally risks carrying hidden state
-(merged checkpoints, pinned artefacts, stale labels) into the public repo. A cold start shows what the
-platform really needs from scratch.
-**Open questions for discuss-phase (not decided):**
+**Goal (reframed by Glenn, 2026-10-05): a production clean-slate reset.**
+- Freeze the current state under the git tag `archive/pre-reset-2026-10`.
+- Clear **everything** generated out of git: data (raw included), outputs, labels, models, notebook outputs.
+- Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
+- Prove that the code starts from an empty checkout: a fail-loud fresh build (D-08), then the MVP-1 no-regime weekly
+  page, run twice with identical output, and the N4 sign-off on Glenn's Mac.
+- Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
+- Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
 
-  - **Registry / DSR on a cold start.** The append-only ledger and the D-16 "whole registry since project start"
-    denominator are standing rules (ADR-0002, ADR-0004). A "reset" would need an ADR. Options: continue the count,
-    or start a new declared epoch with the prior count carried as `prior_genuine_trials`.
-  - **Which later regime-rebuild items fold in here** versus wait: the L2 recipe with a distinct-output check (M6),
-    CR-02 cross-refit alignment (M5), A-03 hysteresis, REG-01.
-  - **What "actionable" means for the weekly page**, so the phase has a testable exit: for example a regime view that
-    is input-responsive and beats the ablation, or else a documented "no-regime is the product" outcome.
-  - **Fresh-pull reproducibility.** The same results on Glenn's Mac and in CI; data provenance recorded.
-  - **D-08 first (found at the 08.3 close):** a failed source fetch must fail the build, not silently splice. Merge-on-save
-    filled a fallback-spliced `gold` and produced a −98% month. Fix this before 8.4's fresh pull.
+**Not in 8.4:** rebuilding any regime model. That covers E-11 (M3), the L2 recipe (M6), CR-02 (M5), A-03 and REG-01.
+**Why before Phase 9:** migrating a stack that has only ever run incrementally risks carrying hidden state (merged
+checkpoints, pinned artefacts, stale labels) into the public repo.
+**Context:** `.planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md` (D-01..D-07). Budget: 0 rows.
 
 **Lean mode:** at most 3 plans per module. If this grows past one module, split it into 8.4 / 8.5 at discuss time.
 **Requirements**: TBD
@@ -832,7 +824,7 @@ platform really needs from scratch.
 
 Plans:
 
-- [ ] TBD (run /gsd-discuss-phase 08.4 after 08.3 closes)
+- [ ] TBD (run /gsd-plan-phase 8.4)
 
 ### Phase 9: Migration to Public Repo
 
