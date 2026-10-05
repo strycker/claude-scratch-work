@@ -4,6 +4,20 @@
 
 **Analysis Date:** 2026-10-05
 
+> **Update 2026-10-05 (after this map was written; DECISIONS G-13 and P-07).** These were **deleted**:
+> - `platform/parked/` (classifier #2, the joint driver, the stability suite);
+> - the parked-only helpers `allocation/joint_tilt.py`, `evaluation/dependence.py` and the `features/` package;
+> - the `labeling_2` config block;
+> - the research scripts `run_joint_lift`, `run_subsample_stability`, `terminal_month_diagnostic`,
+>   `joint_lift_diagnostics` and `diagnose_s1_truncation`;
+> - the one-off scripts `diagnose_yahoo_tls`, `diagnose_yfinance`, `diagnose_cpi_handoff`, `run_policy_trials`,
+>   `smoke_step5.sh` and `egress_test.sh`;
+> - the parked-boundary and doc-count tests.
+>
+> Root `CLAUDE.md` was trimmed; the old text is in `docs/archive/LEGACY-CLAUDE.md`. Wherever this map mentions any
+> of these, read it as history.
+
+
 **Scope:** `src/trading_crab_lib/platform/`, `config/platform_settings.yaml`, `scripts/`, `notebooks/platform/`, tests/. The legacy quarterly pipeline is frozen; not analyzed.
 
 **Special Focus:** Post-KISS-adoption (P-07, 2026-10-05). This document identifies concrete over-engineering and simplification opportunities alongside bugs and fragilities.
