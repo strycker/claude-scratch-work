@@ -806,32 +806,35 @@ Plans:
 **Goal (Glenn, 2026-10-05):** the platform can archive its datasets, outputs and models, and **cold-start or reset at
 any time**. Chosen archives can be version-controlled in git as tagged model snapshots.
 
-- `archive`, `list`, `reset`, `restore` and `promote` commands, each archive carrying a manifest:
-  - sha256 per file;
-  - code commit;
-  - config hash;
-  - registry count and hash;
-  - data date range.
-- Archives are local and gitignored. `promote` commits one into git with the tag `model/<name>`.
-- `reset` always auto-archives first and never touches the registry.
-- No pickles in any archive: `restore` refits the serving model and verifies it against the manifest (P27).
-- Live book state (G-11) never enters a promoted archive.
-- The data build fails loud (D-08) and runs from an empty `data/`. In `no_regime` mode the weekly path needs no regime
-  model.
+- **One plain module (`platform/state.py`, KISS K-1..K-11)** provides `archive`, `list`, `reset`, `restore` and
+  `promote`.
+- **Each archive** is a `tar.gz` plus a manifest:
+  - name, note, created time;
+  - git commit and dirty flag;
+  - registry trial count;
+  - per-file sha256.
+- **Archives are local and gitignored.** `promote` commits one into git and tags it `model/<name>`, without live
+  book state (G-11). It never pushes.
+- **`reset --yes`** archives first, then empties `data/` and `outputs/`. It never touches the registry or
+  `archives/`.
+- **No pickles in any archive;** reset deletes them.
+- **`restore`** extracts safely (`filter="data"`) and checks sha256 before moving files into place. There is no
+  refit; the no_regime page needs no model.
+- **The data build fails loud (D-08).** It runs from an empty `data/`, and a failed FRED daily fetch exits 1. In
+  `no_regime` mode the weekly page needs no regime model.
 
 **Context:** `.planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md`. Budget: 0 rows.
 **Depends on:** Phase 08.3
-**Plans:** 3 plans
+**Plans:** 2 plans (KISS replan 2026-10-05, CONTEXT K-1..K-11)
 
 Plans:
 **Wave 1**
 
-- [ ] 08.4-01-PLAN.md — **Fail-loud build and a model-free page (D-T6..D-T9, D-T7).** Merge-on-save takes derived columns verbatim (`replace_columns`). A fallback-splice gate and a source gate run before any write, under `build.fail_loud` (true, pinned) with `allow_missing_sources` / `allow_fallback` as escape hatches. The build writes `build_provenance.json`. A failed FRED daily fetch exits 1 (the A1 test flips, dated). The closing hint names the page. A 221defc regression with paired controls and one mutation. The no_regime page needs no nowcaster, labels or belief, and shows "Scoreboard: not yet measured" — wave 1
-- [ ] 08.4-02-PLAN.md — **State package: archive, list, reset (D-T1, D-T2, D-T4, D-T10).** `python -m trading_crab_lib.platform.state` over injectable `StatePaths` (ratchet stays 31). The archive is a deterministic `state.tar.gz` plus a manifest (per-file sha, commit, config sha, registry count and sha, data range, serving block), over all of data/ and outputs/, with no pickles. Deep `verify_archive`. Reset auto-archives, verifies, empties the trees and never touches the registry. `archives/*` is gitignored except `promoted/` — wave 1
+- [ ] 08.4-01-PLAN.md — **Fail-loud build and a model-free page (K-9, K-10; D-08, D-T7, D-T8).** `build.fail_loud` (true, pinned) + `build.allow_missing_sources`: a missing source or an unallowed fallback splice raises `BuildFailed` before any write; derived splice columns are replaced on merge (`replace_columns`); a failed FRED daily fetch exits 1 (A1 test flipped, dated); the closing hint names the page; one plain 221defc regression. The no_regime page needs no nowcaster, labels or belief, and shows "Scoreboard: not yet measured" — wave 1
 
-**Wave 2** *(blocked on Wave 1 completion)*
+**Wave 2** *(runs after 01, so the D-08-built row and the full-suite run see both plans)*
 
-- [ ] 08.4-03-PLAN.md — **Restore, promote, docs (D-T3, D-T5).** Restore goes into empty trees: verify, stage, move, then refit in-process and verify at rel 1e-9 against the manifest. Promote writes `archives/promoted/<name>` without G-11 live state, pickles or scratch, commits it and tags `model/<name>`, and never pushes. Pre-commit exclusion; README state section; DECISIONS G-12, D-08 built, A-14 changed; full suite. Mac checks go to UAT — wave 2
+- [ ] 08.4-02-PLAN.md — **State tool and docs (K-2..K-8).** One module, `python -m trading_crab_lib.platform.state {archive,list,reset,restore,promote}`: plain `state.tar.gz` + manifest (per-file sha256, commit, trial count); no pickles anywhere; reset `--yes` auto-archives and never touches registry/ or archives/; restore into empty trees with `filter="data"` and sha checks, no refit; promote drops G-11 live state, commits and tags `model/<name>`, never pushes. `.gitignore` / pre-commit lines; README state section; DECISIONS G-12, D-08 built; full suite. Mac checks go to UAT — wave 1
 
 ### Phase 08.5: Clean-Slate Reset & Learnings Before Migration (INSERTED)
 
