@@ -783,11 +783,9 @@ core-mix choice (no-regime ablation vs Faber, A-13) and is the baseline every la
 
   1. Equity / oil / long-duration monthly returns are month-end-to-month-end (or documented as a
      bounded exception), applied once in the splice, with a test that fails on an averaged series.
-
   2. One budgeted re-measurement: before (8.1 numbers) vs after, all five legs, common 1972–2020 window,
      10 bps; DSR at the live count; one-sentence answers to "does the tilt beat the ablation?" and
      "does MVP-1's core mix stand?" recorded in DECISIONS.
-
   3. The weekly page, scoreboard and P9 reflect the new numbers; the E-07 caveat is removed or narrowed.
   4. Full suite green on Python 3.10 (pandas 2) and 3.11+ (pandas 3); point-in-time test still green.
 
@@ -844,7 +842,6 @@ Plans:
 - Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
 - From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page, run twice with identical output, then
   the N4 sign-off.
-
 - Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
 - Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
 
