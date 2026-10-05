@@ -65,7 +65,7 @@ def _per_step_metrics(n_steps: int = 6, *, classes=(0, 1, 2)) -> dict:
 
 class TestStateChangeCount:
     def test_matches_the_scripts_dropna_then_compare_convention(self):
-        """The same count ``run_joint_lift.py::_n_transitions`` produces."""
+        """The same count the retired joint-lift script's ``_n_transitions`` produced."""
         states = pd.Series([0, 0, 1, 1, 1, 2])
         assert state_change_count(states) == 2
 

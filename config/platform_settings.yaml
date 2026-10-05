@@ -39,9 +39,9 @@ fred_monthly:
       daily: true
     WTISPLC:
       name:  "wti_fred"        # oil cross-check vs macrotrends wti_crude
-    # D-12/INV-01 (07-regime-representation wave 2): M2SL and TOTALSL feed
-    # classifier #2's named invariant ratios (m2_gdp, credit_gdp —
-    # platform/features/relative.py::compute_invariant_ratios). Both are
+    # D-12/INV-01 (07-regime-representation wave 2): M2SL and TOTALSL were added
+    # for classifier #2's invariant ratios (retired 2026-10-05 with the parked
+    # code); they remain ordinary monthly model columns. Both are
     # natively monthly (live-verified: M2SL first valid 1959-01, 811 obs;
     # TOTALSL first valid 1943-01, 1003 obs), so — like every other series in
     # this block — neither needs the quarterly-repeat forward-fill fred_gdp
@@ -470,57 +470,6 @@ labeling:
   lambda: 10.0
   n_restarts: 10
   embargo_months: 12
-
-# ── Classifier #2 — the leadership/relative axis (ADR-0002, REG-01) ─────────────
-# A SECOND, independent L1 labeler, fit unsupervised on a feature set DISJOINT
-# from classifier #1's 13 lean columns (D-10) and frozen under the same rule at
-# the same 1972+ decision window (D-11). Every value below was pinned by a human
-# at a blocking decision checkpoint on 2026-09-17, BEFORE the first fit, with
-# ZERO selection trials spent (D-13) — see
-# .planning/phases/07-regime-representation/07-DECISIONS-07-08.md and
-# platform_design/adr/0002-l1-second-classifier.md.
-#
-#   K = 3            three asset sleeves in the candidate set (equities, long
-#                    duration, oil) -> three leadership states. By construction.
-#   lambda = 32.0    = 4 x len(features) = 4 x 8, the same feature-count formula
-#                    classifier #1 instantiates (13 -> 52.0). NOT a free knob:
-#                    classifier2_config() RAISES if these two ever drift apart.
-#   sort_column      canonical state ordering (bond-leading -> equity-leading).
-#                    Passed explicitly into canonicalize_states; there is no
-#                    fallback since plan 07-05 deleted it.
-#
-# Changing `features` without recomputing `lambda` is a loud failure, not a
-# silent drift. Changing either after the first fit is an ADR-0002 amendment,
-# not a config edit — the first fit would otherwise become an unlogged trial.
-# Not added to _REQUIRED_PLATFORM_SECTIONS — read defensively via cfg.get().
-labeling_2:
-  # RE-PINNED 2026-09-18 (ADR-0002 § RE-PIN). Was K: 3, lambda: 32.0 (= 4n).
-  #
-  # K: 3 breached §4.4 criterion 1 ("every state >= ~8% and <= ~35%") on two of
-  # three states (46.12%, 38.51%) and was arithmetically near-infeasible: three
-  # states summing to 100% under a 35% cap must each sit in [30%, 35%], i.e.
-  # forced balance, which §4.3 set out to replace. K: 5 puts all five states at
-  # 16.7-23.9%, comfortably inside the band.
-  #
-  # lambda: 16.0 = 2 x len(features). Still a formula of the feature count
-  # (D-13's rule), re-coefficiented per §4.3's licence to tune lambda until the
-  # §4.4 criteria pass. At 4n = 32 the K=5 fit produced five contiguous blocks
-  # in sequence with NO state recurring -- a segmentation, not a regime model
-  # (§4.4 criterion 3's "episode, not a regime"). Measured acceptance window at
-  # K=5 is lambda in [8, 24]; 16 is mid-window and on a plateau with 12.
-  K: 5
-  lambda: 16.0
-  n_restarts: 10
-  sort_column: rs_equities_bonds
-  features:
-    - rs_equities_bonds
-    - rs_oil_equities
-    - equities_tr_mom_12m
-    - long_duration_tr_mom_12m
-    - oil_mom_12m
-    - corr_equities_tr_long_duration_tr_24m
-    - cpi_acceleration
-    - m2_gdp
 
 # ── Paid-provider adapter seams (DATA-06) — documentation-only placeholders ───
 # No runtime code in v1. stockcharts.com/finviz.com (Glenn has subscriptions)

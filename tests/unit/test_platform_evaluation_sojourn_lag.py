@@ -337,7 +337,7 @@ class TestT012WrongColumnShapeRaises:
 # to the function, because the JSON was written before it. Both inputs are tracked
 # (data/checkpoints/platform/regime_labels.parquet and the l1only joint curve), so
 # nothing here skips in CI. The reconstruction mirrors
-# scripts/joint_lift_diagnostics.py::diagnose exactly: dev split of the full-sample
+# the retired scripts/joint_lift_diagnostics.py::diagnose exactly: dev split of the full-sample
 # L1 labels, and a one-hot of the walk-forward state_1 column (exact, not an
 # approximation, under ROUTING_L1_ONLY).
 

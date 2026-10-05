@@ -424,10 +424,9 @@ def test_fetch_macro_monthly_all_sources_empty_returns_empty_df():
 
 
 # ── TestInvariantSeriesIngestion — INV-01/D-12: M2SL + TOTALSL ──────────────
-# 07-regime-representation wave 2. M2SL and TOTALSL feed classifier #2's
-# named invariant ratios (platform/features/relative.py::compute_invariant_ratios,
-# m2_gdp and credit_gdp). Both are natively monthly and ingested through the
-# existing config-driven fred_monthly.series path — no new fetch code.
+# M2SL and TOTALSL are natively monthly and ingested through the existing
+# config-driven fred_monthly.series path. (The classifier-#2 invariant ratios
+# they once fed were retired with the parked research code, 2026-10-05.)
 
 
 class TestInvariantSeriesIngestion:
@@ -468,42 +467,3 @@ class TestInvariantSeriesIngestion:
         df = fetch_fred_monthly(cfg)
         assert "fred_m2sl" in df.columns
         assert "fred_totalsl" in df.columns
-
-    def test_boundary_m2_gdp_first_valid_is_the_later_source_start(self):
-        """m2_gdp's first valid month must equal the LATER of fred_m2sl's and
-        fred_gdp's own starts, never the earlier -- a ratio cannot be valid
-        before BOTH its inputs are."""
-        from trading_crab_lib.platform.features.relative import compute_invariant_ratios
-
-        idx = pd.date_range("1959-01-31", periods=60, freq="ME")
-        m2 = pd.Series(np.linspace(100.0, 200.0, len(idx)), index=idx, name="fred_m2sl")
-        gdp = pd.Series(np.linspace(2000.0, 3000.0, len(idx)), index=idx, name="fred_gdp")
-        gdp_start = pd.Timestamp("1962-02-28")
-        gdp = gdp.where(gdp.index >= gdp_start)  # fred_gdp starts later than fred_m2sl
-        df = pd.DataFrame({"fred_m2sl": m2, "fred_gdp": gdp})
-
-        result = compute_invariant_ratios(df)
-        first_valid = result["m2_gdp"].first_valid_index()
-        assert first_valid == gdp_start
-
-    def test_adjacency_denominator_not_interpolated_across_a_quarter(self):
-        """On the forward-filled shape align_agency_monthly already produces
-        (fred_gdp repeats one value across a quarter's 3 months), the
-        recovered GDP (numerator / ratio) must be constant across the
-        quarter -- a varying recovered denominator would mean an
-        interpolation was silently introduced into fred_gdp between adjacent
-        m2_gdp values, which must not happen."""
-        from trading_crab_lib.platform.features.relative import compute_invariant_ratios
-
-        idx = pd.date_range("1962-01-31", periods=6, freq="ME")
-        m2 = pd.Series([100.0, 101.0, 102.5, 103.0, 104.0, 105.5], index=idx, name="fred_m2sl")
-        # fred_gdp repeats one value across each 3-month quarter block.
-        gdp = pd.Series([2000.0, 2000.0, 2000.0, 2100.0, 2100.0, 2100.0], index=idx, name="fred_gdp")
-        df = pd.DataFrame({"fred_m2sl": m2, "fred_gdp": gdp})
-
-        result = compute_invariant_ratios(df)
-        recovered_gdp = m2 / result["m2_gdp"]
-        first_quarter = recovered_gdp.iloc[0:3]
-        second_quarter = recovered_gdp.iloc[3:6]
-        np.testing.assert_allclose(first_quarter.to_numpy(), 2000.0, atol=1e-9)
-        np.testing.assert_allclose(second_quarter.to_numpy(), 2100.0, atol=1e-9)

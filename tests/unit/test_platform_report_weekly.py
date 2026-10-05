@@ -357,15 +357,15 @@ def _serve_env(monkeypatch, tmp_path, *, as_of: str = "2026-08-31", served_prior
 
 
 class TestRegimeBeliefAtServe:
-    def test_one_cold_start_rule_across_all_three_modules(self):
+    def test_one_cold_start_rule_across_both_modules(self):
         """Asserted on the RESOLVED FUNCTION OBJECT, not by grep — a grep passes on a
         copied implementation. A divergent cold start is the only way train/serve skew
         can enter this design."""
         import trading_crab_lib.platform.backtest.driver as d
-        import trading_crab_lib.platform.parked.joint_driver as j
         from trading_crab_lib.platform.prediction import regime_filter
 
-        for module in (d, j, weekly):
+        # 2026-10-05: the parked joint driver (the third module) was retired.
+        for module in (d, weekly):
             assert getattr(module, "unconditional_belief", None) is regime_filter.unconditional_belief, module.__name__
 
     def test_cold_start_calls_the_shared_helper_and_the_tilt_gets_the_belief(self, monkeypatch, tmp_path):
