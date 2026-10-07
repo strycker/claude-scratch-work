@@ -4,9 +4,9 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08.4
 current_phase_name: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
-status: planning
+status: executing
 stopped_at: "Phase 08.4 context re-gathered (tooling: archive/reset/restore/promote + fail-loud build); 08.5 context captured (clean-slate reset)"
-last_updated: "2026-10-05T20:57:05.184Z"
+last_updated: "2026-10-07T16:44:27.182Z"
 progress:
   total_phases: 13
   completed_phases: 10
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 8 COMPLETE (2026-09-30). Next: Phase 08.1 Point-in-Time Data Audit — order 8.1 → 8.2 decided by Glenn 2026-09-30; 8.1 also carries two usability fixes (target allocation always printed; staleness cap per series). Lean-MVP mode applies. Starts on a new branch after Glenn merges this branch to main.
+**Current focus:** Phase 08.4 — Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
 
 ## Current Position
 
-Phase: 08.4 — Cold-Start Tooling: Archive, Reset, Restore & Fail-Loud Build (re-scoped 2026-10-05)
-Status: Context gathered (2026-10-05) — ready to plan (`/gsd-plan-phase 8.4`). Tooling: archive/list/reset/restore/promote (local archives, promote → git tag `model/<name>`, reset auto-archives, no pickles — refit on restore), fail-loud build (D-08), no_regime page without regime models. Budget 0. Then 08.5 (context also gathered): the production reset using this tooling — everything out of git, registry true-zero epoch (ADR-0005), MVP-1 from a fresh clone, Phase 9.x rebuild order.
+Phase: 08.4 (Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build) — EXECUTING
+Status: Executing Phase 08.4
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
