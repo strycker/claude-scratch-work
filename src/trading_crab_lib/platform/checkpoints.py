@@ -17,8 +17,14 @@ Usage:
 
 from __future__ import annotations
 
-from trading_crab_lib import DATA_DIR, OUTPUT_DIR
+from trading_crab_lib import DATA_DIR, OUTPUT_DIR, ROOT
 from trading_crab_lib.checkpoints import CheckpointManager
+
+#: The repo root and the two generated-state trees, exposed so ``platform/state.py`` (archive / reset /
+#: restore / promote) needs no import of the legacy package root (the legacy-import ratchet).
+PLATFORM_ROOT_DIR = ROOT
+PLATFORM_DATA_DIR = DATA_DIR
+PLATFORM_OUTPUT_DIR = OUTPUT_DIR
 
 PLATFORM_CHECKPOINT_DIR = DATA_DIR / "checkpoints" / "platform"
 
