@@ -5,13 +5,13 @@ milestone_name: milestone
 current_phase: 08.4
 current_phase_name: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
 status: executing
-stopped_at: Completed 08.4-01-PLAN.md
-last_updated: "2026-10-07T16:57:37.223Z"
+stopped_at: Completed 08.4-02-PLAN.md
+last_updated: "2026-10-07T17:13:46.389Z"
 progress:
   total_phases: 13
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 78
-  completed_plans: 76
+  completed_plans: 77
 last_activity: 2026-10-05
 last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."
 ---
@@ -576,6 +576,7 @@ Recent decisions affecting current work:
 - [Phase 07-12]: The ADR's pre-declared sections were not edited in place. The Status section's original text is preserved verbatim under a subsection, and the probe-edge table's five extended rows carry a labelled AMENDMENT 2026-09-21 note — D-17's before-the-run guarantee is worthless if a pre-declaration can be silently rewritten afterward.
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
 - [Phase ?]: [Phase 08.4-01]: build.fail_loud true (pinned) with build.allow_missing_sources [] as the only escape hatch; splice research columns are replaced on every monthly_raw save; the model-free no_regime page engages only when the nowcaster is missing
+- [Phase ?]: 08.4-02 G-12: state tooling is one module (platform/state.py: archive, list, reset, restore, promote); no pickle archived, promote never pushes
 
 ### Pending Todos
 
@@ -795,8 +796,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-07T16:57:37.184Z
-Stopped at: Completed 08.4-01-PLAN.md
+Last session: 2026-10-07T17:13:46.345Z
+Stopped at: Completed 08.4-02-PLAN.md
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
 acceptance — the thirteen items Phase 7 carries forward, and the starting point for Phase 8.
 **Read § ACCEPTANCE 2026-09-21 first: criterion 6 is unresolved and REG-01 is only partially

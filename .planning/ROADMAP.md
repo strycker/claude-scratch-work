@@ -831,7 +831,7 @@ any time**. Chosen archives can be version-controlled in git as tagged model sna
 
 **Context:** `.planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md`. Budget: 0 rows.
 **Depends on:** Phase 08.3
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans executed
 
 Plans:
 **Wave 1**
@@ -840,7 +840,7 @@ Plans:
 
 **Wave 2** *(runs after 01, so the D-08-built row and the full-suite run see both plans)*
 
-- [ ] 08.4-02-PLAN.md — **State tool and docs (K-2..K-8).** One module, `python -m trading_crab_lib.platform.state {archive,list,reset,restore,promote}`: plain `state.tar.gz` + manifest (per-file sha256, commit, trial count); no pickles anywhere; reset `--yes` auto-archives and never touches registry/ or archives/; restore into empty trees with `filter="data"` and sha checks, no refit; promote drops G-11 live state, commits and tags `model/<name>`, never pushes. `.gitignore` / pre-commit lines; README state section; DECISIONS G-12, D-08 built; full suite. Mac checks go to UAT — wave 1
+- [x] 08.4-02-PLAN.md — **State tool and docs (K-2..K-8).** One module, `python -m trading_crab_lib.platform.state {archive,list,reset,restore,promote}`: plain `state.tar.gz` + manifest (per-file sha256, commit, trial count); no pickles anywhere; reset `--yes` auto-archives and never touches registry/ or archives/; restore into empty trees with `filter="data"` and sha checks, no refit; promote drops G-11 live state, commits and tags `model/<name>`, never pushes. `.gitignore` / pre-commit lines; README state section; DECISIONS G-12, D-08 built; full suite. Mac checks go to UAT — wave 1
 
 ### Phase 08.5: Clean-Slate Reset & Learnings Before Migration (INSERTED)
 
@@ -919,6 +919,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
-| 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 1/2 | In Progress|  |
+| 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | In Progress|  |
 | 08.5 Clean-Slate Reset & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
