@@ -185,7 +185,7 @@ class TestScoreboardTable:
         assert board["available"] is False
         text = "\n".join(scoreboard.format_scoreboard(board))
         assert "## Scoreboard (static — last budgeted run)" in text
-        assert "unavailable" in text
+        assert "Scoreboard: not yet measured" in text  # 08.4 (2026-10-05): wording per K-10/D-T7
         assert "python -m trading_crab_lib.platform.evaluation.report" in text
         assert scoreboard.E07_CAVEAT in text
 
@@ -388,4 +388,4 @@ class TestOnThePage:
         markdown, _ = weekly.build_weekly_page(world["cfg"], get_platform_checkpoint_manager(),
                                                output_dir=tmp_path / "page")
         assert "## Scoreboard (static — last budgeted run)" in markdown
-        assert "unavailable" in markdown
+        assert "Scoreboard: not yet measured" in markdown  # 08.4 (2026-10-05): wording per K-10/D-T7

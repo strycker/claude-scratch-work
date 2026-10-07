@@ -211,12 +211,13 @@ def format_scoreboard(board: dict[str, Any]) -> list[str]:
     Reconciled: ``| Leg | TLW <y0>–<y1> | MDD <y0>–<y1> |`` on the common window, then a footnote
     with every leg's own-span TLW (and the baselines' start months). Not reconciled: the KPI
     table's own-span columns and a "common-window columns withheld" line with the reason.
-    Unavailable: one line naming ``REPORT_BUILD_COMMAND``. Always the E-07 caveat.
+    Not yet measured (no backtest outputs): one ``Scoreboard: not yet measured (<reason>)`` line naming
+    ``REPORT_BUILD_COMMAND``. Always the E-07 caveat.
     """
     lines = [_HEADING, ""]
     if not board["available"]:
         lines.append(
-            f"Scoreboard unavailable: {board['reason']}. It is written by the budgeted run "
+            f"Scoreboard: not yet measured ({board['reason']}). It is written by the budgeted run "
             f"`{REPORT_BUILD_COMMAND}` (do not run it just to refresh this page)."
         )
         lines.extend(["", E07_CAVEAT, ""])

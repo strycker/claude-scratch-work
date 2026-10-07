@@ -120,7 +120,11 @@ from trading_crab_lib.platform.allocation.hysteresis import (
     update_active_regime,
 )
 from trading_crab_lib.platform.allocation.tilt import vol_targeted_tilt
-from trading_crab_lib.platform.assets.returns import returns_by_regime_stats
+from trading_crab_lib.platform.assets.returns import (
+    compute_monthly_returns,
+    returns_by_regime_stats,
+    tradable_asset_returns,
+)
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty.holdout import load_full_span
@@ -135,6 +139,7 @@ from trading_crab_lib.platform.prediction.transition_matrix import empirical_tra
 from trading_crab_lib.platform.report.holdings import load_account_weights
 from trading_crab_lib.platform.report.scoreboard import format_scoreboard, scoreboard_table
 from trading_crab_lib.platform.report.serving import SERVING_BUILD_COMMAND, SERVING_CLASS_PRIOR
+from trading_crab_lib.platform.splice import build_core_research_series
 from trading_crab_lib.platform.tripwire.monitor import evaluate_tripwire
 
 log = logging.getLogger(__name__)
@@ -168,6 +173,10 @@ ALLOCATION_MODES = ("regime_tilt", "no_regime")
 _SUSPENDED_SENTENCE = (
     "Regime view: suspended — the served nowcaster is input-independent (fixed in the regime "
     "rebuild); the allocation does not use it."
+)
+# 08.4 (K-10, D-T7): the same slot when no regime model is fitted at all.
+_NO_MODEL_SENTENCE = (
+    "Regime view: suspended — no regime model is fitted; the no-regime allocation needs none."
 )
 
 
@@ -624,6 +633,7 @@ def assemble_weekly_report(
     mode_note: str | None = None,
     tripwire: dict | None = None,
     scoreboard: list[str] | None = None,
+    suspended_sentence: str | None = None,
 ) -> str:
     """Assemble the weekly report markdown (design §7 output list) from
     pre-computed inputs — a pure function, no I/O beyond the per-account
@@ -658,6 +668,8 @@ def assemble_weekly_report(
     lines read "no-regime core mix". ``allocation_mode``, when given, is printed directly under
     the trades heading, before the table, followed by ``mode_note`` (A-15, a mode switch). With
     all three at their defaults the page is byte-identical to the pre-08.2 page.
+    ``suspended_sentence`` replaces ``_SUSPENDED_SENTENCE`` in that block (08.4: the model-free
+    page passes ``_NO_MODEL_SENTENCE``); None keeps the old sentence.
 
     ``tripwire`` (``evaluate_tripwire``'s output, D-04) renders the ``## Crash Tripwire`` section
     directly before the trades heading: one bullet per signal with its state, value, threshold
@@ -672,7 +684,7 @@ def assemble_weekly_report(
         lines.extend(_stale_banner(stale_series, stale_expected_through))
 
     if regime_view_suspended:
-        lines.extend(_suspended_regime_view(scored_as_of_note, input_sensitivity_note))
+        lines.extend(_suspended_regime_view(scored_as_of_note, input_sensitivity_note, suspended_sentence))
     else:
         lines.extend(_regime_sections(
             probs,
@@ -799,13 +811,15 @@ def _tripwire_section(tripwire: dict) -> list[str]:
     return lines
 
 
-def _suspended_regime_view(scored_as_of_note: str | None, input_sensitivity_note: str | None) -> list[str]:
+def _suspended_regime_view(
+    scored_as_of_note: str | None, input_sensitivity_note: str | None, sentence: str | None = None
+) -> list[str]:
     """Sections 1-3 in no_regime mode (D-03): one block, no probabilities, belief or posture.
 
     No distribution is printed here, so the q2-ii constant-posterior sentence, which points at
     "the distribution above", names the served posterior instead.
     """
-    lines = ["## Regime View (suspended)", "", _SUSPENDED_SENTENCE, ""]
+    lines = ["## Regime View (suspended)", "", sentence or _SUSPENDED_SENTENCE, ""]
     if input_sensitivity_note:
         input_sensitivity_note = input_sensitivity_note.replace(
             _CONSTANT_POSTERIOR_SENTENCE, _SUSPENDED_CONSTANT_POSTERIOR_SENTENCE
@@ -1078,6 +1092,90 @@ def served_posterior_path(cm=None) -> tuple[pd.DatetimeIndex, np.ndarray, list]:
     return pd.DatetimeIndex(frame.index), proba, [int(c) for c in nowcaster.classes_]
 
 
+def _staleness(cfg: dict, monthly_features: pd.DataFrame) -> tuple[dict, pd.Timestamp]:
+    """A-12: per-series staleness against the run date, over the series the lag table lists
+    (derived research series inherit their inputs' lags) that the full-span frame carries.
+    Returns ``(stale_series, stale_expected_through)``."""
+    grace_days = int(cfg.get("report", {}).get("staleness_grace_days", _DEFAULT_STALENESS_GRACE_DAYS))
+    watched = [
+        str(name) for name, entry in (cfg.get("publication_lags") or {}).items()
+        if entry != DERIVED and name in monthly_features.columns
+    ]
+    run_date = _run_date()
+    late = stale_series(monthly_features, watched, run_date=run_date, grace_days=grace_days)
+    return late, expected_month_end(run_date, grace_days)
+
+
+def _execute_and_save(cm, tilt: dict, *, mode: str, as_of: pd.Timestamp, no_trade_band: float | None):
+    """The no-trade band (plan 08-09): the SAME function the drivers call. Held-book I/O
+    happens only when a band is configured — with none, the executed book is the target.
+    The mode record (A-15) is gated the same way, so band-free configs write nothing new.
+    Returns ``(executed, last_week_weights, changed_from)``."""
+    last_week, held, changed_from = None, None, None
+    if no_trade_band is not None:
+        last_week = load_last_executed_weights(cm)  # load BEFORE save
+        switched, changed_from = mode_switch(
+            load_allocation_mode(cm), mode=mode, as_of=as_of, executed_exists=_has_executed_book(cm)
+        )  # load BEFORE save
+        # A-15: a switch trades the new target in full; a band against the old mode's book
+        # would hold a hybrid no measured leg ever held.
+        held = None if switched else load_held_weights(cm, as_of=as_of)  # load BEFORE save
+    executed = execute_rebalance(tilt["weights"], tilt["cash"], held, band=no_trade_band)
+    if no_trade_band is not None:
+        save_executed_weights(executed["weights"], held, cm, as_of=as_of)  # save AFTER load
+        save_allocation_mode(mode, cm, as_of=as_of, changed_from=changed_from)  # save AFTER load
+    return executed, last_week, changed_from
+
+
+def _model_free_inputs(cfg: dict, cm, mode: str) -> dict:
+    """The no_regime page's inputs when no regime model is fitted (08.4, K-10, D-T7).
+
+    Reads only ``monthly_raw`` and ``monthly_features`` (the latter for the staleness watch list).
+    No nowcaster, regime labels, class prior, belief or hysteresis is read or written. The
+    asset returns are derived in memory exactly as ``serving.py`` derives them and are never
+    written: the ``asset_returns`` checkpoint is serving output and can predate the build. The
+    scored month is the last month complete in every asset's returns; the executed book and the
+    mode are persisted as in the model path.
+    """
+    no_trade_band = no_trade_band_from_config(cfg)  # validated before any state I/O
+    monthly_features = load_full_span("monthly_features")
+    late, stale_expected_through = _staleness(cfg, monthly_features)
+
+    returns = compute_monthly_returns(build_core_research_series(cm.load("monthly_raw"), cfg))
+    asset_returns = tradable_asset_returns(returns, cfg["splice"])
+    complete = asset_returns.dropna(how="any")
+    if complete.empty:
+        raise ValueError(
+            "monthly_raw has no month with a return for every tradable asset, so the no_regime "
+            "target cannot be computed. Rebuild the data: python scripts/build_platform_data.py"
+        )
+    as_of = pd.Timestamp(complete.index.max())
+    tilt = no_regime_target(asset_returns, as_of, cfg)
+    executed, last_week, changed_from = _execute_and_save(
+        cm, tilt, mode=mode, as_of=as_of, no_trade_band=no_trade_band
+    )
+    return {
+        "regime_probs": pd.Series(dtype=float),
+        "regime_belief": None,
+        "active_regime": None,
+        "transition_matrix": pd.DataFrame(),
+        "returns_by_regime": pd.DataFrame(),
+        "target_weights": executed["weights"],
+        "cash": executed["cash"],
+        "pre_band_target_weights": tilt["weights"],
+        "pre_band_cash": tilt["cash"],
+        "no_trade_band": no_trade_band,
+        "scored_as_of_note": None,
+        "input_sensitivity_note": None,
+        "stale_series": late,
+        "stale_expected_through": stale_expected_through,
+        "last_week_weights": last_week,
+        "allocation_mode": mode,
+        "mode_note": _mode_note(mode, changed_from) if changed_from else None,
+        "suspended_sentence": _NO_MODEL_SENTENCE,
+    }
+
+
 def _build_report_inputs(cfg: dict, cm=None) -> dict:
     """The full allocation-cycle orchestration (load -> update -> tilt ->
     save, load-before-save order per Pitfall 3): load the previous
@@ -1109,7 +1207,14 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
 
     # The four serving artifacts are built by SERVING_BUILD_COMMAND (report/serving.py);
     # a missing one says so.
-    nowcaster = _load_serving_artifact(cm, "nowcaster", model=True)
+    try:
+        nowcaster = _load_serving_artifact(cm, "nowcaster", model=True)
+    except FileNotFoundError:
+        if mode != "no_regime":
+            raise
+        # 08.4 (K-10, D-T7): the no-regime allocation needs no model, so a fresh build alone is enough.
+        log.info("No fitted nowcaster; building the no_regime page without a regime model.")
+        return _model_free_inputs(cfg, cm, mode)
     # CR-01: the prior the filter's likelihood divides by, validated against this model
     # before anything is scored and before any state is loaded or saved.
     class_prior = _served_class_prior(cm, nowcaster)
@@ -1126,17 +1231,7 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
     # them (ruling q1-c); validated before any state load or save, so a refusal writes nothing.
     cols = _model_columns(nowcaster, monthly_features)
     row, scored_as_of_note = _scored_row(monthly_features, cols)
-    # A-12: per-series staleness against the run date, over the series the lag table lists
-    # (derived research series inherit their inputs' lags) that the full-span frame carries.
-    report_cfg = cfg.get("report", {})
-    grace_days = int(report_cfg.get("staleness_grace_days", _DEFAULT_STALENESS_GRACE_DAYS))
-    watched = [
-        str(name) for name, entry in (cfg.get("publication_lags") or {}).items()
-        if entry != DERIVED and name in monthly_features.columns
-    ]
-    run_date = _run_date()
-    late = stale_series(monthly_features, watched, run_date=run_date, grace_days=grace_days)
-    stale_expected_through = expected_month_end(run_date, grace_days)
+    late, stale_expected_through = _staleness(cfg, monthly_features)
     proba = nowcaster.predict_proba(row)[0]
     regime_probs = pd.Series(proba, index=nowcaster.classes_)
     # Ruling q2-ii: disclose how input-dependent that posterior is (looking, not fitting).
@@ -1180,22 +1275,9 @@ def _build_report_inputs(cfg: dict, cm=None) -> dict:
             min_obs=allocation_cfg.get("portfolio_vol_min_obs", 12),
         )
 
-    # The no-trade band (plan 08-09): the SAME function the drivers call. Held-book I/O
-    # happens only when a band is configured — with none, the executed book is the target.
-    # The mode record (A-15) is gated the same way, so band-free configs write nothing new.
-    last_week, held, changed_from = None, None, None
-    if no_trade_band is not None:
-        last_week = load_last_executed_weights(cm)  # load BEFORE save
-        switched, changed_from = mode_switch(
-            load_allocation_mode(cm), mode=mode, as_of=as_of, executed_exists=_has_executed_book(cm)
-        )  # load BEFORE save
-        # A-15: a switch trades the new target in full; a band against the old mode's book
-        # would hold a hybrid no measured leg ever held.
-        held = None if switched else load_held_weights(cm, as_of=as_of)  # load BEFORE save
-    executed = execute_rebalance(tilt["weights"], tilt["cash"], held, band=no_trade_band)
-    if no_trade_band is not None:
-        save_executed_weights(executed["weights"], held, cm, as_of=as_of)  # save AFTER load
-        save_allocation_mode(mode, cm, as_of=as_of, changed_from=changed_from)  # save AFTER load
+    executed, last_week, changed_from = _execute_and_save(
+        cm, tilt, mode=mode, as_of=as_of, no_trade_band=no_trade_band
+    )
 
     return {
         "regime_probs": regime_probs,
@@ -1258,6 +1340,7 @@ def build_weekly_page(cfg: dict, cm=None, *, output_dir: Path | None = None) -> 
         mode_note=inputs.get("mode_note"),
         tripwire=tripwire,
         scoreboard=format_scoreboard(scoreboard_table(cfg, cm)),
+        suspended_sentence=inputs.get("suspended_sentence"),
     )
     return markdown, write_weekly_report(markdown, output_dir=output_dir)
 
