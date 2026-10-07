@@ -5,13 +5,13 @@ milestone_name: milestone
 current_phase: 08.4
 current_phase_name: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
 status: executing
-stopped_at: "Phase 08.4 context re-gathered (tooling: archive/reset/restore/promote + fail-loud build); 08.5 context captured (clean-slate reset)"
-last_updated: "2026-10-07T16:44:27.182Z"
+stopped_at: Completed 08.4-01-PLAN.md
+last_updated: "2026-10-07T16:57:37.223Z"
 progress:
   total_phases: 13
   completed_phases: 10
   total_plans: 78
-  completed_plans: 75
+  completed_plans: 76
 last_activity: 2026-10-05
 last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."
 ---
@@ -283,7 +283,7 @@ again to plan wave 2 with real numbers in hand (D-09).
 `deferred_requirements: [INV-01]` (entirely wave 2, D-09 cited). Recorded as a decision, not
 an omission.
 
-**Resume file:** .planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md
+**Resume file:** None
 
 ### ⚠ Carried into execution — three things that are not settled
 
@@ -471,7 +471,7 @@ scoring now uses it — **required, not cosmetic**: it scores
 2020 as "today" every week. Three tests pin the wiring specifically and fail
 against the unwired code.
 
-Progress: [███████▌░░] 75% (6 of 8 phases; phase 7 in flight, 11 of its 12 plans done)
+Progress: [██████████] 97% (6 of 8 phases; phase 7 in flight, 11 of its 12 plans done)
 
 ### Roadmap restructure (2026-08-04)
 
@@ -529,6 +529,7 @@ numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
 | Phase 7 P08 | 1 session | 3 tasks | 6 files |
 | Phase 07 P11 | 1h05m | 3 tasks | 6 files |
 | Phase 07 P12 | 35min | 2 tasks | 4 files |
+| Phase 08.4 P01 | 1 session | 3 tasks | 11 files |
 
 *Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
 *Updated after each plan completion.*
@@ -574,6 +575,7 @@ Recent decisions affecting current work:
 - [Phase 07-12]: REG-01 claimed PARTIALLY rather than in full, by Glenn's explicit decision of 2026-09-18, with criterion 6 named as the open item rather than folded in. The plan as written assumed both requirements could be claimed outright; that assumption did not survive the INCONCLUSIVE dependence verdict.
 - [Phase 07-12]: The ADR's pre-declared sections were not edited in place. The Status section's original text is preserved verbatim under a subsection, and the probe-edge table's five extended rows carry a labelled AMENDMENT 2026-09-21 note — D-17's before-the-run guarantee is worthless if a pre-declaration can be silently rewritten afterward.
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
+- [Phase ?]: [Phase 08.4-01]: build.fail_loud true (pinned) with build.allow_missing_sources [] as the only escape hatch; splice research columns are replaced on every monthly_raw save; the model-free no_regime page engages only when the nowcaster is missing
 
 ### Pending Todos
 
@@ -793,8 +795,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-05T18:29:44.403Z
-Stopped at: Phase 08.4 context re-gathered (tooling) + 08.5 context captured (reset)
+Last session: 2026-10-07T16:57:37.184Z
+Stopped at: Completed 08.4-01-PLAN.md
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
 acceptance — the thirteen items Phase 7 carries forward, and the starting point for Phase 8.
 **Read § ACCEPTANCE 2026-09-21 first: criterion 6 is unresolved and REG-01 is only partially

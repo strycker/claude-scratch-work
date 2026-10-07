@@ -783,9 +783,11 @@ core-mix choice (no-regime ablation vs Faber, A-13) and is the baseline every la
 
   1. Equity / oil / long-duration monthly returns are month-end-to-month-end (or documented as a
      bounded exception), applied once in the splice, with a test that fails on an averaged series.
+
   2. One budgeted re-measurement: before (8.1 numbers) vs after, all five legs, common 1972–2020 window,
      10 bps; DSR at the live count; one-sentence answers to "does the tilt beat the ablation?" and
      "does MVP-1's core mix stand?" recorded in DECISIONS.
+
   3. The weekly page, scoreboard and P9 reflect the new numbers; the E-07 caveat is removed or narrowed.
   4. Full suite green on Python 3.10 (pandas 2) and 3.11+ (pandas 3); point-in-time test still green.
 
@@ -808,6 +810,7 @@ any time**. Chosen archives can be version-controlled in git as tagged model sna
 
 - **One plain module (`platform/state.py`, KISS K-1..K-11)** provides `archive`, `list`, `reset`, `restore` and
   `promote`.
+
 - **Each archive** is a `tar.gz` plus a manifest:
   - name, note, created time;
   - git commit and dirty flag;
@@ -815,22 +818,25 @@ any time**. Chosen archives can be version-controlled in git as tagged model sna
   - per-file sha256.
 - **Archives are local and gitignored.** `promote` commits one into git and tags it `model/<name>`, without live
   book state (G-11). It never pushes.
+
 - **`reset --yes`** archives first, then empties `data/` and `outputs/`. It never touches the registry or
   `archives/`.
+
 - **No pickles in any archive;** reset deletes them.
 - **`restore`** extracts safely (`filter="data"`) and checks sha256 before moving files into place. There is no
   refit; the no_regime page needs no model.
+
 - **The data build fails loud (D-08).** It runs from an empty `data/`, and a failed FRED daily fetch exits 1. In
   `no_regime` mode the weekly page needs no regime model.
 
 **Context:** `.planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md`. Budget: 0 rows.
 **Depends on:** Phase 08.3
-**Plans:** 2 plans (KISS replan 2026-10-05, CONTEXT K-1..K-11)
+**Plans:** 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 08.4-01-PLAN.md — **Fail-loud build and a model-free page (K-9, K-10; D-08, D-T7, D-T8).** `build.fail_loud` (true, pinned) + `build.allow_missing_sources`: a missing source or an unallowed fallback splice raises `BuildFailed` before any write; derived splice columns are replaced on merge (`replace_columns`); a failed FRED daily fetch exits 1 (A1 test flipped, dated); the closing hint names the page; one plain 221defc regression. The no_regime page needs no nowcaster, labels or belief, and shows "Scoreboard: not yet measured" — wave 1
+- [x] 08.4-01-PLAN.md — **Fail-loud build and a model-free page (K-9, K-10; D-08, D-T7, D-T8).** `build.fail_loud` (true, pinned) + `build.allow_missing_sources`: a missing source or an unallowed fallback splice raises `BuildFailed` before any write; derived splice columns are replaced on merge (`replace_columns`); a failed FRED daily fetch exits 1 (A1 test flipped, dated); the closing hint names the page; one plain 221defc regression. The no_regime page needs no nowcaster, labels or belief, and shows "Scoreboard: not yet measured" — wave 1
 
 **Wave 2** *(runs after 01, so the D-08-built row and the full-suite run see both plans)*
 
@@ -845,6 +851,7 @@ Plans:
 - Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
 - From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page, run twice with identical output, then
   the N4 sign-off.
+
 - Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
 - Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
 
@@ -912,6 +919,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
-| 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 0/TBD | Not started | - |
+| 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 1/2 | In Progress|  |
 | 08.5 Clean-Slate Reset & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
