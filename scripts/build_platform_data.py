@@ -1,21 +1,15 @@
 #!/usr/bin/env python
-"""build_platform_data.py — Build the Phase 1 monthly data checkpoints.
+"""build_platform_data.py — Build the platform's monthly data checkpoints.
 
-The platform backtest/report machinery (Phase 5) reads checkpoints the
-Phase 1 data layer produces. Only ``data/raw/`` is gitignored — the platform
-checkpoints under ``data/checkpoints/platform/`` ARE tracked in git — but a
-fresh clone's tracked copy can still be stale or empty (e.g. a degraded
-source wrote a 0-row frame before Task 1's never-lose-coverage protection
-existed). Re-running this script refreshes them, so
-``python -m trading_crab_lib.platform.evaluation.report`` can run end-to-end.
+Runs ``build_monthly_spine()`` once to fetch the real sources and write ``daily_raw``,
+``monthly_raw`` and ``monthly_features`` (dev and holdout) into the platform checkpoint
+namespace, then ``fetch_fred_daily()`` to write ``fred_daily_raw`` (DAAA/DBAA, the weekly
+tripwire's credit signal). It works from an empty ``data/``.
 
-    FileNotFoundError: .../data/checkpoints/platform/monthly_features.parquet
-
-This script runs ``build_monthly_spine()`` once to fetch the real sources and
-write ``daily_raw``, ``monthly_raw``, and ``monthly_features`` into the platform
-checkpoint namespace, so the report CLI can then run end-to-end. It then runs
-``fetch_fred_daily()`` to write ``fred_daily_raw`` (DAAA/DBAA, the weekly tripwire's
-credit signal); a failure there only warns (plan 08.2-03).
+Under ``build.fail_loud`` (true in config/platform_settings.yaml) a lost source stops the build
+before anything is written, and a failed DAAA/DBAA fetch fails the build after the other
+checkpoints are written. Either way the script exits 1 and names the source and the retry
+command (run this script again).
 
 Data sources (all free; only FRED needs a key):
   - FRED           (needs FRED_API_KEY in your environment / .env)
@@ -103,26 +97,31 @@ def main() -> int:
         return 1
 
     # The weekly page's crash tripwire reads fred_daily_raw (DAAA/DBAA) for its credit signal
-    # (plan 08.2-03, ruling A1). The tripwire is advisory, so a failed fetch warns and leaves
-    # the exit code alone: the page then shows that signal UNAVAILABLE or STALE, never green.
+    # (plan 08.2-03). Under build.fail_loud a failed or empty fetch fails the build (08.4 D-T8,
+    # superseding ruling A1) once the other checks have run; with the gate off it only warns.
     from trading_crab_lib.platform.ingestion.macro_daily import fetch_fred_daily
 
+    fail_loud = bool(cfg.get("build", {}).get("fail_loud"))
+    retry = "python scripts/build_platform_data.py"
+    fred_daily_failed = False
     try:
         fred_daily = fetch_fred_daily(cfg)
     except Exception as exc:  # noqa: BLE001 — network ingestion; fredapi raises various types
-        log.warning(
-            "fred_daily_raw fetch failed (%s): the weekly tripwire's credit signal will read "
-            "UNAVAILABLE (no checkpoint) or STALE (an old one). The rest of the build is unaffected.",
-            exc,
-        )
+        problem = f"fred_daily_raw fetch (DAAA/DBAA) failed ({exc})"
     else:
-        if fred_daily.empty:
-            log.warning(
-                "fred_daily_raw: no series fetched; the weekly tripwire's credit signal will read "
-                "UNAVAILABLE or STALE."
-            )
-        else:
+        problem = "fred_daily_raw: no series fetched (DAAA/DBAA)" if fred_daily.empty else None
+        if problem is None:
             log.info("fred_daily_raw: %d days, last date %s", len(fred_daily), fred_daily.index.max().date())
+    if problem is not None:
+        if fail_loud:
+            fred_daily_failed = True
+            log.error("%s. The build fails after the other checks; retry: %s", problem, retry)
+        else:
+            log.warning(
+                "%s: the weekly tripwire's credit signal will read UNAVAILABLE (no checkpoint) or STALE "
+                "(an old one). The rest of the build is unaffected.",
+                problem,
+            )
 
     cm = get_platform_checkpoint_manager()
 
@@ -184,8 +183,15 @@ def main() -> int:
         )
         return 1
 
-    print("\nBUILD OK — you can now run the real backtest:")
-    print("    python -m trading_crab_lib.platform.evaluation.report")
+    if fred_daily_failed:
+        return 1
+
+    print("\nBUILD OK — now write the weekly page:")
+    print("    python -m trading_crab_lib.platform.report.weekly")
+    # allocation_mode absent or null means regime_tilt (weekly.allocation_mode_from_config)
+    if cfg.get("report", {}).get("allocation_mode") in (None, "regime_tilt"):
+        print("regime_tilt mode also needs the served regime model first:")
+        print("    python -m trading_crab_lib.platform.report.serving")
     return 0
 
 

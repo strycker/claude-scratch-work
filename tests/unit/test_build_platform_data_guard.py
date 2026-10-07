@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import build_platform_data as build
 import pandas as pd
+import pytest
 
 
 def test_check_price_coverage_reports_failure_for_zero_row_frame():
@@ -87,19 +88,23 @@ def test_main_fetches_fred_daily_once_with_the_build_cfg(monkeypatch, tmp_path):
     assert calls[0] is spine_cfgs[0]
 
 
-def test_a_failed_fred_daily_fetch_warns_and_keeps_the_exit_code(monkeypatch, tmp_path, caplog):
+# 08.4 (2026-10-05): D-T8 supersedes ruling A1; under build.fail_loud a failed FRED daily fetch exits 1
+@pytest.mark.parametrize("failure", ["raise", "empty"])
+def test_a_failed_fred_daily_fetch_fails_the_build(monkeypatch, tmp_path, caplog, failure):
     import logging
 
     def ok(cfg):
         return pd.DataFrame({"fred_daaa": [4.5], "fred_dbaa": [5.5]}, index=pd.to_datetime(["2026-09-30"]))
 
-    def boom(cfg):
-        raise ConnectionError("FRED unreachable")
+    def bad(cfg):
+        if failure == "raise":
+            raise ConnectionError("FRED unreachable")
+        return pd.DataFrame()
 
     ok_code, _ = _drive_main(monkeypatch, tmp_path / "ok", ok)
-    with caplog.at_level(logging.WARNING, logger="build_platform_data"):
-        bad_code, _ = _drive_main(monkeypatch, tmp_path / "bad", boom)
-    assert bad_code == ok_code == 0
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "fred_daily_raw" in r.getMessage()]
-    assert warnings, [r.getMessage() for r in caplog.records]
-    assert "UNAVAILABLE" in warnings[0].getMessage()
+    with caplog.at_level(logging.ERROR, logger="build_platform_data"):
+        bad_code, _ = _drive_main(monkeypatch, tmp_path / "bad", bad)
+    assert ok_code == 0
+    assert bad_code == 1
+    errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert any("DAAA/DBAA" in m and "python scripts/build_platform_data.py" in m for m in errors), errors

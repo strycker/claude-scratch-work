@@ -494,6 +494,9 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     raw_path = cm.save(
         monthly_raw, "monthly_raw",
         source="build_monthly_spine (combined monthly ingest: macro+prices+research+agency)",
+        # The spliced research columns are derived: replaced by every build, never refilled from
+        # an old disk copy (08.4, the 221defc -98% gold month).
+        replace_columns=[params["research_name"] for params in cfg.get("splice", {}).values()],
     )
     write_lag_marker(cm.dir / LAG_MARKER_FILENAME, cfg)
 

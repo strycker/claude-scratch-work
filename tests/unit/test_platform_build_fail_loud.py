@@ -84,3 +84,40 @@ def test_main_returns_1_when_the_build_fails(monkeypatch):
     monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)
     monkeypatch.setattr(transforms_monthly, "build_monthly_spine", boom)
     assert script.main() == 1
+
+
+# ── merge-on-save: derived columns are replaced, raw columns still fill from disk ───
+
+
+def test_replace_columns_take_the_new_value_while_raw_columns_still_fill_from_disk():
+    from trading_crab_lib.checkpoints import merge_preserving
+
+    idx = pd.date_range("2020-01-31", periods=3, freq="ME")
+    old = pd.DataFrame({"a": [1.0, 2.0, 3.0], "d": [10.0, 20.0, 30.0], "only_disk_d": [7.0, 8.0, 9.0]}, index=idx)
+    new = pd.DataFrame({"a": [np.nan, 5.0, np.nan], "d": [np.nan, 50.0, np.nan]}, index=idx)
+
+    merged, stats = merge_preserving(old, new, replace_columns=["d", "only_disk_d"])
+
+    assert merged["a"].tolist() == [1.0, 5.0, 3.0]  # raw: NaN cells still filled from disk
+    assert merged["d"].isna().tolist() == [True, False, True]  # derived: new verbatim
+    assert merged["d"].iloc[1] == 50.0
+    assert "only_disk_d" not in merged.columns  # a derived column only on disk is dropped
+    assert sorted(stats["cols_replaced"]) == ["d", "only_disk_d"]
+
+    plain, _ = merge_preserving(old, new)
+    assert plain["d"].tolist() == [10.0, 50.0, 30.0]  # without replace_columns: today's merge
+
+
+def test_221defc_gold_spot_lost_leaves_no_pre_iau_gold_and_no_month_below_minus_half(tmp_path):
+    """The 2026-10 incident: gold_spot lost, IAU spliced from 2005-01, the old monthly_raw
+    refilling the pre-IAU months of the derived `gold` column (a -98% month)."""
+    cfg, macro, prices, vintages = _world()
+    _build(cfg, macro, prices, vintages, tmp_path)  # the old disk: gold from gold_spot, whole span
+
+    cfg["build"] = {"fail_loud": True, "allow_missing_sources": ["gold_spot"]}
+    lost_macro, lost_prices = _221defc_inputs(macro, prices)
+    _build(cfg, lost_macro, lost_prices, vintages, tmp_path)
+
+    gold = pd.read_parquet(tmp_path / "platform" / "monthly_raw.parquet")["gold"]
+    assert gold.loc[gold.index < IAU_START].isna().all()
+    assert gold.pct_change(fill_method=None).min() > -0.5
