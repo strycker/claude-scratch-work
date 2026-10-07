@@ -7,8 +7,11 @@ registry/ and git history are never touched. 0 registry rows.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+import shutil
+import subprocess
 import tarfile
 
 import pytest
@@ -196,3 +199,159 @@ def test_restore_is_refused_when_tarfile_has_no_data_filter(state_env, monkeypat
     with pytest.raises(state.StateError, match="data_filter"):
         state.restore("nofilter")
     assert _snapshot(state_env) == {"data/snapshots/platform/.gitkeep": b""}
+
+
+# ── list and reset ──
+
+
+def _tree_hash(folder):
+    return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+def test_reset_without_yes_changes_nothing(state_env, capsys):
+    before = _snapshot(state_env)
+
+    assert state.main(["reset"]) == 1
+
+    assert "--yes" in capsys.readouterr().out
+    assert _snapshot(state_env) == before and not state.ARCHIVES_DIR.exists()
+
+
+def test_reset_archives_first_empties_the_trees_and_restore_brings_it_back(state_env, capsys):
+    before = _snapshot(state_env)
+    registry_before = _tree_hash(state_env / "registry")
+    state.archive("keep-me")
+    archives_before = _tree_hash(state.ARCHIVES_DIR)
+
+    assert state.main(["reset", "--yes"]) == 0
+
+    out = capsys.readouterr().out
+    assert "nowcaster.pkl" in out and "legacy_labels.pickle" in out  # deleted pickles are named
+    assert _snapshot(state_env) == {"data/snapshots/platform/.gitkeep": b""}
+    assert not (state_env / "outputs/reports").exists()  # emptied sub-directories are removed
+    assert _tree_hash(state_env / "registry") == registry_before
+    after = _tree_hash(state.ARCHIVES_DIR)
+    assert {k: v for k, v in after.items() if k.startswith("keep-me/")} == archives_before  # untouched
+    auto = [row["name"] for row in state.list_archives() if row["name"].startswith("auto-")]
+    assert len(auto) == 1 and f"restore {auto[0]}" in out
+
+    state.restore(auto[0])
+    assert _snapshot(state_env) == {k: v for k, v in before.items() if not _is_pickle(k)}
+
+
+def test_reset_with_a_name_uses_it_and_refuses_when_registry_or_archives_sit_in_a_tree(state_env, monkeypatch):
+    assert state.reset("named")[0] == "named"
+    assert (state.ARCHIVES_DIR / "named/manifest.json").is_file()
+
+    _write_world(state_env)
+    monkeypatch.setattr(state, "ARCHIVES_DIR", state.DATA_DIR / "archives")
+    with pytest.raises(state.StateError, match="inside"):
+        state.reset("inside")
+    monkeypatch.setattr(state, "ARCHIVES_DIR", state_env / "archives")
+    monkeypatch.setattr(state, "REGISTRY_PATH", state.OUTPUT_DIR / "trials.jsonl")
+    with pytest.raises(state.StateError, match="inside"):
+        state.reset("inside")
+    assert (state_env / "data/checkpoints/platform/monthly_raw.parquet").exists()
+
+
+def test_list_shows_name_size_promoted_commit_trials_and_note(state_env, capsys):
+    state.archive("alpha", note="first one")
+    assert state.main(["list"]) == 0
+    line = capsys.readouterr().out.strip()
+    assert line.startswith("alpha") and "promoted=no" in line and "trials=2" in line and "first one" in line
+    assert [row["name"] for row in state.list_archives()] == ["alpha"]
+
+
+# ── promote, in a throwaway git repo ──
+
+
+@pytest.fixture
+def git_env(state_env, monkeypatch):
+    """state_env turned into an isolated git repo; no global config, no signing, nothing pushed."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not installed")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    root = state_env
+
+    def git(*args):
+        done = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True)
+        return done.stdout.strip()
+
+    git("init", "-q")
+    for key, value in (("user.name", "Test"), ("user.email", "test@example.com"),
+                       ("commit.gpgsign", "false"), ("tag.gpgsign", "false")):
+        git("config", key, value)
+    (root / ".gitignore").write_text("archives/*\n!archives/promoted/\n", encoding="utf-8")
+    (root / "tracked.txt").write_text("one\n", encoding="utf-8")
+    git("add", ".gitignore", "tracked.txt")
+    git("commit", "-q", "-m", "initial")
+    git.root = root
+    return git
+
+
+def test_promote_commits_only_the_promoted_folder_tags_it_and_drops_live_state(git_env):
+    root = git_env.root
+    state.archive("model-a", note="for the tag")
+    head_before = git_env("rev-parse", "HEAD")
+
+    assert state.promote("model-a") == "model/model-a"
+
+    assert git_env("rev-parse", "HEAD~1") == head_before
+    assert set(git_env("show", "--name-only", "--format=", "HEAD").splitlines()) == {
+        "archives/promoted/model-a/manifest.json", "archives/promoted/model-a/state.tar.gz"}
+    assert git_env("cat-file", "-t", "model/model-a") == "tag"
+    assert "for the tag" in git_env("tag", "-l", "-n5", "model/model-a")
+    with tarfile.open(root / "archives/promoted/model-a/state.tar.gz") as tar:
+        names = tar.getnames()
+    assert not any("executed_weights" in n or n.endswith("weekly_report.md") or _is_pickle(n) for n in names)
+    assert "data/checkpoints/platform/monthly_raw.parquet" in names
+    promoted = json.loads((root / "archives/promoted/model-a/manifest.json").read_text())
+    assert sorted(promoted["excluded"]) == ["data/checkpoints/platform/executed_weights.meta.json",
+                                            "data/checkpoints/platform/executed_weights.parquet",
+                                            "outputs/reports/platform/weekly_report.md"]
+    assert [f["path"] for f in promoted["files"]] == names
+    assert subprocess.run(["git", "check-ignore", "-q", "archives/model-a/state.tar.gz"], cwd=root).returncode == 0
+    assert subprocess.run(["git", "check-ignore", "-q", "archives/promoted/model-a/state.tar.gz"], cwd=root).returncode == 1
+    assert [row["promoted"] for row in state.list_archives()] == [True]
+
+    _empty_trees(root)
+    shutil.rmtree(root / "archives/model-a")  # only the promoted copy is left, as on a fresh clone
+    assert state.restore("model-a")["files"] == len(names)
+
+
+def test_promote_refuses_a_dirty_tracked_file_a_missing_or_promoted_name_and_an_oversized_archive(git_env, monkeypatch):
+    state.archive("model-b")
+    head = git_env("rev-parse", "HEAD")
+    (git_env.root / "tracked.txt").write_text("changed\n", encoding="utf-8")
+    with pytest.raises(state.StateError, match="tracked.txt"):
+        state.promote("model-b")
+    git_env("checkout", "--", "tracked.txt")
+
+    with pytest.raises(state.StateError, match="no local archive"):
+        state.promote("nothing-here")
+
+    monkeypatch.setattr(state, "MAX_PROMOTE_BYTES", 10)
+    with pytest.raises(state.StateError, match="MB|over"):
+        state.promote("model-b")
+    assert not (state.ARCHIVES_DIR / "promoted/model-b").exists()
+    monkeypatch.undo()
+
+    assert git_env("rev-parse", "HEAD") == head and git_env("tag", "-l", "model/*") == ""
+    assert git_env("status", "--porcelain", "--untracked-files=no") == ""
+
+
+def test_a_failed_commit_unstages_and_removes_the_promoted_folder(git_env):
+    state.archive("model-c")
+    hook = git_env.root / ".git/hooks/pre-commit"
+    hook.write_text("#!/bin/sh\necho nope >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    head = git_env("rev-parse", "HEAD")
+
+    with pytest.raises(state.StateError, match="nope"):
+        state.promote("model-c")
+
+    assert git_env("rev-parse", "HEAD") == head and git_env("tag", "-l", "model/*") == ""
+    assert not (state.ARCHIVES_DIR / "promoted/model-c").exists()
+    assert git_env("diff", "--cached", "--name-only") == ""
