@@ -398,10 +398,23 @@ def _fetch_macrotrends_monthly_all(cfg: dict[str, Any]) -> dict[str, pd.Series]:
             if not s.empty:
                 results[name] = s
         except Exception as exc:  # noqa: BLE001 — network libraries raise various types
-            log.warning("Failed to scrape macrotrends %s: %s", name, exc)
+            log.warning("Failed to scrape macrotrends %s: %s%s", name, exc, network_hint(exc))
         time.sleep(macrotrends.RATE_LIMIT_SECONDS)
 
     return results
+
+
+def network_hint(exc: BaseException) -> str:
+    """A plain-English cause for a blocked or throttled fetch, or ``""`` (08.4 UAT, corporate VPN)."""
+    text = f"{type(exc).__name__}: {exc}"
+    if "403" in text:
+        return (
+            " — blocked (HTTP 403): the site refuses this network, as it does on many corporate "
+            "VPNs, firewalls and cloud hosts. Run the build off the VPN."
+        )
+    if "RateLimit" in text or "Too Many Requests" in text or "429" in text:
+        return " — rate-limited: wait an hour and retry, or run off the VPN (a shared exit IP is throttled)."
+    return ""
 
 
 # ── Index month-end closes (08.3, P&L only) ────────────────────────────────
@@ -431,7 +444,12 @@ def _fetch_index_month_end(cfg: dict[str, Any]) -> dict[str, pd.Series]:
     for ticker, meta in index_cfg.items():
         name = meta["name"]
         if ticker not in monthly.columns or monthly[ticker].dropna().empty:
-            log.warning("Index month-end fetch returned nothing for %s (%s) — column absent", name, ticker)
+            log.warning(
+                "Index month-end fetch returned nothing for %s (%s) — column absent. Yahoo rate-limits or "
+                "blocks many shared networks (corporate VPNs among them): retry later, or off the VPN.",
+                name,
+                ticker,
+            )
             continue
         results[name] = monthly[ticker].rename(name)
     return results

@@ -90,3 +90,20 @@ def test_assemble_weekly_report_keeps_the_old_sentence_when_none_is_given():
     assert weekly._NO_MODEL_SENTENCE in weekly.assemble_weekly_report(
         **kwargs, suspended_sentence=weekly._NO_MODEL_SENTENCE
     )
+
+
+def test_main_says_build_first_when_the_platform_data_is_missing(tmp_path, monkeypatch, capsys):
+    """08.4 UAT (2026-10-07): a failed build left no data and main() crashed with a traceback.
+    It now names the missing files and the build command, and exits 1."""
+    empty = tmp_path / "empty_platform"
+    empty.mkdir()
+    monkeypatch.setattr(platform_ckpt, "PLATFORM_CHECKPOINT_DIR", empty)
+    monkeypatch.setattr(weekly, "load_platform_config", lambda: {"report": {}})
+    monkeypatch.setattr(weekly, "build_weekly_page", lambda cfg: pytest.fail("must not build"))
+
+    assert weekly.main([]) == 1
+
+    out = capsys.readouterr().out
+    assert "platform data has not been built" in out
+    assert str(empty / "monthly_raw.parquet") in out and str(empty / "monthly_features.parquet") in out
+    assert weekly.PLATFORM_BUILD_COMMAND in out

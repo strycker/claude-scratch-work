@@ -1347,6 +1347,15 @@ def build_weekly_page(cfg: dict, cm=None, *, output_dir: Path | None = None) -> 
     return markdown, write_weekly_report(markdown, output_dir=output_dir)
 
 
+PLATFORM_BUILD_COMMAND = "python scripts/build_platform_data.py"
+
+
+def _missing_platform_data(cm) -> list[Path]:
+    """The build's checkpoints every page reads, listed if absent (08.4 UAT: say so, no traceback)."""
+    paths = [cm.dir / f"{name}.parquet" for name in ("monthly_raw", "monthly_features")]
+    return [path for path in paths if not path.exists()]
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: assemble + always write the markdown; email opt-in.
 
@@ -1367,6 +1376,14 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO)
 
     cfg = load_platform_config()
+    missing = _missing_platform_data(get_platform_checkpoint_manager())
+    if missing:
+        print(
+            "Weekly page not written: the platform data has not been built here. Missing:\n"
+            + "".join(f"  {path}\n" for path in missing)
+            + f"Build it first: {PLATFORM_BUILD_COMMAND}  (re-run this once it prints BUILD OK)"
+        )
+        return 1
     _, report_path = build_weekly_page(cfg)
 
     if args.send_email:

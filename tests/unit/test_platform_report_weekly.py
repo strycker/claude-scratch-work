@@ -15,6 +15,14 @@ from trading_crab_lib.platform.report import weekly
 # ── trades_implied: signal rules against the flat no-trade band ─────────────
 
 
+@pytest.fixture(autouse=True)
+def _platform_data_present(monkeypatch):
+    """main() now checks the build's checkpoints exist (08.4 UAT, 2026-10-07). These tests stub
+    the inputs, so they stand in for a built data dir; test_platform_weekly_model_free.py covers
+    the missing case."""
+    monkeypatch.setattr(weekly, "_missing_platform_data", lambda cm: [])
+
+
 class TestTradesImplied:
     def test_hold_within_threshold(self):
         target = pd.Series({"SPY": 0.40})

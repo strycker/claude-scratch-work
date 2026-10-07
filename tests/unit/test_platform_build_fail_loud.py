@@ -59,6 +59,7 @@ def test_a_lost_source_stops_the_build_before_any_write(tmp_path):
     text = str(err.value)
     assert "gold_spot" in text and "macrotrends_monthly" in text
     assert "scripts/build_platform_data.py" in text and "allow_missing_sources" in text
+    assert "corporate VPNs" in text  # a macrotrends loss names the likely cause (08.4 UAT, 2026-10-07)
     assert raw_path.read_bytes() == before
 
 
@@ -134,3 +135,16 @@ def test_221defc_gold_spot_lost_leaves_no_pre_iau_gold_and_no_month_below_minus_
     gold = pd.read_parquet(tmp_path / "platform" / "monthly_raw.parquet")["gold"]
     assert gold.loc[gold.index < IAU_START].isna().all()
     assert gold.pct_change(fill_method=None).min() > -0.5
+
+
+def test_network_hint_names_a_blocked_or_throttled_fetch():
+    """08.4 UAT (2026-10-07): behind a corporate VPN, macrotrends answered 403 and Yahoo rate-limited.
+    The fetch WARNING now says which, in plain words; any other failure gets no guess."""
+    from trading_crab_lib.platform.ingestion.macro_monthly import network_hint
+
+    class YFRateLimitError(Exception):
+        pass
+
+    assert "blocked (HTTP 403)" in network_hint(RuntimeError("HTTP Error 403: Forbidden"))
+    assert "rate-limited" in network_hint(YFRateLimitError("Too Many Requests. Rate limited."))
+    assert network_hint(ValueError("no table found")) == ""

@@ -430,11 +430,19 @@ def fallback_splices(cfg: dict[str, Any], provenance: dict[str, Any] | None) -> 
     return problems
 
 
+_BLOCKED_HINT = (
+    "macrotrends (HTTP 403) and Yahoo (rate limits) block many corporate VPNs and firewalls; if you are "
+    "on one, run the build off it. "
+)
+
+
 def _raise_build_failed(problems: list[str]) -> None:
     if problems:
+        blocked = any("macrotrends_monthly" in p or "index_monthly" in p for p in problems)
         raise BuildFailed(
             "build_monthly_spine: nothing was written, because " + "; ".join(problems) + ". "
-            "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To go on "
+            + (_BLOCKED_HINT if blocked else "")
+            + "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To go on "
             "without a raw column on purpose, list it in build.allow_missing_sources in "
             "config/platform_settings.yaml."
         )
