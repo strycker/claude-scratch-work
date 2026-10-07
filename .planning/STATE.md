@@ -31,6 +31,16 @@ avoided drawdowns — never fooled by its own backtest.
 Phase: 08.4 (Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build) — EXECUTING
 Status: Executing Phase 08.4
 
+**Phase 08.4 executed 2026-10-07 (2/2 plans).**
+
+- **08.4-01:** fail-loud build. A lost or all-NaN source, or a fallback splice, stops the build before any write.
+  Derived splice columns are replaced on save. A failed FRED daily fetch exits 1. The no_regime page runs without
+  any regime model.
+- **08.4-02:** `platform/state.py`, a single module with archive, list, reset, restore and promote.
+
+Suite 2263. Registry 48 (0 rows spent). Mac UAT is pending. The KISS cleanup on 2026-10-05 retired the parked
+code (G-13) and trimmed CLAUDE.md.
+
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
 common-window scoreboard with the E-07 caveat (A-14). Classifier #2, joint driver and stability parked in
@@ -575,8 +585,8 @@ Recent decisions affecting current work:
 - [Phase 07-12]: REG-01 claimed PARTIALLY rather than in full, by Glenn's explicit decision of 2026-09-18, with criterion 6 named as the open item rather than folded in. The plan as written assumed both requirements could be claimed outright; that assumption did not survive the INCONCLUSIVE dependence verdict.
 - [Phase 07-12]: The ADR's pre-declared sections were not edited in place. The Status section's original text is preserved verbatim under a subsection, and the probe-edge table's five extended rows carry a labelled AMENDMENT 2026-09-21 note — D-17's before-the-run guarantee is worthless if a pre-declaration can be silently rewritten afterward.
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
-- [Phase ?]: [Phase 08.4-01]: build.fail_loud true (pinned) with build.allow_missing_sources [] as the only escape hatch; splice research columns are replaced on every monthly_raw save; the model-free no_regime page engages only when the nowcaster is missing
-- [Phase ?]: 08.4-02 G-12: state tooling is one module (platform/state.py: archive, list, reset, restore, promote); no pickle archived, promote never pushes
+- [Phase 08.4-01]: build.fail_loud true (pinned) with build.allow_missing_sources [] as the only escape hatch; splice research columns are replaced on every monthly_raw save; the model-free no_regime page engages only when the nowcaster is missing
+- [Phase 08.4-02]: G-12: state tooling is one module (platform/state.py: archive, list, reset, restore, promote); no pickle archived, promote never pushes
 
 ### Pending Todos
 
