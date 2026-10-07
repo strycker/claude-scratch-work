@@ -104,6 +104,8 @@ def _pit_cfg() -> dict:
     cfg = copy.deepcopy(load_platform_config())
     cfg["data"]["start_date"], cfg["data"]["end_date"] = START, END
     cfg["publication_lags"]["sentinel"] = FLOOR["sentinel"]
+    # 08.4 (2026-10-05): synthetic worlds omit sources by design; the gate is tested in test_platform_build_fail_loud.py
+    cfg["build"] = {"fail_loud": False}
     return cfg
 
 

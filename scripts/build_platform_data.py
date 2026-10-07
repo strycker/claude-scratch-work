@@ -89,14 +89,18 @@ def main() -> int:
         DEFAULT_HOLDOUT_CUTOFF,
         assert_dev_checkpoint_within_boundary,
     )
-    from trading_crab_lib.platform.transforms_monthly import build_monthly_spine
+    from trading_crab_lib.platform.transforms_monthly import BuildFailed, build_monthly_spine
 
     cfg = load_platform_config()
     start = cfg["data"]["start_date"]
     end = cfg["data"].get("end_date") or "today"
     log.info("Building monthly spine %s → %s (fetching FRED + multpl + macrotrends + yfinance)...", start, end)
 
-    monthly_features = build_monthly_spine(cfg)
+    try:
+        monthly_features = build_monthly_spine(cfg)
+    except BuildFailed as exc:
+        log.error("%s", exc)
+        return 1
 
     # The weekly page's crash tripwire reads fred_daily_raw (DAAA/DBAA) for its credit signal
     # (plan 08.2-03, ruling A1). The tripwire is advisory, so a failed fetch warns and leaves

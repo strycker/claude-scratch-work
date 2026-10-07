@@ -377,6 +377,57 @@ def _assert_lag_marker_allows_merge(cm: Any, cfg: dict[str, Any]) -> None:
     )
 
 
+# ── Fail-loud build gate (08.4, DECISIONS D-08) ──────────────────────────────
+
+
+class BuildFailed(RuntimeError):
+    """A source the build needs is missing; raised before anything is written."""
+
+
+def expected_source_columns(cfg: dict[str, Any]) -> dict[str, str]:
+    """Every raw column the build expects, mapped to the config section that names it."""
+    expected: dict[str, str] = {}
+    for meta in cfg.get("fred_monthly", {}).get("series", {}).values():
+        expected[meta["name"]] = "fred_monthly"
+    for row in cfg.get("multpl_monthly", {}).get("datasets", []):
+        expected[row[0]] = "multpl_monthly"
+    for entry in cfg.get("macrotrends_monthly", {}).get("series", []):
+        expected[entry["name"]] = "macrotrends_monthly"
+    for meta in cfg.get("index_monthly", {}).values():
+        expected[meta["name"]] = "index_monthly"
+    for ticker in prices_daily.universe_fetch_tickers(cfg):
+        expected[ticker] = "universe"
+    for meta in cfg.get("fred_vintage", {}).get("series", {}).values():
+        expected[meta["name"]] = "fred_vintage"
+    return expected
+
+
+def build_problems(
+    cfg: dict[str, Any], delivered: set[str], provenance: dict[str, Any] | None
+) -> list[str]:
+    """What stops a fail-loud build.
+
+    Every expected column that was neither delivered nor allowed, plus every splice class
+    that fell back from a primary column that is not allowed."""
+    allowed = set(cfg.get("build", {}).get("allow_missing_sources", []))
+    problems: list[str] = []
+    for column, section in expected_source_columns(cfg).items():
+        if column in delivered:
+            continue
+        if column in allowed:
+            log.warning("build: source column '%s' (%s) is missing; build.allow_missing_sources allows it.", column, section)
+        else:
+            problems.append(f"source column '{column}' ({section}) was not delivered")
+    for research_name, record in (provenance or {}).items():
+        if record.get("status") != "fallback":
+            continue
+        for key, detail in record["sources"].items():
+            primary = detail["candidates"][0]
+            if detail["position"] != 1 and primary not in allowed:
+                problems.append(f"splice '{research_name}' fell back from '{primary}' to '{detail['resolved']}' ({key})")
+    return problems
+
+
 def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     """Assemble the monthly feature table (DATA-01, DATA-03 runtime, DATA-04).
 
@@ -424,6 +475,18 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     monthly_raw = pd.concat(frames, axis=1) if frames else pd.DataFrame(index=monthly_index)
     monthly_raw = monthly_raw.reindex(monthly_index)
     monthly_raw.index.name = "date"
+
+    if cfg.get("build", {}).get("fail_loud"):
+        delivered = set(macro.columns) | set(monthly_prices.columns) | set(agency.columns)
+        provenance = research.attrs.get("splice_provenance") if not research.empty else None
+        problems = build_problems(cfg, delivered, provenance)
+        if problems:
+            raise BuildFailed(
+                "build_monthly_spine: nothing was written, because " + "; ".join(problems) + ". "
+                "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To go on "
+                "without a raw column on purpose, list it in build.allow_missing_sources in "
+                "config/platform_settings.yaml."
+            )
 
     cm = get_platform_checkpoint_manager()
     _assert_lag_marker_allows_merge(cm, cfg)  # before ANY write

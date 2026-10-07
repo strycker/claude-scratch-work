@@ -12,6 +12,16 @@ data:
   monthly_freq: "ME"           # month-end resample rule (vs incumbent's "QE")
   daily_persist: true          # D-05: store daily raw prices, derive monthly by resample
 
+# ── Fail-loud build (08.4, DECISIONS D-08) ────────────────────────────────────
+# fail_loud: a lost source column, or a splice that fell back from its primary
+# column, stops the build BEFORE any write (BuildFailed, script exits 1). An
+# absent `build` key = today's permissive build (synthetic test configs); a test
+# pins `true` here. allow_missing_sources: raw columns the build may go on
+# without (logged); a splice class whose PRIMARY column is listed may fall back.
+build:
+  fail_loud: true
+  allow_missing_sources: []
+
 # ── FRED market/fast-layer series (no ALFRED vintage needed) ──────────────────
 # Market-observed series (rates, spreads, prices) are never revised. Their
 # publication lags live in the top-level `publication_lags` table (08.1), not
