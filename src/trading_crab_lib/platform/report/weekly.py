@@ -1165,7 +1165,9 @@ def _model_free_inputs(cfg: dict, cm, mode: str) -> dict:
         "pre_band_target_weights": tilt["weights"],
         "pre_band_cash": tilt["cash"],
         "no_trade_band": no_trade_band,
-        "scored_as_of_note": None,
+        "scored_as_of_note": (
+            f"Scored as of {as_of.date().isoformat()}, the latest month with a return for every tradable asset."
+        ),
         "input_sensitivity_note": None,
         "stale_series": late,
         "stale_expected_through": stale_expected_through,

@@ -332,11 +332,11 @@ def test_promote_refuses_a_dirty_tracked_file_a_missing_or_promoted_name_and_an_
     with pytest.raises(state.StateError, match="no local archive"):
         state.promote("nothing-here")
 
-    monkeypatch.setattr(state, "MAX_PROMOTE_BYTES", 10)
-    with pytest.raises(state.StateError, match="MB|over"):
-        state.promote("model-b")
+    with monkeypatch.context() as m:  # scoped, so the fixture's path patches stay in force
+        m.setattr(state, "MAX_PROMOTE_BYTES", 10)
+        with pytest.raises(state.StateError, match="MB|over"):
+            state.promote("model-b")
     assert not (state.ARCHIVES_DIR / "promoted/model-b").exists()
-    monkeypatch.undo()
 
     assert git_env("rev-parse", "HEAD") == head and git_env("tag", "-l", "model/*") == ""
     assert git_env("status", "--porcelain", "--untracked-files=no") == ""
@@ -355,3 +355,34 @@ def test_a_failed_commit_unstages_and_removes_the_promoted_folder(git_env):
     assert git_env("rev-parse", "HEAD") == head and git_env("tag", "-l", "model/*") == ""
     assert not (state.ARCHIVES_DIR / "promoted/model-c").exists()
     assert git_env("diff", "--cached", "--name-only") == ""
+
+
+# ── review fixes (2026-10-07) ──
+
+
+@pytest.mark.parametrize("bad", ["a..b", "x.lock", "x.", "Upper", "promoted", ".hidden"])
+def test_names_that_are_not_valid_git_tags_are_refused_before_anything_is_written(state_env, bad):
+    with pytest.raises(state.StateError, match="bad archive name"):
+        state.archive(bad)
+    assert not state.ARCHIVES_DIR.exists()
+
+
+def test_promote_leaves_notebook_scratch_out(git_env):
+    scratch = state.DATA_DIR / "checkpoints/platform_notebook/scratch.parquet"
+    scratch.parent.mkdir(parents=True, exist_ok=True)
+    scratch.write_bytes(b"scratch")
+    state.archive("model-d")
+    state.promote("model-d")
+    manifest = json.loads((state.ARCHIVES_DIR / "promoted/model-d/manifest.json").read_text(encoding="utf-8"))
+    assert "data/checkpoints/platform_notebook/scratch.parquet" in manifest["excluded"]
+    assert all(not f["path"].startswith("data/checkpoints/platform_notebook/") for f in manifest["files"])
+
+
+def test_list_survives_an_unreadable_archive(state_env):
+    state.archive("good")
+    broken = state.ARCHIVES_DIR / "broken"
+    broken.mkdir()
+    (broken / "manifest.json").write_text("{not json", encoding="utf-8")
+    rows = {row["name"]: row for row in state.list_archives()}
+    assert rows["good"]["trials"] is not None
+    assert rows["broken"]["note"].startswith("UNREADABLE")

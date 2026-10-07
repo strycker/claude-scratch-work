@@ -44,7 +44,9 @@ LIVE_STATE_STEMS = (
     "allocation_mode", "asset_returns", "executed_weights", "hysteresis_state",
     "nowcaster_class_prior", "regime_belief", "returns_by_regime",
 )
-_NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]*")
+#: Throwaway notebook scratch (plotting/loaders.py NOTEBOOK_SCRATCH_DIR); archived locally, never promoted.
+NOT_PROMOTED_PREFIXES = ("data/checkpoints/platform_notebook/",)
+_NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]*(\.[a-z0-9_-]+)*")  # no "..", no trailing "." (git ref rules)
 
 
 class StateError(RuntimeError):
@@ -55,8 +57,9 @@ class StateError(RuntimeError):
 
 
 def _check_name(name: str) -> None:
-    if not _NAME_RE.fullmatch(name) or name == "promoted":
-        raise StateError(f"bad archive name {name!r}: use lowercase letters, digits, '.', '_', '-' ('promoted' is reserved)")
+    if not _NAME_RE.fullmatch(name) or name == "promoted" or name.endswith(".lock"):
+        raise StateError(f"bad archive name {name!r}: use lowercase letters, digits, '.', '_', '-' "
+                         "(no '..', no trailing '.' or '.lock'; 'promoted' is reserved)")
 
 
 def _trees() -> tuple[tuple[str, Path], tuple[str, Path]]:
@@ -133,6 +136,16 @@ def _check_archive(folder: Path) -> tuple[dict, Path]:
     return manifest, tar_path
 
 
+def _verify_hashes(folder: Path) -> None:
+    """_check_archive plus every member's sha256 against the manifest (reset deletes only after this)."""
+    manifest, tar_path = _check_archive(folder)
+    want = {f["path"]: f["sha256"] for f in manifest["files"]}
+    with tarfile.open(tar_path, "r:gz") as tar:
+        for member in tar.getmembers():
+            if hashlib.sha256(tar.extractfile(member).read()).hexdigest() != want[member.name]:
+                raise StateError(f"archive {folder.name!r}: sha256 mismatch for {member.name}")
+
+
 # ── archive / restore ──
 
 
@@ -171,7 +184,7 @@ def archive(name: str, note: str = "") -> Path:
             "files": files,
         }
         (tmp / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        _check_archive(tmp)  # reopen what was written before anything depends on it
+        _verify_hashes(tmp)  # reopen what was written and check every hash before anything depends on it
         tmp.rename(final)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -228,11 +241,16 @@ def list_archives() -> list[dict]:
         for folder in folders:
             if folder.name.startswith(".") or folder.name == "promoted" or not (folder / "manifest.json").is_file():
                 continue
-            manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
             row = found.setdefault(folder.name, {"name": folder.name, "promoted": False})
+            try:
+                manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+                size = (folder / "state.tar.gz").stat().st_size
+            except (OSError, ValueError) as exc:
+                row.update(created="", size=0, commit="", trials=None, note=f"UNREADABLE: {exc}")
+                continue
             row["promoted"] = row["promoted"] or promoted
             row.update(
-                created=manifest.get("created_utc", ""), size=(folder / "state.tar.gz").stat().st_size,
+                created=manifest.get("created_utc", ""), size=size,
                 commit=str(manifest.get("git_commit", ""))[:7], trials=manifest.get("registry_trials"),
                 note=manifest.get("note", ""),
             )
@@ -240,7 +258,7 @@ def list_archives() -> list[dict]:
 
 
 def reset(name: str | None = None) -> tuple[str, list[str]]:
-    """Archive first (NAME or auto-<UTC stamp>), then empty data/ and outputs/; return (name, deleted pickle paths)."""
+    """Archive first (NAME or auto-<UTC stamp>), then empty data/ and outputs/; return (name, paths deleted unarchived)."""
     for protected in (ARCHIVES_DIR, REGISTRY_PATH):
         for _, root in _trees():
             if protected.resolve().is_relative_to(root.resolve()):
@@ -249,16 +267,16 @@ def reset(name: str | None = None) -> tuple[str, list[str]]:
     folder = archive(name, note="made by reset")
     if not (folder / "manifest.json").is_file():
         raise StateError(f"archive {name!r} was not written; nothing was deleted")
-    pickles: list[str] = []
+    not_archived: list[str] = []  # pickles (P27) and symlinks: deleted, never archived
     for _, root in _trees():
         for path in _walk(root):
-            if path.name.lower().endswith(PICKLE_SUFFIXES):
-                pickles.append(str(path))
+            if path.is_symlink() or path.name.lower().endswith(PICKLE_SUFFIXES):
+                not_archived.append(str(path))
             path.unlink()
         for sub in sorted((p for p in root.rglob("*") if p.is_dir()), reverse=True):
             if not any(sub.iterdir()):
                 sub.rmdir()
-    return name, pickles
+    return name, not_archived
 
 
 def promote(name: str) -> str:
@@ -274,6 +292,10 @@ def promote(name: str) -> str:
     if dest.exists():
         raise StateError(f"{name!r} is already promoted")
     manifest, tar_path = _check_archive(src)
+    tag = f"model/{name}"
+    _git("check-ref-format", f"refs/tags/{tag}")  # before any commit: a bad tag name must not leave a commit
+    if _git("tag", "-l", tag):
+        raise StateError(f"tag {tag} already exists")
     rel = dest.relative_to(REPO_ROOT).as_posix()
     dest.mkdir(parents=True)
     try:
@@ -281,7 +303,8 @@ def promote(name: str) -> str:
         with tarfile.open(tar_path, "r:gz") as old, tarfile.open(dest / "state.tar.gz", "w:gz") as new:
             for entry in manifest["files"]:
                 base = Path(entry["path"]).name
-                if base.split(".")[0] in LIVE_STATE_STEMS or base == "weekly_report.md":
+                if (base.split(".")[0] in LIVE_STATE_STEMS or base == "weekly_report.md"
+                        or entry["path"].startswith(NOT_PROMOTED_PREFIXES)):
                     excluded.append(entry["path"])
                     continue
                 data = old.extractfile(entry["path"]).read()
@@ -299,7 +322,6 @@ def promote(name: str) -> str:
         subprocess.run(["git", "reset", "-q", "--", rel], cwd=REPO_ROOT, capture_output=True)
         shutil.rmtree(dest, ignore_errors=True)
         raise
-    tag = f"model/{name}"
     summary = f"{manifest['git_commit'][:7]}, {manifest['registry_trials']} trials, {manifest.get('note', '')}"
     _git("tag", "-a", tag, "-m", f"{name}: {summary}")
     return tag
@@ -334,9 +356,9 @@ def main(argv: list[str] | None = None) -> int:
             if not args.yes:
                 print(f"reset would empty {DATA_DIR} and {OUTPUT_DIR} (after archiving them); re-run with --yes")
                 return 1
-            archived, pickles = reset(args.name)
-            for path in pickles:
-                print(f"deleted pickle (never archived): {path}")
+            archived, not_archived = reset(args.name)
+            for path in not_archived:
+                print(f"deleted, not archived (pickle or symlink): {path}")
             print(f"reset done; everything else is in archive {archived}. Undo: python -m trading_crab_lib.platform.state "
                   f"restore {archived}")
         elif args.command == "promote":
