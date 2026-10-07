@@ -62,6 +62,19 @@ def test_a_lost_source_stops_the_build_before_any_write(tmp_path):
     assert raw_path.read_bytes() == before
 
 
+def test_a_source_column_that_arrives_all_nan_counts_as_not_delivered(tmp_path):
+    """A silent parse failure (the column is there, every value NaN) stops the build like a lost
+    column does, also for a series no splice class watches (08.4 review)."""
+    from trading_crab_lib.platform.transforms_monthly import expected_source_columns
+
+    cfg, macro, prices, vintages = _world()
+    cfg["build"] = {"fail_loud": True, "allow_missing_sources": []}
+    column = next(c for c, s in expected_source_columns(cfg).items() if s == "fred_monthly" and c in macro.columns)
+    with pytest.raises(BuildFailed) as err:
+        _build(cfg, macro.assign(**{column: np.nan}), prices, vintages, tmp_path)
+    assert f"source column '{column}' (fred_monthly) was not delivered" in str(err.value)
+
+
 def test_an_allowed_missing_column_goes_on_with_a_warning_and_lets_its_class_fall_back(tmp_path, caplog):
     cfg, macro, prices, vintages = _world()
     cfg["build"] = {"fail_loud": True, "allow_missing_sources": ["gold_spot"]}

@@ -402,13 +402,8 @@ def expected_source_columns(cfg: dict[str, Any]) -> dict[str, str]:
     return expected
 
 
-def build_problems(
-    cfg: dict[str, Any], delivered: set[str], provenance: dict[str, Any] | None
-) -> list[str]:
-    """What stops a fail-loud build.
-
-    Every expected column that was neither delivered nor allowed, plus every splice class
-    that fell back from a primary column that is not allowed."""
+def missing_sources(cfg: dict[str, Any], delivered: set[str]) -> list[str]:
+    """Every expected raw column that was neither delivered nor allowed (allowed ones are logged)."""
     allowed = set(cfg.get("build", {}).get("allow_missing_sources", []))
     problems: list[str] = []
     for column, section in expected_source_columns(cfg).items():
@@ -418,6 +413,13 @@ def build_problems(
             log.warning("build: source column '%s' (%s) is missing; build.allow_missing_sources allows it.", column, section)
         else:
             problems.append(f"source column '{column}' ({section}) was not delivered")
+    return problems
+
+
+def fallback_splices(cfg: dict[str, Any], provenance: dict[str, Any] | None) -> list[str]:
+    """Every splice class that fell back from a primary column that is not allowed to be missing."""
+    allowed = set(cfg.get("build", {}).get("allow_missing_sources", []))
+    problems: list[str] = []
     for research_name, record in (provenance or {}).items():
         if record.get("status") != "fallback":
             continue
@@ -426,6 +428,16 @@ def build_problems(
             if detail["position"] != 1 and primary not in allowed:
                 problems.append(f"splice '{research_name}' fell back from '{primary}' to '{detail['resolved']}' ({key})")
     return problems
+
+
+def _raise_build_failed(problems: list[str]) -> None:
+    if problems:
+        raise BuildFailed(
+            "build_monthly_spine: nothing was written, because " + "; ".join(problems) + ". "
+            "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To go on "
+            "without a raw column on purpose, list it in build.allow_missing_sources in "
+            "config/platform_settings.yaml."
+        )
 
 
 def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
@@ -446,6 +458,15 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
 
     macro = macro_monthly.fetch_macro_monthly(cfg)
     daily, monthly_prices = prices_daily.fetch_universe_prices(cfg)
+    agency = align_agency_monthly(monthly_index, cfg)
+
+    # Fail-loud gate, part 1 (08.4, D-08): every source checked BEFORE any splice runs, so a lost
+    # or silently empty column stops the build with its name instead of a crash further down.
+    fail_loud = bool(cfg.get("build", {}).get("fail_loud"))
+    if fail_loud:
+        # A column that arrived but is entirely NaN (a silent parse failure) was not delivered.
+        delivered = {c for frame in (macro, monthly_prices, agency) for c in frame.columns if frame[c].notna().any()}
+        _raise_build_failed(missing_sources(cfg, delivered))
 
     # The splice input MUST include the monthly ticker columns (e.g. IAU), not
     # just macro-only columns — otherwise a fallback chain naming a tradable
@@ -469,24 +490,14 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
         lagged = pd.DataFrame()
         research = pd.DataFrame()
 
-    agency = align_agency_monthly(monthly_index, cfg)
-
     frames = [f for f in (lagged, research, agency) if not f.empty]
     monthly_raw = pd.concat(frames, axis=1) if frames else pd.DataFrame(index=monthly_index)
     monthly_raw = monthly_raw.reindex(monthly_index)
     monthly_raw.index.name = "date"
 
-    if cfg.get("build", {}).get("fail_loud"):
-        delivered = set(macro.columns) | set(monthly_prices.columns) | set(agency.columns)
-        provenance = research.attrs.get("splice_provenance") if not research.empty else None
-        problems = build_problems(cfg, delivered, provenance)
-        if problems:
-            raise BuildFailed(
-                "build_monthly_spine: nothing was written, because " + "; ".join(problems) + ". "
-                "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To go on "
-                "without a raw column on purpose, list it in build.allow_missing_sources in "
-                "config/platform_settings.yaml."
-            )
+    # Fail-loud gate, part 2: a splice class that fell back from its primary column.
+    if fail_loud:
+        _raise_build_failed(fallback_splices(cfg, research.attrs.get("splice_provenance") if not research.empty else None))
 
     cm = get_platform_checkpoint_manager()
     _assert_lag_marker_allows_merge(cm, cfg)  # before ANY write
