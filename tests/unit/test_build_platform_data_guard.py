@@ -72,7 +72,7 @@ def _drive_main(monkeypatch, tmp_path, fetch):
     monkeypatch.setattr(holdout_mod, "assert_dev_checkpoint_within_boundary", lambda *a, **k: None)
     monkeypatch.setattr(macro_daily, "fetch_fred_daily", fetch)
     logging.getLogger("build_platform_data").propagate = True
-    return build.main(), spine_cfgs
+    return build.main([]), spine_cfgs
 
 
 def test_main_fetches_fred_daily_once_with_the_build_cfg(monkeypatch, tmp_path):

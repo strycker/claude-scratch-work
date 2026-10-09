@@ -35,6 +35,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
 from typing import Any
 
@@ -436,15 +437,19 @@ _BLOCKED_HINT = (
 )
 
 
+_COLUMN_IN_PROBLEM = re.compile(r"(?:source column|fell back from) '([^']+)'")
+
+
 def _raise_build_failed(problems: list[str]) -> None:
     if problems:
         blocked = any("macrotrends_monthly" in p or "index_monthly" in p for p in problems)
+        columns = ",".join(dict.fromkeys(_COLUMN_IN_PROBLEM.findall(" ".join(problems))))
         raise BuildFailed(
             "build_monthly_spine: nothing was written, because " + "; ".join(problems) + ". "
             + (_BLOCKED_HINT if blocked else "")
-            + "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To go on "
-            "without a raw column on purpose, list it in build.allow_missing_sources in "
-            "config/platform_settings.yaml."
+            + "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To build "
+            f"without them on purpose (each one's class falls back, and the run logs it): python "
+            f"scripts/build_platform_data.py --allow-missing {columns}"
         )
 
 

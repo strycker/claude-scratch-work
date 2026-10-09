@@ -22,10 +22,18 @@ normal internet (a laptop), NOT a locked-down CI/sandbox that blocks Yahoo/macro
 
 Usage:
     python scripts/build_platform_data.py
+    python scripts/build_platform_data.py --allow-missing gold_spot,wti_crude,sp500_close_me
+
+``--allow-missing`` lets named raw columns be missing for this run only (a source your network
+blocks: macrotrends answers HTTP 403 and Yahoo rate-limits on many corporate VPNs). Each
+missing column is logged, and its splice class falls back to its next source: gold to IAU
+(month-end, from 2005), while oil keeps its FRED primary. sp500_close_me is read only by the
+budgeted backtest's P&L, which refuses to run without it. The weekly page does not read it.
 """
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import sys
@@ -51,7 +59,16 @@ def check_price_coverage(daily_raw: pd.DataFrame | None) -> str | None:
     return None
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Build the platform's monthly data checkpoints.")
+    parser.add_argument(
+        "--allow-missing",
+        default="",
+        metavar="COL[,COL...]",
+        help="raw source columns this run may go without (the build error names them); each class falls back",
+    )
+    args = parser.parse_args(argv)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
@@ -83,9 +100,22 @@ def main() -> int:
         DEFAULT_HOLDOUT_CUTOFF,
         assert_dev_checkpoint_within_boundary,
     )
-    from trading_crab_lib.platform.transforms_monthly import BuildFailed, build_monthly_spine
+    from trading_crab_lib.platform.transforms_monthly import (
+        BuildFailed,
+        build_monthly_spine,
+        expected_source_columns,
+    )
 
     cfg = load_platform_config()
+    allowed = [column.strip() for column in args.allow_missing.split(",") if column.strip()]
+    if allowed:
+        unknown = sorted(set(allowed) - set(expected_source_columns(cfg)))
+        if unknown:
+            log.error("--allow-missing: %s is not a source column this build fetches (check the spelling).", unknown)
+            return 2
+        build = cfg.setdefault("build", {})
+        build["allow_missing_sources"] = sorted({*build.get("allow_missing_sources", []), *allowed})
+        log.warning("--allow-missing: this run may go without %s (each one is logged if missing).", ", ".join(allowed))
     start = cfg["data"]["start_date"]
     end = cfg["data"].get("end_date") or "today"
     log.info("Building monthly spine %s → %s (fetching FRED + multpl + macrotrends + yfinance)...", start, end)

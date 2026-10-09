@@ -4,7 +4,7 @@
 
 | Command | What it does |
 |---|---|
-| `python scripts/build_platform_data.py` | Fetches every source and builds the platform data (`data/checkpoints/platform/`, holdout carve). Needs network and `FRED_API_KEY`. |
+| `python scripts/build_platform_data.py` | Fetches every source and builds the platform data (`data/checkpoints/platform/`, holdout carve). Needs network and `FRED_API_KEY`. If your network blocks a source (macrotrends 403 or a Yahoo rate limit on a corporate VPN), the build stops and prints the `--allow-missing COL,...` command that builds without it for that run. |
 | `python -m trading_crab_lib.platform.report.serving` | Fits the served regime model. It is only needed for `allocation_mode: regime_tilt`. |
 | `python -m trading_crab_lib.platform.report.weekly` | Writes the weekly page (`outputs/reports/platform/weekly_report.md`). |
 | `python scripts/platform_snapshot.py` | Offline dev snapshots of the platform checkpoints (see `docs/offline_snapshots.md`). |

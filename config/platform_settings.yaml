@@ -18,6 +18,8 @@ data:
 # absent `build` key = today's permissive build (synthetic test configs); a test
 # pins `true` here. allow_missing_sources: raw columns the build may go on
 # without (logged); a splice class whose PRIMARY column is listed may fall back.
+# For one run only, prefer `python scripts/build_platform_data.py --allow-missing COL,...`
+# (e.g. on a VPN that blocks macrotrends and Yahoo); leave this list empty.
 build:
   fail_loud: true
   allow_missing_sources: []
@@ -289,7 +291,7 @@ splice:
   gold:
     research_name: gold
     method:        single_source
-    # Chain: gold_spot (macrotrends, 1915+) tried first; falls back to IAU
+    # Chain: gold_spot (macrotrends) tried first; falls back to IAU
     # (the tradable ETF's own daily price, from prices_daily.fetch_universe_prices)
     # when gold_spot is unavailable — macrotrends 403-blocks datacenter/VPN IPs
     # and FRED delisted its LBMA gold series. optional:true additionally lets
@@ -297,10 +299,11 @@ splice:
     # resolves, instead of crashing.
     #
     # CAVEAT — IAU is NOT spot gold: it is a total-return ETF carrying an
-    # expense ratio and tracking drift, and its price history starts ~2005
-    # versus gold_spot's 1915+. Falling back to it changes what the regime
-    # labeler sees and truncates the gold research series by roughly nine
-    # decades. This is an explicitly chosen compromise, accepted so the
+    # expense ratio and tracking drift, and its price history starts ~2005.
+    # The macrotrends scrape was meant to reach 1915 but measures 1985-02+
+    # (as with oil, 2026-09-18; re-measured 2026-10-09), so falling back
+    # truncates gold by about 20 years and changes what the regime labeler
+    # sees. This is an explicitly chosen compromise, accepted so the
     # platform keeps SOME gold series while gold_spot has no reachable free
     # source — it is not a claim that IAU equals spot gold.
     source_col:    [gold_spot, IAU]

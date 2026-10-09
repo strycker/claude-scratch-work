@@ -58,7 +58,8 @@ def test_a_lost_source_stops_the_build_before_any_write(tmp_path):
 
     text = str(err.value)
     assert "gold_spot" in text and "macrotrends_monthly" in text
-    assert "scripts/build_platform_data.py" in text and "allow_missing_sources" in text
+    # 2026-10-09: the way on is now the per-run flag, not an edit to the tracked config.
+    assert "scripts/build_platform_data.py --allow-missing gold_spot" in text
     assert "corporate VPNs" in text  # a macrotrends loss names the likely cause (08.4 UAT, 2026-10-07)
     assert raw_path.read_bytes() == before
 
@@ -97,7 +98,7 @@ def test_main_returns_1_when_the_build_fails(monkeypatch):
     monkeypatch.setenv("FRED_API_KEY", "x")
     monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)
     monkeypatch.setattr(transforms_monthly, "build_monthly_spine", boom)
-    assert script.main() == 1
+    assert script.main([]) == 1
 
 
 # ── merge-on-save: derived columns are replaced, raw columns still fill from disk ───
@@ -148,3 +149,77 @@ def test_network_hint_names_a_blocked_or_throttled_fetch():
     assert "blocked (HTTP 403)" in network_hint(RuntimeError("HTTP Error 403: Forbidden"))
     assert "rate-limited" in network_hint(YFRateLimitError("Too Many Requests. Rate limited."))
     assert network_hint(ValueError("no table found")) == ""
+
+
+# ── behind a corporate VPN (08.4 UAT, 2026-10-09) ────────────────────────────
+
+_VPN_BLOCKED = ["gold_spot", "wti_crude", "sp500_close_me"]  # macrotrends 403, Yahoo 429
+
+
+def _vpn_inputs(macro: pd.DataFrame, prices: pd.DataFrame):
+    lost_macro, lost_prices = _221defc_inputs(macro, prices)
+    return lost_macro.drop(columns=["wti_crude", "sp500_close_me"]), lost_prices
+
+
+def test_with_the_vpn_blocked_sources_allowed_the_build_completes_on_its_fallbacks(tmp_path):
+    """Gold falls back to IAU (month-end, from its start), oil keeps its FRED primary, and the
+    P&L-only S&P month-end close is simply absent: the build writes, it does not invent data."""
+    from trading_crab_lib.platform.splice import build_core_research_series
+
+    cfg, macro, prices, vintages = _world()
+    cfg["build"] = {"fail_loud": True, "allow_missing_sources": list(_VPN_BLOCKED)}
+    lost_macro, lost_prices = _vpn_inputs(macro, prices)
+
+    _build(cfg, lost_macro, lost_prices, vintages, tmp_path)
+
+    raw = pd.read_parquet(tmp_path / "platform" / "monthly_raw.parquet")
+    assert not set(_VPN_BLOCKED) & set(raw.columns)
+    research = build_core_research_series(raw, cfg)
+    gold = research["gold"].dropna()
+    assert gold.index.min() == IAU_START  # IAU only: nothing before its start
+    pd.testing.assert_series_equal(gold, raw["IAU"].dropna().loc[IAU_START:], check_names=False, check_freq=False)
+    assert research["oil"].dropna().index.min() == raw["wti_fred"].dropna().index.min()
+
+
+def test_allow_missing_reaches_the_build_for_this_run_only(monkeypatch):
+    import build_platform_data as script
+    import dotenv
+
+    import trading_crab_lib.platform.transforms_monthly as transforms_monthly
+
+    seen = {}
+
+    def capture(cfg):
+        seen["allowed"] = cfg["build"]["allow_missing_sources"]
+        raise BuildFailed("stop here")
+
+    monkeypatch.setenv("FRED_API_KEY", "x")
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(transforms_monthly, "build_monthly_spine", capture)
+
+    assert script.main(["--allow-missing", " gold_spot, wti_crude,sp500_close_me"]) == 1
+    assert seen["allowed"] == sorted(_VPN_BLOCKED)
+    assert load_platform_config()["build"]["allow_missing_sources"] == []  # the tracked config is untouched
+
+
+def test_allow_missing_refuses_a_misspelled_column(monkeypatch, caplog):
+    import build_platform_data as script
+    import dotenv
+
+    import trading_crab_lib.platform.transforms_monthly as transforms_monthly
+
+    monkeypatch.setenv("FRED_API_KEY", "x")
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(transforms_monthly, "build_monthly_spine", lambda cfg: pytest.fail("must not build"))
+
+    assert script.main(["--allow-missing", "gold_spt"]) == 2
+    assert "gold_spt" in caplog.text
+
+
+def test_the_build_error_prints_the_exact_allow_missing_command(tmp_path):
+    cfg, macro, prices, vintages = _world()
+    cfg["build"] = {"fail_loud": True, "allow_missing_sources": []}
+    lost_macro, lost_prices = _vpn_inputs(macro, prices)
+    with pytest.raises(BuildFailed) as err:
+        _build(cfg, lost_macro, lost_prices, vintages, tmp_path)
+    assert "--allow-missing gold_spot,wti_crude,sp500_close_me" in str(err.value)
