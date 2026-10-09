@@ -19,7 +19,8 @@ def tracked_record_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
     """``cfg`` with only the gold source rolled back to the 8.3 record's; ``cfg`` is not edited."""
     cfg = copy.deepcopy(cfg)
     cfg.pop("worldbank_monthly", None)
-    cfg["macrotrends_monthly"]["series"].insert(0, dict(_GOLD_SPOT_FETCH))
+    if not any(entry["name"] == "gold_spot" for entry in cfg["macrotrends_monthly"]["series"]):
+        cfg["macrotrends_monthly"]["series"].insert(0, dict(_GOLD_SPOT_FETCH))
     lags = cfg["publication_lags"]
     lags.pop("gold_wb")
     lags["gold_spot"] = 0

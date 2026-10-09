@@ -149,12 +149,16 @@ multpl_monthly:
 
 # ── macrotrends.net monthly series ────────────────────────────────────────────
 # Reused verbatim from trading_crab_lib.ingestion.macrotrends (D-01: import,
-# never edit). Only the oil fallback is left: the scrape measures 1985-02+ and
-# macrotrends 403-blocks corporate VPNs and cloud hosts. gold_spot moved to the
-# World Bank series below (2026-10-09).
+# never edit). Both are fallbacks now: gold_spot behind the World Bank's gold_wb,
+# wti_crude behind FRED's wti_fred. The scrapes measure 1985-02+, and macrotrends
+# 403-blocks corporate VPNs and cloud hosts, so on a VPN build with
+# `--allow-missing gold_spot,wti_crude` (2026-10-09).
 macrotrends_monthly:
   base_url: "https://www.macrotrends.net"
   series:
+    - name: gold_spot
+      path: "/1333/historical-gold-prices-100-year-chart"
+      resample: mean
     - name: wti_crude
       path: "/1369/crude-oil-price-history-chart"
       resample: mean
@@ -221,7 +225,8 @@ publication_lags:
   # close; the workbook is re-issued about the 2nd business day of m+1 (inside
   # report.staleness_grace_days, like the FRED monthly averages).
   gold_wb:      0
-  # macrotrends month means (WTI fallback): observed prices.
+  # macrotrends month closes (gold fallback) / month means (WTI fallback): observed prices.
+  gold_spot:    0
   wti_crude:    0
   # Universe prices: daily closes resampled to month-end — real-time.
   SPY:  0
@@ -305,15 +310,14 @@ splice:
     research_name: gold
     method:        single_source
     # Chain (2026-10-09, Glenn): gold_wb (World Bank monthly average of daily
-    # London prices, 1960+) first; falls back to IAU (the tradable ETF's own
-    # month-end price, 2005+) when the World Bank fetch fails. It replaced
-    # macrotrends gold_spot, which measured only 1985-02+, sampled near
-    # month-end, and is 403-blocked on corporate VPNs. FRED delisted its LBMA
-    # gold series. A monthly average is a model input like multpl's sp500 and
+    # London prices, 1960+) first; then macrotrends gold_spot (measured 1985-02+,
+    # sampled near month-end, 403-blocked on corporate VPNs); then IAU (the
+    # tradable ETF's own month-end price, 2005+). FRED delisted its LBMA gold
+    # series. A monthly average is a model input like multpl's sp500 and
     # WTISPLC; gold's P&L reads month-end prices through pnl_splice (E-08).
     # optional:true lets the build skip gold (with a WARNING) if neither
     # candidate resolves, instead of crashing.
-    source_col:    [gold_wb, IAU]
+    source_col:    [gold_wb, gold_spot, IAU]
     optional:      true
     tradable:      IAU
   oil:

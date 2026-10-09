@@ -1385,6 +1385,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     _, report_path = build_weekly_page(cfg)
+    print(f"Weekly page written: {report_path}\n  view it: less {report_path}")
 
     if args.send_email:
         subject, body = build_weekly_email_body(

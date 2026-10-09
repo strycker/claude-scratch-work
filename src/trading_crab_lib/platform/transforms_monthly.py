@@ -441,6 +441,19 @@ _BLOCKED_HINT = (
 )
 
 
+def _raise_if_fred_key_rejected(cfg: dict[str, Any], delivered: set[str]) -> None:
+    """Every FRED series missing means the key, not the series: say so, and do not suggest
+    --allow-missing for all of them (08.4 UAT failure drill, 2026-10-09)."""
+    fred = [column for column, section in expected_source_columns(cfg).items() if section.startswith("fred_")]
+    if fred and not set(fred) & delivered:
+        raise BuildFailed(
+            f"build_monthly_spine: nothing was written, because every FRED series failed ({len(fred)} columns: "
+            f"{', '.join(fred)}). That is FRED_API_KEY, not the series: check the key in your environment or .env "
+            "(free key: https://fred.stlouisfed.org/docs/api/api_key.html), then re-run "
+            "python scripts/build_platform_data.py"
+        )
+
+
 _COLUMN_IN_PROBLEM = re.compile(r"(?:source column|fell back from) '([^']+)'")
 
 
@@ -483,6 +496,7 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     if fail_loud:
         # A column that arrived but is entirely NaN (a silent parse failure) was not delivered.
         delivered = {c for frame in (macro, monthly_prices, agency) for c in frame.columns if frame[c].notna().any()}
+        _raise_if_fred_key_rejected(cfg, delivered)
         _raise_build_failed(missing_sources(cfg, delivered))
 
     # The splice input MUST include the monthly ticker columns (e.g. IAU), not
