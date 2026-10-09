@@ -33,6 +33,7 @@ from test_platform_point_in_time import (  # tests/unit is on sys.path (prepend 
     _synthetic_prices,
     _synthetic_vintages,
 )
+from tracked_record import tracked_record_cfg
 
 from trading_crab_lib.platform import splice, transforms_monthly
 from trading_crab_lib.platform.assets.returns import compute_monthly_returns, tradable_asset_returns
@@ -53,6 +54,8 @@ PNL_SPLICE_OVERLAYS: dict[str, dict] = {
     # ratio_splice splices RETURNS (avg/avg, then close/close), never a mixed close/avg month.
     "oil": {"method": "ratio_splice", "old_col": "wti_fred", "new_col": "wti_me", "join_date": "1986-01-31"},
 }
+#: 2026-10-09: gold's P&L overlay, added when gold moved to the World Bank monthly average.
+GOLD_PNL_OVERLAY = {"method": "ratio_splice", "old_col": "gold_wb", "new_col": "IAU", "join_date": "2005-01-31"}
 EQUITIES_ONLY = {"equities": PNL_SPLICE_OVERLAYS["equities"]}
 OIL_JOIN = pd.Timestamp(PNL_SPLICE_OVERLAYS["oil"]["join_date"])
 
@@ -671,7 +674,8 @@ class TestIndexMonthEndFetch:
         assert splice.pnl_only_columns({**cfg, "pnl_splice": PNL_SPLICE_OVERLAYS}) == splice.pnl_only_columns(cfg)
         assert "^GSPC" not in str(cfg["universe"])
         # The live block is the constant, verbatim; join_date stays a string (quoted in the YAML).
-        assert cfg["pnl_splice"] == PNL_SPLICE_OVERLAYS
+        # 2026-10-09: plus gold's overlay (World Bank average through 2005-01, IAU close after).
+        assert cfg["pnl_splice"] == {**PNL_SPLICE_OVERLAYS, "gold": GOLD_PNL_OVERLAY}
         assert isinstance(cfg["pnl_splice"]["oil"]["join_date"], str)
         # The feature-side splice block is untouched by the overlay (D-01).
         assert cfg["splice"]["equities"]["price_col"] == "sp500"
@@ -743,7 +747,8 @@ class TestTrackedMigration:
     def test_the_tracked_marker_matches_the_live_lag_table(self):
         from trading_crab_lib.platform.ingestion.publication_lags import lag_marker_matches
 
-        assert lag_marker_matches(TRACKED_MARKER, load_platform_config())
+        # 2026-10-09: the lag table the tracked data was built under (gold_spot, not gold_wb).
+        assert lag_marker_matches(TRACKED_MARKER, tracked_record_cfg(load_platform_config()))
 
     @pytest.mark.parametrize("dropped", MONTH_END_COLUMNS)
     def test_dropping_a_lag_entry_makes_apply_publication_lags_raise(self, dropped):
@@ -765,7 +770,7 @@ class TestTrackedPnlSeries:
 
     @pytest.fixture(scope="class")
     def series(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        cfg = load_platform_config()
+        cfg = tracked_record_cfg(load_platform_config())  # 2026-10-09: built before the gold switch
         raw = pd.read_parquet(TRACKED_RAW)
         feature = compute_monthly_returns(splice.build_core_research_series(raw, cfg))
         pnl = compute_monthly_returns(splice.build_pnl_research_series(raw, cfg))
@@ -946,7 +951,7 @@ class TestHindsightOracleReadsPnl:
 
         from trading_crab_lib.platform.evaluation.report import _smoothed_hindsight_perf
 
-        cfg = {k: v for k, v in load_platform_config().items() if k != "pnl_splice"}
+        cfg = {k: v for k, v in tracked_record_cfg(load_platform_config()).items() if k != "pnl_splice"}
         raw = pd.read_parquet(TRACKED_RAW)
         returns = compute_monthly_returns(splice.build_core_research_series(raw, cfg))
         assets = tradable_asset_returns(returns, cfg["splice"])
@@ -966,3 +971,31 @@ class TestHindsightOracleReadsPnl:
         text = (PIT_08_3_BEFORE / "backtest_report.md").read_text(encoding="utf-8")
         recorded = float(re.search(r"real-time filtered performance\): (-?[0-9.]+)", text).group(1))
         assert round(default - float(kpi.loc["strategy", "terminal_log_wealth"]), 4) == recorded
+
+
+# ── Gold on the World Bank average, P&L on month-end (2026-10-09, DECISIONS D-09) ──
+
+
+def test_live_gold_pnl_is_average_through_the_join_and_iau_close_after():
+    """Features read gold_wb (a monthly average); P&L reads it only through 2005-01 and IAU's
+    month-end closes from 2005-02 (E-08). The live chain and overlay, on a small synthetic frame."""
+    live = load_platform_config()
+    cfg = {**live, "splice": {"gold": live["splice"]["gold"]}, "pnl_splice": {"gold": live["pnl_splice"]["gold"]}}
+    idx = pd.date_range("2004-10-31", "2005-04-30", freq="ME", name="date")
+    raw = pd.DataFrame(
+        {
+            "gold_wb": [420.0, 439.0, 442.0, 424.0, 423.0, 434.0, 429.0],
+            "IAU": [np.nan, np.nan, np.nan, 42.3, 43.6, 42.8, 43.5],
+        },
+        index=idx,
+    )
+
+    feature = compute_monthly_returns(splice.build_core_research_series(raw, cfg))["gold"]
+    pnl = compute_monthly_returns(splice.build_pnl_research_series(raw, cfg))["gold"]
+
+    wb, iau = raw["gold_wb"], raw["IAU"]
+    pd.testing.assert_series_equal(feature, wb.pct_change(fill_method=None), check_names=False, check_freq=False)
+    assert pnl.loc["2005-01-31"] == pytest.approx(wb["2005-01-31"] / wb["2004-12-31"] - 1, rel=1e-9, abs=0)
+    for month, prev in (("2005-02-28", "2005-01-31"), ("2005-04-30", "2005-03-31")):
+        assert pnl.loc[month] == pytest.approx(iau[month] / iau[prev] - 1, rel=1e-9, abs=0), month
+    assert not {"gold_wb", "IAU"} & splice.pnl_only_columns(cfg)  # both stay feature-side sources

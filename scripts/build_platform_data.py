@@ -14,21 +14,22 @@ command (run this script again).
 Data sources (all free; only FRED needs a key):
   - FRED           (needs FRED_API_KEY in your environment / .env)
   - multpl.com     (public scrape — S&P valuation anchors)
-  - macrotrends.net (public scrape — long-history gold/oil)
-  - Yahoo Finance  (yfinance — daily universe ETF/equity prices, no key)
+  - World Bank     (monthly commodity workbook — gold, 1960+)
+  - macrotrends.net (public scrape — oil fallback)
+  - Tiingo / Yahoo Finance (daily universe ETF/equity prices; Yahoo also the ^GSPC month-end close)
 
 Requires outbound network access to those hosts. Run it from an environment with
 normal internet (a laptop), NOT a locked-down CI/sandbox that blocks Yahoo/macrotrends.
 
 Usage:
     python scripts/build_platform_data.py
-    python scripts/build_platform_data.py --allow-missing gold_spot,wti_crude,sp500_close_me
+    python scripts/build_platform_data.py --allow-missing wti_crude,sp500_close_me
 
 ``--allow-missing`` lets named raw columns be missing for this run only (a source your network
 blocks: macrotrends answers HTTP 403 and Yahoo rate-limits on many corporate VPNs). Each
-missing column is logged, and its splice class falls back to its next source: gold to IAU
-(month-end, from 2005), while oil keeps its FRED primary. sp500_close_me is read only by the
-budgeted backtest's P&L, which refuses to run without it. The weekly page does not read it.
+missing column is logged, and its splice class falls back to its next source. wti_crude is
+only oil's fallback (oil keeps its FRED primary). sp500_close_me is read only by the budgeted
+backtest's P&L, which refuses to run without it; the weekly page does not read it.
 """
 
 from __future__ import annotations

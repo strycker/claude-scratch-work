@@ -370,11 +370,13 @@ def _assert_lag_marker_allows_merge(cm: Any, cfg: dict[str, Any]) -> None:
     if lag_marker_matches(marker, cfg):
         return
     state = "missing" if not marker.exists() else "records a different lag table"
-    raise RuntimeError(
-        f"build_monthly_spine: {marker} is {state}, so the on-disk monthly_raw was not built "
-        "under the current publication_lags and merging onto it would reintroduce unlagged values. "
-        "If it predates publication lags, run `python scripts/migrate_publication_lags.py` once. "
-        "If a lag was changed on purpose, delete monthly_raw (and the marker) and rebuild."
+    # BuildFailed (a RuntimeError), so the build script exits 1 with this message (2026-10-09).
+    raise BuildFailed(
+        f"build_monthly_spine: nothing was written, because {marker} is {state}, so the on-disk "
+        "monthly_raw was not built under the current publication_lags and merging onto it would "
+        "reintroduce unlagged values. If it predates publication lags, run "
+        "`python scripts/migrate_publication_lags.py` once. If a lag or source was changed on purpose, "
+        "build into an empty data folder (TC_DATA_DIR) or delete monthly_raw (and the marker) and rebuild."
     )
 
 
@@ -394,6 +396,8 @@ def expected_source_columns(cfg: dict[str, Any]) -> dict[str, str]:
         expected[row[0]] = "multpl_monthly"
     for entry in cfg.get("macrotrends_monthly", {}).get("series", []):
         expected[entry["name"]] = "macrotrends_monthly"
+    for entry in (cfg.get("worldbank_monthly") or {}).get("series", []):
+        expected[entry["name"]] = "worldbank_monthly"
     for meta in cfg.get("index_monthly", {}).values():
         expected[meta["name"]] = "index_monthly"
     for ticker in prices_daily.universe_fetch_tickers(cfg):
@@ -483,7 +487,7 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
 
     # The splice input MUST include the monthly ticker columns (e.g. IAU), not
     # just macro-only columns — otherwise a fallback chain naming a tradable
-    # ETF (gold: [gold_spot, IAU]) could never resolve, even though the ETF
+    # ETF (gold: [gold_wb, IAU]) could never resolve, even though the ETF
     # data is right there in monthly_prices. Guarded only for the both-empty
     # case: if either macro or monthly_prices has data, splice still runs on
     # whatever is available (a class missing its required macro columns then

@@ -147,18 +147,28 @@ multpl_monthly:
     - [div_yield,       "SP500 Dividend Yield",      "https://www.multpl.com/s-p-500-dividend-yield/table/by-month",    percent]
     - [cape_shiller,    "Shiller PE 10 Ratio",       "https://www.multpl.com/shiller-pe/table/by-month",                num]
 
-# ── macrotrends.net monthly series (long-history commodities) ─────────────────
+# ── macrotrends.net monthly series ────────────────────────────────────────────
 # Reused verbatim from trading_crab_lib.ingestion.macrotrends (D-01: import,
-# never edit) — already returns monthly gold (1915+) and WTI (1946+).
+# never edit). Only the oil fallback is left: the scrape measures 1985-02+ and
+# macrotrends 403-blocks corporate VPNs and cloud hosts. gold_spot moved to the
+# World Bank series below (2026-10-09).
 macrotrends_monthly:
   base_url: "https://www.macrotrends.net"
   series:
-    - name: gold_spot
-      path: "/1333/historical-gold-prices-100-year-chart"
-      resample: mean
     - name: wti_crude
       path: "/1369/crude-oil-price-history-chart"
       resample: mean
+
+# ── World Bank monthly commodity prices ("Pink Sheet", 2026-10-09) ────────────
+# Monthly averages of daily prices, nominal USD, 1960-01+, free and keyless,
+# re-issued early each month (its download link changes, so the page is read for
+# the current one). Reachable on corporate VPNs. Gold is the London price in
+# $/troy oz, stored in whole dollars, flat at the $35 peg until 1968-01.
+worldbank_monthly:
+  page_url: "https://www.worldbank.org/en/research/commodity-markets"
+  series:
+    - name:   gold_wb
+      column: "Gold"
 
 # ── Publication lags (D-01..D-03, phase 08.1) ─────────────────────────────────
 # When each raw series could first have been known: the value for reference
@@ -207,8 +217,11 @@ publication_lags:
   # ~6 months of earnings are estimated then back-filled — revision-exposed,
   # an accepted compromise like the ALFRED pre-vintage fallback.
   cape_shiller: 0
-  # macrotrends month closes (gold) / month means (WTI cross-check): observed prices.
-  gold_spot:    0
+  # World Bank monthly average of daily London gold prices: observed by the month's
+  # close; the workbook is re-issued about the 2nd business day of m+1 (inside
+  # report.staleness_grace_days, like the FRED monthly averages).
+  gold_wb:      0
+  # macrotrends month means (WTI fallback): observed prices.
   wti_crude:    0
   # Universe prices: daily closes resampled to month-end — real-time.
   SPY:  0
@@ -291,22 +304,16 @@ splice:
   gold:
     research_name: gold
     method:        single_source
-    # Chain: gold_spot (macrotrends) tried first; falls back to IAU
-    # (the tradable ETF's own daily price, from prices_daily.fetch_universe_prices)
-    # when gold_spot is unavailable — macrotrends 403-blocks datacenter/VPN IPs
-    # and FRED delisted its LBMA gold series. optional:true additionally lets
-    # the build SKIP gold entirely (with a WARNING) if NEITHER candidate
-    # resolves, instead of crashing.
-    #
-    # CAVEAT — IAU is NOT spot gold: it is a total-return ETF carrying an
-    # expense ratio and tracking drift, and its price history starts ~2005.
-    # The macrotrends scrape was meant to reach 1915 but measures 1985-02+
-    # (as with oil, 2026-09-18; re-measured 2026-10-09), so falling back
-    # truncates gold by about 20 years and changes what the regime labeler
-    # sees. This is an explicitly chosen compromise, accepted so the
-    # platform keeps SOME gold series while gold_spot has no reachable free
-    # source — it is not a claim that IAU equals spot gold.
-    source_col:    [gold_spot, IAU]
+    # Chain (2026-10-09, Glenn): gold_wb (World Bank monthly average of daily
+    # London prices, 1960+) first; falls back to IAU (the tradable ETF's own
+    # month-end price, 2005+) when the World Bank fetch fails. It replaced
+    # macrotrends gold_spot, which measured only 1985-02+, sampled near
+    # month-end, and is 403-blocked on corporate VPNs. FRED delisted its LBMA
+    # gold series. A monthly average is a model input like multpl's sp500 and
+    # WTISPLC; gold's P&L reads month-end prices through pnl_splice (E-08).
+    # optional:true lets the build skip gold (with a WARNING) if neither
+    # candidate resolves, instead of crashing.
+    source_col:    [gold_wb, IAU]
     optional:      true
     tradable:      IAU
   oil:
@@ -352,6 +359,11 @@ pnl_splice:
     old_col:   wti_fred
     new_col:   wti_me
     join_date: "1986-01-31"      # quoted: an unquoted date would load as datetime.date
+  gold:                          # World Bank avg/avg through 2005-01, IAU month-end close/close from 2005-02
+    method:    ratio_splice
+    old_col:   gold_wb
+    new_col:   IAU
+    join_date: "2005-01-31"      # IAU's first month-end
 
 # ── Universe (tickers) ─────────────────────────────────────────────────────────
 universe:

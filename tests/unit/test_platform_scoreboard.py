@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from test_platform_plotting_backtest import CFG  # tests/unit is on sys.path (prepend mode)
+from tracked_record import tracked_record_cfg
 
 from trading_crab_lib.platform.evaluation.kpis import max_drawdown_and_duration, terminal_log_wealth
 from trading_crab_lib.platform.plotting import backtest as pbacktest
@@ -311,7 +312,9 @@ class TestTrackedScoreboard:
         reports = _REPO / "outputs" / "reports" / "platform"
         before = _sha(registry_path)
         board = scoreboard.scoreboard_table(
-            load_platform_config(), CheckpointManager(checkpoint_dir=_REPO / "data" / "checkpoints" / "platform"),
+            # 2026-10-09: the tracked data predates the World Bank gold switch.
+            tracked_record_cfg(load_platform_config()),
+            CheckpointManager(checkpoint_dir=_REPO / "data" / "checkpoints" / "platform"),
             reports_dir=reports, registry_path=registry_path,
         )
         assert board["reconciled"] is True, board["reason"]

@@ -5,11 +5,14 @@ All network access is mocked — no real HTTP/FRED calls are made.
 """
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
+
+from trading_crab_lib.platform.ingestion import macro_monthly
 
 
 class _FakeResponse:
@@ -467,3 +470,80 @@ class TestInvariantSeriesIngestion:
         df = fetch_fred_monthly(cfg)
         assert "fred_m2sl" in df.columns
         assert "fred_totalsl" in df.columns
+
+
+# ── World Bank monthly commodity prices (08.4 UAT, 2026-10-09) ───────────────
+
+
+def _pink_sheet_bytes() -> bytes:
+    """A workbook laid out like the World Bank's: title rows, a header row, a units row, then
+    one row per month labelled 1960M01, with "…" for a missing value."""
+    import io
+
+    rows = [
+        ["World Bank Commodity Price Data (The Pink Sheet)", None, None],
+        ["monthly prices in nominal US dollars, 1960 to present", None, None],
+        ["Updated on October 02, 2026", None, None],
+        [None, None, None],
+        [None, "Crude oil, WTI", "Gold"],
+        [None, "($/bbl)", "($/troy oz)"],
+        ["1960M01", "…", 35],
+        ["1960M02", "…", 35],
+        ["1968M03", 3.1, 37.5],
+        ["2026M09", 64.2, 4319],
+    ]
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        pd.DataFrame(rows).to_excel(writer, sheet_name="Monthly Prices", header=False, index=False)
+    return buffer.getvalue()
+
+
+class _Response:
+    def __init__(self, *, text: str = "", content: bytes = b""):
+        self.text, self.content = text, content
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+_WB_CFG = {
+    "worldbank_monthly": {
+        "page_url": "https://www.worldbank.org/en/research/commodity-markets",
+        "series": [{"name": "gold_wb", "column": "Gold"}],
+    }
+}
+_WB_LINK = "https://thedocs.worldbank.org/en/doc/abc-0050012026/related/CMO-Historical-Data-Monthly.xlsx"
+
+
+def test_parse_worldbank_monthly_reads_month_end_values_by_column_name():
+    pytest.importorskip("openpyxl")
+    parsed = macro_monthly.parse_worldbank_monthly(_pink_sheet_bytes(), ["Gold", "Crude oil, WTI"])
+
+    gold = parsed["Gold"]
+    assert list(gold.index) == list(pd.to_datetime(["1960-01-31", "1960-02-29", "1968-03-31", "2026-09-30"]))
+    assert gold.tolist() == [35.0, 35.0, 37.5, 4319.0]
+    assert parsed["Crude oil, WTI"].index.min() == pd.Timestamp("1968-03-31")  # "…" months dropped
+
+
+def test_fetch_worldbank_monthly_follows_the_current_link_and_renames(monkeypatch):
+    pytest.importorskip("openpyxl")
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        if url == _WB_CFG["worldbank_monthly"]["page_url"]:
+            return _Response(text=f'<a href="{_WB_LINK}">Monthly prices</a>')
+        return _Response(content=_pink_sheet_bytes())
+
+    monkeypatch.setattr(macro_monthly, "http_get", fake_get)
+    out = macro_monthly._fetch_worldbank_monthly(_WB_CFG)
+
+    assert calls == [_WB_CFG["worldbank_monthly"]["page_url"], _WB_LINK]
+    assert out["gold_wb"].name == "gold_wb" and out["gold_wb"].iloc[-1] == 4319.0
+
+
+def test_fetch_worldbank_monthly_logs_and_returns_nothing_when_the_link_is_gone(monkeypatch, caplog):
+    monkeypatch.setattr(macro_monthly, "http_get", lambda url, **kwargs: _Response(text="<html>moved</html>"))
+    with caplog.at_level(logging.WARNING):
+        assert macro_monthly._fetch_worldbank_monthly(_WB_CFG) == {}
+    assert "CMO-Historical-Data-Monthly.xlsx" in caplog.text

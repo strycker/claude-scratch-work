@@ -15,7 +15,8 @@ FRED market/fast-layer series (``fetch_fred_monthly``) reuse the
 ``fred.py::_fetch_one`` client-construction + ``ThreadPoolExecutor`` +
 try/except-WARNING skeleton. multpl valuation anchors
 (``_scrape_multpl_monthly``) reuse ``multpl.py``'s importable raw-row
-scraper and value-parsing constants. macrotrends long-history commodities
+scraper and value-parsing constants. World Bank monthly commodity prices
+(``_fetch_worldbank_monthly``, gold) read the "Pink Sheet" workbook. macrotrends commodities
 (``_scrape_macrotrends_monthly``) reuse ``macrotrends.py``'s importable
 ``_extract_json_data`` JSON extractor. ``fetch_macro_monthly`` merges every
 source into ONE wide DataFrame via ``pd.concat([...], axis=1)`` — an outer,
@@ -37,7 +38,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Any
 
 import numpy as np
@@ -417,6 +418,81 @@ def network_hint(exc: BaseException) -> str:
     return ""
 
 
+# ── World Bank monthly commodity prices (08.4 UAT, 2026-10-09) ───────────────
+#
+# The "Pink Sheet": monthly averages of daily prices in nominal USD, 1960-01 onward, free and
+# keyless, re-issued early each month. Its download URL changes with each issue, so the
+# commodity-markets page is read for the current link first. It is reachable where macrotrends
+# (HTTP 403) is not: corporate VPNs and cloud hosts.
+
+_WORLDBANK_XLSX = re.compile(r"https://thedocs\.worldbank\.org/[^\"'\s]*CMO-Historical-Data-Monthly\.xlsx")
+
+
+def parse_worldbank_monthly(content: bytes, columns: list[str]) -> dict[str, pd.Series]:
+    """One month-end Series per named column of the Pink Sheet's "Monthly Prices" sheet.
+
+    The sheet has title rows, a header row naming each commodity (``Gold``), a units row,
+    then one row per month labelled ``1960M01``. Missing values are written "…" and become NaN.
+
+    Raises:
+        ValueError: if no header row names any of ``columns``.
+    """
+    sheet = pd.read_excel(BytesIO(content), sheet_name="Monthly Prices", header=None)
+    for row in range(min(len(sheet), 12)):
+        header = sheet.iloc[row].tolist()
+        if any(name in header for name in columns):
+            break
+    else:
+        raise ValueError(f"World Bank 'Monthly Prices' sheet: no header row names any of {columns}")
+    body = sheet.iloc[row + 1:]
+    body = body[body.iloc[:, 0].astype(str).str.fullmatch(r"\d{4}M\d{2}").to_numpy()]
+    index = pd.DatetimeIndex(
+        pd.to_datetime(body.iloc[:, 0].str.replace("M", "-"), format="%Y-%m") + pd.offsets.MonthEnd(0), name="date"
+    )
+    results: dict[str, pd.Series] = {}
+    for name in columns:
+        if name not in header:
+            log.warning("World Bank 'Monthly Prices' sheet has no column %r — skipped", name)
+            continue
+        values = pd.to_numeric(body.iloc[:, header.index(name)], errors="coerce").to_numpy(dtype=float)
+        results[name] = pd.Series(values, index=index).dropna()
+    return results
+
+
+def _fetch_worldbank_monthly(cfg: dict[str, Any]) -> dict[str, pd.Series]:
+    """Fetch every ``cfg['worldbank_monthly']['series']`` entry, renamed to its ``name``.
+
+    A failed fetch logs a WARNING and returns what it has (nothing), as for every other source;
+    the build's fail-loud gate then names the missing column.
+    """
+    wb_cfg = cfg.get("worldbank_monthly") or {}
+    series_cfg: list = wb_cfg.get("series", [])
+    if not series_cfg:
+        return {}
+    page_url = wb_cfg["page_url"]
+    try:
+        page = http_get(page_url)
+        page.raise_for_status()
+        link = _WORLDBANK_XLSX.search(page.text)
+        if link is None:
+            raise ValueError(f"no CMO-Historical-Data-Monthly.xlsx link found on {page_url}")
+        log.info("Fetching World Bank (monthly) %s", link.group(0))
+        book = http_get(link.group(0), timeout=120.0)
+        book.raise_for_status()
+        parsed = parse_worldbank_monthly(book.content, [entry["column"] for entry in series_cfg])
+    except ImportError as exc:
+        log.warning("World Bank prices need openpyxl (pip install openpyxl): %s", exc)
+        return {}
+    except Exception as exc:  # noqa: BLE001 — network/parsing libraries raise various types
+        log.warning("Failed to fetch World Bank monthly prices: %s%s", exc, network_hint(exc))
+        return {}
+    return {
+        entry["name"]: parsed[entry["column"]].rename(entry["name"])
+        for entry in series_cfg
+        if entry["column"] in parsed
+    }
+
+
 # ── Index month-end closes (08.3, P&L only) ────────────────────────────────
 
 
@@ -461,7 +537,7 @@ def _fetch_index_month_end(cfg: dict[str, Any]) -> dict[str, pd.Series]:
 def fetch_macro_monthly(cfg: dict[str, Any]) -> pd.DataFrame:
     """
     Fetch FRED monthly market series, multpl valuation anchors, macrotrends
-    long-history commodities and index month-end closes (``index_monthly``),
+    commodities, World Bank monthly commodity prices and index month-end closes (``index_monthly``),
     then merge ALL series into ONE wide monthly DataFrame.
 
     Merges exclusively via ``pd.concat([...], axis=1)`` (outer join —
@@ -480,6 +556,7 @@ def fetch_macro_monthly(cfg: dict[str, Any]) -> pd.DataFrame:
 
     frames.extend(_scrape_multpl_monthly(cfg).values())
     frames.extend(_fetch_macrotrends_monthly_all(cfg).values())
+    frames.extend(_fetch_worldbank_monthly(cfg).values())
     frames.extend(_fetch_index_month_end(cfg).values())
 
     if not frames:

@@ -128,6 +128,14 @@ closer duration match, if a future phase needs tighter tracking.
 research series, tracked against **IAU** (2005+; Glenn holds IAU, not GLD —
 D-03, D-10).
 
+**Superseded 2026-10-09 (DECISIONS D-09).** The chain is now `source_col: [gold_wb, IAU]`:
+the World Bank monthly average of daily London prices ("Pink Sheet", 1960-01+) first, IAU
+second. Measured on the tracked data, macrotrends `gold_spot` covered only 1985-02+, not 1915+,
+and sampled near month-end; it is also 403-blocked on corporate VPNs. Because `gold_wb` is a
+monthly average, gold's P&L reads month-end prices through `pnl_splice.gold`: World Bank
+average-over-average through 2005-01, IAU close-over-close from 2005-02 (E-08, like oil). The
+text below records the 260806-u89 decision it replaced.
+
 **Decision (updated — Task 2, 260806-u89).** Config-driven fallback chain:
 `source_col: [gold_spot, IAU]`. `gold_spot` (macrotrends) is tried first; if
 it is unavailable, the class falls back to `IAU`'s own daily price (merged
