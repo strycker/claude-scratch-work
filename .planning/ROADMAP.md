@@ -863,6 +863,7 @@ public repo.
 discussion). Budget: 0 rows of measurement, plus the deliberate epoch reset.
 **Depends on:** Phase 08.4
 **Blocks:** Phase 9 (Migration): its order and scope come from 8.5's learnings.
+**UI hint**: no (the "weekly page" is a generated markdown report, not a frontend)
 **Plans:** 0 plans
 
 Plans:
