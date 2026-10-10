@@ -22,7 +22,7 @@ decision-bearing ``ROUTING_L1_ONLY``, ``joint_driver.py:431`` sets
 are then elementwise IDENTICAL — not similar, identical — so a measurement of
 Track A taken after a change to L2 reports the same number whether the change
 worked perfectly or not at all. That degeneracy is real and is pinned as such in
-``scripts/joint_lift_diagnostics.py``'s ``series_identity`` block. It is not a
+the (since retired) joint-lift diagnostics' ``series_identity`` block. It is not a
 reason to collapse the two into one function; it is the reason not to.
 
 Two denominators, stated once here. A churn *count* is over adjacent PAIRS, so a
@@ -66,7 +66,7 @@ def state_change_count(series: pd.Series) -> int:
     Track B alike so that a difference between the two numbers is a difference
     between the two *series* and never between two counting conventions.
 
-    NaN handling follows ``scripts/run_joint_lift.py::_n_transitions``: drop
+    NaN handling follows the (since retired) joint-lift script's ``_n_transitions``: drop
     nulls first, then compare adjacent survivors. ``[0, NaN, 0]`` is therefore
     one run with zero changes, not two changes through a gap.
 

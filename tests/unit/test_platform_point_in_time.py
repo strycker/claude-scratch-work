@@ -63,6 +63,7 @@ def _macro_names(cfg: dict) -> list[str]:
         *(meta["name"] for meta in cfg["fred_monthly"]["series"].values()),
         *(row[0] for row in cfg["multpl_monthly"]["datasets"]),
         *(entry["name"] for entry in cfg["macrotrends_monthly"]["series"]),
+        *(entry["name"] for entry in (cfg.get("worldbank_monthly") or {}).get("series", [])),
         *(meta["name"] for meta in cfg["index_monthly"].values()),
     ]
 
@@ -104,6 +105,8 @@ def _pit_cfg() -> dict:
     cfg = copy.deepcopy(load_platform_config())
     cfg["data"]["start_date"], cfg["data"]["end_date"] = START, END
     cfg["publication_lags"]["sentinel"] = FLOOR["sentinel"]
+    # 08.4 (2026-10-05): synthetic worlds omit sources by design; the gate is tested in test_platform_build_fail_loud.py
+    cfg["build"] = {"fail_loud": False}
     return cfg
 
 

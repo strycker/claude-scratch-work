@@ -49,6 +49,7 @@ import hashlib
 import json
 import logging
 import os
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -108,7 +109,7 @@ _ENV_TRUTHY = {"1", "true", "yes"}
 
 
 def merge_preserving(
-    existing: pd.DataFrame, new: pd.DataFrame
+    existing: pd.DataFrame, new: pd.DataFrame, *, replace_columns: Iterable[str] = ()
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Combine *new* over *existing*, never losing coverage *existing* has.
 
@@ -120,6 +121,10 @@ def merge_preserving(
       - a column present only in *new* is added.
       - column order is deterministic: *new*'s columns (in *new*'s order)
         first, then existing-only columns.
+      - *replace_columns* (derived series) are the exception: they are *new*'s
+        column verbatim (NaN stays NaN), and one present only in *existing* is
+        dropped. A derived column is a function of the current build, so
+        refilling it from disk splices two different definitions (08.4, 221defc).
 
     Duplicate column labels in either frame make combine-first semantics
     undefined, so that case is refused rather than guessed at: *new* is
@@ -128,7 +133,7 @@ def merge_preserving(
 
     Returns:
         (merged, stats) — stats reports cols_kept_from_disk, cols_added,
-        cols_updated (all lists of column names), and rows_kept_from_disk,
+        cols_updated, cols_replaced (all lists of column names), and rows_kept_from_disk,
         rows_added, cells_filled_from_disk (all counts).
     """
     existing_dupes = existing.columns[existing.columns.duplicated()].tolist()
@@ -141,6 +146,10 @@ def merge_preserving(
             dupes,
         )
         return new, {"degraded": "duplicate column labels", "duplicate_columns": dupes}
+
+    replace = list(replace_columns)
+    cols_replaced = [c for c in replace if c in existing.columns or c in new.columns]
+    existing = existing.drop(columns=[c for c in replace if c in existing.columns])
 
     cols_kept_from_disk = [c for c in existing.columns if c not in new.columns]
     cols_added = [c for c in new.columns if c not in existing.columns]
@@ -159,6 +168,7 @@ def merge_preserving(
         "cols_kept_from_disk": cols_kept_from_disk,
         "cols_added": cols_added,
         "cols_updated": cols_updated,
+        "cols_replaced": cols_replaced,
         "rows_kept_from_disk": rows_kept_from_disk,
         "rows_added": rows_added,
         "cells_filled_from_disk": cells_filled_from_disk,
@@ -221,6 +231,7 @@ class CheckpointManager:
         merge: bool | None = None,
         force_replace: bool = False,
         source: str | None = None,
+        replace_columns: Iterable[str] = (),
     ) -> Path:
         """Persist a DataFrame to {name}.parquet and write metadata.
 
@@ -241,6 +252,8 @@ class CheckpointManager:
                 setting `TC_CHECKPOINT_FORCE_REPLACE` truthy.
             source: human-readable label for the producing chain/step, used
                 only in the WARNING logged when an empty write is refused.
+            replace_columns: derived columns that a merge takes from *df*
+                verbatim instead of filling from disk (see `merge_preserving`).
         """
         parquet_path = self.dir / f"{name}.parquet"
 
@@ -273,7 +286,7 @@ class CheckpointManager:
             )
             return parquet_path
 
-        merged, stats = merge_preserving(existing, df)
+        merged, stats = merge_preserving(existing, df, replace_columns=replace_columns)
         stats = dict(stats)
         stats["pre_merge_shape"] = {"rows": len(existing), "columns": len(existing.columns)}
         log.info(

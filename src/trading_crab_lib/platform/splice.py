@@ -31,11 +31,11 @@ picture is recorded in the returned frame's ``.attrs["splice_provenance"]``
 (persist it to JSON with ``write_splice_provenance()``).
 
 IAU-is-not-spot-gold caveat: the ``gold`` class's chain falls back to the
-``IAU`` ETF column when ``gold_spot`` (macrotrends) is unavailable. IAU is a
-total-return gold ETF carrying an expense ratio and tracking drift — it is
-**not** spot gold, and its price history begins around 2005 versus
-``gold_spot``'s 1915+. Falling back to it changes what downstream models see
-and truncates the gold research series by roughly nine decades. This is an
+``IAU`` ETF column when ``gold_wb`` (World Bank monthly average, 1960+; DECISIONS
+D-09) is unavailable. IAU is a total-return gold ETF carrying an expense ratio
+and tracking drift — it is **not** spot gold, and its price history begins
+around 2005. Falling back to it changes what downstream models see and
+truncates the gold research series by about four decades. This is an
 explicitly chosen compromise (see ``config/platform_settings.yaml``'s
 ``splice.gold`` comment and ``docs/splicing_rules.md`` §3), not an
 equivalence claim.

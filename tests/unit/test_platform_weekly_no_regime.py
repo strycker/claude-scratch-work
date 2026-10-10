@@ -21,6 +21,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from test_platform_report_serving import _serving_world  # tests/unit is on sys.path (prepend mode)
+from tracked_record import tracked_record_cfg
 
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.report import weekly
@@ -362,7 +363,7 @@ class TestParityWithTheAblationLeg:
                 shutil.copy2(_TRACKED_PLATFORM / f"{name}{suffix}", tmp_ckpt / f"{name}{suffix}")
         monkeypatch.setattr(returns_mod, "OUTPUT_DIR", tmp_path / "out")
         cm = CheckpointManager(checkpoint_dir=tmp_ckpt)
-        cfg = load_platform_config()
+        cfg = tracked_record_cfg(load_platform_config())  # 2026-10-09: built before the gold switch
         assert cfg["backtest"].get("skip_l1l2_for_ablation", True) is True, "precondition: the measured leg skipped L1/L2"
         serving.build_serving_artifacts(cfg, cm=cm, output_dir=tmp_path / "out")
 

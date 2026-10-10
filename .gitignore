@@ -49,6 +49,9 @@ data/checkpoints/platform/regime_belief.*
 data/checkpoints/platform/returns_by_regime.*
 outputs/reports/platform/returns_by_regime.parquet
 outputs/reports/platform/weekly_report.md
+# Local state archives (08.4 state tool); only promoted ones are committed, as model/<name> tags (K-8).
+archives/*
+!archives/promoted/
 # data/processed/
 # data/regimes/
 # outputs/figures/

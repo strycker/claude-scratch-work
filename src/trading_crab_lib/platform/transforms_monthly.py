@@ -35,6 +35,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
 from typing import Any
 
@@ -369,12 +370,104 @@ def _assert_lag_marker_allows_merge(cm: Any, cfg: dict[str, Any]) -> None:
     if lag_marker_matches(marker, cfg):
         return
     state = "missing" if not marker.exists() else "records a different lag table"
-    raise RuntimeError(
-        f"build_monthly_spine: {marker} is {state}, so the on-disk monthly_raw was not built "
-        "under the current publication_lags and merging onto it would reintroduce unlagged values. "
-        "If it predates publication lags, run `python scripts/migrate_publication_lags.py` once. "
-        "If a lag was changed on purpose, delete monthly_raw (and the marker) and rebuild."
+    # BuildFailed (a RuntimeError), so the build script exits 1 with this message (2026-10-09).
+    raise BuildFailed(
+        f"build_monthly_spine: nothing was written, because {marker} is {state}, so the on-disk "
+        "monthly_raw was not built under the current publication_lags and merging onto it would "
+        "reintroduce unlagged values. If it predates publication lags, run "
+        "`python scripts/migrate_publication_lags.py` once. If a lag or source was changed on purpose, "
+        "build into an empty data folder (TC_DATA_DIR) or delete monthly_raw (and the marker) and rebuild."
     )
+
+
+# ── Fail-loud build gate (08.4, DECISIONS D-08) ──────────────────────────────
+
+
+class BuildFailed(RuntimeError):
+    """A source the build needs is missing; raised before anything is written."""
+
+
+def expected_source_columns(cfg: dict[str, Any]) -> dict[str, str]:
+    """Every raw column the build expects, mapped to the config section that names it."""
+    expected: dict[str, str] = {}
+    for meta in cfg.get("fred_monthly", {}).get("series", {}).values():
+        expected[meta["name"]] = "fred_monthly"
+    for row in cfg.get("multpl_monthly", {}).get("datasets", []):
+        expected[row[0]] = "multpl_monthly"
+    for entry in cfg.get("macrotrends_monthly", {}).get("series", []):
+        expected[entry["name"]] = "macrotrends_monthly"
+    for entry in (cfg.get("worldbank_monthly") or {}).get("series", []):
+        expected[entry["name"]] = "worldbank_monthly"
+    for meta in cfg.get("index_monthly", {}).values():
+        expected[meta["name"]] = "index_monthly"
+    for ticker in prices_daily.universe_fetch_tickers(cfg):
+        expected[ticker] = "universe"
+    for meta in cfg.get("fred_vintage", {}).get("series", {}).values():
+        expected[meta["name"]] = "fred_vintage"
+    return expected
+
+
+def missing_sources(cfg: dict[str, Any], delivered: set[str]) -> list[str]:
+    """Every expected raw column that was neither delivered nor allowed (allowed ones are logged)."""
+    allowed = set(cfg.get("build", {}).get("allow_missing_sources", []))
+    problems: list[str] = []
+    for column, section in expected_source_columns(cfg).items():
+        if column in delivered:
+            continue
+        if column in allowed:
+            log.warning("build: source column '%s' (%s) is missing; build.allow_missing_sources allows it.", column, section)
+        else:
+            problems.append(f"source column '{column}' ({section}) was not delivered")
+    return problems
+
+
+def fallback_splices(cfg: dict[str, Any], provenance: dict[str, Any] | None) -> list[str]:
+    """Every splice class that fell back from a primary column that is not allowed to be missing."""
+    allowed = set(cfg.get("build", {}).get("allow_missing_sources", []))
+    problems: list[str] = []
+    for research_name, record in (provenance or {}).items():
+        if record.get("status") != "fallback":
+            continue
+        for key, detail in record["sources"].items():
+            primary = detail["candidates"][0]
+            if detail["position"] != 1 and primary not in allowed:
+                problems.append(f"splice '{research_name}' fell back from '{primary}' to '{detail['resolved']}' ({key})")
+    return problems
+
+
+_BLOCKED_HINT = (
+    "macrotrends (HTTP 403) and Yahoo (rate limits) block many corporate VPNs and firewalls; if you are "
+    "on one, run the build off it. "
+)
+
+
+def _raise_if_fred_key_rejected(cfg: dict[str, Any], delivered: set[str]) -> None:
+    """Every FRED series missing means the key, not the series: say so, and do not suggest
+    --allow-missing for all of them (08.4 UAT failure drill, 2026-10-09)."""
+    fred = [column for column, section in expected_source_columns(cfg).items() if section.startswith("fred_")]
+    if fred and not set(fred) & delivered:
+        raise BuildFailed(
+            f"build_monthly_spine: nothing was written, because every FRED series failed ({len(fred)} columns: "
+            f"{', '.join(fred)}). That is FRED_API_KEY, not the series: check the key in your environment or .env "
+            "(free key: https://fred.stlouisfed.org/docs/api/api_key.html), then re-run "
+            "python scripts/build_platform_data.py"
+        )
+
+
+_COLUMN_IN_PROBLEM = re.compile(r"(?:source column|fell back from) '([^']+)'")
+
+
+def _raise_build_failed(problems: list[str]) -> None:
+    if problems:
+        blocked = any("macrotrends_monthly" in p or "index_monthly" in p for p in problems)
+        columns = ",".join(dict.fromkeys(_COLUMN_IN_PROBLEM.findall(" ".join(problems))))
+        raise BuildFailed(
+            "build_monthly_spine: nothing was written, because " + "; ".join(problems) + ". "
+            + (_BLOCKED_HINT if blocked else "")
+            + "Retry: python scripts/build_platform_data.py (a flaky source usually comes back). To build "
+            f"without them on purpose (each one's class falls back, and the run logs it): python "
+            f"scripts/build_platform_data.py --allow-missing {columns}"
+        )
 
 
 def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
@@ -395,10 +488,20 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
 
     macro = macro_monthly.fetch_macro_monthly(cfg)
     daily, monthly_prices = prices_daily.fetch_universe_prices(cfg)
+    agency = align_agency_monthly(monthly_index, cfg)
+
+    # Fail-loud gate, part 1 (08.4, D-08): every source checked BEFORE any splice runs, so a lost
+    # or silently empty column stops the build with its name instead of a crash further down.
+    fail_loud = bool(cfg.get("build", {}).get("fail_loud"))
+    if fail_loud:
+        # A column that arrived but is entirely NaN (a silent parse failure) was not delivered.
+        delivered = {c for frame in (macro, monthly_prices, agency) for c in frame.columns if frame[c].notna().any()}
+        _raise_if_fred_key_rejected(cfg, delivered)
+        _raise_build_failed(missing_sources(cfg, delivered))
 
     # The splice input MUST include the monthly ticker columns (e.g. IAU), not
     # just macro-only columns — otherwise a fallback chain naming a tradable
-    # ETF (gold: [gold_spot, IAU]) could never resolve, even though the ETF
+    # ETF (gold: [gold_wb, IAU]) could never resolve, even though the ETF
     # data is right there in monthly_prices. Guarded only for the both-empty
     # case: if either macro or monthly_prices has data, splice still runs on
     # whatever is available (a class missing its required macro columns then
@@ -418,12 +521,14 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
         lagged = pd.DataFrame()
         research = pd.DataFrame()
 
-    agency = align_agency_monthly(monthly_index, cfg)
-
     frames = [f for f in (lagged, research, agency) if not f.empty]
     monthly_raw = pd.concat(frames, axis=1) if frames else pd.DataFrame(index=monthly_index)
     monthly_raw = monthly_raw.reindex(monthly_index)
     monthly_raw.index.name = "date"
+
+    # Fail-loud gate, part 2: a splice class that fell back from its primary column.
+    if fail_loud:
+        _raise_build_failed(fallback_splices(cfg, research.attrs.get("splice_provenance") if not research.empty else None))
 
     cm = get_platform_checkpoint_manager()
     _assert_lag_marker_allows_merge(cm, cfg)  # before ANY write
@@ -431,6 +536,9 @@ def build_monthly_spine(cfg: dict[str, Any]) -> pd.DataFrame:
     raw_path = cm.save(
         monthly_raw, "monthly_raw",
         source="build_monthly_spine (combined monthly ingest: macro+prices+research+agency)",
+        # The spliced research columns are derived: replaced by every build, never refilled from
+        # an old disk copy (08.4, the 221defc -98% gold month).
+        replace_columns=[params["research_name"] for params in cfg.get("splice", {}).values()],
     )
     write_lag_marker(cm.dir / LAG_MARKER_FILENAME, cfg)
 

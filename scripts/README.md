@@ -1,5 +1,20 @@
 # Scripts
 
+## Platform (active): the weekly product
+
+| Command | What it does |
+|---|---|
+| `python scripts/build_platform_data.py` | Fetches every source and builds the platform data (`data/checkpoints/platform/`, holdout carve). Needs network and `FRED_API_KEY`. If your network blocks a source (macrotrends 403 or a Yahoo rate limit on a corporate VPN), the build stops and prints the `--allow-missing COL,...` command that builds without it for that run. |
+| `python -m trading_crab_lib.platform.report.serving` | Fits the served regime model. It is only needed for `allocation_mode: regime_tilt`. |
+| `python -m trading_crab_lib.platform.report.weekly` | Writes the weekly page (`outputs/reports/platform/weekly_report.md`). |
+| `python scripts/platform_snapshot.py` | Offline dev snapshots of the platform checkpoints (see `docs/offline_snapshots.md`). |
+| `python scripts/recompute_monthly_features.py` | Network-free recompute of `monthly_features` from the cached `monthly_raw`. |
+| `python scripts/migrate_*.py` | One-off migrations from 08.1 and 08.3. They are kept for their record tests and retire in 08.5. |
+
+`diagnose_macrotrends*.py` and `diagnose_yahoo_interceptor.sh` help when a source fails to fetch on a new machine.
+
+## Legacy quarterly pipeline (frozen)
+
 ## run_weekly_report.py
 
 Single entry point for the **weekly regime + recommendation report**.
@@ -63,46 +78,14 @@ bash scripts/run_tests.sh tests/unit/test_returns.py -q
 - Fails fast if `pytest` is not importable in that env.
 - Passes all extra arguments directly through to pytest.
 
-## smoke_step5.sh
-
-Quick **end-to-end smoke** for **step 5 (predict)** once steps **1–4** have produced the usual artifacts.
-
-**Usage:**
-
-```bash
-bash scripts/smoke_step5.sh
-bash scripts/smoke_step5.sh --verbose
-```
-
-**Prerequisites (default mode — step 5 only):**
-
-- `data/processed/features_supervised.parquet` (step 2)
-- `data/regimes/cluster_labels.parquet` (step 3)
-- `data/raw/macro_raw.parquet` **or** `data/raw/asset_prices.parquet` (returns for behavior models)
-
-If anything is missing, the script prints what to run (e.g. `python run_pipeline.py --steps 1,2,3,4`).
-
-**Full pipeline mode** (steps 1–5 in one go; step 1 may need `FRED_API_KEY` / network if raw data is not cached):
-
-```bash
-SMOKE_FULL_PIPELINE=1 bash scripts/smoke_step5.sh
-```
-
-**What it checks after step 5:**
-
-- `outputs/models/current_regime.pkl`, `decision_tree.pkl`, `forward_classifiers.pkl`, `behavior_models.pkl`
-- `outputs/reports/model_metrics/cv_summary.parquet`, `per_fold.jsonl`, `confusion_matrices.parquet`, `calibration.parquet`
-
-Uses `PYTHONPATH=src` and `python3` by default; override with `PYTHON=/path/to/python`.
-
-## install_trading_crab_lib.sh
+## install_trading_crab.sh
 
 One-shot installer for Trading-Crab on a new machine.
 
 **Usage:**
 
 ```bash
-bash scripts/install_trading_crab_lib.sh
+bash scripts/install_trading_crab.sh
 ```
 
 **What it does:**

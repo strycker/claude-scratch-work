@@ -11,6 +11,7 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
         args: ["--maxkb=500"]
+        exclude: "^archives/promoted/"   # promoted state archives are capped at 50 MB by the state tool
 
   - repo: https://github.com/PyCQA/flake8
     rev: 7.1.0

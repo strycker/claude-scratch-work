@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 08.4
-current_phase_name: Cold-Start Rebuild & Learnings Before Migration
+current_phase: 08.5
+current_phase_name: Clean-Slate Reset & Learnings Before Migration
 status: planning
-stopped_at: Phase 08.3 CLOSED 2026-10-05 — Mac run passed; P7/P8/P9 signed off (approve); Mac data commit 221defc reverted (gold fallback -98% month, D-08); live weekly state untracked (G-11); next: discuss 08.4
-last_updated: "2026-10-05T15:26:28.339Z"
+stopped_at: Phase 08.4 CLOSED 2026-10-09 — verified 13/13; Mac UAT 4/4 passed on the VPN; D-09 gold from the World Bank; --allow-missing; next: KISS pass on the 08.5 CONTEXT, then plan 08.5
+last_updated: "2026-10-10T00:00:00.000Z"
 progress:
-  total_phases: 12
-  completed_phases: 10
-  total_plans: 76
-  completed_plans: 75
-last_activity: 2026-10-05
-last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."
+  total_phases: 13
+  completed_phases: 12
+  total_plans: 78
+  completed_plans: 78
+last_activity: 2026-10-09
+last_activity_desc: "Phase 08.4 closed — fail-loud build, model-free no_regime page, state tool (archive/reset/restore/promote), --allow-missing, D-09 World Bank gold. Mac UAT 4/4. Suite 2283. Registry 48."
 ---
 
 # Project State
@@ -24,12 +24,28 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 8 COMPLETE (2026-09-30). Next: Phase 08.1 Point-in-Time Data Audit — order 8.1 → 8.2 decided by Glenn 2026-09-30; 8.1 also carries two usability fixes (target allocation always printed; staleness cap per series). Lean-MVP mode applies. Starts on a new branch after Glenn merges this branch to main.
+**Current focus:** Phase 08.5 — Clean-Slate Reset & Learnings Before Migration
 
 ## Current Position
 
-Phase: 08.4 — Cold-Start Rebuild & Learnings Before Migration
-Status: Ready to discuss (`/gsd-discuss-phase 8.4`, on a new branch off main after 08.3 merges). 08.3 closed 2026-10-05: E-12 stands (tilt 3.8789 < ablation 4.1124; core mix no_regime). Registry 48. Open first: D-08 (fetch failures must fail the build).
+Phase: 08.5 — Clean-Slate Reset & Learnings Before Migration
+Status: Context captured; a KISS pass on `08.5-CONTEXT.md` comes before planning (`/gsd-plan-phase 8.5`).
+
+**Phase 08.4 closed 2026-10-09.** Verified 13/13; Glenn's Mac UAT passed 4/4 on the corporate VPN (build from
+empty + bogus-key drill, no-model page, archive → reset → restore with an identical page, promote with the real
+hooks). Fixed during UAT: the page's no-data exit, pytest ignoring `TC_*_DIR`, `--allow-missing COL,...` for
+blocked sources (macrotrends 403, Yahoo rate limit), and **D-09: gold from the World Bank monthly average (1960+),
+then macrotrends, then IAU, with month-end P&L via `pnl_splice`**. Suite 2283. Registry 48 (0 rows spent).
+
+**Phase 08.4 executed 2026-10-07 (2/2 plans).**
+
+- **08.4-01:** fail-loud build. A lost or all-NaN source, or a fallback splice, stops the build before any write.
+  Derived splice columns are replaced on save. A failed FRED daily fetch exits 1. The no_regime page runs without
+  any regime model.
+- **08.4-02:** `platform/state.py`, a single module with archive, list, reset, restore and promote.
+
+Suite 2263. Registry 48 (0 rows spent). Mac UAT is pending. The KISS cleanup on 2026-10-05 retired the parked
+code (G-13) and trimmed CLAUDE.md.
 
 **Phase 08.2 closed 2026-10-02 — MVP-1 is usable.** Weekly page trades the measured no-regime leg (A-13; mode
 switch executes in full, A-15), regime view suspended, crash tripwire (STALE/UNAVAILABLE never green) and a static
@@ -471,7 +487,7 @@ scoring now uses it — **required, not cosmetic**: it scores
 2020 as "today" every week. Three tests pin the wiring specifically and fail
 against the unwired code.
 
-Progress: [███████▌░░] 75% (6 of 8 phases; phase 7 in flight, 11 of its 12 plans done)
+Progress: [██████████] 97% (6 of 8 phases; phase 7 in flight, 11 of its 12 plans done)
 
 ### Roadmap restructure (2026-08-04)
 
@@ -529,6 +545,7 @@ numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
 | Phase 7 P08 | 1 session | 3 tasks | 6 files |
 | Phase 07 P11 | 1h05m | 3 tasks | 6 files |
 | Phase 07 P12 | 35min | 2 tasks | 4 files |
+| Phase 08.4 P01 | 1 session | 3 tasks | 11 files |
 
 *Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
 *Updated after each plan completion.*
@@ -574,6 +591,8 @@ Recent decisions affecting current work:
 - [Phase 07-12]: REG-01 claimed PARTIALLY rather than in full, by Glenn's explicit decision of 2026-09-18, with criterion 6 named as the open item rather than folded in. The plan as written assumed both requirements could be claimed outright; that assumption did not survive the INCONCLUSIVE dependence verdict.
 - [Phase 07-12]: The ADR's pre-declared sections were not edited in place. The Status section's original text is preserved verbatim under a subsection, and the probe-edge table's five extended rows carry a labelled AMENDMENT 2026-09-21 note — D-17's before-the-run guarantee is worthless if a pre-declaration can be silently rewritten afterward.
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
+- [Phase 08.4-01]: build.fail_loud true (pinned) with build.allow_missing_sources [] as the only escape hatch; splice research columns are replaced on every monthly_raw save; the model-free no_regime page engages only when the nowcaster is missing
+- [Phase 08.4-02]: G-12: state tooling is one module (platform/state.py: archive, list, reset, restore, promote); no pickle archived, promote never pushes
 
 ### Pending Todos
 
@@ -793,8 +812,11 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T16:05:00.000Z
-Stopped at: Completed 07-12-PLAN.md — **Phase 7 CLOSED**
+Last session: 2026-10-10T00:00:00.000Z
+Stopped at: Phase 08.4 CLOSED 2026-10-09 — Mac UAT 4/4 passed; next: KISS pass on the 08.5 CONTEXT, then plan 08.5
+Resume file: `.planning/phases/08.5-clean-slate-reset-learnings-before-migration/08.5-CONTEXT.md`
+
+Older resume pointer (Phase 7 era):
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
 acceptance — the thirteen items Phase 7 carries forward, and the starting point for Phase 8.
 **Read § ACCEPTANCE 2026-09-21 first: criterion 6 is unresolved and REG-01 is only partially

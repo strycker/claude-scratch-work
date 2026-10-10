@@ -22,6 +22,8 @@ then upgraded module by module against frozen interfaces.
 drawdowns** — and is never fooled by its own backtest. The honesty framework is not
 overhead; it is the product. A beautiful but leaky backtest is worthless.
 
+**Governing principle (Glenn, 2026-10-05): KISS.** Human-readable, human-editable, human-testable by one person with Python scripts and notebooks; the simplest honest design wins (DECISIONS P-07).
+
 **Working mode (Glenn, 2026-09-29): lean MVP.** Usable weekly product first; one module per phase,
 ≤2–3 plans, small PLANs, decisions recorded as rows in `platform_design/DECISIONS.md`; heavy rigor
 (mutation proofs, ruling records, measurement amendments) only for decision-bearing numbers. Build

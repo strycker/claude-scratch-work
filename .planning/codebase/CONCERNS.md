@@ -1,392 +1,534 @@
-> **STALE (flagged 2026-09-29):** generated 2026-07-09, before the monthly `platform/` package was built (Phases 1–8). It describes the legacy quarterly codebase. For the platform see `REBUILD-FROM-SCRATCH-GUIDE.md` §3 and `platform_design/DECISIONS.md`; regenerate with `/gsd-map-codebase` before relying on it.
+# Codebase Concerns — Platform Monthly MVP
 
-<!-- refreshed: 2026-07-09 -->
-# Codebase Concerns
+<!-- refreshed: 2026-10-05 -->
 
-**Analysis Date:** 2026-07-09
+**Analysis Date:** 2026-10-05
 
----
+> **Update 2026-10-05 (after this map was written; DECISIONS G-13 and P-07).** These were **deleted**:
+> - `platform/parked/` (classifier #2, the joint driver, the stability suite);
+> - the parked-only helpers `allocation/joint_tilt.py`, `evaluation/dependence.py` and the `features/` package;
+> - the `labeling_2` config block;
+> - the research scripts `run_joint_lift`, `run_subsample_stability`, `terminal_month_diagnostic`,
+>   `joint_lift_diagnostics` and `diagnose_s1_truncation`;
+> - the one-off scripts `diagnose_yahoo_tls`, `diagnose_yfinance`, `diagnose_cpi_handoff`, `run_policy_trials`,
+>   `smoke_step5.sh` and `egress_test.sh`;
+> - the parked-boundary and doc-count tests.
+>
+> Root `CLAUDE.md` was trimmed; the old text is in `docs/archive/LEGACY-CLAUDE.md`. Wherever this map mentions any
+> of these, read it as history.
 
-## Tech Debt
 
-### Architecture & Design Gaps (from platform_design.md §11, R1-R15)
+**Scope:** `src/trading_crab_lib/platform/`, `config/platform_settings.yaml`, `scripts/`, `notebooks/platform/`, tests/. The legacy quarterly pipeline is frozen; not analyzed.
 
-**R1 — Quarterly data spine instead of monthly** (BLOCKING REDESIGN ITEM)
-- **Issue:** Data frequency is hardcoded to `frequency: "Q"` in `config/settings.yaml`. Design calls for monthly spine (D10) with weekly scoring overlay.
-- **Files:** `config/settings.yaml`, `src/trading_crab_lib/ingestion/fred.py`, `src/trading_crab_lib/ingestion/multpl.py`, `src/trading_crab_lib/ingestion/assets.py`
-- **Impact:** ~260 quarterly observations from 1950 vs ~800 monthly observations. Quadruples detection lag in calendar time for regime transitions. Labeler (L1) starved of signal.
-- **Fix approach:** Migrate ingestion to monthly; keep quarterly agency series (GDP/GNP) with proper alignment via publication-lag shift; resample ETF prices to monthly. Estimated effort: 2 phases (data layer + feature engineering).
+**Special Focus:** Post-KISS-adoption (P-07, 2026-10-05). This document identifies concrete over-engineering and simplification opportunities alongside bugs and fragilities.
 
-**R2 — Forced-balance clustering instead of jump-model labeling** (MODELING DEBT)
-- **Issue:** Current: `KMeansConstrained(size_min=budget-2, size_max=budget+2)` produces `balanced_k=5` clusters of artificially equal occupancy. Design prefers: jump-model (k-means + jump penalty with DP solve) using occupancy floor/cap as acceptance criteria (not forcing), plus temporal persistence via penalty term.
-- **Files:** `src/trading_crab_lib/clustering.py` (lines 380-440 for `fit_clusters()`)
-- **Impact:** Distorts cluster geometry near occupancy-constrained boundaries. No native temporal persistence — regimes appear i.i.d. rather than temporally sticky. Current k-means serves as warm start for future jump-model implementation.
-- **Fix approach:** Implement jump-model solver as drop-in replacement; keep k-means for initialization and baseline diagnostics. No code change in downstream steps. Effort: 1 phase (labeler upgrade).
-
-**R3 — Constant transition matrix instead of feature-conditional transitions** (MODELING DEBT)
-- **Issue:** Current: `build_transition_matrix()` computes empirical 1-step transition probabilities (constant across time). Design requires: TVTP-style transitions P(S_{t+1}=j | S_t=i, z_t, age_t) with features (credit spreads, vol, etc.) + regime age as predictors.
-- **Files:** `src/trading_crab_lib/regime.py` (lines 80-120 for `build_transition_matrix()`)
-- **Impact:** Transition model (L2) cannot distinguish pre-crisis vs post-crisis likelihood. Nowcast + transition model are conflated in step-5 supervisedmodels.
-- **Fix approach:** Add transition-model training in prediction/__init__.py; keep empirical matrix as diagnostic baseline.
-
-**R4 — PCA(5) before clustering obscures semantics** (ANALYSIS DEBT)
-- **Issue:** Current: `reduce_pca()` projects 69 clustering features onto 5 PCA components before KMeans. This loses interpretability and mixes signal dimensions (e.g., PC1 is a soup of all series' leading edges).
-- **Files:** `src/trading_crab_lib/clustering.py` (lines 50-80 for `reduce_pca()`)
-- **Impact:** Regime profiles are in PCA space, not original feature space — makes interpretation harder. Semantic skeleton constraints (D3) cannot be applied directly.
-- **Fix approach:** Keep PCA as diagnostic (notebook 03); use standardized curated features directly, or remove PCA pre-clustering. Will require cluster geometry re-validation.
-
-**R5 — Non-stationary levels in clustering feature set** (VERIFICATION GAP)
-- **Issue:** Design §9 forbids non-stationary raw levels (rates, log-prices, etc.) from reaching the labeler. Current `clustering_features` in `config/settings.yaml` may include harmful levels. Audit required.
-- **Files:** `config/settings.yaml` (lines 140-180), `src/trading_crab_lib/transforms.py` (engineer_all function)
-- **Impact:** If raw levels leak into clustering, cointegration / spurious regression can appear as regimes.
-- **Fix approach:** Audit final clustering matrix after step 2; enforce stationarity check (ADF test or ACF decay) before step 3. Add pre-clustering validation step.
-
-**R6 — FRED data revised (no ALFRED vintage alignment)** (DATA INTEGRITY DEBT)
-- **Issue:** Current ingestion fetches live FRED series via `fredapi.Fred()` without vintage tracking. FRED data revises continuously. Supervised models trained on Q1 data retrain in Q2 with Q1 "final" revision, leaking revision surprises into labels.
-- **Files:** `src/trading_crab_lib/ingestion/fred.py` (entire fetch_all function)
-- **Impact:** Revised data leakage violates D12 (point-in-time discipline). Impacts model reproducibility and real-time scoring.
-- **Fix approach:** Migrate to ALFRED (Archival FRED) API which preserves vintage dates. Reclassify features into fast/slow/agency taxonomy (D12). Estimated effort: 1 phase (data layer).
-
-**R7 — TimeSeriesSplit CV without purging/embargo** (LOOK-AHEAD BIAS)
-- **Issue:** Current: `TimeSeriesSplit(n_splits=5)` is used (good), but no purging of overlapping-label boundaries or embargo of trailing-uncertainty label windows. Forward classifiers (h ∈ {1,2,4,8} quarters) create 92%+ overlapping labels; CV folds can leak future information.
-- **Files:** `src/trading_crab_lib/prediction/__init__.py` (lines 150-200 for train_current_regime), `src/trading_crab_lib/monitoring/prediction.py` (compute_cv_fold_scores)
-- **Impact:** CV accuracy inflated; real-time scoring worse than backtest. Transition-window detection metrics are optimistic.
-- **Fix approach:** Add purged CV (López de Prado ch.7–8): remove training data within h periods of each test fold start; embargo last 6–12 months of labels (unstable due to two-sided smoothing). Report transition-window metrics separately from overall accuracy.
-
-**R8 — Conflated nowcast and transition models** (MODELING DEBT)
-- **Issue:** Current: Single RF/DT trained on regime labels predicts both "what regime now" and transitions implicitly. Design requires separate nowcaster (recursive state feature, γ sample weights from L1 confidence) and transition model (features: spreads, vol, age).
-- **Files:** `src/trading_crab_lib/prediction/__init__.py` (train_current_regime, train_forward_classifiers)
-- **Impact:** Transition signals (spreads, vol) and level signals (means) compete in one model. Harder to diagnose and tune separately.
-- **Fix approach:** Split into two models; nowcaster includes prior P(S_t | z_{1:t-1}) as a feature (recursive). Add recursive = True parameter to prediction API.
-
-**R9 — No volatility forecasting or regime-conditional stops** (PORTFOLIO DEBT)
-- **Issue:** Current: `tactics.py` uses fixed vol/trend thresholds → buy_hold/swing/stand_aside. No GARCH/EWMA vol forecasting. Stops are not regime-conditional or vol-scaled.
-- **Files:** `src/trading_crab_lib/tactics.py` (entire module), `src/trading_crab_lib/portfolio construction` logic
-- **Impact:** Portfolio allocation static vs vol; regime crashes not de-risked automatically. Missing §6.2 and §7 (design).
-- **Fix approach:** Add GARCH(1,1) or EWMA vol layer; implement vol targeting; add regime-conditional stop multipliers m_k·σ̂.
-
-**R10 — No walk-forward harness; full-sample fit used** (EVALUATION DEBT)
-- **Issue:** Current: Clustering fit on full data → labels → CV. No refit loop for each CV fold. Parameter lookahead: labels are filtered with future-informed parameters (PCA, gap-fill thresholds computed on 1950–2026 data).
-- **Files:** `src/trading_crab/pipeline.py` (main function, lines 1-1374), `src/trading_crab_lib/clustering.py`
-- **Impact:** Prevents honest walk-forward testing. Smoothed-vs-filtered gap (hindsight content) not measurable. Design §8.1 requires walk-forward as core infrastructure.
-- **Fix approach:** Build walk-forward runner with refit at each time point; report smoothed-vs-filtered gap and detection lag. Report transition-window metrics separately. Implement before next model iteration.
-
-**R11 — Gaussian mixtures instead of Student-t** (STATISTICAL DEBT)
-- **Issue:** Current: `gmm.py` uses GaussianMixture. Design D7 mandates Student-t emissions everywhere (fat tails are real; extra Gaussian states waste capacity absorbing outliers like 2008/2020).
-- **Files:** `src/trading_crab_lib/gmm.py` (lines 30-80 for fit_gmm)
-- **Impact:** GMM over-fits with extra states to model tails. Interpretability degraded.
-- **Fix approach:** Replace `GaussianMixture` with `sklearn_mixture.BayesianGaussianMixture` with Wishart priors, or use statsmodels Student-t HMM. Effort: 1 component upgrade.
-
-**R12 — No trial registry or holdout discipline** (EVALUATION DEBT)
-- **Issue:** Current: No log of which configs were evaluated, in what order. No locked holdout period (design D13: 2021-01-01+ untouched until design freeze).
-- **Files:** Not applicable (missing infrastructure)
-- **Impact:** Cannot compute deflated Sharpe or report multiple-testing corrections. Enables unintentional p-hacking.
-- **Fix approach:** Implement trial registry (flat SQLite or JSON file) with config hash → metrics. Carve 2021+ holdout as separate data partition before next modeling iteration. Add to Phase 0 (Foundations).
-
-**R13 — Short ETF histories, no spliced long asset prices** (DATA DEBT)
-- **Issue:** Current: Labeling (L1, ~260 observations) needs 1962+ history (~30+ regime transitions). ETFs start 1993–2006. Missing spliced index/futures/spot histories (S&P TR, gold, WTI, constant-maturity Treasuries).
-- **Files:** `src/trading_crab_lib/ingestion/assets.py` (entire module), config lacks splice definitions
-- **Impact:** Asset-returns regression (L3) blind for 1962–1993 (~25 years, ~10 regimes). Pre-1993 regime profiles use macro proxies (log_sp500 proxy) only.
-- **Fix approach:** Build spliced long histories per asset (SPY←S&P 500 TR, GLD←gold spot/futures, TLT←constant-maturity synthetic, etc.). Estimated effort: 1 phase (R13). Design §9 has source references.
-
-**R14 — Regime naming post-hoc instead of skeleton-constrained** (DESIGN PATTERN DEBT)
-- **Issue:** Current: `suggest_names()` uses median-deviation heuristics to name clusters after clustering. Design prefers: hand-specified semantic skeleton (growth/inflation 2×2 grid from D3) as *constraints* during L1 solve (or at least applied to interpret outputs).
-- **Files:** `src/trading_crab_lib/regime.py` (lines 40-80 for suggest_names)
-- **Impact:** Regime names can drift across runs. Skeleton enforces economic interpretability without overfitting.
-- **Fix approach:** Recast suggest_names() output as skeleton seeds; add skeleton-constraint layer in L1 (could be soft or hard depending on jump-model variant used). Keeps existing code as warm start.
-
-**R15 — Checkpointing and config infrastructure, no test coverage for pipeline.py** (TESTING DEBT)
-- **Issue:** Positives: Functions-only library, caller-driven config, parquet checkpoints, CLI, ~769 tests. Negative: `src/trading_crab/pipeline.py` (1374 lines) has zero direct test coverage. Full-stack integration tests exist but no unit tests of step dispatch, flag handling, or error recovery.
-- **Files:** `src/trading_crab/pipeline.py`, no corresponding `tests/test_pipeline_unit.py`
-- **Impact:** Regressions in flag handling (--steps, --market-code, etc.) not caught. Pipeline changes land untested.
-- **Fix approach:** Add unit test module `tests/test_pipeline_unit.py` mocking checkpoints and internal steps. Estimated effort: 0.5 phase (testing, not modeling).
+> **Orchestrator verification note (2026-10-05).** This map was produced by a lightweight model. These items were
+> checked against the code and corrected. Treat the rest as leads to verify, not facts.
+> - **C-9 is false.** `report/weekly.py` contains no DSR or hurdle code (`grep -i "dsr|deflated|hurdle"` finds
+>   nothing). Nothing to remove.
+> - **Open-2 (CR-03) is fixed, not open.** Since 08.1 (DECISIONS D-05) the `publication_lags` table lags `fred_m2sl`
+>   by 1, `fred_totalsl` by 2 and `div_yield` by 3. The "currently set to lag 0" text is stale.
+> - **Open-3 (E-11):** realized vol runs **above** the 10% target per DECISIONS E-11. The "~9.13%" figure quoted
+>   here is unverified.
+> - **C-2** names no concrete confirm-only tests. DECISIONS H-11 is the source; nothing was found to remove
+>   mechanically.
+> - **Bug-1 (D-08)** is the real open bug. It is fixed in Phase 08.4.
 
 ---
 
-## Known Bugs
+## Real Bugs
 
-### P22 — SSL verification disabled for price ingestion
-- **What happens:** `src/trading_crab_lib/ingestion/assets.py` line 145: `curl_requests.Session(verify=False)`. Certificate verification is permanently disabled for yfinance calls.
-- **Why it's wrong:** Susceptible to MITM attacks on price data. While unlikely for yfinance, an attacker could inject false prices.
-- **Workaround:** Use VPN or trusted network for production runs. Verify data sanity after each ingest (step 1 logs column counts).
-- **Fix approach:** Add `RunConfig.ssl_verify` flag; default False (current behavior); add doc + warning. Planned: migrate to system trust store or cert pinning.
+### Bug-1: D-08 — Merge-on-Save Silent Fallback (RESOLVED)
 
-### P23 — Partial ingestion produces plausible-looking outputs (SILENT FAILURE)
-- **What happens:** Ingestion failures (network, API down) are caught and logged at WARNING level; pipeline continues with whatever data was successfully fetched. Macro_raw.parquet column count is diagnostic only (should be ~53 cols).
-- **Why it's wrong:** User won't notice a missing series until downstream metrics drift. Adds stale-data risk.
-- **Workaround:** Check `macro_raw.parquet` column count after step 1. Run `python -c "import pandas as pd; df=pd.read_parquet('data/raw/macro_raw.parquet'); print(len(df.columns), df.columns[:10])"`.
-- **Fix approach:** Already partially fixed (P23 in D14: added `ingestion_completeness_report()`). Call `validate_ingestion_completeness()` after step 1 and FAIL if columns missing. Wired in `run_pipeline.py` — verify still active.
+**What happened:** 08.3 Mac rebuild (2026-10-05) lost macrotrends `gold_spot` and yfinance `^GSPC` data. The merge-on-save operation in `checkpoints.py` silently filled pre-2005 NaN cells in the gold research series from an older checkpoint's IAU-based column. Result: −98.07% gold return at 2005-01 in the research series, with no error raised. Commit 221defc reverted. 
 
-### P24 — CheckpointManager.list() silently ignores corrupt metadata
-- **What happens:** `CheckpointManager.list()` catches `JSONDecodeError` and `OSError` without logging which file failed.
-- **Why it's wrong:** Silent failures make debugging metadata corruption hard.
-- **Workaround:** Manually inspect `data/checkpoints/*.meta.json` for syntax errors.
-- **Fix approach:** Already fixed in D14 — log at WARNING with filename before skipping. Verify in `checkpoints.py` line 245.
+**Files:** `src/trading_crab_lib/platform/checkpoints.py` (D-01 contract), `src/trading_crab_lib/platform/splice.py` (fallback handling)
 
-### P25 — Committed data artifacts can create stale-data bugs
-- **What happens:** `data/grok_quarter_classifications_20260216.pickle`, `data/fred_api_datasets_snapshot_20260216.pickle`, `data/multpl_datasets_snapshot_20260216.pickle` are checked in. If pipeline accidentally loads these instead of fresh-fetched data, results silently based on Feb 2026 snapshots.
-- **Why it's wrong:** Stale-data gap to current date undetected. Produces misleading regime classifications.
-- **Workaround:** Ensure `--refresh` flag is used in weekly/monthly automation.
-- **Fix approach:** Move snapshots to `data/archives/` with explicit "do not load by default" documentation. Or add timestamp check (warn if snapshot >30 days old) in ingestion/__init__.py.
+**Scenario:** A fresh `git clone` with `build_platform_data.py`, during step 2/3, when a source fetch fails partially:
+1. `gold_spot` ingestion fails silently (network/parse)
+2. Gold research series falls back to IAU (different scale, starts 2005)
+3. Merge-on-save loads an old checkpoint with pre-2005 gold_spot-derived values
+4. Merge operation fills new NaN rows with old values
+5. Splicing then produces a phantom −98% move at the join point
+6. No error raised; backtest metrics silently corrupt
 
-### P26 — FRED ingestion hard-fails when FRED_API_KEY missing
-- **What happens:** `fred.py`'s `fetch_all()` calls `fredapi.Fred(api_key=...)` which raises ValueError if key is None.
-- **Why it's wrong:** Error message doesn't guide user to solution.
-- **Workaround:** Copy `.env.example` to `.env` and add free key from fred.stlouisfed.org.
-- **Fix approach:** Catch KeyError in __main__, print helpful message: "FRED_API_KEY not set in .env. Get free key at ... and run: cp .env.example .env && edit .env". Estimated effort: 1 line + docstring.
+**Impact:** Any backtest number depending on pre-2005 gold is garbage if a single ingestion source fails. The result masquerades as correct because parquet loads without error.
 
-### P13 — Checkpoint freshness check uses wall-clock time, not data time
-- **What happens:** `CheckpointManager.is_fresh(name, max_age_days=7)` rejects checkpoints older than 7 wall-clock days. If FRED releases new data on Monday but pipeline hasn't run, checkpoint remains "fresh" until Thursday, stale data flows downstream.
-- **Why it's wrong:** Data staleness and checkpoint staleness are decoupled.
-- **Workaround:** Always run with `--refresh` on production schedules (Friday or Monday).
-- **Fix approach:** Add optional `data_lag_quarters=1` parameter to `is_fresh()`. Check checkpoint metadata's index_end date against today's quarter; reject if more than `data_lag_quarters` behind. Estimated effort: 0.5 component.
+**Fix (decided, not yet implemented per DECISIONS D-08):**
+- (a) Merge-on-save may fill only raw source columns, never derived or spliced ones
+- (b) A single-source splice that resolves to a fallback candidate must fail `build_platform_data` unless the fallback is explicitly allowed
+- (c) `build_platform_data`'s closing hint must not invite a re-run that overwrites the tracked backtest record
+
+**Status:** Open (Phase 08.4). The 08.3 close documented the rule; 08.4 must implement it before a fresh cold-start rebuild.
+
+---
+
+## Open Defects Carried from Phase 8
+
+### Open-1: CR-02 — State-Id Non-Alignment Across Walk-Forward Refits
+
+**What it is:** The Bayes filter (decision rule: `π_t ∝ [π_{t−1}A]·L_t`) carries `regime_belief` (posterior) across walk-forward decision steps. On each refit (monthly), the labeler may assign new state ids (via canonical ordering or label switching). The filter has no mechanism to detect or correct when state 1 from month N maps to state 3 from month N+1.
+
+**Files:** `src/trading_crab_lib/platform/prediction/regime_filter.py` (line 149+), `src/trading_crab_lib/platform/parked/joint_driver.py:597-610` (joint harness)
+
+**Symptom:** A genuine regime shift (e.g., high-inflation to low-inflation) might be observed by the labeler (states swap ids). The filter's belief is carried forward without translation, corrupting the next step's decision. No diagnostic catches this.
+
+**Impact:** L2 (nowcaster) numbers are qualified with this defect recorded in `08-MEASUREMENTS §6` and `08-SERVING §4.6`. Every L2-routed KPI footnotes "CR-02 applies". The defect is acknowledged and measured; not fixed in this phase.
+
+**Decision (Glenn, 2026-09-29):** Phase 8.1. The current MVP (8.2) does not use the regime tilt, so L2 is advisory only. Before any future rebuild grants the regime layer weight, CR-02 must be resolved.
+
+**Rebuild approach (tentative, DECISIONS M5):** Fingerprint `regime_belief` checkpoint to the labeling's state ordering, or explicitly align state ids across refits using a reference labeling.
+
+---
+
+### Open-2: CR-03 — Unmodelled Publication Lag in L2 Model Columns
+
+**What it is:** Two FRED series used in L2 (nowcaster) modeling have real publication delays that the backtest does not model:
+- `fred_m2sl` (M2 money supply): ~1 month lag
+- `fred_totalsl` (total loans): ~2 months lag
+
+These are included in the nowcaster's causal features but the backtest training uses end-of-month values that were not available when a decision was made.
+
+**Files:** `src/trading_crab_lib/platform/ingestion/macro_monthly.py`, `config/platform_settings.yaml` (`publication_lags` table — rows for `fred_m2sl` and `fred_totalsl` are DEFERRED, currently set to lag 0)
+
+**Impact:** L2 backtest results (every joint-driver measurement) are look-ahead-biased. The bias may flatter the regime tilt over the ablation differently than for L1 (already measured in E-04: "Relative verdicts are not guaranteed under CR-03").
+
+**Decision (Glenn, 2026-09-29, Phase 08.1):** CR-03 is FIXED in ingestion (D-05, DECISIONS row 42). All three series (`fred_m2sl`, `fred_totalsl`, `div_yield`) are now lagged per `publication_lags` table in config. Ingestion guard test `test_platform_point_in_time` validates the shift.
+
+**Status:** Measured and accepted. Every published L2 number carries the qualification. No code fix needed; just acknowledge that the bias was corrected in 08.1-03.
+
+---
+
+### Open-3: E-11 — Vol Target Miscalibration (DEFERRED)
+
+**What it is:** The strategy's 10% annual vol target is estimated on monthly-average prices (not month-end). Average prices understate monthly vol by ~13–17% (measured in 08.3 research). When strategy P&L is recomputed on month-end prices (E-08), realized vol climbs to ~9.13% (ablation ~8.89%), exceeding the 10% target.
+
+**Files:** `src/trading_crab_lib/platform/assets/vol.py`, `src/trading_crab_lib/platform/allocation/tilt.py`
+
+**Impact:** Portfolio is slightly more volatile than declared. Risk model inputs are not aligned with realized returns. No monetary loss (tilt still loses to ablation on both TLW and MDD), but the mismatch breaks the model-vs-realized contract.
+
+**Decision (Glenn, 2026-10-02, Phase 08.3):** DEFER to 08.4 (cold-start rebuild, E-11 placed at M3). Re-estimate vol/return inputs on month-end returns as a deliberate model change, not a measurement fix.
+
+**Rebuild approach:** Recompute `returns_by_regime_stats` and `compute_ewma_vol` using month-end returns instead of averages.
+
+---
+
+## KISS: Complexity & Simplification Candidates
+
+All candidates are classified by safety (Safe cleanup now / Needs decision / Leave for Phase 9 module rebuild).
+
+### Over-Engineering: Trial Registry & Measurement Apparatus
+
+#### C-1: Trial Registry Per-Row Ceremony (H-03: SIMPLIFY)
+
+**What it is:** Every trial row in `platform/honesty/registry.py` carries:
+- `trial_tag` (required, non-empty, trimmed)
+- `metrics.sharpe` (computed separately, can fail silently if key missing)
+- `independent_trial` (boolean flag for DSR variance weighting)
+- `config` dict (full config serialized as JSON)
+- Multiple validation checks at append time
+
+**Files:** `src/trading_crab_lib/platform/honesty/registry.py`, `scripts/run_joint_lift.py` (lines 40-51 document the ceremony)
+
+**Evidence of over-engineering:**
+- Phase 7 UAT (2026-09-15, STATE.md:243-269) found four untagged wiring-test rows that bloated D-16's denominator. The fix required archiving, resetting, and re-tallying — a workflow not scaled for a solo developer.
+- H-03 in DECISIONS marked "SIMPLIFY": drop per-row ceremony, keep only the ledger.
+- The current code enforces the ceremony (lines 150-164 in registry.py), but Glenn's lean MVP mode suggests this is overhead.
+
+**KISS violation:** The ceremony exists to prevent accidental registry pollution during development. In a solo-operator model, a simpler rule (one canonical way to run a trial: `build_platform_data.py` → `python -m report --trial-tag <phase-name>`) might suffice. The current 50-line append function is a guard against a class of mistakes that don't occur in single-operator flow.
+
+**Classification:** **NEEDS DECISION.** Removing the ceremony changes the failure mode for accidental test-runs-as-trials. The current setup is defensive; a leaner version requires explicit operator discipline.
+
+---
+
+#### C-2: Confirm-Only Checks Marked as Defects (H-11: SIMPLIFY)
+
+**What it is:** Phase 8 audit found 13 "confirm-only" checks — assertions that can only pass (they confirm a hypothesis but never fail on a defect). Examples:
+- `test_platform_point_in_time` checks that lags are applied, but cannot catch if they are applied *wrong*
+- DSR hurdle checks pass/fail but do not test the math
+- Plausibility guards (abs wealth_delta < 5, etc.) warn but never block
+
+**Evidence:** STATE.md:159 lists them; DECISIONS H-11 notes "13 confirm-only checks found in Phase 8."
+
+**KISS violation:** Confirm-only tests bloat the suite without catching real defects. A solo operator needs tests that catch when things break, not just that they ran.
+
+**Classification:** **SAFE CLEANUP NOW.** Convert confirm-only checks to real mutation tests or remove them. No behavior change; only test suite improvement. ~50 lines of low-risk removal.
+
+**Action:** Search for `@pytest.mark.skip` or `# CONFIRM-ONLY` comments and remove or replace with real assertions.
+
+---
+
+### Over-Engineering: Parked Code & Dead Scripts
+
+#### C-3: 101 KB of Parked Code (L1-04 / G-08: ALREADY DEFERRED)
+
+**What it is:** Three modules parked in `platform/parked/` during Phase 8.2 (08.2-02):
+- `classifier2.py` (472 lines) — leadership / relative classifier, added no lift per ADR-0002
+- `joint_driver.py` (871 lines) — two-classifier joint backtest, criterion 7 joint-lift measurement
+- `stability.py` (824 lines) — subsample-stability suite for criterion 3
+
+**Status:** DEFERRED intentionally. Active weekly path (MVP-1) does not import them. Enforcement: `tests/unit/test_platform_parked_boundary.py` (fresh-interpreter `sys.modules` check + AST scan).
+
+**To un-park:** `git mv` back and fix importers listed in `platform_design/MODULE-MAP.md`.
+
+**KISS aspect:** The code exists for Phase 9's regime rebuild. For the **current** MVP, it is pure dead weight (~2500 lines, ~40KB on disk). Keeping it in git means:
+- Every `git blame` traversal walks through it
+- Every developer touching `platform/` must understand the boundary test
+- The parked boundary test adds 30 lines of maintenance overhead
+
+**Classification:** **LEAVE FOR PHASE 9.** The decision to park is deliberate (DECISIONS G-08). Deleting it now saves future Phase 9 effort if the rebuild path changes. Only delete if Glenn confirms Phase 9's rebuild will not use these components.
+
+---
+
+#### C-4: Scripts Importing Parked Code (G-07 / G-08 scope cut)
+
+**Scripts that import `parked.*`:**
+- `scripts/run_joint_lift.py` (520 lines) — uses `joint_driver`, `classifier2` config
+- `scripts/run_subsample_stability.py` (911 lines) — uses `stability`
+- `scripts/terminal_month_diagnostic.py` (573 lines) — uses `classifier2`, `stability`
+
+**Status per DECISIONS G-07:** Scope cut for 8.2 MVP. These are Phase 7–8 research scripts, not used in the weekly product. They use the parked code intentionally (for historical analysis/backtest).
+
+**KISS aspect:** Three large scripts (~2000 lines total) that do not ship with the MVP. They clutter `scripts/` and are off-limits to Glenn during weekly runs (import boundary prevents it).
+
+**Classification:** **SAFE CLEANUP FOR 08.4.** Archive these to `scripts/archive/` or a separate `research/` branch. They can be restored from git history if Phase 9 rebuilds need them. Removes ~2000 lines of cognitive load from the active codebase.
+
+---
+
+### Over-Engineering: Large, Monolithic Modules
+
+#### C-5: report/weekly.py — 1299 Lines
+
+**What it is:** The main entry point for the weekly report. Single function `assemble_weekly_report()` (lines 100+) orchestrates:
+- Target allocation computation
+- Regime view rendering (advisory, tripwire, scoreboard)
+- Holdings table
+- Trade recommendation
+- Risk warnings
+
+**Files:** `src/trading_crab_lib/platform/report/weekly.py`
+
+**Fragility:** The function is a parameter-heavy orchestrator with ~15 keyword-only args, each controlling a report section. Changes to one section risk breaking others due to tight coupling in the markdown assembly (state is passed through local variables, not a structured dict).
+
+**KISS aspect:** For MVP-1, most of this complexity is scaffolding:
+- Regime view is advisory-only (A-14); tied to a static scoreboard, not live L2 output
+- Holdings section depends on a single `executed_weights` checkpoint
+- Trade section is simple (compare target vs current, apply no-trade band)
+
+The current code supports both regime-tilt and no-regime modes, with conditional blocks for each. The no-regime path (A-13, production) is simpler; the regime-tilt scaffolding (G-06: advisory, pending rebuild) takes ~30% of the function.
+
+**Classification:** **LEAVE FOR PHASE 9.** Refactoring to remove regime scaffolding would save ~300 lines but breaks the interface for any Phase 9 rebuild. Wait until regime-tilt path is decided.
+
+---
+
+#### C-6: evaluation/report.py — 1155 Lines
+
+**What it is:** Backtest report assembly and orchestration. Pure markdown builder, but depends on ~12 submodules and carries heavy logic for:
+- Sojourn/lag headline computation
+- Baseline gauntlet (SPY, 60/40, Faber, no-regime ablation)
+- KPI table assembly
+- Model-metrics artifacts
+
+**Files:** `src/trading_crab_lib/platform/evaluation/report.py`
+
+**Fragility:** One entry point `run_full_backtest_evaluation()` calls ~10 helper functions in sequence. State is returned as dicts, which are error-prone (missing keys, type mismatches). Lines 915-940 have complex logic for matching smoothed labels to walk-forward decision dates, with an assert at 916 that silently becomes a no-op if invariants shift.
+
+**KISS aspect:** For MVP-1, this is research/measurement apparatus, not shipped code. It runs once per phase for the recorded backtest report. The complexity (sojourn/lag, model metrics, full KPI gauntlet) is necessary for honesty; cannot be simplified without losing rigor.
+
+**Classification:** **LEAVE FOR PHASE 9.** This is Phase 8's honesty scaffolding. Phase 9 will either keep it (for every rebuild's evaluation report) or replace it with a simpler version. Too entangled to touch now.
+
+---
+
+### Over-Engineering: Unused Config Switches
+
+#### C-7: Dual Allocation Modes (A-13 vs Regime Tilt)
+
+**What it is:** `config/platform_settings.yaml` has a `report.allocation_mode` switch:
+- `no_regime` (production in 08.2, A-13) — constant one-state belief, no regime layer
+- `regime_tilt` (advisory in 08.2, G-06) — regime-conditional allocation, pending rebuild
+
+**Files:** `config/platform_settings.yaml` (key: `report.allocation_mode`)
+
+**Usage:** `src/trading_crab_lib/platform/report/weekly.py` (lines 134-160), `src/trading_crab_lib/platform/report/holdings.py`
+
+**KISS aspect:** The switch exists to support two paths with one codebase. In 8.2, only `no_regime` runs; `regime_tilt` is dead code (guarded by G-06 ruling). Phase 8.2's goal was to ship a usable MVP first; the switch kept both paths buildable.
+
+For MVP-1 (A-13), the switch is unnecessary overhead:
+- `config` has two values; only one is live
+- Code has two paths; one is dead
+- Tests check both; one test is noise
+
+**Classification:** **NEEDS DECISION.** If Phase 9 will rebuild the regime layer with a clean separation (`src/trading_crab_lib/platform/regime_rebuilt/`), then delete the switch and hard-code `no_regime`. If Phase 9 will upgrade the current code in-place, keep the switch for ease of A/B testing.
+
+**Recommendation for Glenn:** Decide in 08.4 context. If the switch stays, add a `pytest.mark.skipif` to the regime-tilt tests to reduce noise.
+
+---
+
+### Over-Engineering: Hardcoded Config Constants
+
+#### C-8: Hysteresis Thresholds & Band Width (A-03 / A-04: OPEN)
+
+**What it is:** Allocation decisions use hardcoded thresholds and band-widths:
+- Hysteresis: `0.70` (switch to regime) / `0.40` (switch away) — in `allocation/hysteresis.py` line 80+
+- No-trade band: `0.05` (5 percentage points) — in `allocation/hysteresis.py`, `report/weekly.py`
+
+**Files:** `src/trading_crab_lib/platform/allocation/hysteresis.py`, `src/trading_crab_lib/platform/report/weekly.py`
+
+**KISS aspect:** These are in code, not config. For an MVP where Glenn manually adjusts targets via `executed_weights.yaml`, making thresholds configurable adds surface area without benefit. But having them in code makes testing hard (no A/B without code changes).
+
+**Current status (DECISIONS A-03, A-04):** Values were tuned in Phase 8 (08-09 ruling). They are marked KEEP, not revisited. The values are load-bearing (trades to the new target after switching).
+
+**Classification:** **SAFE CLEANUP (OPTIONAL).** Move thresholds to `config/platform_settings.yaml` under a `[allocation]` section. No behavior change if defaults match current code. Benefit: Glenn can A/B-test by editing YAML, not touching Python.
+
+**Action:** Extract to config, add schema validation, update tests to use config values. ~30 lines of refactoring.
+
+---
+
+### Over-Engineering: Measurement & Qualification Infrastructure
+
+#### C-9: DSR Hurdle & Variance Placeholder (H-09 / ADR-0003: SIMPLIFY)
+
+**What it is:** Deflated Sharpe calculation uses a hardcoded variance placeholder:
+- `DEGENERATE_SHARPE_VARIANCE = 1.0` (lines 31-41, `evaluation/deflated_sharpe.py`)
+- This is used for every DSR computation until "20 independent Sharpe-bearing trials exist" (criteria per ADR-0003)
+- DSR hurdle is currently the "one governing quality gate" (H-09) but H-09 marks it "SIMPLIFY: report it, don't block on it pre-MVP"
+
+**Files:** `src/trading_crab_lib/platform/evaluation/deflated_sharpe.py` (lines 31-41, 120-145)
+
+**KISS aspect:** The DSR logic is correct but is gating the MVP on a meaningless number. With a placeholder variance, the hurdle is not a real measurement of selection bias; it's a proxy. DECISIONS H-09 says MVP-1 should report it, not block on it.
+
+**Current status:** The gate is built in `backtest/driver.py` but is observational (logging only, no raise). The code doesn't enforce it, so the placeholder doesn't block weekly reports.
+
+**Classification:** **SAFE CLEANUP NOW.** Remove the DSR hurdle gate from the weekly report (it's already observational). Keep it in `evaluation/report.py` for historical records, but do not call it from production code.
+
+**Action:** Delete ~20 lines from `report/weekly.py` that check DSR hurdle. Simplifies the weekly report and reduces noise in logs.
+
+---
+
+### Over-Engineering: Feature Admission Guard (L2-02: SIMPLIFY)
+
+**What it is:** L2 (nowcaster) training uses a feature-admission guard:
+- **Min history:** every feature must have ≥120 months of non-NaN data
+- **Min occupancy per class:** every class must have ≥n_splits observations in walk-forward CV
+
+**Files:** `src/trading_crab_lib/platform/prediction/nowcaster.py` (lines 160-190)
+
+**Problem per DECISIONS L2-02:** At full history (1963–2020), the guard admits all 55 features. But then it shrinks training to 153 rows (2007–2019, 3 of 6 regimes occupied) because the holdout boundary is 2020-12 and early features have late starts. The resulting model is constant (always high posterior for one state).
+
+**KISS aspect:** The guard exists to prevent CV crash on rare classes. But it's too permissive (admits all features) and too strict (shrinks training to 3 regimes). A simpler rule (admit features available for the full dev window only, even if sparse) would be clearer.
+
+**Current status:** Works as designed but produces a constant posterior (expected, not a bug). The MVP doesn't use L2 for allocation, so the weakness is silent.
+
+**Classification:** **NEEDS DECISION.** Fixing this changes the L2 model (no longer constant). Before Phase 9's L2 rebuild, decide whether to:
+- (a) Loosen the history requirement (admit features with only 60+ months)
+- (b) Tighten occupancy (require all 6 classes, even if rare)
+- (c) Use a different approach (shrinkage, Bayesian priors on sparse classes)
+
+Currently L2-02 is marked "SIMPLIFY" in DECISIONS, suggesting (a) or (c). Wait for Phase 9.
 
 ---
 
 ## Security Considerations
 
-### SSL/TLS: Disabled verification in yfinance fallback
-- **Risk:** MITM on ETF price data (unlikely but possible in compromised networks).
-- **Files:** `src/trading_crab_lib/ingestion/assets.py` lines 118-148
-- **Current mitigation:** Limited to Phase 2 fallback (only triggered if batch download fails); SSL warning logged.
-- **Recommendations:** 
-  1. Add `RunConfig.ssl_verify` toggle (default False for backward compatibility).
-  2. Document in README: "SSL verification is disabled for yfinance to work around cert-store issues. Use on trusted networks."
-  3. Plan: Use `certifi.where()` or system trust store if curl_cffi upgrades bundled libcurl.
+### Sec-1: Hardcoded Output Paths (Moderate)
 
-### Secrets management
-- **Risk:** `.env` file with FRED_API_KEY could be accidentally committed.
-- **Current mitigation:** `.env` in `.gitignore`; `.env.example` provided as template; setup.sh prompts user.
-- **Status:** ✅ Good. Email config also guarded (`config/email.yaml`, `config/email.local.yaml` in `.gitignore`).
+**What it is:** Platform reports and checkpoints write to hardcoded directories:
+- `OUTPUT_DIR / "reports" / "platform"` for backtest reports, weekly markdown, scoreboard
+- `DATA_DIR / "checkpoints" / "platform"` for model checkpoints, regime beliefs, asset returns
 
-### Pickle/Joblib serialization
-- **Risk:** `joblib.dump()` / `joblib.load()` execute arbitrary code on load.
-- **Current mitigation:** Models stored in `outputs/models/*.pkl` (not committed); users control access.
-- **Files:** `src/trading_crab_lib/checkpoints.py` lines 210-230 (save_model/load_model).
-- **Recommendations:** Document: "Never load a .pkl file whose provenance you cannot verify." No code change needed.
+**Files:** `src/trading_crab_lib/platform/checkpoints.py` (lines 23, 28), `src/trading_crab_lib/__init__.py` (ROOT, OUTPUT_DIR, DATA_DIR globals)
 
----
+**Risk:** If Glenn's notebook or scripts run under a different user context (e.g., CI, cron, container), the hardcoded paths may point to unwritable or world-readable directories. No error handling for permission failures.
 
-## Performance Bottlenecks
+**Severity:** Low in current MVP (single-operator). Becomes moderate if scripting/CI is added.
 
-### Large feature matrix and derivatives computation
-- **Problem:** 69 clustering features × 3 derivatives (d1/d2/d3) = 207 columns before final feature selection. `np.gradient()` + rolling mean computation is O(n·m).
-- **Files:** `src/trading_crab_lib/transforms.py` (apply_derivatives, lines 240-300)
-- **Symptom:** Step 2 (features) takes ~30 seconds for full history.
-- **Mitigation:** Checkpoint-driven caching; `--recompute` flag skips redundant derivative calculations. Efficient enough for quarterly pipeline; would be stressed at monthly frequency (R1).
-- **Long-term:** Consider vectorized derivative via rolling_apply or NumPy broadcasting if monthly spine adopted.
+**Mitigation in place:** `TC_DATA_DIR`, `TC_OUTPUT_DIR` env vars can override at import time (set in `src/trading_crab_lib/__init__.py`, checked at module load).
 
-### PCA + KMeans sweep across k=2..12
-- **Problem:** Each k requires full PCA fit + KMeans fit with n_init=50. Step 3 runs ~11 models × 50 restarts each.
-- **Files:** `src/trading_crab_lib/clustering.py` (fit_clusters, lines 380-440)
-- **Symptom:** Step 3 takes ~5–10 seconds.
-- **Mitigation:** Checkpoint-driven; single PCA fit reused across k-sweep; parallelization not implemented but feasible.
-- **Impact:** Negligible for quarterly pipeline; at monthly frequency (R1) would warrant parallel sweep.
-
-### RRG (Relative Rotation Graph) computation
-- **Problem:** `compute_rrg()` in `src/trading_crab_lib/diagnostics.py` computes rolling percentile ranks and z-scores for all assets and ratios. Quadratic in asset count.
-- **Files:** `src/trading_crab_lib/diagnostics.py` (lines 60–150 for compute_rrg, percentile_rank)
-- **Symptom:** Step 8 (diagnostics) can take 30+ seconds with 20+ ETFs.
-- **Mitigation:** Only run step 8 if --plots or --diagnostics flag set. Cacheable with checkpoint.
-- **Impact:** Acceptable for weekly reports; would stall at daily frequency.
-
-### Seaborn pairplot for 69 features
-- **Problem:** `notebooks/03_clustering.ipynb` can generate 69×69 = 4761 subplots. Very slow.
-- **Files:** `notebooks/03_clustering.ipynb` (cell for pairplot)
-- **Mitigation:** Disabled by default (`generate_pairplot: False` in RunConfig). Only generated on explicit request.
+**Classification:** **KEEP AS-IS FOR MVP.** The env var override is sufficient. Add a pre-flight check in `build_platform_data.py` if automation is added.
 
 ---
 
 ## Fragile Areas
 
-### Gap-fill algorithm (Bernstein polynomial + Taylor extrapolation)
-- **Files:** `src/trading_crab_lib/transforms.py` (lines 130-200 for apply_gap_fill and _fill_column)
-- **Why fragile:** 
-  - Boundary conditions require 4 derivatives per side (value + d1 + d2 + d3). Any NaN in d2 or d3 near gap causes failure.
-  - Edge gaps (leading/trailing NaNs) use Taylor extrapolation; small data → unreliable derivatives.
-  - Silent fallback to forward-fill if BPoly creation fails (line 175: `except Exception`).
-- **Safe modification:** Test on synthetic gap patterns before production changes. Add assertions: "Taylor extrapolation degree ≤ min(available_rows, 3)".
-- **Test coverage:** `tests/unit/test_transforms.py` has 5 gap-fill tests. Not comprehensive for all edge cases.
+### Frag-1: Splice Fallback Chain (D-04 compromise)
 
-### Cluster label canonicalization
-- **Files:** `src/trading_crab_lib/clustering.py` (_canonicalize_cluster_col, lines 50-80)
-- **Why fragile:** Assumes cluster labels are sortable and PC1 is computed. If PCA fails or cluster IDs are non-integer, function breaks silently.
-- **Safe modification:** Add assertions: `assert np.issubdtype(labels.dtype, np.integer)`, `assert len(pca_obj.components_) > 0`.
-- **Test coverage:** `tests/unit/test_clustering.py` has 2 canonicalization tests.
+**What it is:** Five research series (equities_tr, long_duration_tr, gold, oil, cash) each have a source-column chain defined in config. `resolve_class_sources()` picks the first available column. For gold, the chain is `[gold_spot, IAU]`.
 
-### Regime profile computation and naming
-- **Files:** `src/trading_crab_lib/regime.py` (build_profiles, suggest_names, lines 20-80)
-- **Why fragile:** 
-  - `suggest_names()` uses heuristics (median-deviation ratios) that silently skip 4 features (`10yr_ustreas`, `fred_gs10`, `fred_tb3ms`, `div_minus_baa`) if only derivatives are in clustering_features.
-  - No validation that regime has ≥ 3 observations for profile estimation.
-- **Safe modification:** Assert `len(regime_data) >= 3` before computing std.
-- **Test coverage:** `tests/test_models_reporting.py` has 3 profile tests, but limited edge cases.
+**Files:** `src/trading_crab_lib/platform/splice.py` (lines 200-250), `config/platform_settings.yaml` (`splice.gold.source_candidates`)
 
-### Forward classifiers (multi-horizon predictions)
-- **Files:** `src/trading_crab_lib/prediction/__init__.py` (train_forward_classifiers, lines 370-420)
-- **Why fragile:** 
-  - Uses `y.shift(-h).dropna()` which silently drops last h rows. If h ≥ remaining rows, y_future is empty, fitting fails.
-  - No check for minimum data per class; imbalanced horizons can produce degenerate trees.
-- **Safe modification:** Assert `len(y_future) > 2*n_classes` before fitting.
-- **Test coverage:** `tests/unit/test_prediction_flat.py` has 2 forward-classifier tests, but no imbalance/edge cases.
+**Fragility:** If `gold_spot` (macrotrends, back to 1915) fetches successfully but is corrupted (all NaN or wrong units), the code falls back to IAU (2005+) silently. Downstream models train on 80 fewer years of gold regime behavior. No error flags this truncation.
 
-### Email body construction and SMTP
-- **Files:** `src/trading_crab_lib/email.py` (build_weekly_email_body, send_weekly_email, lines 150-280)
-- **Why fragile:** 
-  - SMTP SSL/TLS negotiation can fail silently if port/use_tls mismatch.
-  - Report content is markdown-like; no validation that plots exist before embedding.
-- **Safe modification:** Test SMTP connection at config load time (connection pool check). Validate plot paths exist before building HTML.
-- **Test coverage:** `tests/test_email_weekly.py` has 30 tests; good coverage but no real SMTP test (uses mock).
+**Scenario:**
+1. Macrotrends gold_spot fetch succeeds (returns data)
+2. But the data is all NaN due to parsing error
+3. `resolve_class_sources()` sees NaN, tries IAU (2nd in chain)
+4. Splice code proceeds with 2005+ gold only
+5. Backtest metrics are silently degraded
+
+**Mitigation per D-08 (in-progress):** Merge-on-save will be restricted. But the splice fallback itself is unguarded.
+
+**Classification:** **NEEDS DECISION.** Is a silent fallback acceptable? Options:
+- (a) Fail `build_platform_data` if gold_spot is missing or mostly NaN (strict)
+- (b) Warn at CRITICAL level and continue with IAU (current, unsafe)
+- (c) Fill sparse gold_spot with IAU but track which rows are fallback (hybrid)
+
+**Recommendation:** Option (a) for MVP-1. A daily/weekly run without historical gold is better than a run with corrupted regimes.
 
 ---
 
-## Scaling Limits
+### Frag-2: Label State-Id Instability (CR-02 & L1-06)
 
-### Quarterly frequency bottleneck (R1)
-- **Current capacity:** ~260 observations (1950–2026, quarterly).
-- **Limit:** Labeler needs ~15–30 regime transitions to be stable. With quarterly data at ~5-year sojourn, only ~10 transitions in history. Monthly would give ~40 transitions.
-- **Scaling path:** Migrate to monthly frequency (R1). Estimated effort: 2 phases.
+**What it is:** Regime labels are canonical-ordered by centroid position (line 73 in `labeling/jump_model.py`). On each monthly refit, the labeler may find centroids in a different order (e.g., high-vol state shifts from id 2 to id 4). The filter's belief carries across without re-mapping.
 
-### ETF price history coverage (R13)
-- **Current capacity:** SPY/GLD/TLT/QQQ/etc. start 1993–2006; ~30 years of asset data.
-- **Limit:** Asset-returns regression (L3) is blind 1962–1993. Pre-1993 regimes have no asset price data.
-- **Scaling path:** Build spliced long index/futures histories (S&P 500 TR, gold spot, WTI, Treasury synthetics). Design §9 has source references. Estimated effort: 1 phase.
+**Files:** `src/trading_crab_lib/platform/labeling/jump_model.py` (canonicalize_states), `src/trading_crab_lib/platform/prediction/regime_filter.py`
 
-### Feature set size
-- **Current capacity:** 69 clustering features fit comfortably in `features.parquet` (300 rows × 70 cols).
-- **Limit:** At monthly frequency (R1, ~850 rows), memory is not a constraint, but derivative computation becomes noticeable.
-- **Scaling path:** Vectorize derivatives via NumPy broadcasting or Numba. No architectural change needed.
+**Fragility:** The filter's input (L1 soft labels) and its belief output must refer to the same state-id vocabulary. If they don't, decisions are corrupted. No test catches this (no cross-refit state-id alignment test exists).
 
-### Model CV evaluation
-- **Current capacity:** `TimeSeriesSplit(n_splits=5)` with ~260 rows gives ~50-row test folds. Sufficient for 5-class regime prediction.
-- **Limit:** At lower frequency (more data per quarter) or with additional prediction targets (L3 per-asset models), CV become fragmented.
-- **Scaling path:** Implement walk-forward harness (R10) with configurable refit frequency. Estimated effort: 1 phase.
+**Current workaround:** L1 only routing (criterion 7, E-02) — bypass the filter entirely for decision-bearing numbers. L2 (filter-based) numbers are observational and qualified with CR-02.
+
+**Classification:** **DEFERRED TO PHASE 9** (per DECISIONS L1-06, CR-02). For MVP-1, this is acceptable because:
+- Weekly report does not use regime tilt (A-13: no-regime path)
+- L2 is advisory only (G-06 ruling)
+- The defect is measured and documented
 
 ---
 
-## Dependencies at Risk
+### Frag-3: Nowcaster Constant Posterior (L2-02)
 
-### Optional: `k-means-constrained`
-- **Risk:** Not on PyPI maintained anymore; unmaintained since 2020. Vendor dependency (relies on C++ binding).
-- **Impact:** Balanced clustering falls back to plain KMeans if package unavailable (line 100 in clustering.py). Cluster sizes become imbalanced.
-- **Mitigation:** `--no-constrained` flag allows users to skip if missing.
-- **Recommendation:** Lock version in `requirements.txt` (currently pinned). Monitor for updates; consider fork if upstream dies. No immediate action needed.
+**What it is:** The L2 nowcaster (P(S_t | features)) is trained on 153 rows (2007–2019) with 3 of 6 regimes present after holdout boundary. The feature-admission guard shrinks training this much because early features (pre-1980) are excluded by the 120-month min-history rule.
 
-### Optional: `hmmlearn`
-- **Risk:** Smaller maintainer community than scikit-learn. Unstable release cycle (~1 release/year).
-- **Impact:** HMM-based labeling (hmm.py) skips gracefully if missing; GMM + KMeans continue working.
-- **Mitigation:** Tests skip with `pytest.mark.skipif(not HAS_HMMLEARN)`.
-- **Recommendation:** Safe; conditional dependency. No action needed.
+**Files:** `src/trading_crab_lib/platform/prediction/nowcaster.py` (lines 120-160)
 
-### Optional: `lxml` and `cssselect`
-- **Risk:** External C++ binding for XML parsing. Large attack surface.
-- **Impact:** multpl.com scraping (step 1) fails if missing. Fallback to... none (hard requirement for step 1).
-- **Mitigation:** Core requirement in `requirements.txt` and `pyproject.toml[ingestion]`.
-- **Recommendation:** Good. Mark as required, not optional.
+**Fragility:** On such small, sparse training, the classifier learns a constant — it always predicts the majority class. The posterior is uninformative. No warning is logged.
 
-### Optional: `joblib` (now required)
-- **Risk:** Migrated from pickle to joblib for model serialization (D14, 2026-03-31). Joblib versioning is stable but worth monitoring.
-- **Impact:** Model pickle/unpickle depends on joblib compatibility.
-- **Mitigation:** Pinned in `requirements.txt` (joblib>=1.3).
-- **Recommendation:** Good. Keep pin current.
+**Impact:** Phase 8 measured this (08-MEASUREMENTS §11.3): `max posterior < 0.70 in 355/488 rows` for classifier #1. The nowcaster is broken.
+
+**Current workaround:** The weekly report (MVP-1) does not use L2 nowcaster output. The regime view is advisory, sourced from a static pre-fitted labeler, not live L2 predictions.
+
+**Classification:** **LEAVE FOR PHASE 9.** This is a known issue flagged in STATE.md:154. The fix is to rebuild L2 with a different feature-admission rule (option (a), (b), or (c) above). Cannot be patched without changing the model semantics.
 
 ---
 
-## Missing Critical Features
+## Testing Gaps
 
-### Walk-forward evaluation harness (R10, BLOCKING)
-- **Problem:** No refit loop for honest backtesting. All labels computed on full data.
-- **Blocks:** Can't measure hindsight content or detection lag. Can't validate strategy under real-time constraints.
-- **Implementation notes:** Requires refit loop at each time point t: fit L1/L2/L3 on data ≤ t, score data at t, step forward.
-- **Priority:** HIGH — must implement before next modeling iteration to avoid inflated metrics.
+### Test-1: Cross-Refit State-Id Alignment (CR-02)
 
-### Purged and embargoed CV (R7, HIGH PRIORITY)
-- **Problem:** No purging of overlapping-label windows. No embargo of trailing labels (unstable due to two-sided smoothing).
-- **Blocks:** Forward-classifier evaluation likely inflated. Real-time detection lag not measured.
-- **Implementation notes:** López de Prado ch.7–8 shows purging mechanics. For h-step-ahead labels, remove training data within h periods of test fold start. Embargo last 6–12 months.
-- **Priority:** HIGH — affects supervised (L2/L3) accuracy metrics.
+**Missing:** No test verifies that regime belief is correctly re-mapped when state ids change across refits.
 
-### Trial registry and holdout discipline (R12, MEDIUM PRIORITY)
-- **Problem:** No log of which configs were evaluated. No locked holdout (2021+ untouched).
-- **Blocks:** Can't compute deflated Sharpe. Multiple-testing inflation unmeasured.
-- **Implementation notes:** SQLite or flat JSON file: {config_hash → {params, metrics, timestamp}}. Carve 2021+ as read-only partition.
-- **Priority:** MEDIUM — needed for honest strategy evaluation in Phase 6 (design freeze).
+**Files:** `src/trading_crab_lib/platform/prediction/regime_filter.py`, `tests/unit/test_platform_walkforward.py`
 
-### Monthly data spine (R1, RESHAPING)
-- **Problem:** Quarterly frequency limits regime detection (10 transitions in history vs 40 at monthly).
-- **Blocks:** Labeler starved. Detection lag 4× longer in calendar time.
-- **Implementation notes:** Rearchitect ingestion to monthly; keep quarterly agency series with alignment. Resample ETF prices to monthly.
-- **Priority:** HIGH for redesign; deferred for current codebase (too invasive).
+**Risk:** Silent state-id drift would go undetected. Current tests only check that the filter runs; they don't validate semantic correctness across refits.
 
-### Spliced long asset price histories (R13, DATA ENGINEERING)
-- **Problem:** ETF prices start 1993–2006; asset-returns regression (L3) blind 1962–1993.
-- **Blocks:** Can't train regime-conditional asset models on full history.
-- **Implementation notes:** Build spliced SPY←S&P 500 TR, GLD←gold spot/futures, etc. Design §9 lists sources.
-- **Priority:** MEDIUM for redesign; low for current use case (30-year period has ~25% of available regime data).
-
-### Volatility forecasting and regime-conditional stops (R9, PORTFOLIO)
-- **Problem:** No GARCH/EWMA vol layer. No vol-scaled stops or regime-conditional multipliers.
-- **Blocks:** Portfolio exposure not de-risked into volatility spikes or crashes.
-- **Implementation notes:** Add GARCH(1,1) or EWMA vol forecast. Implement vol targeting and regime-conditional stop multipliers.
-- **Priority:** MEDIUM — nice-to-have; current tactics module functional but crude.
+**Recommendation:** Add a test that fits jump_model on two overlapping windows, permutes state ids, and verifies that the filter's belief correctly maps.
 
 ---
 
-## Test Coverage Gaps
+### Test-2: Splice Fallback Provenance (D-04)
 
-### `src/trading_crab/pipeline.py` (1374 lines, ZERO unit test coverage)
-- **What's not tested:** Step dispatch, flag handling (--steps, --market-code, --refresh, etc.), checkpoint fallback logic, error recovery.
-- **Files:** `src/trading_crab/pipeline.py` (no corresponding unit test file).
-- **Why it matters:** Pipeline CLI is the primary user interface; regressions in flag handling silently break workflows.
-- **Test coverage:** Integration tests exist (test_pipeline_smoke.py, test_cli_smoke.py), but no unit tests of step dispatch or flag combinations.
-- **Fix approach:** Create `tests/test_pipeline_unit.py` with mocked checkpoints and steps. Estimated effort: 0.5 phase (testing).
+**Missing:** No test for the fallback chain in splice. All tests use cached raw data with no missing sources.
 
-### TimeSeriesSplit CV edge cases
-- **What's not tested:** Behavior when n_splits ≥ number of available samples. Behavior when n_samples < 2*n_splits.
-- **Files:** `src/trading_crab_lib/prediction/__init__.py` (lines 145-160 for TSCV usage), `src/trading_crab_lib/monitoring/prediction.py` (lines 30-50 for compute_cv_fold_scores).
-- **Why it matters:** Small datasets (early time steps) can produce empty test folds, causing silent failures.
-- **Fix approach:** Add assertions: `n_samples >= 2*n_splits` before TSCV initialization. Add test cases for edge n_samples.
+**Files:** `src/trading_crab_lib/platform/splice.py` (resolve_class_sources), `tests/unit/test_platform_*splice*.py`
 
-### Forward classifier label alignment
-- **What's not tested:** Behavior when shifted label has all NaN (h ≥ remaining rows). Behavior when class imbalance is extreme.
-- **Files:** `src/trading_crab_lib/prediction/__init__.py` (lines 370-420 for train_forward_classifiers).
-- **Why it matters:** Silent fitting failures (empty y_future) produce degenerate models.
-- **Fix approach:** Add guard: `if len(y_future) < 2: return None` with warning. Add test cases.
+**Risk:** A partial ingestion failure (gold_spot present but all NaN) would not be caught by any test.
 
-### Regime naming heuristics
-- **What's not tested:** Behavior when clustering_features lacks certain series (e.g., only derivatives retained). Behavior when regime has <3 observations.
-- **Files:** `src/trading_crab_lib/regime.py` (suggest_names, lines 40-80).
-- **Why it matters:** Silent skipping of features makes naming inconsistent across runs.
-- **Fix approach:** Log skipped features at INFO level. Add test cases for all skip scenarios.
-
-### Email SMTP configuration
-- **What's not tested:** Real SMTP connection (all tests mock). TLS/SSL negotiation. Credential validation.
-- **Files:** `src/trading_crab_lib/email.py` (send_weekly_email, lines 200-250).
-- **Why it matters:** Email failures only discovered at deployment time.
-- **Workaround:** Test locally with `--send-email` flag + mock SMTP server (`smtp4dev` or similar) before production.
-- **Fix approach:** Add optional integration test with real SMTP credentials (gated by env var, e.g., TEST_SMTP=1).
+**Recommendation:** Add a test that intentionally zeros out `gold_spot` and verifies:
+- Fallback to IAU is logged at WARNING level
+- Provenance JSON records the fallback
+- Downstream models are alerted to the truncation
 
 ---
 
-## Summary: Risk Triage
+### Test-3: Weekly Report Mode Switching (A-15)
 
-| Issue | Severity | Category | Blocks | Effort |
-|-------|----------|----------|--------|--------|
-| R1 (Quarterly spine) | HIGH | Architecture | Redesign | 2 phases |
-| R10 (Walk-forward harness) | HIGH | Evaluation | Honest metrics | 1 phase |
-| R7 (Purged CV) | HIGH | Bias | L2/L3 eval | 0.5 phase |
-| R2 (Forced balance) | MEDIUM | Modeling | Temporal logic | 1 phase |
-| R6 (FRED revised data) | MEDIUM | Data | Reproducibility | 1 phase |
-| R13 (Short asset histories) | MEDIUM | Data | L3 training | 1 phase |
-| P22 (SSL disabled) | MEDIUM | Security | MITM risk | 0.2 phase |
-| P13 (Checkpoint staleness) | MEDIUM | Operations | Stale data | 0.5 phase |
-| R12 (No trial registry) | MEDIUM | Eval | Strategy val | 0.5 phase |
-| P23 (Partial ingestion) | LOW | Debugging | Silent failure | Already fixed |
-| P24 (Metadata corruption) | LOW | Debugging | Silent failure | Already fixed |
-| R3 (Constant transitions) | LOW | Modeling | Transition model | 1 phase |
-| R4 (PCA interpretation) | LOW | Analysis | Readability | 0.5 phase |
-| R9 (No vol forecasting) | LOW | Portfolio | Vol de-risking | 1 phase |
+**Missing:** No test for the mode-switch logic in `weekly.py` (allocation_mode changed from `regime_tilt` to `no_regime` or vice versa).
+
+**Files:** `src/trading_crab_lib/platform/report/weekly.py` (lines 200-220), `tests/unit/test_platform_weekly_page.py`
+
+**Risk:** A mode switch would execute the new target in full (no band against old book). If the test is missing, a bug here could cause unexpected trades.
+
+**Recommendation:** Add a test that:
+1. Sets `allocation_mode: regime_tilt` in executed_weights checkpoint
+2. Runs weekly report with config `allocation_mode: no_regime`
+3. Verifies (a) report says "mode changed", (b) target trades full, (c) no band applied
 
 ---
 
-*Concerns audit: 2026-07-09*
+## Test Artifacts & Maintenance Debt
+
+### Test-Debt-1: Untagged Registry Rows (Phase 7)
+
+**What happened:** Phase 7 wave 1 appended 4 untagged rows to `platform/honesty/registry.jsonl` during wiring verification (07-04). These rows inflated D-16 (total trial count) from 38 to 42 without being policy evaluations.
+
+**Resolution (2026-09-15):** Registry was archived, reset with `prior_genuine_trials=38` header, and `append_trial` now refuses rows without `trial_tag` or `NO_REGISTRY` sentinel.
+
+**Current status:** Resolved. Future wiring runs must use `--smoke` flag (appends NO_REGISTRY) or provide `--trial-tag`.
+
+**Monitoring:** `tests/unit/test_platform_registry_hygiene.py` checks that registry rows have tags. No test fails if this rule is violated (non-gating).
+
+**Classification:** **SAFE TO LEAVE.** The guard is in place. Monitor registry appendage in weekly runs via the tag-check test.
+
+---
+
+## Performance Concerns
+
+### Perf-1: Backtest Driver Runtime (No Blocking Issue, But Large)
+
+**What it is:** `backtest/driver.py::run_backtest()` walks forward 588 months (1972–2020) in nested loops:
+- Outer: walk-forward refits (monthly)
+- Inner: per-month decision + allocation + P&L
+
+**Runtime:** ~30–60 seconds on a 4-core laptop (measured, not gated).
+
+**Risk:** If run_backtest is called multiple times per session (e.g., in a notebook for A/B analysis), user will wait. No progress bar or checkpoint recovery.
+
+**Classification:** **LOW PRIORITY.** Not a blocker. MVP runs backtest ~once per phase. If interactivity is needed in notebooks, add a progress bar and checkpoint recovery (`load_partial_backtest`, save equity curve checkpoint per month).
+
+---
+
+## Data Quality & Validation
+
+### Data-1: No Pre-flight Check for Required Columns
+
+**What it is:** `build_platform_data.py` does not validate that ingested `monthly_raw` has all expected columns before proceeding to splice.
+
+**Files:** `scripts/build_platform_data.py`, `src/trading_crab_lib/platform/ingestion/macro_monthly.py`
+
+**Risk:** If FRED or multpl API changes and a column is dropped, the splice will fail with a cryptic "column not found" error downstream, not at the source.
+
+**Mitigation in place:** `assert_yield_units_plausible()` catches yield-unit errors. But no general column-schema check.
+
+**Recommendation:** Add a preflight check in `build_platform_data.py` that validates all required columns in `monthly_raw` are present and non-empty, with clear error messages.
+
+---
+
+## Summary by Classification
+
+### SAFE CLEANUP NOW (No behavior change, low risk)
+- C-2: Confirm-only checks (remove 50 lines, make tests real)
+- C-4: Archive research scripts (move 2000 lines to archive/)
+- C-9: DSR hurdle gate (remove 20 lines from weekly report)
+- Test-1, Test-2, Test-3: Add missing tests (~200 lines total)
+
+### NEEDS DECISION
+- C-1: Trial registry ceremony (simplify or keep for rigor)
+- C-7: Dual allocation modes (hard-code or keep switch)
+- C-8: Hysteresis thresholds (move to config or keep in code)
+- Frag-1: Splice fallback (fail or warn on gold_spot truncation)
+- Frag-3: Nowcaster fix (Phase 9 scope decision)
+
+### LEAVE FOR PHASE 9
+- C-3: Parked code (100 KB, used by Phase 9 regime rebuild)
+- C-5: weekly.py monolith (1299 lines, wait for regime refactor)
+- C-6: evaluation/report.py (1155 lines, keep for honesty)
+- Frag-2, Frag-3: CR-02, L2-02 (Phase 9 deferred, per DECISIONS)
+
+### ALREADY RESOLVED / MONITORED
+- Bug-1 (D-08): Merge-on-save — rule decided, implementation deferred to 08.4
+- Test-Debt-1: Registry contamination — fixed with tag requirement, no-retest needed
+- Open-1, Open-2, Open-3: CR-02, CR-03, E-11 — measured, qualified, deferred per DECISIONS
+
+---
+
+**Analysis Date:** 2026-10-05
+
+*Codebase concerns analysis: 2026-10-05*

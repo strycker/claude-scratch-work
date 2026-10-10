@@ -9,6 +9,23 @@ import pandas as pd
 import pytest
 
 # ---------------------------------------------------------------------------
+# Path overrides from the operator's shell never reach the tests (08.4 UAT, 2026-10-07)
+# ---------------------------------------------------------------------------
+# trading_crab_lib resolves DATA_DIR / OUTPUT_DIR / CONFIG_DIR at import time from
+# these variables. A shell left exporting TC_DATA_DIR=$HOME/tc-cold/data (the cold-start
+# UAT) pointed the session fixture below at an empty tree, so every real-data test failed.
+# Drop them here, before any test module imports the package; tests that exercise the
+# overrides set them with monkeypatch.
+_PATH_OVERRIDES = ("TC_ROOT_DIR", "TC_CONFIG_DIR", "TC_DATA_DIR", "TC_OUTPUT_DIR", "TC_CHECKPOINT_DIR")
+_IGNORED_OVERRIDES = {name: os.environ.pop(name) for name in _PATH_OVERRIDES if name in os.environ}
+
+
+def pytest_report_header(config: pytest.Config) -> str | None:
+    if _IGNORED_OVERRIDES:
+        return "ignored for this run (tests use the repo's own data/): " + ", ".join(sorted(_IGNORED_OVERRIDES))
+    return None
+
+# ---------------------------------------------------------------------------
 # Checkpoint isolation
 # ---------------------------------------------------------------------------
 # All checkpoint I/O is redirected to a session-scoped temporary directory so

@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-2699%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-blue)
 [![PyPI - trading-crab](https://img.shields.io/pypi/v/trading-crab?label=trading-crab)](https://pypi.org/project/trading-crab/)
 [![PyPI - trading-crab-lib](https://img.shields.io/pypi/v/trading-crab-lib?label=trading-crab-lib)](https://pypi.org/project/trading-crab-lib/)
@@ -480,7 +480,7 @@ Short summary:
 - ✓ Momentum features: trailing returns, S&P-in-Gold/Oil, rolling cross-asset correlation, CPI acceleration
 - ✓ Cross-asset divergence features: SPY/TLT, SPY/GLD, GLD/Oil, CreditSpread/VIX pairs (z-scores + triggers)
 - ✓ Hidden Markov Model regime detection (`hmm.py` + `markov.py`)
-- ✓ 2699 tests (unit + integration), all passing
+- ✓ Full unit + integration suite, all passing (`pytest tests/ -q`)
 - ✓ Exploration notebooks (01–12)
 
 ---
@@ -531,10 +531,14 @@ Three commands, in this order:
 ```bash
 # 1. The data. Reads FRED (needs FRED_API_KEY) and the web sources; writes the platform
 #    checkpoints (data/checkpoints/platform/, and the 2021+ holdout under data/holdout/),
-#    including fred_daily_raw (DAAA/DBAA) for the tripwire's credit signal.
+#    including fred_daily_raw (DAAA/DBAA) for the tripwire's credit signal. It fails loud
+#    (DECISIONS D-08, exit 1, nothing written) when a source column is lost or a splice would
+#    fall back to another series; only a column listed under build.allow_missing_sources in
+#    config/platform_settings.yaml is let through.
 python scripts/build_platform_data.py
 
-# 2. The serving artifacts. Reads the DEV monthly_features and regime_labels (to 2020-12-31)
+# 2. The serving artifacts (regime_tilt mode ONLY; the default no_regime page needs no model,
+#    so skip this step). Reads the DEV monthly_features and regime_labels (to 2020-12-31)
 #    and monthly_raw; writes nowcaster.pkl, nowcaster_class_prior (the model's training
 #    prior, which the weekly filter divides by), asset_returns and returns_by_regime to
 #    data/checkpoints/platform/. Fit by the same function the backtest evaluated. It is NOT a
@@ -589,6 +593,34 @@ never committed):
 1. Copy `config/accounts/example.yaml` to `config/accounts/<name>.yaml` and enter your weights and cash.
 2. List `<name>` under `report.accounts:` in `config/platform_settings.yaml`.
 3. Re-run step 3: the page adds "Account: <name>" with the trades implied.
+
+### State: archive / reset / restore / promote
+
+Start over at will (DECISIONS G-12). One module, `python -m trading_crab_lib.platform.state`:
+
+```bash
+python -m trading_crab_lib.platform.state archive NAME --note "why"   # data/ + outputs/ -> archives/NAME/
+python -m trading_crab_lib.platform.state list                        # name, date, size, promoted, commit, trials, note
+python -m trading_crab_lib.platform.state reset [NAME] --yes          # archive first, then empty data/ and outputs/
+python -m trading_crab_lib.platform.state restore NAME                # into EMPTY trees, every sha256 checked
+python -m trading_crab_lib.platform.state promote NAME                # commit a copy and tag model/NAME (never pushes)
+```
+
+- `archive` writes `archives/NAME/state.tar.gz` and `manifest.json` (git commit, trial count, sha256 per file). A
+  name is used once. `archives/` is git-ignored except `archives/promoted/`.
+- **Pickles are never archived** (P27). The serving model is refit by `python -m trading_crab_lib.platform.report.serving`,
+  and only `regime_tilt` needs it; the `no_regime` page needs no model. `reset` deletes pickles and prints their paths.
+- `reset` needs `--yes`, archives first (`auto-<UTC stamp>` unless you name it) and never touches `registry/` or
+  `archives/`. It prints the `restore` command that undoes it.
+- `restore` refuses unless `data/` and `outputs/` are empty (run `reset` first), checks every file against the manifest
+  before moving anything, and only warns if the archive came from a different commit.
+- `promote` drops the live book state (G-11: executed weights, belief, allocation mode, ... and `weekly_report.md`),
+  commits the rest under `archives/promoted/NAME/` and tags `model/NAME`. It refuses a dirty tree and anything over
+  50 MB, and never pushes; it prints `git push origin model/NAME` for you to run.
+
+Clean-slate order (Phase 8.5): `archive` -> `promote` -> `git push origin model/NAME` -> `reset --yes` -> build ->
+weekly page. `reset` leaves tracked files deleted, so `promote` refuses after it; promote first. On another machine,
+`git checkout model/NAME -- archives/promoted/NAME` then `restore NAME`.
 
 ---
 
