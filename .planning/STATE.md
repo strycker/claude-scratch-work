@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 08.4
-current_phase_name: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
-status: executing
-stopped_at: Completed 08.4-02-PLAN.md
-last_updated: "2026-10-07T17:13:46.389Z"
+current_phase: 08.5
+current_phase_name: Clean-Slate Reset & Learnings Before Migration
+status: planning
+stopped_at: Phase 08.4 CLOSED 2026-10-09 — verified 13/13; Mac UAT 4/4 passed on the VPN; D-09 gold from the World Bank; --allow-missing; next: KISS pass on the 08.5 CONTEXT, then plan 08.5
+last_updated: "2026-10-10T00:00:00.000Z"
 progress:
   total_phases: 13
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 78
-  completed_plans: 77
-last_activity: 2026-10-05
-last_activity_desc: "Phase 08.2 closed — MVP-1: no-regime weekly page (A-13/A-15), regime view suspended + tripwire + static scoreboard (A-14), parked classifier #2/joint driver/stability, MODULE-MAP, notebooks P7–P9. Suite 2640. Registry 46."
+  completed_plans: 78
+last_activity: 2026-10-09
+last_activity_desc: "Phase 08.4 closed — fail-loud build, model-free no_regime page, state tool (archive/reset/restore/promote), --allow-missing, D-09 World Bank gold. Mac UAT 4/4. Suite 2283. Registry 48."
 ---
 
 # Project State
@@ -24,12 +24,18 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 08.4 — Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build
+**Current focus:** Phase 08.5 — Clean-Slate Reset & Learnings Before Migration
 
 ## Current Position
 
-Phase: 08.4 (Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build) — EXECUTING
-Status: Executing Phase 08.4
+Phase: 08.5 — Clean-Slate Reset & Learnings Before Migration
+Status: Context captured; a KISS pass on `08.5-CONTEXT.md` comes before planning (`/gsd-plan-phase 8.5`).
+
+**Phase 08.4 closed 2026-10-09.** Verified 13/13; Glenn's Mac UAT passed 4/4 on the corporate VPN (build from
+empty + bogus-key drill, no-model page, archive → reset → restore with an identical page, promote with the real
+hooks). Fixed during UAT: the page's no-data exit, pytest ignoring `TC_*_DIR`, `--allow-missing COL,...` for
+blocked sources (macrotrends 403, Yahoo rate limit), and **D-09: gold from the World Bank monthly average (1960+),
+then macrotrends, then IAU, with month-end P&L via `pnl_splice`**. Suite 2283. Registry 48 (0 rows spent).
 
 **Phase 08.4 executed 2026-10-07 (2/2 plans).**
 
@@ -806,8 +812,11 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-07T17:13:46.345Z
-Stopped at: Completed 08.4-02-PLAN.md
+Last session: 2026-10-10T00:00:00.000Z
+Stopped at: Phase 08.4 CLOSED 2026-10-09 — Mac UAT 4/4 passed; next: KISS pass on the 08.5 CONTEXT, then plan 08.5
+Resume file: `.planning/phases/08.5-clean-slate-reset-learnings-before-migration/08.5-CONTEXT.md`
+
+Older resume pointer (Phase 7 era):
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
 acceptance — the thirteen items Phase 7 carries forward, and the starting point for Phase 8.
 **Read § ACCEPTANCE 2026-09-21 first: criterion 6 is unresolved and REG-01 is only partially

@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 08.1: Point-in-Time Data Audit** *(INSERTED 2026-09-29)* - Every feature lagged to its publication date; re-run decision-bearing evaluations under a declared budget (completed 2026-09-30)
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
 - [x] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands (completed 2026-10-05)
-- [ ] **Phase 08.4: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build** *(INSERTED 2026-10-02; re-scoped 2026-10-05)* - Archive/reset/restore/promote state at will, tagged model archives under git; the build fails loud and runs from empty
+- [x] **Phase 08.4: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build** *(INSERTED 2026-10-02; re-scoped 2026-10-05)* - Archive/reset/restore/promote state at will, tagged model archives under git; the build fails loud and runs from empty (completed 2026-10-09)
 - [ ] **Phase 08.5: Clean-Slate Reset & Learnings Before Migration** *(INSERTED 2026-10-05)* - Use the 8.4 tooling for the production reset (everything generated out of git, registry true-zero epoch), MVP-1 from a fresh clone, learnings and the Phase 9.x rebuild order
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
@@ -831,7 +831,7 @@ any time**. Chosen archives can be version-controlled in git as tagged model sna
 
 **Context:** `.planning/phases/08.4-cold-start-rebuild-and-learnings/08.4-CONTEXT.md`. Budget: 0 rows.
 **Depends on:** Phase 08.3
-**Plans:** 2/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -919,6 +919,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.1 Point-in-Time Data Audit (INSERTED) | 3/3 | Complete (verified; Mac run passed; E-06 NO) | 2026-09-30 |
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
-| 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | In Progress|  |
+| 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | Complete (verified 13/13; Mac UAT 4/4 passed; D-09 gold source) | 2026-10-09 |
 | 08.5 Clean-Slate Reset & Learnings (INSERTED) | 0/TBD | Not started | - |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
