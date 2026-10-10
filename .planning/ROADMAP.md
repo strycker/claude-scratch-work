@@ -844,13 +844,14 @@ Plans:
 
 ### Phase 08.5: Clean-Slate Reset & Learnings Before Migration (INSERTED)
 
-**Goal (reframed by Glenn, 2026-10-05): a production clean-slate reset, done with 8.4's tooling.**
+**Goal (reframed by Glenn, 2026-10-05; KISS revision 2026-10-10): a production clean-slate reset.**
 
-- Archive and promote the current state as `model/pre-reset-2026-10`.
-- Clear **everything** generated out of git: data (raw included), outputs, labels, models, notebook outputs.
+- Freeze the pre-reset tree as the git tag `model/pre-reset-2026-10` (on `4e49652`; Glenn pushes it).
+- Make the suite green with no data (real-data tests marked `realdata` and skipped; record pins retired, listed).
+- Clear **everything** generated out of git: data (raw included), outputs, notebook outputs.
 - Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
-- From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page, run twice with identical output, then
-  the N4 sign-off.
+- From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page twice with identical output, then
+  `pytest -m realdata`.
 
 - Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
 - Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
