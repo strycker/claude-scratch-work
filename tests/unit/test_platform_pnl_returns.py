@@ -33,7 +33,6 @@ from test_platform_point_in_time import (  # tests/unit is on sys.path (prepend 
     _synthetic_prices,
     _synthetic_vintages,
 )
-from tracked_record import tracked_record_cfg
 
 from trading_crab_lib.platform import splice, transforms_monthly
 from trading_crab_lib.platform.assets.returns import compute_monthly_returns, tradable_asset_returns
@@ -741,8 +740,7 @@ class TestTrackedMigration:
     def test_the_tracked_marker_matches_the_live_lag_table(self):
         from trading_crab_lib.platform.ingestion.publication_lags import lag_marker_matches
 
-        # 2026-10-09: the lag table the tracked data was built under (gold_spot, not gold_wb).
-        assert lag_marker_matches(TRACKED_MARKER, tracked_record_cfg(load_platform_config()))
+        assert lag_marker_matches(TRACKED_MARKER, load_platform_config())
 
 
 # ── 5b. The live P&L series on the built data (08.3-02 Task 3; V2, V6) ──────
@@ -754,7 +752,7 @@ class TestTrackedPnlSeries:
 
     @pytest.fixture(scope="class")
     def series(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        cfg = tracked_record_cfg(load_platform_config())  # 2026-10-09: built before the gold switch
+        cfg = load_platform_config()
         raw = pd.read_parquet(TRACKED_RAW)
         _require_month_end_columns(raw)
 

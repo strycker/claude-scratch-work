@@ -21,48 +21,13 @@ build/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data — raw/processed data should not be versioned
-data/raw/
+# Generated data and outputs never live in git (08.5, D-01). Pre-reset tree: tag model/pre-reset-2026-10.
+/data/
+/outputs/
 
-# Platform NOTEBOOK scratch checkpoint namespace (plotting/loaders.py
-# NOTEBOOK_SCRATCH_DIR). Notebooks route label_regimes() writes here so they can
-# never touch the tracked production namespace at data/checkpoints/platform/
-# (D-10, threat T-06-12). Because that production namespace IS tracked in this
-# repo, the scratch twin must be ignored explicitly — otherwise every P3 run
-# leaves untracked files one `git add data/` away from being committed.
-data/checkpoints/platform_notebook/
-# Serving model pickles in the TRACKED platform namespace (plan 08-13). nowcaster.pkl is
-# a machine-local joblib pickle rebuilt by `python -m trading_crab_lib.platform.report.serving`
-# (SERVING_BUILD_COMMAND); it is never committed. Loading an unverified pickle is
-# arbitrary code execution (P27), so a pickle must never arrive through git.
-data/checkpoints/platform/*.pkl
-# Live weekly/serving STATE in the tracked platform namespace (08.3 close, Glenn 2026-10-05).
-# These hold the operator's actual book and per-machine serving state, rewritten by every
-# weekly/serving run on the Mac. They are machine-local, like the pickles above, and must never
-# ride along on a `git add data/` (the 08.3 Mac commit is why this rule exists).
-data/checkpoints/platform/allocation_mode.*
-data/checkpoints/platform/asset_returns.*
-data/checkpoints/platform/executed_weights.*
-data/checkpoints/platform/hysteresis_state.*
-data/checkpoints/platform/nowcaster_class_prior.*
-data/checkpoints/platform/regime_belief.*
-data/checkpoints/platform/returns_by_regime.*
-outputs/reports/platform/returns_by_regime.parquet
-outputs/reports/platform/weekly_report.md
 # Local state archives (08.4 state tool); only promoted ones are committed, as model/<name> tags (K-8).
 archives/*
 !archives/promoted/
-# data/processed/
-# data/regimes/
-# outputs/figures/
-# outputs/models/
-# outputs/plots/
-# outputs/reports/
-
-# Offline dev snapshots — deliberately committed (docs/offline_snapshots.md).
-# Narrowest possible exception: only this subtree, nothing else under data/.
-!data/snapshots/
-!data/snapshots/**
 
 # Secrets / API keys (always use .env instead)
 *.key
