@@ -864,12 +864,12 @@ discussion). Budget: 0 rows of measurement, plus the deliberate epoch reset.
 **Depends on:** Phase 08.4
 **Blocks:** Phase 9 (Migration): its order and scope come from 8.5's learnings.
 **UI hint**: no (the "weekly page" is a generated markdown report, not a frontend)
-**Plans:** 3 plans (3 waves; lean mode; budget 0 measurement rows plus the deliberate registry epoch reset)
+**Plans:** 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 08.5-01-PLAN.md — **Tests green with no data (D-04).** `realdata` marker + collection hook (skip without data; `-m realdata` with no data fails loudly); 14 lasting-property tests marked (month-end ones skip when the columns are absent); 23 record pins retired with dated notes, each citing its covering synthetic test; `scripts/migrate_month_end_columns.py` deleted (approved 2026-10-12). Suite 2261; no-data run 2247 passed + 14 skipped, on pandas 3 and 2
+- [x] 08.5-01-PLAN.md — **Tests green with no data (D-04).** `realdata` marker + collection hook (skip without data; `-m realdata` with no data fails loudly); 14 lasting-property tests marked (month-end ones skip when the columns are absent); 23 record pins retired with dated notes, each citing its covering synthetic test; `scripts/migrate_month_end_columns.py` deleted (approved 2026-10-12). Suite 2261; no-data run 2247 passed + 14 skipped, on pandas 3 and 2
 
 **Wave 2** *(blocked on Wave 1: the deletion must find the suite already data-independent)*
 
@@ -931,5 +931,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
 | 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | Complete (verified 13/13; Mac UAT 4/4 passed; D-09 gold source) | 2026-10-09 |
-| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 0/TBD | Not started | - |
+| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 1/3 | In Progress|  |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |

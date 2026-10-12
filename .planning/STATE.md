@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 08.5
 current_phase_name: Clean-Slate Reset & Learnings Before Migration
 status: executing
-stopped_at: "Phase 08.5 PLANNED 2026-10-12 — 3 plans in 3 waves (tests without data, the reset, learnings + Mac gate); plan-checker findings resolved; Glenn amended D-06; next: /gsd-execute-phase 8.5"
-last_updated: "2026-10-12T16:12:45.367Z"
+stopped_at: Completed 08.5-01-PLAN.md
+last_updated: "2026-10-12T16:35:33.930Z"
 progress:
   total_phases: 13
   completed_phases: 12
   total_plans: 81
-  completed_plans: 78
+  completed_plans: 79
 last_activity: 2026-10-12
-last_activity_desc: "Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
+last_activity_desc: "Phase 08.5 plan 01 executed (suite green with no data: 2247 passed + 14 skipped aside, 2261 with data). Earlier: Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
 ---
 
 # Project State
@@ -546,6 +546,7 @@ numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
 | Phase 07 P11 | 1h05m | 3 tasks | 6 files |
 | Phase 07 P12 | 35min | 2 tasks | 4 files |
 | Phase 08.4 P01 | 1 session | 3 tasks | 11 files |
+| Phase 08.5 P01 | 21min | 3 tasks | 16 files |
 
 *Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
 *Updated after each plan completion.*
@@ -593,6 +594,7 @@ Recent decisions affecting current work:
 - [Phase 07-12]: Ratchet left at 31 rather than touched. The constant may only decrease and the re-measurement found no decrease; ROADMAP criterion 8's correction block was left byte-identical and the re-measurement recorded outside it.
 - [Phase 08.4-01]: build.fail_loud true (pinned) with build.allow_missing_sources [] as the only escape hatch; splice research columns are replaced on every monthly_raw save; the model-free no_regime page engages only when the nowcaster is missing
 - [Phase 08.4-02]: G-12: state tooling is one module (platform/state.py: archive, list, reset, restore, promote); no pickle archived, promote never pushes
+- [Phase 08.5-01]: realdata marker plus trylast collection hook (skip without a build; UsageError exit 4 when -m selects only realdata); 23 record pins retired with dated notes; tracked_record helper kept for plan 02
 
 ### Pending Todos
 
@@ -812,9 +814,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-10T00:00:00.000Z
-Stopped at: Phase 08.5 PLANNED 2026-10-12 — next: /gsd-execute-phase 8.5
-Resume file: `.planning/phases/08.5-clean-slate-reset-learnings-before-migration/08.5-01-PLAN.md`
+Last session: 2026-10-12T16:35:33.898Z
+Stopped at: Completed 08.5-01-PLAN.md
+Resume file: None
 
 Older resume pointer (Phase 7 era):
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at
