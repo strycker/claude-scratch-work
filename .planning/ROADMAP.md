@@ -873,7 +873,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1: the deletion must find the suite already data-independent)*
 
-- [ ] 08.5-02-PLAN.md — **The reset (D-01, D-03, D-04, D-05).** `git rm` the 88 generated files, ignore `/data/` and `/outputs/`, drop the gold-rollback test helper; registry true-zero epoch (48-trial ledger archived byte-identical, provenance header, ADR-0005) with the full suite after; notebook outputs stripped (sign-off cells kept); README/CLAUDE.md/docs updated (CLAUDE.md edits approved 2026-10-12); fresh-clone run on the clone's own `src/`
+- [x] 08.5-02-PLAN.md — **The reset (D-01, D-03, D-04, D-05).** `git rm` the 88 generated files, ignore `/data/` and `/outputs/`, drop the gold-rollback test helper; registry true-zero epoch (48-trial ledger archived byte-identical, provenance header, ADR-0005) with the full suite after; notebook outputs stripped (sign-off cells kept); README/CLAUDE.md/docs updated (CLAUDE.md edits approved 2026-10-12); fresh-clone run on the clone's own `src/`
 
 **Wave 3** *(blocked on Wave 2: the learnings and the Mac gate need the reset)*
 
@@ -931,5 +931,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
 | 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | Complete (verified 13/13; Mac UAT 4/4 passed; D-09 gold source) | 2026-10-09 |
-| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 1/3 | In Progress|  |
+| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 2/3 | In Progress|  |
 | 9. Migration to Public Repo | 0/TBD | Not started | - |
