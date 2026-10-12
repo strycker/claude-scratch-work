@@ -82,7 +82,7 @@ The weekly page lands in `outputs/reports/platform/weekly_report.md`. Every CLI 
   locally.
 - Live weekly and serving state (executed weights, belief, allocation mode, …) is machine-local and gitignored
   (G-11).
-- Nothing generated is tracked: `data/`, `outputs/` and notebook outputs stay out of git (08.5). The pre-reset tree
+- Nothing generated is tracked: `data/`, `outputs/` and platform notebook outputs stay out of git (08.5). The pre-reset tree
   is the tag `model/pre-reset-2026-10`; read it with
   `git restore --source=model/pre-reset-2026-10 --worktree -- data outputs`.
 - Branches: `claude/<description>`. Never push to `main`. Commits use the conventional format (`feat:`, `fix:`,
