@@ -62,7 +62,7 @@ to the public repo. Design references: `platform_design/platform_design.md` v1.7
 
 ### Migration (MIG)
 
-- [ ] **MIG-01**: Platform decoupled from the legacy library (4 seams vendored, import-guard test) and migrated to `strycker/trading-crab` (two-package layout), tests green in that repo's CI, real run reproduces the reference numbers, README/docs updated — step plan in `MIGRATION-PLAN.md`
+- [ ] **MIG-01**: Platform decoupled from the legacy library (4 seams vendored, import-guard test) and migrated to `strycker/trading-crab` (two-package layout), tests green in that repo's CI, a fresh-clone build and weekly page run, and the first budgeted run (9.4) sets the new baseline (the 2026-08 numbers retired at the 08.5 reset), README/docs updated — step plan in `MIGRATION-PLAN.md`; delivered module by module in Phases 9.1–9.8
 
 ### Regime Persistence & Stability (PER)
 
@@ -254,7 +254,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PER-08 | Phase 8 | Complete |
 | PER-09 | Phase 8 | Complete |
 | PER-10 | Phase 8 | Complete (four doc sites pinned to a live collection, 2392 as of 08-10; live 2494 as of 2026-09-29 after gap closure 08-11..08-19) |
-| MIG-01 | Phase 9 | Pending |
+| MIG-01 | Phase 9 (9.1–9.8) | Pending |
 
 **Coverage:**
 

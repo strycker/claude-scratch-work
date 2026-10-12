@@ -74,6 +74,7 @@ from trading_crab_lib.platform.assets.returns import (
 from trading_crab_lib.platform.backtest.baselines import faber_sma, no_regime_ablation, sixty_forty, spy_buy_hold
 from trading_crab_lib.platform.backtest.driver import run_backtest
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+from trading_crab_lib.platform.code_version import code_version
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.evaluation.disagreement import measure_label_disagreement
 from trading_crab_lib.platform.evaluation.kpis import (
@@ -1130,6 +1131,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Wiring/verification run — write the report but log NOTHING to the registry.",
     )
     args = parser.parse_args(argv)
+    print(code_version())
 
     logging.basicConfig(level=logging.INFO)
 

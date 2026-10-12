@@ -258,7 +258,8 @@ def test_reset_with_a_name_uses_it_and_refuses_when_registry_or_archives_sit_in_
 def test_list_shows_name_size_promoted_commit_trials_and_note(state_env, capsys):
     state.archive("alpha", note="first one")
     assert state.main(["list"]) == 0
-    line = capsys.readouterr().out.strip()
+    code_line, line = capsys.readouterr().out.strip().splitlines()
+    assert code_line.startswith("Code: ")  # every CLI names its code first (2026-10-12)
     assert line.startswith("alpha") and "promoted=no" in line and "trials=2" in line and "first one" in line
     assert [row["name"] for row in state.list_archives()] == ["alpha"]
 

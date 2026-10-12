@@ -25,6 +25,46 @@ def pytest_report_header(config: pytest.Config) -> str | None:
         return "ignored for this run (tests use the repo's own data/): " + ", ".join(sorted(_IGNORED_OVERRIDES))
     return None
 
+
+def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Config) -> None:
+    """Name the code under test next to the result line; unlike the header, it survives -q (2026-10-12)."""
+    try:
+        from trading_crab_lib.platform.code_version import code_version
+    except ImportError as exc:
+        terminalreporter.write_line(f"Code: unknown (trading_crab_lib does not import: {exc})")
+        return
+    terminalreporter.write_line(code_version())
+
+
+# ---------------------------------------------------------------------------
+# realdata marker (08.5, D-04): tests that read the built platform data under data/
+# ---------------------------------------------------------------------------
+_BUILT_DATA = Path(__file__).resolve().parents[1] / "data" / "checkpoints" / "platform" / "monthly_raw.parquet"
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip realdata tests when no build exists; fail loudly when `-m` selects only them.
+
+    trylast: this sees only the items left after `-m` / `-k` deselection, so `-m "not realdata"`
+    never raises. A skipped-only `-m realdata` run would read as a green Mac gate, hence the error.
+    """
+    if _BUILT_DATA.exists():
+        return
+    marked = [i for i in items if i.get_closest_marker("realdata")]
+    if not marked:
+        return
+    markexpr = config.getoption("markexpr") or ""
+    if "realdata" in markexpr and "not realdata" not in markexpr and len(marked) == len(items):
+        raise pytest.UsageError(
+            "-m realdata needs built data under data/: run `python scripts/build_platform_data.py` first "
+            "(TC_* path variables are ignored by the tests)"
+        )
+    skip = pytest.mark.skip(reason="no built data under data/: run `python scripts/build_platform_data.py`")
+    for item in marked:
+        item.add_marker(skip)
+
+
 # ---------------------------------------------------------------------------
 # Checkpoint isolation
 # ---------------------------------------------------------------------------
@@ -257,61 +297,10 @@ def _isolated_checkpoint_dir(tmp_path_factory: pytest.TempPathFactory):
     holdout_mod.HOLDOUT_CHECKPOINT_DIR = original_holdout_dir
 
 
-# ---------------------------------------------------------------------------
-# Pre-8.1 platform checkpoints (git show, never the live working tree)
-# ---------------------------------------------------------------------------
-# 08.1-03 migrated the tracked platform data to publication lags. A test that
-# verifies a Phase 7/8 RECORD (a number measured on the unlagged data and written
-# into a committed JSON/markdown record) must keep reading the data that record
-# was measured on, so it reads the checkpoints as they stood at the last pre-8.1
-# data commit. Skips (never fails) when the commit is unreachable, e.g. a
-# shallow clone — the same convention as test_platform_evaluation_disagreement.py.
-
-#: Last commit before 08.1-03 migrated data/checkpoints/platform (08.1-03-PLAN.md).
-PRE_PIT_DATA_COMMIT = "06002f9c7535bf29d3991fdeedf9695cb5dc3ba3"
-_PRE_PIT_PLATFORM_PATH = "data/checkpoints/platform"
-
-
-def _extract_pre_pit_platform(dest: Path) -> Path | None:
-    """Write every file under ``data/checkpoints/platform`` at PRE_PIT_DATA_COMMIT
-    into *dest*; None if git or the commit is unreachable."""
-    import subprocess
-
-    try:
-        listing = subprocess.run(
-            ["git", "ls-tree", "--name-only", f"{PRE_PIT_DATA_COMMIT}:{_PRE_PIT_PLATFORM_PATH}"],
-            capture_output=True, check=True, text=True,
-        ).stdout.split()
-        dest.mkdir(parents=True, exist_ok=True)
-        for name in listing:
-            blob = subprocess.run(
-                ["git", "show", f"{PRE_PIT_DATA_COMMIT}:{_PRE_PIT_PLATFORM_PATH}/{name}"],
-                capture_output=True, check=True,
-            ).stdout
-            (dest / name).write_bytes(blob)
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return None
-    return dest if listing else None
-
-
-@pytest.fixture(scope="session")
-def _pre_pit_platform_snapshot(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    path = _extract_pre_pit_platform(tmp_path_factory.mktemp("pre_pit_platform"))
-    if path is None:
-        pytest.skip(f"pre-8.1 platform checkpoints not reachable via `git show {PRE_PIT_DATA_COMMIT[:7]}`")
-    return path
-
-
-@pytest.fixture
-def pre_pit_platform_dir(_pre_pit_platform_snapshot: Path, tmp_path: Path, monkeypatch) -> Path:
-    """Point ``PLATFORM_CHECKPOINT_DIR`` at a fresh copy of the pre-8.1 platform
-    checkpoints for one test (a copy, so a test that saves cannot alter the snapshot)."""
-    import trading_crab_lib.platform.checkpoints as platform_ckpt_mod
-
-    copy = tmp_path / "pre_pit_platform"
-    shutil.copytree(_pre_pit_platform_snapshot, copy)
-    monkeypatch.setattr(platform_ckpt_mod, "PLATFORM_CHECKPOINT_DIR", copy)
-    return copy
+# The "Pre-8.1 platform checkpoints" fixtures (the pre-8.1 data commit constant, the git-show snapshot and
+# pre_pit_platform_dir) were deleted 2026-10-12 (08.5): their only user was
+# test_platform_evaluation_sojourn_lag.py's TestHeadlinePinOnRealDevInputs, a record pin retired the same day;
+# the record lives in tag model/pre-reset-2026-10.
 
 
 @pytest.fixture

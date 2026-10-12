@@ -28,7 +28,7 @@ PLATFORM_OUTPUT_DIR = OUTPUT_DIR
 
 PLATFORM_CHECKPOINT_DIR = DATA_DIR / "checkpoints" / "platform"
 
-#: Where the platform's report artifacts live (the tracked backtest outputs among them). Exposed
+#: Where the platform's report artifacts live (the budgeted run's outputs among them). Exposed
 #: here so platform modules that only READ them (``report/scoreboard.py``) need no import of
 #: the legacy package root (the legacy-import ratchet, criterion 8).
 PLATFORM_REPORT_DIR = OUTPUT_DIR / "reports" / "platform"

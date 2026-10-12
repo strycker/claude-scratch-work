@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
 - [x] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands (completed 2026-10-05)
 - [x] **Phase 08.4: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build** *(INSERTED 2026-10-02; re-scoped 2026-10-05)* - Archive/reset/restore/promote state at will, tagged model archives under git; the build fails loud and runs from empty (completed 2026-10-09)
-- [ ] **Phase 08.5: Clean-Slate Reset & Learnings Before Migration** *(INSERTED 2026-10-05)* - Use the 8.4 tooling for the production reset (everything generated out of git, registry true-zero epoch), MVP-1 from a fresh clone, learnings and the Phase 9.x rebuild order
+- [x] **Phase 08.5: Clean-Slate Reset & Learnings Before Migration** *(INSERTED 2026-10-05)* - Use the 8.4 tooling for the production reset (everything generated out of git, registry true-zero epoch), MVP-1 from a fresh clone, learnings and the Phase 9.x rebuild order
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -844,13 +844,14 @@ Plans:
 
 ### Phase 08.5: Clean-Slate Reset & Learnings Before Migration (INSERTED)
 
-**Goal (reframed by Glenn, 2026-10-05): a production clean-slate reset, done with 8.4's tooling.**
+**Goal (reframed by Glenn, 2026-10-05; KISS revision 2026-10-10): a production clean-slate reset.**
 
-- Archive and promote the current state as `model/pre-reset-2026-10`.
-- Clear **everything** generated out of git: data (raw included), outputs, labels, models, notebook outputs.
+- Freeze the pre-reset tree as the git tag `model/pre-reset-2026-10` (on `4e49652`; Glenn pushes it).
+- Make the suite green with no data (real-data tests marked `realdata` and skipped; record pins retired, listed).
+- Clear **everything** generated out of git: data (raw included), outputs, notebook outputs.
 - Reset the trial registry to a **true-zero epoch** (ADR-0005, with the caveat disclosed).
-- From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page, run twice with identical output, then
-  the N4 sign-off.
+- From a **fresh clone** on Glenn's Mac: build, then the MVP-1 no-regime page twice with identical output, then
+  `pytest -m realdata`.
 
 - Fold the learnings into the guide, MODULE-MAP, MIGRATION-PLAN and DECISIONS.
 - Restructure Phase 9 into a **module-by-module, human-gated rebuild (9.x: M0→M7) in the target `trading-crab` repo**.
@@ -862,17 +863,27 @@ public repo.
 discussion). Budget: 0 rows of measurement, plus the deliberate epoch reset.
 **Depends on:** Phase 08.4
 **Blocks:** Phase 9 (Migration): its order and scope come from 8.5's learnings.
-**Plans:** 0 plans
+**UI hint**: no (the "weekly page" is a generated markdown report, not a frontend)
+**Plans:** 3/3 plans executed
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 8.5)
+- [x] 08.5-01-PLAN.md — **Tests green with no data (D-04).** `realdata` marker + collection hook (skip without data; `-m realdata` with no data fails loudly); 14 lasting-property tests marked (month-end ones skip when the columns are absent); 23 record pins retired with dated notes, each citing its covering synthetic test; `scripts/migrate_month_end_columns.py` deleted (approved 2026-10-12). Suite 2261; no-data run 2247 passed + 14 skipped, on pandas 3 and 2
+
+**Wave 2** *(blocked on Wave 1: the deletion must find the suite already data-independent)*
+
+- [x] 08.5-02-PLAN.md — **The reset (D-01, D-03, D-04, D-05).** `git rm` the 88 generated files, ignore `/data/` and `/outputs/`, drop the gold-rollback test helper; registry true-zero epoch (48-trial ledger archived byte-identical, provenance header, ADR-0005) with the full suite after; notebook outputs stripped (sign-off cells kept); README/CLAUDE.md/docs updated (CLAUDE.md edits approved 2026-10-12); fresh-clone run on the clone's own `src/`
+
+**Wave 3** *(blocked on Wave 2: the learnings and the Mac gate need the reset)*
+
+- [x] 08.5-03-PLAN.md — **Learnings, Phase 9.x and the Mac gate (D-01, D-05, D-06, D-07).** Phase 9 becomes 9.1–9.8 (one module each; M8 moves with M1/M3, DECISIONS G-15); DECISIONS G-14, G-15, H-12; guide, MODULE-MAP, MIGRATION-PLAN. Human checkpoint: Glenn pushes the tag and runs the fresh-clone gate (build, page three times with runs 2 and 3 identical but for the run date — D-06 as amended 2026-10-12 — then `pytest -m realdata`; a VPN result of 8 passed + 6 skipped closes with the skips recorded as unverified)
 
 ### Phase 9: Migration to Public Repo
 
 **Goal**: The validated platform lives in `strycker/trading-crab`, the public/PyPI
 two-package repo, ready for continued development outside the heavy-dev workbench.
-**Depends on**: Phase 7
+**Depends on**: Phase 08.5
 **Requirements**: MIG-01
 **Success Criteria** (what must be TRUE):
 
@@ -886,21 +897,159 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
   2. The two-package layout (`trading-crab` + `trading-crab-lib`) exists in
      `strycker/trading-crab` with the L0–L4 modules migrated.
 
-  3. The test suite passes green in the new repo's CI, not just locally (≥378 platform
-     tests).
+  3. The suite passes in the new repo's CI, with no pinned test count; each module's
+     `realdata` tests pass on Glenn's Mac after a build.
 
-  4. A real 1972–2020 walk-forward in the new repo reproduces the reference numbers in
-     `MIGRATION-PLAN.md` §6.
+  4. From a fresh clone of the new repo the build and the weekly page run; the first
+     budgeted run (9.4) sets the new reference numbers and its DSR line carries the ADR-0005
+     epoch note. The 2026-08 numbers retired at the 08.5 reset; the record lives in tag
+     model/pre-reset-2026-10.
 
   5. README and docs in the new repo describe the regime-conditional platform, not the
      legacy quarterly pipeline.
-**Plans**: TBD
-**Detailed step plan**: `MIGRATION-PLAN.md` (P0–P6)
+**Plans**: none of its own; delivered by Phases 9.1–9.8, one module each, in `strycker/trading-crab`.
+**M8 and M9+:** M8 (honesty) has no phase of its own (DECISIONS G-15): its code moves with the first module that
+imports it: the registry module with M0 (9.1), the holdout fence and walk-forward with M1 (9.2), budgets and DSR
+with M3 (9.4) (G-15, amended 2026-10-12). M9+
+(tripwire upgrades, A-03 hysteresis thresholds, REG-01) stays backlog until MVP-2.
+**Detailed step plan**: `MIGRATION-PLAN.md` (P0–P6, a checklist); order and module files: `platform_design/MODULE-MAP.md`
+
+### Phase 9.1: M0 Skeleton
+
+**Goal:** the two-package skeleton in `strycker/trading-crab`: config, checkpoint manager, CLI, CI and the state tool, importing nothing from the legacy library.
+**Depends on:** Phase 08.5
+**Requirements:** MIG-01
+**Module files:** `config.py`, `checkpoints.py`, `snapshots.py`, `state.py` (the state tool, G-12); the four P0 seams vendored (CheckpointManager, multpl and macrotrends scraper helpers, email helpers; `MIGRATION-PLAN.md` P0). From M8: `honesty/registry.py` (the ledger reader and append, one file), because `state.py` reads `total_trial_count` (G-15, amended 2026-10-12).
+**Notebook:** none
+**Success Criteria** (what must be TRUE):
+  1. `tradingcrab --help` runs.
+  2. CI is green.
+  3. The legacy-import ratchet reads 0 (`MAX_LEGACY_IMPORT_SITES = 0`).
+  4. The suite is green on Mac and Linux.
+  5. Glenn signs off.
+**Plans:** 0 plans (at most 3)
+
+### Phase 9.2: M1 Data spine
+
+**Goal:** raw sources → `monthly_raw` with publication lags applied once at ingestion, a fail-loud build and the 2021+ holdout fence.
+**Depends on:** Phase 9.1
+**Requirements:** MIG-01
+**Module files:** `ingestion/{alfred,eodhd,macro_daily,macro_monthly,norgate,prices_daily,publication_lags,tiingo}.py` (free sources kept; paid-provider adapters stay placeholders), `splice.py`, `transforms_monthly.py`, `scripts/build_platform_data.py`; from M8: `honesty/{holdout,walkforward}.py` (G-15).
+**Notebook:** `P1_data_spine.ipynb`
+**Success Criteria** (what must be TRUE):
+  1. The coverage plot renders.
+  2. Point-in-time test passes.
+  3. Splices are continuous.
+  4. Every raw series carries its publication lag, applied once at ingestion (08.1).
+  5. The build fails loud on a missing source (D-08).
+  6. Gold comes from the World Bank series (D-09).
+  7. The holdout fence holds.
+  8. P1 runs and Glenn signs its one sign-off cell.
+  9. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
+  10. The suite is green on Mac and Linux.
+**Plans:** 0 plans (at most 3)
+
+### Phase 9.3: M2 Features
+
+**Goal:** `monthly_raw` → `monthly_features`, causal only, in the lean named taxonomy.
+**Depends on:** Phase 9.2
+**Requirements:** MIG-01
+**Module files:** `taxonomy.py` (ported as is)
+**Notebook:** `P2_features_taxonomy.ipynb`
+**Success Criteria** (what must be TRUE):
+  1. The taxonomy table renders.
+  2. No centred smoothing in causal features.
+  3. P2 runs and Glenn signs its one sign-off cell.
+  4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
+  5. The suite is green on Mac and Linux.
+**Plans:** 0 plans (at most 3)
+
+### Phase 9.4: M3 Allocator + backtest
+
+**Goal:** returns → vol-targeted weights → walk-forward curve vs SPY, 60/40 and Faber, net of costs; the first budgeted run after the reset.
+**Depends on:** Phase 9.3
+**Requirements:** MIG-01
+**Module files:** `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` (keep KPIs, sojourn/lag, churn; drop one-off diagnostics); from M8: `honesty/gating.py`, `evaluation/deflated_sharpe.py` (budgets and DSR; the registry arrived in 9.1; report, don't gate, before MVP-2; G-15).
+**Notebook:** `P5_assets_allocation.ipynb`, `P6_backtest_evaluation.ipynb`
+**Success Criteria** (what must be TRUE):
+  1. The scoreboard table renders.
+  2. Costs are applied.
+  3. P&L uses month-end prices (E-08) and the vol target uses month-end returns (E-11).
+  4. The first budgeted run sets the new baseline and its DSR line carries the ADR-0005 epoch note (H-12).
+  5. P5 and P6 run and Glenn signs their sign-off cells.
+  6. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
+  7. The suite is green on Mac and Linux.
+**Plans:** 0 plans (at most 3)
+
+### Phase 9.5: M4 Weekly report
+
+**Goal:** latest data + weights + holdings → the weekly markdown page; MVP-1 in the new repo.
+**Depends on:** Phase 9.4
+**Requirements:** MIG-01
+**Module files:** `report/{weekly,serving,holdings,scoreboard}.py` (ported as is)
+**Notebook:** `P7_serving_report.ipynb` (N4)
+**Success Criteria** (what must be TRUE):
+  1. The page on real data is identical run 2 vs run 3 apart from the run date (D-06 as amended 2026-10-12).
+  2. The as-of date is shown.
+  3. P7 runs and Glenn signs its one sign-off cell.
+  4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
+  5. The suite is green on Mac and Linux.
+  6. **MVP-1:** Glenn trades from it.
+**Plans:** 0 plans (at most 3)
+
+### Phase 9.6: M5 Regime labeler
+
+**Goal:** features → regime states and profiles, aligned across refits.
+**Depends on:** Phase 9.5
+**Requirements:** MIG-01
+**Module files:** `labeling/{jump_model,diagnostics}.py` (simplified: add cross-refit alignment, CR-02, Hungarian matching on centroids by default)
+**Notebook:** `P3_regime_labeling.ipynb`
+**Success Criteria** (what must be TRUE):
+  1. The regime timeline is checked against recessions.
+  2. Occupancy is reported.
+  3. Profiles make sense.
+  4. State ids are aligned across refits (CR-02).
+  5. P3 runs and Glenn signs its one sign-off cell.
+  6. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
+  7. The suite is green on Mac and Linux.
+**Plans:** 0 plans (at most 3)
+
+### Phase 9.7: M6 Nowcaster + filter
+
+**Goal:** causal features → P(regime now) → filtered belief, with more than one distinct output.
+**Depends on:** Phase 9.6
+**Requirements:** MIG-01
+**Module files:** `prediction/{nowcaster,regime_filter,transition_matrix}.py` (simplified: the L2 recipe, a fixed long-history feature set; calibration only if it earns it); purged CV `honesty/cv.py` comes with its first importer
+**Notebook:** `P4_nowcaster.ipynb`, `P8_filtered_belief.ipynb` (N6)
+**Success Criteria** (what must be TRUE):
+  1. The distinct-output count is above 1.
+  2. The truncation (no look-ahead) test passes.
+  3. P4 and P8 run and Glenn signs their sign-off cells.
+  4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
+  5. The suite is green on Mac and Linux.
+**Plans:** 0 plans (at most 3)
+
+### Phase 9.8: M7 Regime tilt vs ablation
+
+**Goal:** belief → tilted weights, and the scoreboard compares the tilt with the no-regime ablation net of costs (decision-bearing; MVP-2).
+**Depends on:** Phase 9.7
+**Requirements:** MIG-01
+**Module files:** `allocation/tilt.py`, `backtest/driver.py` (tilt-off ablation leg)
+**Notebook:** `P9_does_regime_pay.ipynb` (N7)
+**Success Criteria** (what must be TRUE):
+  1. The tilt beats the ablation net of costs, or it stays advisory (G-06).
+  2. Full rigor applies here (decision-bearing numbers).
+  3. P9 runs and Glenn signs its one sign-off cell.
+  4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
+  5. The suite is green on Mac and Linux.
+  6. **MVP-2.**
+**Plans:** 0 plans (at most 3)
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 9.1 → … → 9.8
+(Phase 9 split into 9.1–9.8 in 08.5, one module each, M0..M7: DECISIONS G-15.)
 (8.3 inserted by Glenn 2026-10-02: the regime rebuild starts with E-07 before migration.)
 (8.4 inserted by Glenn 2026-10-02: cold-start rebuild and learnings before any migration.)
 (Order confirmed by Glenn 2026-09-30: 8.1 before 8.2 — 8.1's outcome shapes 8.2's design.)
@@ -920,5 +1069,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
 | 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | Complete (verified 13/13; Mac UAT 4/4 passed; D-09 gold source) | 2026-10-09 |
-| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 0/TBD | Not started | - |
-| 9. Migration to Public Repo | 0/TBD | Not started | - |
+| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 3/3 | Complete (verified 11/12, human_needed: 6 month-end realdata tests await an off-VPN build; Mac gate passed on the VPN) | 2026-10-12 |
+| 9. Migration to Public Repo | 0/TBD | Umbrella (9.1–9.8) | - |
+| 9.1 M0 Skeleton | 0/TBD | Not started | - |
+| 9.2 M1 Data spine | 0/TBD | Not started | - |
+| 9.3 M2 Features | 0/TBD | Not started | - |
+| 9.4 M3 Allocator + backtest | 0/TBD | Not started | - |
+| 9.5 M4 Weekly report | 0/TBD | Not started | - |
+| 9.6 M5 Regime labeler | 0/TBD | Not started | - |
+| 9.7 M6 Nowcaster + filter | 0/TBD | Not started | - |
+| 9.8 M7 Regime tilt vs ablation | 0/TBD | Not started | - |

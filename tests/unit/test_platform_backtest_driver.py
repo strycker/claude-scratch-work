@@ -30,11 +30,10 @@ from trading_crab_lib.platform.taxonomy import lean_feature_set
 N_MONTHS = 60
 MIN_TRAIN = 24
 
-# Real dev checkpoint — present in this container (see 07-01-PLAN.md output
-# note). Gated with the same skip idiom as
-# tests/unit/test_platform_plotting_regime.py's REAL_MONTHLY_FEATURES so this
-# module still collects cleanly in an environment without the checkpoint.
-REAL_MONTHLY_FEATURES = Path("data/checkpoints/platform/monthly_features.parquet")
+# Real dev checkpoint under data/ (a build leaves it). The one test that reads it carries the realdata
+# marker (tests/conftest.py skips it without a build, 08.5), so this module collects cleanly either way.
+# Anchored on this file, not the cwd, so the path holds from any working directory.
+REAL_MONTHLY_FEATURES = Path(__file__).resolve().parents[2] / "data" / "checkpoints" / "platform" / "monthly_features.parquet"
 
 
 def _cfg(*, min_train: int = MIN_TRAIN, skip_l1l2_for_ablation: bool = True) -> dict:
@@ -586,10 +585,7 @@ class TestFrozenPolicyEquivalence:
         assert "1" in msg, f"error message must name the resolved count 1: {msg!r}"
         assert "2" in msg, f"error message must name K=2: {msg!r}"
 
-    @pytest.mark.skipif(
-        not REAL_MONTHLY_FEATURES.exists(),
-        reason="real platform monthly_features checkpoint not present",
-    )
+    @pytest.mark.realdata
     def test_real_checkpoint_driver_and_reference_resolve_identical_columns(self, monkeypatch):
         from trading_crab_lib.platform.config import load_platform_config
         from trading_crab_lib.platform.evaluation import report as report_module

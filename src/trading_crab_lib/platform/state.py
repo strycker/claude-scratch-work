@@ -26,6 +26,7 @@ from pathlib import Path, PurePosixPath
 from zoneinfo import ZoneInfo
 
 from trading_crab_lib.platform.checkpoints import PLATFORM_DATA_DIR, PLATFORM_OUTPUT_DIR, PLATFORM_ROOT_DIR
+from trading_crab_lib.platform.code_version import code_version
 from trading_crab_lib.platform.honesty.registry import DEFAULT_REGISTRY_PATH, total_trial_count
 
 log = logging.getLogger(__name__)
@@ -343,6 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("restore", help="restore NAME into empty data/ and outputs/").add_argument("name")
     sub.add_parser("promote", help="commit NAME (no live book state) and tag model/NAME; never pushes").add_argument("name")
     args = parser.parse_args(argv)
+    print(code_version())
     try:
         if args.command == "archive":
             folder = archive(args.name, args.note)

@@ -436,8 +436,10 @@ class TestLagMarkerMergeGuard:
             other["publication_lags"]["div_yield"] = 4
             pl.write_lag_marker(tmp_path / "platform" / pl.LAG_MARKER_FILENAME, other)
 
-        with pytest.raises(RuntimeError, match="migrate_publication_lags"):
+        with pytest.raises(RuntimeError, match="migrate_publication_lags") as excinfo:
             _build(cfg, macro, prices, vintages, tmp_path)
+        phrase = "is missing" if marker_state == "missing" else "records a different lag table"
+        assert f"{pl.LAG_MARKER_FILENAME} {phrase}, so the on-disk" in str(excinfo.value)
 
         assert raw_path.read_bytes() == before
         assert not (tmp_path / "platform" / "daily_raw.parquet").exists()

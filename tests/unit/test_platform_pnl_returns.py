@@ -33,7 +33,6 @@ from test_platform_point_in_time import (  # tests/unit is on sys.path (prepend 
     _synthetic_prices,
     _synthetic_vintages,
 )
-from tracked_record import tracked_record_cfg
 
 from trading_crab_lib.platform import splice, transforms_monthly
 from trading_crab_lib.platform.assets.returns import compute_monthly_returns, tradable_asset_returns
@@ -684,58 +683,49 @@ class TestIndexMonthEndFetch:
 
 
 
-# ── 5. The tracked migration (08.3-02 Task 1; V1, V4) ───────────────────────
+# ── 5. The built data under data/ (08.3-02 Task 1; V1, V4) ──────────────────
+# These read the platform data a build leaves under data/ and carry the realdata marker: tests/conftest.py
+# skips them when no build exists (08.5), and `pytest -m realdata` runs them after `scripts/build_platform_data.py`.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRACKED_RAW = REPO_ROOT / "data" / "checkpoints" / "platform" / "monthly_raw.parquet"
 TRACKED_DEV_FEATURES = REPO_ROOT / "data" / "checkpoints" / "platform" / "monthly_features.parquet"
 TRACKED_HOLDOUT_FEATURES = REPO_ROOT / "data" / "holdout" / "monthly_features.parquet"
 TRACKED_MARKER = REPO_ROOT / "data" / "checkpoints" / "platform" / "publication_lags.json"
-#: The pre-08.3 data commit: the tracked monthly_raw before the additive migration.
-PRE_08_3_DATA_COMMIT = "b2907787694fdc04dacaa1e11cf82b8395923533"
 MONTH_END_COLUMNS = ["sp500_close_me", "dgs10_me", "wti_me"]
 
 
-def _pre_migration_raw() -> pd.DataFrame | None:
-    """The tracked monthly_raw at the pre-08.3 data commit, or None if git/the blob is unreachable."""
-    import io
-    import subprocess
-
-    try:
-        out = subprocess.run(
-            ["git", "show", f"{PRE_08_3_DATA_COMMIT}:data/checkpoints/platform/monthly_raw.parquet"],
-            capture_output=True, check=True, cwd=REPO_ROOT,
-        ).stdout
-        return pd.read_parquet(io.BytesIO(out))
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError, ValueError):
-        return None
+def _require_month_end_columns(raw: pd.DataFrame) -> None:
+    """Skip when a build run with --allow-missing left a month-end column absent or all-NaN."""
+    if any(col not in raw.columns or raw[col].isna().all() for col in MONTH_END_COLUMNS):
+        pytest.skip("month-end columns not fetched (--allow-missing); needs an off-VPN build")
 
 
 class TestTrackedMigration:
-    def test_the_47_existing_columns_equal_the_pre_08_3_blob_exactly(self):
-        before = _pre_migration_raw()
-        if before is None:
-            pytest.skip(f"git blob {PRE_08_3_DATA_COMMIT[:8]} unreachable")
-        raw = pd.read_parquet(TRACKED_RAW)
-        assert before.shape == (776, 47)
-        assert raw.shape == (776, 50)
-        assert raw.index.equals(before.index)
-        assert list(raw.columns) == list(before.columns) + MONTH_END_COLUMNS
-        pd.testing.assert_frame_equal(raw[before.columns], before, check_exact=True)
+    # test_the_47_existing_columns_equal_the_pre_08_3_blob_exactly retired 2026-10-12 (08.5): record pin (the 08.3
+    # migration's blob shapes, 776x47 -> 776x50, read from git); the record lives in tag model/pre-reset-2026-10.
+    # test_dropping_a_lag_entry_makes_apply_publication_lags_raise[sp500_close_me|dgs10_me|wti_me] retired 2026-10-12
+    # (08.5): covered by test_platform_point_in_time.py::TestApplyPublicationLags::
+    # test_refuses_unlisted_derived_and_vintage_columns (any column without a publication_lags entry raises and the
+    # message names it) and by
+    # TestIndexMonthEndFetch::test_live_config_has_the_fetch_and_lag_entries_and_the_pnl_splice_block (each of the three
+    # has its lag-0 entry); the record lives in tag model/pre-reset-2026-10.
 
+    @pytest.mark.realdata
     def test_coverage_of_the_month_end_columns(self):
         raw = pd.read_parquet(TRACKED_RAW)
+        _require_month_end_columns(raw)
         assert raw["sp500_close_me"].notna().all() and raw["dgs10_me"].notna().all()
         assert raw.loc[raw.index < OIL_JOIN, "wti_me"].isna().all()
         assert raw.loc[raw.index >= OIL_JOIN, "wti_me"].notna().all()
 
+    @pytest.mark.realdata
     def test_features_rebuilt_from_the_tracked_raw_equal_dev_and_holdout_exactly(self):
         """D-01 neutrality on real data: the migration moved no feature."""
         from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
 
         cfg = load_platform_config()
-        raw = pd.read_parquet(TRACKED_RAW)
-        assert set(MONTH_END_COLUMNS) <= set(raw.columns)
+        raw = pd.read_parquet(TRACKED_RAW)  # runs on an --allow-missing build too (08.5 review WR-08)
         rebuilt = transforms_monthly.features_from_raw(raw, cfg)
         assert not (set(MONTH_END_COLUMNS) & set(rebuilt.columns))
         dev, holdout = split_by_holdout_boundary(rebuilt, cutoff=DEFAULT_HOLDOUT_CUTOFF)
@@ -744,34 +734,26 @@ class TestTrackedMigration:
             holdout, pd.read_parquet(TRACKED_HOLDOUT_FEATURES), check_exact=True, check_freq=False
         )
 
+    @pytest.mark.realdata
     def test_the_tracked_marker_matches_the_live_lag_table(self):
         from trading_crab_lib.platform.ingestion.publication_lags import lag_marker_matches
 
-        # 2026-10-09: the lag table the tracked data was built under (gold_spot, not gold_wb).
-        assert lag_marker_matches(TRACKED_MARKER, tracked_record_cfg(load_platform_config()))
-
-    @pytest.mark.parametrize("dropped", MONTH_END_COLUMNS)
-    def test_dropping_a_lag_entry_makes_apply_publication_lags_raise(self, dropped):
-        from trading_crab_lib.platform.ingestion.publication_lags import apply_publication_lags
-
-        cfg = copy.deepcopy(load_platform_config())
-        raw = pd.read_parquet(TRACKED_RAW)[MONTH_END_COLUMNS]
-        apply_publication_lags(raw, cfg)  # the live table lists all three
-        del cfg["publication_lags"][dropped]
-        with pytest.raises(ValueError, match=dropped):
-            apply_publication_lags(raw, cfg)
+        assert lag_marker_matches(TRACKED_MARKER, load_platform_config())
 
 
-# ── 5b. The live P&L series on tracked data (08.3-02 Task 3; V2, V6) ───────
+# ── 5b. The live P&L series on the built data (08.3-02 Task 3; V2, V6) ──────
 
 
+@pytest.mark.realdata
 class TestTrackedPnlSeries:
-    """The live config's P&L series on the tracked monthly_raw, 1972-2020 (return statistics only)."""
+    """The live config's P&L series on the built monthly_raw, 1972-2020 (return statistics only)."""
 
     @pytest.fixture(scope="class")
     def series(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        cfg = tracked_record_cfg(load_platform_config())  # 2026-10-09: built before the gold switch
+        cfg = load_platform_config()
         raw = pd.read_parquet(TRACKED_RAW)
+        _require_month_end_columns(raw)
+
         feature = compute_monthly_returns(splice.build_core_research_series(raw, cfg))
         pnl = compute_monthly_returns(splice.build_pnl_research_series(raw, cfg))
         return raw, feature, pnl
@@ -799,65 +781,12 @@ class TestTrackedPnlSeries:
         assert np.isnan(raw.loc["1985-12-31", "wti_me"])
 
 
-class TestMigrationScriptGuards:
-    """``scripts/migrate_month_end_columns.py``: the checks it raises on before saving."""
-
-    def _frames(self) -> tuple[pd.DataFrame, pd.DataFrame]:
-        raw = pd.read_parquet(TRACKED_RAW)
-        return raw, raw.drop(columns=MONTH_END_COLUMNS)
-
-    def test_the_tracked_raw_passes_every_check(self):
-        from migrate_month_end_columns import check_migrated
-
-        new, existing = self._frames()
-        corrs = check_migrated(new, existing)
-        assert all(v >= 0.98 for v in corrs.values()), corrs
-
-    def test_a_changed_existing_cell_raises(self):
-        from migrate_month_end_columns import check_migrated
-
-        new, existing = self._frames()
-        new = new.copy()
-        new.iloc[100, new.columns.get_loc("sp500")] *= 1 + 1e-12
-        with pytest.raises(AssertionError):
-            check_migrated(new, existing)
-
-    def test_merge_style_column_reordering_raises(self):
-        from migrate_month_end_columns import check_migrated
-
-        new, existing = self._frames()
-        reordered = new[MONTH_END_COLUMNS + list(existing.columns)]  # what merge=True's ordered_cols does
-        with pytest.raises(AssertionError, match="column order"):
-            check_migrated(reordered, existing)
-
-    def test_an_added_row_raises(self):
-        from migrate_month_end_columns import check_migrated
-
-        new, existing = self._frames()
-        extra = pd.DataFrame(np.nan, index=[pd.Timestamp("2026-09-30")], columns=new.columns)
-        with pytest.raises(AssertionError, match="index"):
-            check_migrated(pd.concat([new, extra]), existing)
-
-    def test_wti_values_before_the_join_raise(self):
-        from migrate_month_end_columns import check_migrated
-
-        new, existing = self._frames()
-        new = new.copy()
-        new.loc[pd.Timestamp("1985-12-31"), "wti_me"] = 26.0
-        with pytest.raises(AssertionError, match="wti_me"):
-            check_migrated(new, existing)
-
-    def test_a_second_run_is_refused_before_any_fetch(self):
-        import migrate_month_end_columns as mig
-
-        with patch.object(mig, "fetch_month_end_columns") as fetch, pytest.raises(SystemExit, match="runs once"):
-            mig.migrate(load_platform_config(), dry_run=True)
-        fetch.assert_not_called()
+# TestMigrationScriptGuards (6 tests) retired 2026-10-12 (08.5) with scripts/migrate_month_end_columns.py: a one-off 08.3
+# migration of the tracked monthly_raw, which no longer exists after the reset; the record lives in tag
+# model/pre-reset-2026-10.
 
 
 # ── 6. The smoothed-vs-filtered gap's hindsight oracle earns the P&L series ──
-
-PIT_08_3_BEFORE = REPO_ROOT / "outputs" / "reports" / "platform" / "pit_08.3" / "before"
 
 
 def _oracle_inputs(raw: pd.DataFrame, cfg: dict) -> tuple[pd.Series, pd.DataFrame, pd.Series]:
@@ -944,33 +873,10 @@ class TestHindsightOracleReadsPnl:
         (kwargs,) = seen["oracle"]
         assert kwargs["pnl_returns"] is seen["legs"][0]["pnl_returns"]
 
-    def test_before_the_switch_on_the_tracked_gap_cannot_move(self):
-        """Real data, no pnl_splice block: the P&L frame IS the asset frame, so the oracle (and the
-        gap the 08.3 before run recorded) is unchanged by reading it."""
-        import re
-
-        from trading_crab_lib.platform.evaluation.report import _smoothed_hindsight_perf
-
-        cfg = {k: v for k, v in tracked_record_cfg(load_platform_config()).items() if k != "pnl_splice"}
-        raw = pd.read_parquet(TRACKED_RAW)
-        returns = compute_monthly_returns(splice.build_core_research_series(raw, cfg))
-        assets = tradable_asset_returns(returns, cfg["splice"])
-        pnl = tradable_asset_returns(compute_monthly_returns(splice.build_pnl_research_series(raw, cfg)), cfg["splice"])
-        pd.testing.assert_frame_equal(pnl, assets, check_exact=True)
-
-        states = pd.read_parquet(PIT_08_3_BEFORE / "backtest_full_sample_states.parquet")["state"]
-        # The oracle visits the driver's non-degraded DECISION dates (per_step_metrics["dates"]),
-        # which are the persisted filtered_state_probs index, not the curve's booking dates.
-        dates = list(pd.read_parquet(PIT_08_3_BEFORE / "backtest_filtered_state_probs.parquet").index)
-        cash = returns[cfg["splice"]["cash"]["research_name"]]
-        allocation = cfg.get("allocation", {})
-        default = _smoothed_hindsight_perf(states, assets, cash, dates, allocation)
-        assert _smoothed_hindsight_perf(states, assets, cash, dates, allocation, pnl_returns=pnl) == default
-
-        kpi = pd.read_parquet(PIT_08_3_BEFORE / "backtest_kpi_table.parquet").set_index("leg")
-        text = (PIT_08_3_BEFORE / "backtest_report.md").read_text(encoding="utf-8")
-        recorded = float(re.search(r"real-time filtered performance\): (-?[0-9.]+)", text).group(1))
-        assert round(default - float(kpi.loc["strategy", "terminal_log_wealth"]), 4) == recorded
+    # test_before_the_switch_on_the_tracked_gap_cannot_move retired 2026-10-12 (08.5): record pin (it re-read the
+    # pit_08.3/before artefacts under outputs/ and the tracked monthly_raw); the property (reading the P&L frame cannot
+    # move the oracle when that frame IS the asset frame) is covered by test_pnl_equal_to_the_asset_returns_is_byte_identical
+    # above; the record lives in tag model/pre-reset-2026-10.
 
 
 # ── Gold on the World Bank average, P&L on month-end (2026-10-09, DECISIONS D-09) ──

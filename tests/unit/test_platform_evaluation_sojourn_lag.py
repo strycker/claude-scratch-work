@@ -15,9 +15,6 @@ lag (the "fooled by its own backtest" failure).
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -332,47 +329,10 @@ class TestT012WrongColumnShapeRaises:
 
 # ── Plan 08-06 Task 2: the extraction of _transitions_by_state moved nothing ───────
 #
-# These read the REAL dev inputs from tracked files, not the committed JSON alone: a
-# pin that only re-read diagnostics_l1only.json would pass whatever the refactor did
-# to the function, because the JSON was written before it. Both inputs are tracked
-# (data/checkpoints/platform/regime_labels.parquet and the l1only joint curve), so
-# nothing here skips in CI. The reconstruction mirrors
-# the retired scripts/joint_lift_diagnostics.py::diagnose exactly: dev split of the full-sample
-# L1 labels, and a one-hot of the walk-forward state_1 column (exact, not an
-# approximation, under ROUTING_L1_ONLY).
-
-_JOINT_LIFT_DIR = Path(__file__).resolve().parents[2] / "outputs" / "reports" / "platform" / "joint_lift"
-
-
-def _real_dev_inputs() -> tuple[pd.Series, pd.DataFrame]:
-    from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
-    from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
-
-    full = get_platform_checkpoint_manager().load("regime_labels")["state"]
-    dev, _ = split_by_holdout_boundary(full.to_frame("state"), cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    filtered = pd.read_parquet(_JOINT_LIFT_DIR / "joint_lift_joint_l1only.parquet")["state_1"].dropna().astype(int)
-    probs = pd.DataFrame({int(k): (filtered == k).astype(float) for k in sorted(filtered.unique())}, index=filtered.index)
-    return dev["state"], probs
-
-
-# 08.1 (2026-09-30): these verify 08-06/08-10's RECORD (diagnostics_l1only.json), measured on
-# the pre-8.1 unlagged labels, so they read regime_labels as of 06002f9 (pre_pit_platform_dir).
-# On the point-in-time labels the headline moves 9.5/4.0/2.375 -> 10.0/4.0/2.5 (25 of 25).
-@pytest.mark.usefixtures("pre_pit_platform_dir")
-class TestHeadlinePinOnRealDevInputs:
-    def test_classifier_1_headline_is_9_5_over_4_0_with_25_of_25(self):
-        states, probs = _real_dev_inputs()
-        assert states.index.max() <= pd.Timestamp("2020-12-31")  # holdout never read
-        out = compute_sojourn_lag_headline(states, probs, act_threshold=0.70)
-        assert (out["median_sojourn"], out["median_lag"], out["ratio"]) == (9.5, 4.0, 2.375)
-        assert (out["n_transitions"], out["n_resolved"]) == (25, 25)
-
-    def test_recomputation_equals_the_committed_record(self):
-        record = json.loads((_JOINT_LIFT_DIR / "diagnostics_l1only.json").read_text())["classifier_1"]["sojourn_lag"]
-        states, probs = _real_dev_inputs()
-        out = compute_sojourn_lag_headline(states, probs, act_threshold=record["act_threshold"])
-        for key in ("median_sojourn", "median_lag", "ratio", "n_transitions", "n_resolved"):
-            assert out[key] == record[key], key
+# TestHeadlinePinOnRealDevInputs (2 tests) retired 2026-10-12 (08.5): record pin (the 08-06 headline 9.5 / 4.0 / 25 of 25
+# and the committed diagnostics_l1only.json, read from the tracked labels, the joint-lift curve under outputs/ and the
+# pre-8.1 checkpoints at 06002f9); the headline stays covered by TestSojournLagHeadline above, whose first test checks
+# the known construction against sojourn_lag_ratio; the record lives in tag model/pre-reset-2026-10.
 
 
 # ── Plan 08-06 Task 2: compute_signed_detection_offsets ────────────────────────────
@@ -411,23 +371,9 @@ class TestSignedOffsetAgreesWithDetectionLag:
         assert out["n_negative"] == 0 and out["n_zero_or_negative"] == 0
         assert out["min_offset"] == 1.0
 
-    def test_agrees_on_every_transition_of_the_real_dev_inputs(self):
-        """The real l1only inputs: wherever compute_detection_lag is not 0, the signed
-        offset must equal it exactly; where it is 0, the signed offset must be <= 0.
-        Measured 2026-09-23: all 25 transitions have lag >= 1, so all 25 are equal and
-        none leads (min_offset 1.0, median 4.0 — the headline's own median)."""
-        states, probs = _real_dev_inputs()
-        out = compute_signed_detection_offsets(states, probs, act_threshold=0.70)
-        assert out["n_transitions"] == 25
-        for pos, s, off in zip(out["positions"], out["target_states"], out["offsets"]):
-            lag = compute_detection_lag([pos], probs[s].reindex(states.index), threshold=0.70)["lags"][0]
-            if lag == 0:
-                assert off <= 0, (pos, s, off)
-            elif np.isnan(lag):
-                assert np.isnan(off), (pos, s, off)
-            else:
-                assert off == lag, (pos, s, off, lag)
-        assert out["median_offset"] == compute_sojourn_lag_headline(states, probs)["median_lag"] == 4.0
+    # test_agrees_on_every_transition_of_the_real_dev_inputs retired 2026-10-12 (08.5): record pin (the 25 real l1only
+    # transitions measured 2026-09-23, read from the tracked labels and the joint-lift curve under outputs/); the
+    # property is test_elementwise_equal_where_no_belief_leads above; the record lives in tag model/pre-reset-2026-10.
 
 
 class TestNegativeOffsetsAreReachable:

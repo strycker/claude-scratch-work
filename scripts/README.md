@@ -9,7 +9,7 @@
 | `python -m trading_crab_lib.platform.report.weekly` | Writes the weekly page (`outputs/reports/platform/weekly_report.md`). |
 | `python scripts/platform_snapshot.py` | Offline dev snapshots of the platform checkpoints (see `docs/offline_snapshots.md`). |
 | `python scripts/recompute_monthly_features.py` | Network-free recompute of `monthly_features` from the cached `monthly_raw`. |
-| `python scripts/migrate_*.py` | One-off migrations from 08.1 and 08.3. They are kept for their record tests and retire in 08.5. |
+| `python scripts/migrate_publication_lags.py` | One-off 08.1 publication-lag migration; an error message in transforms_monthly.py names it. The 08.3 month-end migration was retired in 08.5. |
 
 `diagnose_macrotrends*.py` and `diagnose_yahoo_interceptor.sh` help when a source fails to fetch on a new machine.
 

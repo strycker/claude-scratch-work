@@ -6,9 +6,20 @@
 
 **Target repo:** `https://github.com/strycker/trading-crab`
 **Structure:** Two-package layout (`trading-crab` app + `trading-crab-lib` library).
-**Requirement:** MIG-01 · **GSD Phase:** 7 (Migration to Public Repo)
+**Requirement:** MIG-01 · **GSD Phase:** 9 (Migration to Public Repo), delivered as Phases 9.1–9.8
 
 ---
+
+> ## Status 2026-10-10 — read this first
+>
+> - **08.5 reset done:** nothing generated lives in git any more (`data/`, `outputs/` and notebook outputs);
+>   the registry started a true-zero epoch (ADR-0005, DECISIONS H-12). The pre-reset tree is tag
+>   `model/pre-reset-2026-10`.
+> - **§6 reference numbers retired:** their record lives in tag `model/pre-reset-2026-10`. The first budgeted
+>   run in the new repo (Phase 9.4) sets new reference numbers, with the ADR-0005 epoch note on its DSR line.
+> - **Order:** ROADMAP Phases 9.1–9.8, one module each (M0..M7, `platform_design/MODULE-MAP.md`); M8 moves with
+>   M0 (the registry), M1 and M3 (DECISIONS G-15, amended 2026-10-12).
+> - **P0–P6 below stay a checklist** for what each module's phase must carry; they no longer set the order.
 
 > ## Status 2026-09-29 — read before using this plan
 >
@@ -211,24 +222,30 @@ nothing — there is a test for this).
 | P6.7 | CI, pre-commit, ruff/mypy | `.github/workflows/`, `.pre-commit-config.yaml` |
 | P6.8 | Platform-first `README.md` + `CLAUDE.md`; `platform_design.md` | root |
 
-**Validate:** **full suite green in target-repo CI** (not just locally); a real
-1972–2020 run reproduces the numbers below; **`P6_backtest_evaluation.ipynb` runs clean.**
+**Validate:** **full suite green in target-repo CI** (not just locally); ~~a real
+1972–2020 run reproduces the numbers below~~ the first budgeted run (9.4) sets new numbers (§6 retired at the
+08.5 reset); **`P6_backtest_evaluation.ipynb` runs clean.**
 
 ---
 
 ## 5. Acceptance — the migration is done when
 
-1. `pytest tests/ -q` is green in the target repo **and in its CI**, ≥ 378 platform tests.
+1. `pytest tests/ -q` is green in the target repo **and in its CI**.
 2. `platform/` imports nothing from the legacy library (guard test P0.4 enforces).
-3. A real 1972–2020 walk-forward reproduces the reference numbers (§6) within tolerance.
+3. From a fresh clone the build and the weekly page run; the first budgeted run (9.4) sets new reference
+   numbers with the ADR-0005 epoch note.
 4. All six notebooks `P1`–`P6` run top-to-bottom without error.
 5. `registry/trials.jsonl` is git-tracked and gains exactly 2 rows per full run.
 6. No DSR computed; no 2021+ read on any dev path.
 7. README/docs describe the regime-conditional platform, not the quarterly pipeline.
 
-## 6. Reference numbers (post-activation real run, 2026-08)
+## 6. Reference numbers (retired at the 08.5 reset; history only)
 
-The migrated code must reproduce these. Divergence means something broke in transit.
+Retired 2026-10-10: these are no longer an acceptance target (the record is in tag `model/pre-reset-2026-10`; the
+first budgeted run in Phase 9.4 sets new numbers). The table below is kept as history.
+
+~~The migrated code must reproduce these. Divergence means something broke in transit.~~ (post-activation real
+run, 2026-08)
 
 | Metric | Value |
 |---|---|

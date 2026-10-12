@@ -8,25 +8,28 @@ they start with `scripts/` or `notebooks/`.
 
 ## Modules
 
-| # | Module | Interface (in → out) | Current files | Notebook | Gate |
-|---|---|---|---|---|---|
-| M0 | Skeleton | config, checkpoint manager, CLI, CI | `config.py`, `checkpoints.py`, `snapshots.py` | none | `tradingcrab --help` runs; CI green |
-| M1 | Data spine | raw sources → `monthly_raw`, publication lags applied | `ingestion/{alfred,eodhd,macro_daily,macro_monthly,norgate,prices_daily,publication_lags,tiingo}.py`, `splice.py`, `transforms_monthly.py`, `scripts/build_platform_data.py` | `P1_data_spine.ipynb` | coverage plot; point-in-time test passes; splices continuous |
-| M2 | Features | `monthly_raw` → `monthly_features` (causal only) | `taxonomy.py` | `P2_features_taxonomy.ipynb` | taxonomy table; no centred smoothing in causal features |
-| M3 | Baseline allocator + backtest | returns → vol-targeted weights → walk-forward curve vs SPY, 60/40, Faber | `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` | `P5_assets_allocation.ipynb`, `P6_backtest_evaluation.ipynb` | scoreboard table renders; costs applied |
-| M4 | Weekly report (serving) | latest data + weights + holdings → markdown | `report/{weekly,serving,holdings}.py`, plus `report/scoreboard.py` (added by 08.2-03) | N4 = `P7_serving_report.ipynb` (08.2-03) | two runs on real data give an identical report; as-of date shown |
-| MVP-1 | Usable product, no regime model | | | | Glenn trades from it (A-13: the page runs the no-regime core mix) |
-| M5 | Regime labeler | features → states and profiles, aligned across refits | `labeling/{jump_model,diagnostics}.py` | `P3_regime_labeling.ipynb` | timeline vs recessions; occupancy; profiles make sense |
-| M6 | Nowcaster + filter | causal features → P(regime now) → filtered belief | `prediction/{nowcaster,regime_filter,transition_matrix}.py` | `P4_nowcaster.ipynb`; N6 = `P8_filtered_belief.ipynb` (08.2-03) | distinct-output count above 1; truncation (no look-ahead) test. Today the count is 1, hence A-14 (view suspended) |
-| M7 | Regime tilt + ablation | belief → tilted weights; scoreboard compares tilt with ablation | `allocation/tilt.py`, `backtest/driver.py` (tilt-off ablation leg) | N7 = `P9_does_regime_pay.ipynb` (08.2-03) | tilt beats ablation net of costs, or it stays advisory. E-06 says NO, so it is advisory (G-06) |
-| MVP-2 | Regime-aware product | | | | |
-| M8 | Honesty | registry budgets, DSR, holdout evaluation | `honesty/{cv,gap_lag,gating,holdout,registry,walkforward}.py`, `evaluation/deflated_sharpe.py` (now also holds `quality_tier`, `annualized_sharpe`, `QUALITY_TIER_RULE`) | none yet | DSR computed against the registry |
-| M9+ | Tripwire, stability, second classifier, mixture of experts, tactics | as designed | `tripwire/monitor.py` (advisory on the page from 08.2-03); stability and classifier #2 were retired 2026-10-05, see below | per module | per module |
+| # | Module | Phase | Interface (in → out) | Current files | Notebook | Gate |
+|---|---|---|---|---|---|---|
+| M0 | Skeleton | 9.1 | config, checkpoint manager, CLI, CI | `config.py`, `checkpoints.py`, `snapshots.py`, `state.py` (G-12) | none | `tradingcrab --help` runs; CI green |
+| M1 | Data spine | 9.2 | raw sources → `monthly_raw`, publication lags applied | `ingestion/{alfred,eodhd,macro_daily,macro_monthly,norgate,prices_daily,publication_lags,tiingo}.py`, `splice.py`, `transforms_monthly.py`, `scripts/build_platform_data.py` | `P1_data_spine.ipynb` | coverage plot; point-in-time test passes; splices continuous |
+| M2 | Features | 9.3 | `monthly_raw` → `monthly_features` (causal only) | `taxonomy.py` | `P2_features_taxonomy.ipynb` | taxonomy table; no centred smoothing in causal features |
+| M3 | Baseline allocator + backtest | 9.4 | returns → vol-targeted weights → walk-forward curve vs SPY, 60/40, Faber | `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` | `P5_assets_allocation.ipynb`, `P6_backtest_evaluation.ipynb` | scoreboard table renders; costs applied |
+| M4 | Weekly report (serving) | 9.5 | latest data + weights + holdings → markdown | `report/{weekly,serving,holdings}.py`, plus `report/scoreboard.py` (added by 08.2-03) | N4 = `P7_serving_report.ipynb` (08.2-03) | runs 2 and 3 on real data give an identical report apart from the run date (D-06 as amended 2026-10-12); as-of date shown |
+| MVP-1 | Usable product, no regime model | 9.5 | | | | Glenn trades from it (A-13: the page runs the no-regime core mix) |
+| M5 | Regime labeler | 9.6 | features → states and profiles, aligned across refits | `labeling/{jump_model,diagnostics}.py` | `P3_regime_labeling.ipynb` | timeline vs recessions; occupancy; profiles make sense |
+| M6 | Nowcaster + filter | 9.7 | causal features → P(regime now) → filtered belief | `prediction/{nowcaster,regime_filter,transition_matrix}.py` | `P4_nowcaster.ipynb`; N6 = `P8_filtered_belief.ipynb` (08.2-03) | distinct-output count above 1; truncation (no look-ahead) test. Today the count is 1, hence A-14 (view suspended) |
+| M7 | Regime tilt + ablation | 9.8 | belief → tilted weights; scoreboard compares tilt with ablation | `allocation/tilt.py`, `backtest/driver.py` (tilt-off ablation leg) | N7 = `P9_does_regime_pay.ipynb` (08.2-03) | tilt beats ablation net of costs, or it stays advisory. E-06 says NO, so it is advisory (G-06) |
+| MVP-2 | Regime-aware product | 9.8 | | | | |
+| M8 | Honesty | with M0 (9.1), M1 (9.2) and M3 (9.4) | registry budgets, DSR, holdout evaluation | `honesty/{cv,gap_lag,gating,holdout,registry,walkforward}.py`, `evaluation/deflated_sharpe.py` (now also holds `quality_tier`, `annualized_sharpe`, `QUALITY_TIER_RULE`). No phase of its own: the code moves with its first importer: the registry with M0 (the state tool reads it), the holdout fence and walk-forward with M1, budgets and DSR with M3 (G-15, amended 2026-10-12) | none yet | DSR computed against the registry |
+| M9+ | Tripwire, stability, second classifier, mixture of experts, tactics | backlog | as designed | `tripwire/monitor.py` (advisory on the page from 08.2-03); stability and classifier #2 were retired 2026-10-05, see below | per module | per module |
+
+Every gate also needs the module's `realdata` tests green on the Mac after a build (08.5: nothing generated is in git,
+so these tests skip until a build exists).
 
 ## Retired research code (2026-10-05, KISS: DECISIONS P-07, G-13)
 
 The code parked in 08.2-02 and everything that existed only to serve it has been **deleted**, not parked.
-It remains retrievable from git history, and from the 08.5 archive tag. The weekly product never used any of
+It remains retrievable from git history, and from the 08.5 tag `model/pre-reset-2026-10`. The weekly product never used any of
 it.
 
 - **Parked modules:**
@@ -46,4 +49,4 @@ it.
 
 `evaluation/churn.py` and `evaluation/disagreement.py` stay, because active code uses them. Record tests that
 read committed joint-lift outputs without importing retired code (e.g. the S-1 truncation guard in
-`test_platform_nowcaster_recursion.py`) retire with the tracked outputs in 08.5.
+`test_platform_nowcaster_recursion.py`) retired with the tracked outputs in 08.5 (2026-10-10).

@@ -1,7 +1,7 @@
 """
 Static scoreboard for the weekly page and notebook N7 (plan 08.2-03, D-05, DECISIONS A-14).
 
-One table from the LAST BUDGETED RUN's tracked outputs (8.1's D-04 run): the regime tilt, the
+One table from the LAST BUDGETED RUN's outputs (8.1's D-04 run): the regime tilt, the
 no-regime ablation, SPY buy-and-hold, 60/40 and Faber's 10-month SMA, each with terminal log
 wealth (TLW) and max drawdown (MDD). It changes only when a budgeted run rewrites those outputs;
 nothing here fits, tunes, selects or writes, and no registry row is appended.
@@ -122,7 +122,7 @@ def scoreboard_table(
             scoreboard_trial_tag``).
         cm: checkpoint manager holding ``monthly_raw`` (default: the platform namespace).
         reports_dir: where the KPI table and curves live (default ``PLATFORM_REPORT_DIR``,
-            i.e. ``OUTPUT_DIR/reports/platform``: the tracked outputs, read at call time).
+            i.e. ``OUTPUT_DIR/reports/platform``: the local run record, read at call time).
         registry_path: the trial registry (default: the live ledger), read only.
 
     Returns a dict: ``available`` / ``reason``; ``legs`` (one dict per leg in page order:
@@ -143,8 +143,18 @@ def scoreboard_table(
         curves = {leg: pd.read_parquet(reports / name)["return"] for leg, name in _CURVE_FILES.items()}
         own = {leg: (float(kpi.loc[leg, "terminal_log_wealth"]), float(kpi.loc[leg, "max_drawdown"]))
                for leg, _ in LEG_LABELS}
-    except (FileNotFoundError, KeyError) as exc:
-        board["reason"] = f"the tracked backtest outputs under {reports} cannot be read ({exc!r})"
+    except FileNotFoundError as exc:
+        missing = Path(exc.filename or reports).name
+        if not (reports / _KPI_FILE).exists():
+            # Normal since the 08.5 reset: outputs/ is untracked, so a machine has no record until it runs one.
+            board["reason"] = f"no budgeted run has written its record here yet; missing {missing}"
+            log.info("scoreboard not yet measured: %s", board["reason"])
+            return board
+        board["reason"] = f"the backtest outputs under {reports} are incomplete; missing {missing}"
+        log.warning("scoreboard unavailable: %s", board["reason"])
+        return board
+    except KeyError as exc:
+        board["reason"] = f"the backtest outputs under {reports} are incomplete ({exc!r})"
         log.warning("scoreboard unavailable: %s", board["reason"])
         return board
 

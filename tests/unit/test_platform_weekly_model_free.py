@@ -104,6 +104,7 @@ def test_main_says_build_first_when_the_platform_data_is_missing(tmp_path, monke
     assert weekly.main([]) == 1
 
     out = capsys.readouterr().out
+    assert out.startswith("Code: ")  # which branch and commit ran (2026-10-12)
     assert "platform data has not been built" in out
     assert str(empty / "monthly_raw.parquet") in out and str(empty / "monthly_features.parquet") in out
     assert weekly.PLATFORM_BUILD_COMMAND in out
