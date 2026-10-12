@@ -1,6 +1,7 @@
 # REBUILD-FROM-SCRATCH-GUIDE.md: the regime-conditional platform, planned without regret
 
 **Written:** 2026-09-29, after Phases 1–8 of the platform (plus 8's gap closure).
+**Updated:** 2026-10-12 (08.5): learnings from 8.1–8.5, the Phase 9.1–9.8 order, sizes re-measured.
 **For:** rebuilding the platform in `strycker/trading-crab` from zero, or simplifying it in place.
 The two are the same exercise.
 **Not this:** `docs/archive/REBUILD-FROM-SCRATCH-GUIDE.md` rebuilds the *legacy quarterly
@@ -85,6 +86,22 @@ ceilings, per-number ruling records and mutation proofs for every test are worth
 **only once a candidate beats its baseline and you are choosing between candidates**. Before
 that point they are overhead.
 
+### Learnings from 8.1–8.5
+
+Added in 08.5 (2026-10-12). One line each; the row in `platform_design/DECISIONS.md` has the detail.
+
+- **Month-end P&L:** P&L uses month-end prices; monthly averages are model inputs only (E-07, E-08).
+- **Fail-loud build:** a missing source stops the build before any write, unless explicitly allowed (D-08).
+- **Gold:** the World Bank monthly series is the research source (D-09).
+- **Point-in-time lags belong in M1:** one measured lag per raw series, applied once at ingestion (08.1, D-05).
+- **Live state is untracked:** the operator's book and serving state stay machine-local (G-11).
+- **One small state tool:** `platform/state.py` archives, resets and restores (G-12).
+- **Freeze by tag, not by a promoted archive:** the pre-reset tree is tag `model/pre-reset-2026-10` (G-14).
+- **Nothing generated in git:** `data/`, `outputs/` and notebook outputs are ignored or stripped (G-14).
+- **The `realdata` marker:** tests that need a build skip without one and run on the Mac after a build (G-14).
+- **Registry true-zero epoch:** 48 trials archived; early hurdles understate the burden, the 2021+ holdout guards (H-12, ADR-0005).
+- **Page identity compares run 2 with run 3:** run 1 has no previous book (D-06 as amended 2026-10-12).
+
 ---
 
 ## 2. What the finished MVP must do (the usable product)
@@ -115,7 +132,7 @@ interface, one notebook that shows its data and outputs to a human, and one gate
 |---|---|---|---|---|---|
 | M0 | **Skeleton** | config, checkpoint manager, CLI, CI | — | `tradingcrab --help` runs; CI green | `platform/config.py`, `checkpoints.py` |
 | M1 | **Data spine** | raw sources → `monthly_raw` (with publication lags applied) | N1 data | coverage plot; **point-in-time test passes**; splices continuous | `ingestion/`, `splice.py`, `transforms_monthly.py` (P1) |
-| M2 | **Features** | `monthly_raw` → `monthly_features` (causal only) | N2 features | taxonomy table; no centred smoothing in causal features | `taxonomy.py`, `features/` (P2) |
+| M2 | **Features** | `monthly_raw` → `monthly_features` (causal only) | N2 features | taxonomy table; no centred smoothing in causal features | `taxonomy.py` (P2) |
 | M3 | **Baseline allocator + backtest** | returns → vol-targeted weights → walk-forward curve vs SPY / 60-40 / Faber | N3 baseline | scoreboard table renders; costs applied | `assets/`, `allocation/tilt.py`, `backtest/{driver,baselines,costs}.py` (P5–P6) |
 | M4 | **Weekly report (serving)** | latest data + weights + holdings → markdown | N4 report | run on real data twice → identical report; as-of date shown | `report/{weekly,serving,holdings}.py` |
 | **MVP-1** | *Usable product, no regime model* | | | Glenn trades from it | |
@@ -124,56 +141,64 @@ interface, one notebook that shows its data and outputs to a human, and one gate
 | M7 | **Regime tilt + ablation** | belief → tilted weights; scoreboard adds tilt vs ablation | N7 does-regime-pay | tilt beats ablation net of costs, or it stays advisory | `allocation/`, `backtest/driver.py` |
 | **MVP-2** | *Regime-aware product* | | | | |
 | M8 | **Honesty upgrade** | registry budgets, DSR, holdout evaluation | N8 honesty | DSR computed against the registry | `honesty/`, `evaluation/deflated_sharpe.py` |
-| M9+ | Tripwire, stability, second classifier, mixture of experts, tactics | as designed | per module | per module | `tripwire/`, `parked/{stability,classifier2,joint_driver}.py`, `evaluation/*` |
+| M9+ | Tripwire, stability, second classifier, mixture of experts, tactics | as designed | per module | per module | `tripwire/`, `evaluation/*` (the parked stability, classifier #2 and joint-driver code was deleted in G-13) |
 
 Current file mapping: `platform_design/MODULE-MAP.md` (08.2-02).
 
-**Notebook coverage today:** P1–P6 cover M1–M3, M5, the M6 nowcaster, and M7's backtest.
-**Gaps:**
-- M4 serving has no notebook.
-- The M6 filter and belief are not shown.
-- Classifier #2, the no-trade band and the stability and churn analyses have no notebook.
-- No notebook states the one question M7 exists to answer, "does the regime layer pay rent?"
+**Phases:** M0–M7 are ROADMAP Phases 9.1–9.8 (M0 = 9.1 … M7 = 9.8), one module each. M8 has no phase of its
+own: its code moves with M1 (9.2) and M3 (9.4). M9+ is backlog until MVP-2 (DECISIONS G-15).
+
+**Notebook coverage today:** P1–P9 cover M1–M7 (P7 = N4 serving, P8 = N6 filtered belief, P9 = N7 "does the
+regime layer pay rent?", added in 08.2). Since 08.5 they are committed without outputs; run them after a build.
+P6, P8 and P9 also need the first budgeted run (9.4), because they read its outputs.
+**Gaps:** M0 and M8 have no notebook.
 
 ---
 
 ## 4. Build order: usable first, regime second, rigor when it pays
 
-1. **M0 skeleton, in the target repo.** Two-package layout, config, checkpoints, CI. Import
-   nothing from the legacy library.
-2. **M1 data spine, with publication lags applied from the start.**
-   - Commit a `publication_lag_months` table for every series, plus the point-in-time test.
-   - Physical 2021+ holdout carve (cheap).
+Steps 1–8 are ROADMAP Phases 9.1–9.8 (G-15). Every phase starts from a fresh clone with nothing generated
+in git: the build makes the data, and nothing it makes is committed (G-14).
+
+1. **M0 skeleton, in the target repo (9.1).** Two-package layout, config, checkpoints, the state
+   tool, CI. Import nothing from the legacy library.
+2. **M1 data spine, with publication lags applied from the start (9.2).**
+   - A `publication_lag_months` entry for every series in config, plus the point-in-time test.
+   - A build that fails loud on a missing source (D-08).
+   - Physical 2021+ holdout carve and the walk-forward runner (cheap; from M8, G-15).
    - Notebook N1.
-3. **M2 features.** Causal only. The lean named taxonomy, not 100+ derived columns. Notebook N2.
-4. **M3 baseline allocator and backtest harness.**
-   - Vol-targeted core mix; SPY / 60-40 / Faber baselines; 10 bps costs.
-   - Walk-forward runner and append-only registry (cheap).
+3. **M2 features (9.3).** Causal only. The lean named taxonomy, not 100+ derived columns. Notebook N2.
+4. **M3 baseline allocator and backtest harness (9.4).**
+   - Vol-targeted core mix, the vol target on month-end returns (E-11); SPY / 60-40 / Faber
+     baselines; 10 bps costs; P&L on month-end prices (E-08).
+   - Append-only registry, budgets and DSR, reported, not gating (from M8, G-15). The first
+     budgeted run sets the new baseline and its DSR line carries the ADR-0005 epoch note.
    - Relative float tolerances in every test.
    - Notebook N3 with the scoreboard.
-5. **M4 weekly report on real data.**
-   - One command, run twice, identical output.
+5. **M4 weekly report on real data (9.5).**
+   - One command; runs 2 and 3 identical apart from the run date (run 1 has no previous book).
    - Latest complete month scored, with a staleness cap.
    - Notebook N4.
    - **→ MVP-1: Glenn can use it.**
-6. **M5 regime labeler.**
+6. **M5 regime labeler (9.6).**
    - Jump model with K and λ from the design protocol.
-   - States aligned across refits.
+   - States aligned across refits (CR-02).
    - Human-readable profiles.
    - Notebook N5, with a human sign-off.
-7. **M6 nowcaster and filter.**
-   - Fixed long-history feature set, the same freeze rule as L1.
+7. **M6 nowcaster and filter (9.7).**
+   - Fixed long-history feature set, the same freeze rule as L1 (the L2 recipe).
    - Calibrated; distinct-output check.
    - Bayes filter using the model's own training prior.
    - Truncation-invariance test.
    - Notebook N6.
-8. **M7 regime tilt vs ablation.**
+8. **M7 regime tilt vs ablation (9.8).**
    - The decisive experiment.
    - If the tilt doesn't beat the ablation it stays **advisory** (shown, not weighted) and
      MVP-1's allocation stands.
    - Notebook N7.
    - **→ MVP-2.**
-9. **M8 honesty upgrade**, once there are candidates to choose between:
+9. **M8 honesty upgrade**, once there are candidates to choose between. Its code already moved
+   with M1 and M3 (G-15); this step turns the reports into gates:
    - trial budgets per phase (ADR-0004);
    - the DSR hurdle (ADR-0003);
    - the single 2021+ holdout evaluation at design freeze.
@@ -201,7 +226,7 @@ Current file mapping: `platform_design/MODULE-MAP.md` (08.2-02).
 - **Plan length:** about 150 lines per PLAN. If a plan needs more, the module is too big; split it.
 - **Every phase ends with the same three gates:**
   1. the module's notebook runs top to bottom and Glenn signs its one sign-off cell;
-  2. the real-data → report smoke passes;
+  2. the real-data → report smoke passes and the module's `realdata` tests pass on the Mac after a build;
   3. the full suite is green on Mac and Linux.
 - **Rigor budget:** mutation proofs, ruling records and measurement amendments only for
   **decision-bearing** numbers, which is essentially M7's scoreboard. Every other number is a
@@ -216,13 +241,15 @@ Current file mapping: `platform_design/MODULE-MAP.md` (08.2-02).
 
 | Keep, port as is | Simplify while porting | Leave behind / defer |
 |---|---|---|
-| `splice.py`, `ingestion/` (free sources), `taxonomy.py`, holdout carve, registry append, walk-forward runner, purged CV, jump model, EWMA vol, vol-targeted tilt, costs, baselines, weekly report + serving, holdings YAML, plotting core, P1–P6 notebooks | Nowcaster feature admission (L2-02, fixed long-history set); filter (add cross-refit alignment); DSR and budgets (report, don't gate, before MVP-2); evaluation modules (keep KPIs, sojourn/lag, churn; drop one-off diagnostics scripts) | Classifier #2 and the joint driver (no lift), stability sub-sampling suite, per-number ruling apparatus, paid-provider adapters (placeholders), the legacy quarterly pipeline |
+| `splice.py`, `ingestion/` (free sources), `taxonomy.py`, holdout carve, registry append, walk-forward runner, purged CV, jump model, EWMA vol, vol-targeted tilt, costs, baselines, weekly report + serving, holdings YAML, plotting core, P1–P9 notebooks (committed without outputs) | Nowcaster feature admission (L2-02, fixed long-history set); filter (add cross-refit alignment); DSR and budgets (report, don't gate, before MVP-2); evaluation modules (keep KPIs, sojourn/lag, churn; drop one-off diagnostics scripts) | Classifier #2 and the joint driver (no lift), stability sub-sampling suite, per-number ruling apparatus, paid-provider adapters (placeholders), the legacy quarterly pipeline |
 
-Measured size today: `platform/` is 19.1k source lines across 13 subpackages and 23.2k
-lines of platform tests (66 files).
-- `evaluation/` (3.4k), `plotting/` (3.7k) and `backtest/` (2.1k) hold most of the code.
+Measured size today (2026-10-12, after the G-13 deletions and the 08.5 reset): `platform/` is 17.5k
+source lines (17,487) across 11 subpackages and 20.6k lines of platform tests (20,550; 62 files).
+- `evaluation/` (3.1k), `plotting/` (3.7k) and `backtest/` (1.3k) hold most of the code.
 - The regime-signal core (`labeling/jump_model.py`, `prediction/`, `allocation/tilt.py`) is
-  under 2k lines.
+  about 1.1k lines.
+- Measured with `cat $(find src/trading_crab_lib/platform -name '*.py') | wc -l`,
+  `ls tests/unit/test_platform_*.py | wc -l` and `cat tests/unit/test_platform_*.py | wc -l`.
 
 A lean MVP-2 port is roughly 6–8k source lines.
 
@@ -231,8 +258,11 @@ A lean MVP-2 port is roughly 6–8k source lines.
 ## 7. Open items a rebuild must resolve (not decided yet)
 
 - **CR-02:** a cross-refit state-alignment method. Hungarian matching on centroids is the default.
-- **CR-03:** the exact publication-lag table for every raw series (measured, not assumed).
+  → M5 (Phase 9.6).
+- ~~**CR-03:** the exact publication-lag table for every raw series (measured, not assumed).~~
+  **Resolved** by 08.1's measured table (`publication_lags` in config; DECISIONS D-05).
 - **L2 recipe:** a fixed long-history feature set, and whether calibration is needed at all.
-- **Hysteresis thresholds:** revisit once the belief is final (DECISIONS A-03).
+  → M6 (Phase 9.7).
+- **Hysteresis thresholds:** revisit once the belief is final (DECISIONS A-03). → M9+, after MVP-2.
 - **REG-01:** does a second independent axis exist once data is point-in-time? Answer this only
-  after MVP-2.
+  after MVP-2. → M9+.
