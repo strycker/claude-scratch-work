@@ -8,28 +8,22 @@ sections of the page collapse into one suspended block. A mode switch executes t
 full and says so (A-15).
 
 Every test runs on the synthetic serving world of ``test_platform_report_serving.py`` (reused,
-never edited) in per-test tmp dirs, except the tracked-data parity test, which copies the
-tracked platform checkpoints into a tmp dir and passes ``NO_REGISTRY`` to every refit.
+never edited) in per-test tmp dirs. (The tracked-data parity test was retired in 08.5.)
 """
 
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from test_platform_report_serving import _serving_world  # tests/unit is on sys.path (prepend mode)
-from tracked_record import tracked_record_cfg
 
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.report import weekly
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_REAL_REGISTRY = _REPO_ROOT / "registry" / "trials.jsonl"
-_TRACKED_PLATFORM = _REPO_ROOT / "data" / "checkpoints" / "platform"
-_TRACKED_OUTPUTS = _REPO_ROOT / "outputs" / "reports" / "platform"
 _DEV_END = pd.Timestamp("2020-12-31")
 
 _D03_SENTENCE = (
@@ -37,10 +31,6 @@ _D03_SENTENCE = (
     "rebuild); the allocation does not use it."
 )
 _REGIME_LINES = ("- regime ", "Filtered Regime Belief", "Active Regime", "Trajectory", "Per-Asset Signals")
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _report(world: dict) -> str:
@@ -335,69 +325,10 @@ class TestParityWithTheAblationLeg:
             _same(inputs["target_weights"], rebalance["weights"])
             assert inputs["cash"] == pytest.approx(rebalance["cash"], rel=1e-9, abs=0)
 
-    def test_tracked_data_parity_ablation_rerun_matches_the_tracked_curve_and_weekly(self, tmp_path, monkeypatch):
-        """On the tracked data: a NO_REGISTRY ablation re-run reproduces the tracked ablation curve
-        (``return``, ``scale``) and its final-step tilt is the weekly no-regime target at 2020-11-30.
-        Also pins that D-05's tracked ablation numbers still match the code and the data; a later
-        rebuild that changes rows <= 2020-12 turns this red, and that is informative."""
-        import shutil
-
-        import trading_crab_lib.platform.assets.returns as returns_mod
-        from trading_crab_lib.checkpoints import CheckpointManager
-        from trading_crab_lib.platform.assets.returns import compute_monthly_returns, tradable_asset_returns
-        from trading_crab_lib.platform.backtest import driver
-        from trading_crab_lib.platform.backtest.baselines import no_regime_ablation
-        from trading_crab_lib.platform.honesty import registry
-        from trading_crab_lib.platform.report import serving
-        from trading_crab_lib.platform.splice import build_core_research_series, build_pnl_research_series
-
-        sha_before = _sha256(_REAL_REGISTRY)
-        count_before = registry.total_trial_count(_REAL_REGISTRY)
-        # 08.3 (2026-10-04): 46 -> 48 (the 08.3-monthend-tilt-vs-ablation rows)
-        assert count_before == 48
-
-        tmp_ckpt = tmp_path / "platform"
-        tmp_ckpt.mkdir()
-        for name in ("monthly_features", "monthly_raw", "regime_labels"):
-            for suffix in (".parquet", ".meta.json"):
-                shutil.copy2(_TRACKED_PLATFORM / f"{name}{suffix}", tmp_ckpt / f"{name}{suffix}")
-        monkeypatch.setattr(returns_mod, "OUTPUT_DIR", tmp_path / "out")
-        cm = CheckpointManager(checkpoint_dir=tmp_ckpt)
-        cfg = tracked_record_cfg(load_platform_config())  # 2026-10-09: built before the gold switch
-        assert cfg["backtest"].get("skip_l1l2_for_ablation", True) is True, "precondition: the measured leg skipped L1/L2"
-        serving.build_serving_artifacts(cfg, cm=cm, output_dir=tmp_path / "out")
-
-        # The ablation inputs exactly as run_full_backtest_evaluation builds them.
-        returns = compute_monthly_returns(build_core_research_series(cm.load("monthly_raw"), cfg))
-        asset_returns = tradable_asset_returns(returns, cfg["splice"])
-        cash_ret = returns[cfg["splice"]["cash"]["research_name"]]
-        # 08.3 (2026-10-04): the tracked curve is booked on month-end P&L (E-08), so the re-run
-        # passes pnl_returns built exactly as report.py builds it; the decision inputs above are
-        # unchanged (D-09), so the weekly-target half below is unchanged.
-        pnl_assets = tradable_asset_returns(
-            compute_monthly_returns(build_pnl_research_series(cm.load("monthly_raw"), cfg)), cfg["splice"]
-        )
-        tilts = _spy(monkeypatch, driver, "vol_targeted_tilt")
-        curve, _ = no_regime_ablation(
-            cm.load("monthly_features"), asset_returns, cfg, cash_returns=cash_ret, registry_path=registry.NO_REGISTRY,
-            pnl_returns=pnl_assets,
-        )
-
-        tracked = pd.read_parquet(_TRACKED_OUTPUTS / "backtest_equity_curve_ablation.parquet")
-        assert list(curve.index) == list(tracked.index)
-        # Datetime resolution differs by pandas major (2.x reads ns, 3.x keeps us); the dates
-        # themselves are pinned above, so compare at one resolution.
-        curve = curve.set_axis(curve.index.as_unit("ns"))
-        tracked = tracked.set_axis(tracked.index.as_unit("ns"))
-        for column in ("return", "scale"):
-            pd.testing.assert_series_equal(curve[column], tracked[column], rtol=1e-9, atol=0, check_freq=False)
-
-        weekly_target = weekly.no_regime_target(cm.load("asset_returns"), pd.Timestamp("2020-11-30"), cfg)
-        _same(weekly_target["weights"], tilts[-1]["weights"])
-        assert weekly_target["cash"] == pytest.approx(tilts[-1]["cash"], rel=1e-9, abs=0)
-
-        assert _sha256(_REAL_REGISTRY) == sha_before
-        assert registry.total_trial_count(_REAL_REGISTRY) == count_before == 48  # 08.3 (2026-10-04): 46 -> 48
+    # test_tracked_data_parity_ablation_rerun_matches_the_tracked_curve_and_weekly retired 2026-10-12 (08.5): record pin
+    # (the tracked ablation curve under outputs/, the tracked platform checkpoints and the 48-trial registry pin); the
+    # parity itself is test_synthetic_parity_weekly_steps_equal_the_ablation_driver above; the record lives in tag
+    # model/pre-reset-2026-10.
 
 
 class TestSuspendedView:

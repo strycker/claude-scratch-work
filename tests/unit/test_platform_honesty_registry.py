@@ -157,20 +157,21 @@ class TestTotalTrialCount:
         count = total_trial_count(path=path)
         assert count >= 38, f"total_trial_count() fell below the header's own prior (38): got {count}"
 
-    def test_live_ledger_floor_at_38(self):
-        """Regression pin: a future reset that loses the header must not undercount below 38.
+    def test_live_ledger_starts_with_a_provenance_header(self):
+        """The live ledger opens with a provenance header and its count is header priors + other rows.
 
-        Reads the REAL registry/trials.jsonl (read-only) — skips cleanly if absent (fresh
-        checkout with no registry committed yet).
+        Holds in any epoch (48 today, 0 after the 08.5 reset, D-03), so it names no trial count.
+        Reads the REAL registry/trials.jsonl (read-only); skips cleanly if absent.
         """
         if not DEFAULT_REGISTRY_PATH.exists():
             pytest.skip("registry/trials.jsonl does not exist in this checkout")
-        count = total_trial_count()
-        assert count >= 38, (
-            f"total_trial_count() against the live ledger returned {count}, below the "
-            "provenance header's own stated floor of 38 prior_genuine_trials — this means "
-            "the header was not read (undercount) or was lost entirely."
-        )
+        lines = [ln for ln in DEFAULT_REGISTRY_PATH.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        rows = [json.loads(ln) for ln in lines]
+        assert rows, "the live ledger has no rows, not even a provenance header"
+        assert rows[0]["config"]["record_type"] == PROVENANCE_RECORD_TYPE, "row 0 is not a provenance header"
+        headers = [r for r in rows if r["config"].get("record_type") == PROVENANCE_RECORD_TYPE]
+        expected = sum(int(r["config"]["prior_genuine_trials"]) for r in headers) + (len(rows) - len(headers))
+        assert total_trial_count() == expected
 
     def test_read_trials_unchanged_stays_header_unaware(self, tmp_path):
         """read_trials() itself must stay a bare reader — total_trial_count wraps it, not the reverse."""

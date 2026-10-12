@@ -60,7 +60,6 @@ from trading_crab_lib.platform.evaluation.deflated_sharpe import (
     expected_max_sharpe,
     registry_sharpe_variance,
 )
-from trading_crab_lib.platform.honesty.registry import total_trial_count
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -77,12 +76,6 @@ PRIOR_ADR = REPO_ROOT / "platform_design" / "adr" / "0002-l1-second-classifier.m
 
 RECORDED_N_TRIALS = 42
 RECORDED_TRIAL_CEILING = 44
-# The LIVE ledger is checked against the currently declared ceiling, not the
-# historical one: phase 08.1 declared a 2-row budget, 44 -> 46 (DECISIONS G-05,
-# ADR-0004 § Consequences), then phase 08.3 declared 2 more, 46 -> 48 (DECISIONS
-# G-09). A machine-readable budget file is out of lean scope, so the next budget
-# declaration edits this line. The recorded arithmetic above stays pinned at 44.
-DECLARED_TRIAL_CEILING = 48
 RECORDED_HURDLE = 2.2086935028832686
 
 RECORDED_N_OBS = 588
@@ -195,15 +188,10 @@ class TestTheHurdleIsDerivedFromTheTrialCount:
         )
         assert at_ceiling == pytest.approx(2.2268911497604993, rel=1e-12)
 
-    def test_the_live_trial_count_is_what_feeds_the_hurdle(self):
-        """Read live, never copied. The count is a reading of a moment; what is pinned
-        is that the hurdle tracks it and that the declared budget ceiling still binds."""
-        live = total_trial_count()
-        assert live <= DECLARED_TRIAL_CEILING, (
-            f"live trial count {live} exceeds the declared ceiling {DECLARED_TRIAL_CEILING} "
-            "(DECISIONS G-09); exceeding it requires a written budget amendment first (ADR-0004)"
-        )
-        assert expected_max_sharpe(live, DEGENERATE_SHARPE_VARIANCE) >= RECORDED_HURDLE
+    # test_the_live_trial_count_is_what_feeds_the_hurdle retired 2026-10-12 (08.5): it pinned the live ledger count
+    # against a declared ceiling (DECLARED_TRIAL_CEILING 48), and at a true-zero ledger expected_max_sharpe(0, 1.0) is
+    # 0.0, below RECORDED_HURDLE; the monotone property (the hurdle is derived from the trial count) stays covered by
+    # test_more_trials_raise_the_bar above; the record lives in tag model/pre-reset-2026-10.
 
     def test_the_recorded_legs_still_fail_at_the_ceiling(self):
         """The consequence does not depend on the count being exactly 42."""

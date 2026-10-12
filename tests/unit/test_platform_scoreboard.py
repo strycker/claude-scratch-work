@@ -17,7 +17,6 @@ checks the registry is byte-identical afterwards.
 from __future__ import annotations
 
 import ast
-import hashlib
 import json
 import subprocess
 import sys
@@ -27,7 +26,6 @@ import numpy as np
 import pandas as pd
 import pytest
 from test_platform_plotting_backtest import CFG  # tests/unit is on sys.path (prepend mode)
-from tracked_record import tracked_record_cfg
 
 from trading_crab_lib.platform.evaluation.kpis import max_drawdown_and_duration, terminal_log_wealth
 from trading_crab_lib.platform.plotting import backtest as pbacktest
@@ -296,41 +294,11 @@ class TestBoundary:
         assert out.stdout.strip() == "False", out.stderr
 
 
-# ── the tracked outputs (read-only) ──────────────────────────────────────────
-
-
-def _sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-class TestTrackedScoreboard:
-    def test_tracked_numbers(self):
-        from trading_crab_lib.checkpoints import CheckpointManager
-        from trading_crab_lib.platform.config import load_platform_config
-
-        registry_path = _REPO / "registry" / "trials.jsonl"
-        reports = _REPO / "outputs" / "reports" / "platform"
-        before = _sha(registry_path)
-        board = scoreboard.scoreboard_table(
-            # 2026-10-09: the tracked data predates the World Bank gold switch.
-            tracked_record_cfg(load_platform_config()),
-            CheckpointManager(checkpoint_dir=_REPO / "data" / "checkpoints" / "platform"),
-            reports_dir=reports, registry_path=registry_path,
-        )
-        assert board["reconciled"] is True, board["reason"]
-        common = [row["tlw_common"] for row in board["legs"]]
-        # 08.3 (2026-10-04): [3.8909, 4.0424, 5.0022, 4.4799, 5.5451] -> the month-end run's
-        # [3.8789, 4.1124, 4.9900, 4.5098, 4.9759] (registry rows 47-48, DECISIONS E-12)
-        assert common == pytest.approx([3.8789, 4.1124, 4.9900, 4.5098, 4.9759], rel=1e-4)
-        kpi = pd.read_parquet(reports / "backtest_kpi_table.parquet").set_index("leg")
-        for row in board["legs"]:
-            assert row["tlw_own"] == pytest.approx(kpi.loc[row["leg"], "terminal_log_wealth"], rel=1e-9, abs=0)
-        assert (board["window_start"], board["window_end"], board["n_steps"]) == (
-            pd.Timestamp("1972-01-31"), pd.Timestamp("2020-12-31"), 588)
-        # 08.3 (2026-10-04): "2026-09-30" -> "2026-10-04" (the 08.3-monthend-tilt-vs-ablation rows)
-        assert board["trial_tag"] == "08.3-monthend-tilt-vs-ablation"
-        assert board["run_date"].date().isoformat() == "2026-10-04"
-        assert _sha(registry_path) == before
+# ── the tracked outputs: retired 2026-10-12 (08.5) ───────────────────────────
+#
+# TestTrackedScoreboard retired 2026-10-12 (08.5): record pin (the tracked KPIs and registry rows 47-48 read from
+# outputs/ and registry/); the scoreboard table stays covered by TestScoreboardTable above on a synthetic world; the
+# record lives in tag model/pre-reset-2026-10.
 
 
 # ── on the weekly page ───────────────────────────────────────────────────────

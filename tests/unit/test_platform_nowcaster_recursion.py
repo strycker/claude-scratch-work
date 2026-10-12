@@ -57,28 +57,25 @@ arm that asserted one would turn a measurement into a gate after the fact. The
 real-data arm (``joint_lift_probs_1_l2.parquet``) is plan 08-08's, which owns the
 wiring and therefore the number.
 
-**Plan 08-08's real-data arm** (bottom of this file) runs the signed offset over the
-REAL filtered belief path (``joint_lift_belief_{1,2}_l2.parquet``) against the real
-full-sample reference labels, and classifies every strictly negative offset with
-``classify_negative_offsets`` — the held-through-return rule pre-registered in
-08-08-PLAN.md (AMENDED 2026-09-23, before any real 08-08 number existed) and pinned
-against this file's synthetic arms in ``test_platform_evaluation_sojourn_lag.py``
-first. ``n_lead == 0`` is the gate: one LEAD is proof that post-*t* information
-reached the belief. Held-through misses are reported with their positions, never
-dropped.
+**Plan 08-08's real-data arm** ran the signed offset over the real filtered belief
+path against the real full-sample reference labels, and classified every strictly
+negative offset with ``classify_negative_offsets`` (the held-through-return rule
+pre-registered in 08-08-PLAN.md, AMENDED 2026-09-23, before any real 08-08 number
+existed, and pinned against this file's synthetic arms in
+``test_platform_evaluation_sojourn_lag.py`` first). ``n_lead == 0`` is the gate: one
+LEAD is proof that post-*t* information reached the belief. Its two real-data tests
+read the joint-lift records under ``outputs/`` and were retired in 08.5 as record
+pins (see the dated note at the bottom of this file); the synthetic arms above keep
+the property.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from trading_crab_lib.platform.evaluation.churn import read_probability_matrix
 from trading_crab_lib.platform.evaluation.sojourn_lag import (
-    classify_negative_offsets,
     compute_signed_detection_offsets,
     compute_sojourn_lag_headline,
 )
@@ -292,83 +289,12 @@ def test_caveat_an_honest_filter_that_MISSES_a_short_regime_reads_as_a_lead():
     assert belief[0].iloc[36:45].max() < ACT
 
 
-# ── Plan 08-08: the REAL-DATA arm ────────────────────────────────────────────────
-
-_JOINT_LIFT = Path(__file__).resolve().parents[2] / "outputs" / "reports" / "platform" / "joint_lift"
-
-
-def _real_reference(checkpoint: str) -> pd.Series:
-    from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
-    from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
-
-    full = get_platform_checkpoint_manager().load(checkpoint)["state"]
-    dev, _ = split_by_holdout_boundary(full.to_frame("state"), cutoff=DEFAULT_HOLDOUT_CUTOFF)
-    return dev["state"]
-
-
-def _real_act_threshold() -> float:
-    from trading_crab_lib.platform.config import load_platform_config
-
-    return float(load_platform_config()["allocation"]["hysteresis"]["act_threshold"])
-
-
-#: S-1 on the REAL belief paths — an OBSERVATIONAL reading since Glenn's ruling of
-#: 2026-09-23 (08-08-PLAN.md "RULING — 2026-09-23"): causal invariance is the governing
-#: leakage guard; S-1's three clauses are unchanged (T-08-40b), and its counts are pinned
-#: here as measured so that any movement is seen. Every negative offset below was
-#: ADJUDICATED by a truncation cut at p-1 (s1_truncation_invariance.json): bit-identical
-#: by the script's test AND by a NaN-aware exact frame comparison, i.e. not leakage.
-#:
-#: NEW reading, plan 08-19 (2026-09-29). The belief path moved because of CR-01: the
-#: filter's likelihood now divides the posterior by each step fit's TRAINING class prior
-#: (08-16 serve, 08-17 both backtest drivers), not by the in-window label prior. The raw
-#: posterior is unchanged (joint_lift_probs_{1,2}_l2.parquet byte-identical), so only the
-#: belief moved. Cuts at 1995-03-31 and 2012-08-31 (and the standing 1982-08-31 spot-check)
-#: are bit-identical under both comparators.
-#: - #1: 0 negative offsets (the held-through miss at 300 is gone).
-#: - #2: 2 LEADs at 387 (1995-04, -12) and 596 (2012-09, -32), 0 misses (the -1 LEAD at
-#:   236 is gone; 596's offset moved -31 -> -32).
-#:   Classifier #2's walk-forward and reference labelings agree 41.3% after the best 1:1
-#:   relabelling (08-CHURN.md §5.2): S-1 compares two vocabularies there.
-#:
-#: OLD reading, plan 08-08 (2026-09-23), kept verbatim:
-#: - #1: 0 LEADs; 1 held-through miss at 300 (1988-02-29, -6) — a return into state 4
-#:   after the reference's 4-month state-0 run 1987-10..1988-01 that the belief held
-#:   state 4 straight through.
-#: - #2: 3 LEADs at 236 (1982-09, -1), 387 (1995-04, -12), 596 (2012-09, -31), 0 misses.
-#: i.e. {1: {"n_negative": 1, "lead_positions": [], "held_through_miss_positions": [300]},
-#:       2: {"n_negative": 3, "lead_positions": [236, 387, 596], "held_through_miss_positions": []}}
-_MEASURED_S1 = {
-    1: {"n_negative": 0, "lead_positions": [], "held_through_miss_positions": []},
-    2: {"n_negative": 2, "lead_positions": [387, 596], "held_through_miss_positions": []},
-}
-
-
-@pytest.mark.parametrize("clf,checkpoint", [(1, "regime_labels"), (2, "regime_labels_2")])
-def test_real_data_s1_counts_are_pinned_as_measured(clf, checkpoint):
-    """Fails if any S-1 count or position moves. It no longer gates (see the ruling);
-    the governing guard is the invariance test below and the real-data truncation record."""
-    reference = _real_reference(checkpoint)
-    belief = read_probability_matrix(_JOINT_LIFT / f"joint_lift_belief_{clf}_l2.parquet")
-    assert reference.index.max() <= pd.Timestamp("2020-12-31")  # holdout never read
-    assert belief.index.max() <= pd.Timestamp("2020-12-31")
-    act = _real_act_threshold()
-
-    offsets = compute_signed_detection_offsets(reference, belief, act_threshold=act)
-    classified = classify_negative_offsets(reference, belief, offsets, act)
-
-    measured = {
-        "n_negative": offsets["n_negative"],
-        "lead_positions": classified["lead_positions"],
-        "held_through_miss_positions": classified["held_through_miss_positions"],
-    }
-    assert measured == _MEASURED_S1[clf], (
-        f"classifier #{clf}: S-1 moved from its measured reading {_MEASURED_S1[clf]} to {measured}. "
-        "Any new negative offset must be ADJUDICATED by a truncation cut at p-1 "
-        "(scripts/diagnose_s1_truncation.py) before this pin is moved."
-    )
-    assert classified["n_lead"] + classified["n_held_through_miss"] == offsets["n_negative"]
-
+# ── Plan 08-08: the REAL-DATA arm: retired 2026-10-12 (08.5) ─────────────────────
+#
+# test_real_data_s1_counts_are_pinned_as_measured[1|2] retired 2026-10-12 (08.5): record pin (it read the
+# joint-lift belief parquets under outputs/ and pinned S-1 as measured for code retired under G-13); S-1 stays
+# covered by test_arm1_honest_filtered_belief_never_leads_a_transition above; the record lives in tag
+# model/pre-reset-2026-10.
 
 
 # ── Plan 08-08 RULING (2026-09-23): the GOVERNING guard — causal invariance ──────
@@ -492,20 +418,8 @@ def test_why_A_and_the_prior_are_fixed_rederiving_them_breaks_the_HONEST_filter(
     assert not np.array_equal(rederived, full[: cut + 1])
 
 
-def test_every_real_negative_offset_was_adjudicated_bit_identical():
-    """Two-stage real-data guard: S-1 detects, invariance adjudicates. Every negative
-    offset in _MEASURED_S1 must have a truncation cut at p-1 in the committed record,
-    bit-identical for BOTH classifiers — any break would have halted the plan."""
-    import json
-
-    record = json.loads((_JOINT_LIFT / "s1_truncation_invariance.json").read_text())
-    cuts = {c["T"]: c for c in record["cuts"]}
-    for clf, checkpoint in ((1, "regime_labels"), (2, "regime_labels_2")):
-        reference = _real_reference(checkpoint)
-        for p in _MEASURED_S1[clf]["lead_positions"] + _MEASURED_S1[clf]["held_through_miss_positions"]:
-            t = str(reference.index[p - 1].date())
-            assert t in cuts, f"classifier #{clf} offset at {p} has no truncation cut at {t}"
-            for c in ("classifier_1", "classifier_2"):
-                assert cuts[t][c]["bit_identical"] is True, (t, c)
-                assert cuts[t][c]["max_abs_diff"] == 0.0 and cuts[t][c]["index_equal"] is True
-                assert cuts[t][c]["rows_trunc"] == cuts[t][c]["rows_full_le_T"] > 0
+# test_every_real_negative_offset_was_adjudicated_bit_identical retired 2026-10-12 (08.5): record pin (it read the
+# committed outputs/reports/platform/joint_lift/s1_truncation_invariance.json, a past measurement); the truncation
+# invariance it adjudicated stays covered by
+# test_governing_invariance_honest_filter_is_bit_identical_at_EVERY_cut above; the record lives in tag
+# model/pre-reset-2026-10.
