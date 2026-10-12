@@ -184,6 +184,7 @@ class TestLoadPlatformCheckpoint:
         assert "does_not_exist" in message
         assert "X" in message
 
+    @pytest.mark.realdata
     def test_real_monthly_raw_shape(self):
         df = loaders.load_platform_checkpoint(
             "monthly_raw", rebuild_hint="python scripts/build_platform_data.py"

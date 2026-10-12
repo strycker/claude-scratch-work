@@ -25,6 +25,35 @@ def pytest_report_header(config: pytest.Config) -> str | None:
         return "ignored for this run (tests use the repo's own data/): " + ", ".join(sorted(_IGNORED_OVERRIDES))
     return None
 
+
+# ---------------------------------------------------------------------------
+# realdata marker (08.5, D-04): tests that read the built platform data under data/
+# ---------------------------------------------------------------------------
+_BUILT_DATA = Path(__file__).resolve().parents[1] / "data" / "checkpoints" / "platform" / "monthly_raw.parquet"
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip realdata tests when no build exists; fail loudly when `-m` selects only them.
+
+    trylast: this sees only the items left after `-m` / `-k` deselection, so `-m "not realdata"`
+    never raises. A skipped-only `-m realdata` run would read as a green Mac gate, hence the error.
+    """
+    if _BUILT_DATA.exists():
+        return
+    marked = [i for i in items if i.get_closest_marker("realdata")]
+    if not marked:
+        return
+    if config.getoption("markexpr") and len(marked) == len(items):
+        raise pytest.UsageError(
+            "-m realdata needs built data under data/: run `python scripts/build_platform_data.py` first "
+            "(TC_* path variables are ignored by the tests)"
+        )
+    skip = pytest.mark.skip(reason="no built data under data/: run `python scripts/build_platform_data.py`")
+    for item in marked:
+        item.add_marker(skip)
+
+
 # ---------------------------------------------------------------------------
 # Checkpoint isolation
 # ---------------------------------------------------------------------------

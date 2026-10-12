@@ -52,6 +52,7 @@ include = ["trading_crab"]
 markers = [
     "real_browser: test deliberately launches a real browser (exempt from the conftest launch guard)",
     "network: test deliberately makes a real network request (exempt from the conftest network guard)",
+    "realdata: test reads the built platform data under data/ (auto-skipped when data/ is empty)",
 ]
 testpaths  = ["tests"]
 pythonpath = ["src", "scripts"]
