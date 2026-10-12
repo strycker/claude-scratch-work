@@ -13,7 +13,7 @@ progress:
   total_plans: 81
   completed_plans: 78
 last_activity: 2026-10-12
-last_activity_desc: "Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 awaits Glenn's push."
+last_activity_desc: "Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
 ---
 
 # Project State
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.5 — Clean-Slate Reset & Learnings Before Migration
-Status: Planned 2026-10-12 — 3 plans in 3 waves, ready to execute (`/gsd-execute-phase 8.5`). Before merging 8.5, Glenn pushes the tag `model/pre-reset-2026-10` (on `4e49652`; command in 08.5-CONTEXT D-01).
+Status: Planned 2026-10-12 — 3 plans in 3 waves, ready to execute (`/gsd-execute-phase 8.5`). The tag `model/pre-reset-2026-10` is on origin (pushed by Glenn 2026-10-10, peels to `4e49652`); plan 03's checkpoint only confirms it.
 
 **Phase 08.4 closed 2026-10-09.** Verified 13/13; Glenn's Mac UAT passed 4/4 on the corporate VPN (build from
 empty + bogus-key drill, no-model page, archive → reset → restore with an identical page, promote with the real
