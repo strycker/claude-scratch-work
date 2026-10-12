@@ -51,10 +51,14 @@ def config_hash(config: dict[str, Any]) -> str:
 
 
 def _git_sha() -> str:
-    """Return the current git HEAD SHA, or "unknown" if git is unavailable."""
+    """Return the git HEAD SHA of the checkout this code runs from, or "unknown" if git is unavailable.
+
+    Run beside this file, not in the shell's working directory, so a row records the code that
+    produced it (08.5 review WR-07)."""
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+            cwd=Path(__file__).resolve().parent,
         )
         return result.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:

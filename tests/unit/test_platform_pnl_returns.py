@@ -725,9 +725,7 @@ class TestTrackedMigration:
         from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
 
         cfg = load_platform_config()
-        raw = pd.read_parquet(TRACKED_RAW)
-        _require_month_end_columns(raw)
-        assert set(MONTH_END_COLUMNS) <= set(raw.columns)
+        raw = pd.read_parquet(TRACKED_RAW)  # runs on an --allow-missing build too (08.5 review WR-08)
         rebuilt = transforms_monthly.features_from_raw(raw, cfg)
         assert not (set(MONTH_END_COLUMNS) & set(rebuilt.columns))
         dev, holdout = split_by_holdout_boundary(rebuilt, cutoff=DEFAULT_HOLDOUT_CUTOFF)

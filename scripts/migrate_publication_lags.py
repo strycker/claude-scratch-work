@@ -322,6 +322,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Migrate the tracked monthly_raw to the publication-lag table (08.1).")
     parser.add_argument("--dry-run", action="store_true", help="run every check, write nothing")
     args = parser.parse_args(argv)
+    from trading_crab_lib.platform.code_version import code_version
+
+    print(code_version())
     migrate(load_platform_config(), dry_run=args.dry_run)
     return 0
 

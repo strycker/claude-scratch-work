@@ -28,8 +28,11 @@ def pytest_report_header(config: pytest.Config) -> str | None:
 
 def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Config) -> None:
     """Name the code under test next to the result line; unlike the header, it survives -q (2026-10-12)."""
-    from trading_crab_lib.platform.code_version import code_version
-
+    try:
+        from trading_crab_lib.platform.code_version import code_version
+    except ImportError as exc:
+        terminalreporter.write_line(f"Code: unknown (trading_crab_lib does not import: {exc})")
+        return
     terminalreporter.write_line(code_version())
 
 
@@ -51,7 +54,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     marked = [i for i in items if i.get_closest_marker("realdata")]
     if not marked:
         return
-    if config.getoption("markexpr") and len(marked) == len(items):
+    markexpr = config.getoption("markexpr") or ""
+    if "realdata" in markexpr and "not realdata" not in markexpr and len(marked) == len(items):
         raise pytest.UsageError(
             "-m realdata needs built data under data/: run `python scripts/build_platform_data.py` first "
             "(TC_* path variables are ignored by the tests)"

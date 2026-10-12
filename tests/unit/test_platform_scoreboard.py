@@ -190,6 +190,25 @@ class TestScoreboardTable:
         assert "python -m trading_crab_lib.platform.evaluation.report" in text
         assert scoreboard.E07_CAVEAT in text
 
+    def test_a_kpi_table_without_its_curves_is_incomplete_not_unmeasured(self, tmp_path, caplog):
+        """08.5 review WR-03: a crash after the KPI write must not read as 'no run yet'."""
+        world = _world(tmp_path)
+        (world["reports"] / "backtest_equity_curve_ablation.parquet").unlink()
+        with caplog.at_level("WARNING", logger=scoreboard.log.name):
+            board = _board(world)
+        assert board["available"] is False
+        assert "incomplete; missing backtest_equity_curve_ablation.parquet" in board["reason"]
+        assert "no budgeted run" not in board["reason"]
+        assert any(r.levelname == "WARNING" for r in caplog.records)
+
+    def test_a_kpi_table_missing_a_leg_is_incomplete(self, tmp_path):
+        world = _world(tmp_path)
+        kpi = pd.read_parquet(world["reports"] / "backtest_kpi_table.parquet")
+        kpi[kpi["leg"] != "strategy"].to_parquet(world["reports"] / "backtest_kpi_table.parquet")
+        board = _board(world)
+        assert board["available"] is False
+        assert "are incomplete" in board["reason"] and "strategy" in board["reason"]
+
     def test_missing_registry_rows_leave_the_run_date_unknown(self, tmp_path):
         world = _world(tmp_path)
         world["registry"].write_text("", encoding="utf-8")

@@ -75,6 +75,9 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    from trading_crab_lib.platform.code_version import code_version
+
+    print(code_version())
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

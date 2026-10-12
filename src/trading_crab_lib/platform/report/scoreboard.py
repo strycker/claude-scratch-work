@@ -1,7 +1,7 @@
 """
 Static scoreboard for the weekly page and notebook N7 (plan 08.2-03, D-05, DECISIONS A-14).
 
-One table from the LAST BUDGETED RUN's tracked outputs (8.1's D-04 run): the regime tilt, the
+One table from the LAST BUDGETED RUN's outputs (8.1's D-04 run): the regime tilt, the
 no-regime ablation, SPY buy-and-hold, 60/40 and Faber's 10-month SMA, each with terminal log
 wealth (TLW) and max drawdown (MDD). It changes only when a budgeted run rewrites those outputs;
 nothing here fits, tunes, selects or writes, and no registry row is appended.
@@ -144,9 +144,14 @@ def scoreboard_table(
         own = {leg: (float(kpi.loc[leg, "terminal_log_wealth"]), float(kpi.loc[leg, "max_drawdown"]))
                for leg, _ in LEG_LABELS}
     except FileNotFoundError as exc:
-        # Normal since the 08.5 reset: outputs/ is untracked, so a machine has no record until it runs one.
-        board["reason"] = f"no budgeted run has written its record here yet; missing {Path(exc.filename or reports).name}"
-        log.info("scoreboard not yet measured: %s", board["reason"])
+        missing = Path(exc.filename or reports).name
+        if not (reports / _KPI_FILE).exists():
+            # Normal since the 08.5 reset: outputs/ is untracked, so a machine has no record until it runs one.
+            board["reason"] = f"no budgeted run has written its record here yet; missing {missing}"
+            log.info("scoreboard not yet measured: %s", board["reason"])
+            return board
+        board["reason"] = f"the backtest outputs under {reports} are incomplete; missing {missing}"
+        log.warning("scoreboard unavailable: %s", board["reason"])
         return board
     except KeyError as exc:
         board["reason"] = f"the backtest outputs under {reports} are incomplete ({exc!r})"

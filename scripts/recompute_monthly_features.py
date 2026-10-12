@@ -79,6 +79,9 @@ def main(argv: list[str] | None = None) -> int:
         help="compute and log the per-column non-NaN delta without writing anything",
     )
     args = parser.parse_args(argv)
+    from trading_crab_lib.platform.code_version import code_version
+
+    print(code_version())
 
     cfg = load_platform_config()
     cm = get_platform_checkpoint_manager()
