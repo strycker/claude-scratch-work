@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08.5
 current_phase_name: Clean-Slate Reset & Learnings Before Migration
-status: planning
-stopped_at: Phase 08.4 CLOSED 2026-10-09 — verified 13/13; Mac UAT 4/4 passed on the VPN; D-09 gold from the World Bank; --allow-missing; next: KISS pass on the 08.5 CONTEXT, then plan 08.5
-last_updated: "2026-10-10T00:00:00.000Z"
+status: ready_to_execute
+stopped_at: "Phase 08.5 PLANNED 2026-10-12 — 3 plans in 3 waves (tests without data, the reset, learnings + Mac gate); plan-checker findings resolved; Glenn amended D-06; next: /gsd-execute-phase 8.5"
+last_updated: "2026-10-12T16:08:10.514Z"
 progress:
   total_phases: 13
   completed_phases: 12
-  total_plans: 78
+  total_plans: 81
   completed_plans: 78
-last_activity: 2026-10-09
-last_activity_desc: "Phase 08.4 closed — fail-loud build, model-free no_regime page, state tool (archive/reset/restore/promote), --allow-missing, D-09 World Bank gold. Mac UAT 4/4. Suite 2283. Registry 48."
+last_activity: 2026-10-12
+last_activity_desc: "Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 awaits Glenn's push."
 ---
 
 # Project State
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 08.5 — Clean-Slate Reset & Learnings Before Migration
-Status: Context captured; a KISS pass on `08.5-CONTEXT.md` comes before planning (`/gsd-plan-phase 8.5`).
+Status: Planned 2026-10-12 — 3 plans in 3 waves, ready to execute (`/gsd-execute-phase 8.5`). Before merging 8.5, Glenn pushes the tag `model/pre-reset-2026-10` (on `4e49652`; command in 08.5-CONTEXT D-01).
 
 **Phase 08.4 closed 2026-10-09.** Verified 13/13; Glenn's Mac UAT passed 4/4 on the corporate VPN (build from
 empty + bogus-key drill, no-model page, archive → reset → restore with an identical page, promote with the real
@@ -813,8 +813,8 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-10-10T00:00:00.000Z
-Stopped at: Phase 08.4 CLOSED 2026-10-09 — Mac UAT 4/4 passed; next: KISS pass on the 08.5 CONTEXT, then plan 08.5
-Resume file: `.planning/phases/08.5-clean-slate-reset-learnings-before-migration/08.5-CONTEXT.md`
+Stopped at: Phase 08.5 PLANNED 2026-10-12 — next: /gsd-execute-phase 8.5
+Resume file: `.planning/phases/08.5-clean-slate-reset-learnings-before-migration/08.5-01-PLAN.md`
 
 Older resume pointer (Phase 7 era):
 Resume file: `platform_design/adr/0002-l1-second-classifier.md` § Deferrals and open items at

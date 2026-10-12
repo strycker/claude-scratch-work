@@ -864,11 +864,20 @@ discussion). Budget: 0 rows of measurement, plus the deliberate epoch reset.
 **Depends on:** Phase 08.4
 **Blocks:** Phase 9 (Migration): its order and scope come from 8.5's learnings.
 **UI hint**: no (the "weekly page" is a generated markdown report, not a frontend)
-**Plans:** 0 plans
+**Plans:** 3 plans (3 waves; lean mode; budget 0 measurement rows plus the deliberate registry epoch reset)
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 8.5)
+- [ ] 08.5-01-PLAN.md — **Tests green with no data (D-04).** `realdata` marker + collection hook (skip without data; `-m realdata` with no data fails loudly); 14 lasting-property tests marked (month-end ones skip when the columns are absent); 23 record pins retired with dated notes, each citing its covering synthetic test; `scripts/migrate_month_end_columns.py` deleted (approved 2026-10-12). Suite 2261; no-data run 2247 passed + 14 skipped, on pandas 3 and 2
+
+**Wave 2** *(blocked on Wave 1: the deletion must find the suite already data-independent)*
+
+- [ ] 08.5-02-PLAN.md — **The reset (D-01, D-03, D-04, D-05).** `git rm` the 88 generated files, ignore `/data/` and `/outputs/`, drop the gold-rollback test helper; registry true-zero epoch (48-trial ledger archived byte-identical, provenance header, ADR-0005) with the full suite after; notebook outputs stripped (sign-off cells kept); README/CLAUDE.md/docs updated (CLAUDE.md edits approved 2026-10-12); fresh-clone run on the clone's own `src/`
+
+**Wave 3** *(blocked on Wave 2: the learnings and the Mac gate need the reset)*
+
+- [ ] 08.5-03-PLAN.md — **Learnings, Phase 9.x and the Mac gate (D-01, D-05, D-06, D-07).** Phase 9 becomes 9.1–9.8 (one module each; M8 moves with M1/M3, DECISIONS G-15); DECISIONS G-14, G-15, H-12; guide, MODULE-MAP, MIGRATION-PLAN. Human checkpoint: Glenn pushes the tag and runs the fresh-clone gate (build, page three times with runs 2 and 3 identical but for the run date — D-06 as amended 2026-10-12 — then `pytest -m realdata`; a VPN result of 8 passed + 6 skipped closes with the skips recorded as unverified)
 
 ### Phase 9: Migration to Public Repo
 
