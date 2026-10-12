@@ -369,10 +369,10 @@ def _assert_lag_marker_allows_merge(cm: Any, cfg: dict[str, Any]) -> None:
     marker = cm.dir / LAG_MARKER_FILENAME
     if lag_marker_matches(marker, cfg):
         return
-    state = "missing" if not marker.exists() else "records a different lag table"
+    state = "is missing" if not marker.exists() else "records a different lag table"
     # BuildFailed (a RuntimeError), so the build script exits 1 with this message (2026-10-09).
     raise BuildFailed(
-        f"build_monthly_spine: nothing was written, because {marker} is {state}, so the on-disk "
+        f"build_monthly_spine: nothing was written, because {marker} {state}, so the on-disk "
         "monthly_raw was not built under the current publication_lags and merging onto it would "
         "reintroduce unlagged values. If it predates publication lags, run "
         "`python scripts/migrate_publication_lags.py` once. If a lag or source was changed on purpose, "
