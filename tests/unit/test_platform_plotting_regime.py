@@ -1,14 +1,10 @@
 """Tests for src/trading_crab_lib/platform/plotting/regime.py.
 
 No test in this module performs network I/O, fits a model on real data, or
-runs a walk-forward. The one real-data test reads the ``monthly_features``
-parquet directly from the repository path (skipped when absent) and only
-replays the cheap per-window active-feature rule.
+runs a walk-forward, and none reads the built data under data/.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 # matplotlib.use("Agg") must precede pyplot import — import order is intentional.
 # pylint: disable=wrong-import-position,wrong-import-order
@@ -28,48 +24,6 @@ from trading_crab_lib.platform.prediction.transition_matrix import (  # noqa: E4
 )
 
 # pylint: enable=wrong-import-position,wrong-import-order
-
-REAL_MONTHLY_FEATURES = Path("data/checkpoints/platform/monthly_features.parquet")
-
-# The seven documented A13 change points (audit finding, reproduced in
-# CONTEXT.md Amendment 3 item H).
-#
-# RE-PINNED 2026-09-14, authorised by 07-CONTEXT.md D-02-A. Cause: the
-# on-disk `monthly_features` checkpoint this test reads was STALE — its
-# `oil` column was truncated to a 1985-02 start (431 non-NaN dev months)
-# while the cached `monthly_raw` checkpoint has always carried `oil`'s full
-# 1962-01 history (776 non-NaN months). `scripts/recompute_monthly_features.py`
-# rebuilt `monthly_features` as a pure, offline function of the cached
-# `monthly_raw` (D-02-A), which gives `oil` its correct 708 non-NaN dev
-# months and makes it a member of the frozen reference set from the very
-# first decision date onward (see `07-CONTEXT.md` and
-# `07-PREFIX-EVIDENCE.md` for the full history and the pre-fix baseline).
-# The seven change *dates* below are UNCHANGED from the pre-fix sequence —
-# only the active-feature COUNTS moved, each by +1 (oil now counted from
-# 1972-01-31 onward), except the last two dates, which were already at the
-# lean set's ceiling. This constant remains an EXACT list-equality pin —
-# see the assertion below; do not weaken it to an inequality, subset, or
-# tolerance check, as that would have failed to catch the staleness this
-# amendment fixes.
-#
-# 08.1 (2026-09-30): old -> new, on the point-in-time (publication-lagged) data.
-# Old: [(1972-01-31, 5), (1972-02-29, 7), (1972-04-30, 9), (1973-02-28, 10),
-#       (1986-06-30, 11), (1995-02-28, 12), (2000-01-31, 13)].
-# div_yield (lag 3) now starts 1962-04 instead of 1962-01, and equities_tr (built
-# from it) has no 1962-02/03 value, so trailing_return_1m / realized_vol_1m start
-# 1962-05 (was 1962-02). With min_history 120 each activates 3 months later:
-# div_yield joins at 1972-04, the 1m pair at 1972-05. From 1973-02 on nothing moved.
-EXPECTED_CHANGE_POINTS = [
-    ("1972-01-31", 4),
-    ("1972-04-30", 5),
-    ("1972-05-31", 7),
-    ("1972-06-30", 8),
-    ("1972-07-31", 9),
-    ("1973-02-28", 10),
-    ("1986-06-30", 11),
-    ("1995-02-28", 12),
-    ("2000-01-31", 13),
-]
 
 
 @pytest.fixture
@@ -227,38 +181,9 @@ class TestActiveFeatureCountTimeline:
         assert timeline.empty
         assert list(timeline.columns) == ["n_active", "active"]
 
-    @pytest.mark.skipif(
-        not REAL_MONTHLY_FEATURES.exists(),
-        reason="real platform monthly_features checkpoint not present",
-    )
-    def test_real_dev_features_reproduce_the_seven_a13_change_points(self):
-        from trading_crab_lib.platform.config import load_platform_config
-        from trading_crab_lib.platform.taxonomy import lean_feature_set
-
-        cfg = load_platform_config()
-        backtest_cfg = cfg["backtest"]
-        features = pd.read_parquet(REAL_MONTHLY_FEATURES)
-        cols = sorted(lean_feature_set(cfg) & set(features.columns))
-
-        timeline = pregime.active_feature_count_timeline(
-            features,
-            cols,
-            min_history=backtest_cfg["feature_min_history"],
-            min_train=backtest_cfg["min_train_months"],
-        )
-
-        assert len(timeline) == 588
-        # >= 5, not >= 4 (D-02-A, 2026-09-14): the first decision window now
-        # carries five active features (oil joins the frozen set from the
-        # start — see the EXPECTED_CHANGE_POINTS comment above).
-        # 08.1 (2026-09-30): 5 -> 4. div_yield (lag 3) leaves the first three
-        # decision windows, 1972-01..03, and joins at 1972-04.
-        assert int(timeline["n_active"].min()) >= 4
-        assert int(timeline["n_active"].max()) <= 13
-
-        change_dates = pregime.feature_set_change_dates(timeline)
-        observed = [(str(d.date()), int(timeline.loc[d, "n_active"])) for d in change_dates]
-        assert observed == EXPECTED_CHANGE_POINTS
+    # test_real_dev_features_reproduce_the_seven_a13_change_points retired 2026-10-12 (08.5): record pin (the exact
+    # 8.1-era change dates on the tracked dev features; gold is now gold_wb, D-09); the synthetic tests above keep the
+    # timeline's behaviour; the record lives in tag model/pre-reset-2026-10.
 
 
 class TestFeatureSetChangeDates:

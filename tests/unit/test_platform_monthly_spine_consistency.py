@@ -20,9 +20,10 @@ pinning in test_platform_plotting_regime.py were pinned to that bad recompute.
 The error only surfaced when a human ran a clean rebuild and the suite went
 red.
 
-These tests are the guard that would have caught it without a human. They run
-against the committed checkpoints in the git-tracked platform namespace, so a
-missing file is a real defect and is asserted, never skipped.
+These tests are the guard that would have caught it without a human. They check
+the built checkpoints under data/ after a build (``pytest -m realdata``) and skip
+when no build exists (08.5: no data is tracked); once a build exists, a missing
+file is a real defect and is asserted, never skipped.
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 import yaml
+
+pytestmark = pytest.mark.realdata
 
 _ROOT = Path(__file__).resolve().parents[2]
 _CKPT = _ROOT / "data" / "checkpoints" / "platform"
@@ -50,13 +53,13 @@ _PASSTHROUGH_COLUMNS = ("gold", "oil", "fred_vix")
 
 @pytest.fixture(scope="module")
 def raw() -> pd.DataFrame:
-    assert _RAW.is_file(), f"{_RAW} missing from the git-tracked platform namespace"
+    assert _RAW.is_file(), f"{_RAW} missing from the built platform namespace"
     return pd.read_parquet(_RAW)
 
 
 @pytest.fixture(scope="module")
 def features() -> pd.DataFrame:
-    assert _FEATURES.is_file(), f"{_FEATURES} missing from the git-tracked platform namespace"
+    assert _FEATURES.is_file(), f"{_FEATURES} missing from the built platform namespace"
     return pd.read_parquet(_FEATURES)
 
 
