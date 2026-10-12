@@ -10,6 +10,14 @@
 
 ---
 
+> ## Status 2026-10-12 — lean-startup migration (DECISIONS G-17–G-19)
+>
+> - `strycker/trading-crab` is the single production repo for both packages; `strycker/trading-crab-lib` is archived.
+>   Legacy code, tracked data and pickles do not migrate.
+> - Phase 9.1 builds a fully operational, naive skeleton end to end; 9.2–9.8 upgrade one module each. Nothing is
+>   bulk-copied: §4's P-steps and §2's seams are a reference for what each module must cover, not files to move.
+> - The rules (CLAUDE.md, DECISIONS.md, MODULE-MAP.md, LEARNINGS.md) move in 9.1.
+
 > ## Status 2026-10-10 — read this first
 >
 > - **08.5 reset done:** nothing generated lives in git any more (`data/`, `outputs/` and notebook outputs);

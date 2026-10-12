@@ -908,30 +908,36 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
   5. README and docs in the new repo describe the regime-conditional platform, not the
      legacy quarterly pipeline.
 **Plans**: none of its own; delivered by Phases 9.1–9.8, one module each, in `strycker/trading-crab`.
+**Approach (Glenn 2026-10-12, DECISIONS G-17–G-19):** lean startup. 9.1 builds a fully operational skeleton end to end
+(every layer naive). 9.2–9.8 each upgrade one module in place while the end-to-end run stays green. In those phases
+"Module files" name the `claude-scratch-work` code to learn from, not to copy: each module is rewritten to the simplest
+version that meets its gate, with LEARNINGS.md as the guard. Legacy code, tracked data and pickles do not migrate.
 **M8 and M9+:** M8 (honesty) has no phase of its own (DECISIONS G-15): its code moves with the first module that
 imports it: the registry module with M0 (9.1), the holdout fence and walk-forward with M1 (9.2), budgets and DSR
 with M3 (9.4) (G-15, amended 2026-10-12). M9+
 (tripwire upgrades, A-03 hysteresis thresholds, REG-01) stays backlog until MVP-2.
 **Detailed step plan**: `MIGRATION-PLAN.md` (P0–P6, a checklist); order and module files: `platform_design/MODULE-MAP.md`
 
-### Phase 9.1: M0 Skeleton
+### Phase 9.1: Fully operational skeleton
 
-**Goal:** the two-package skeleton in `strycker/trading-crab`: config, checkpoint manager, CLI, CI and the state tool, importing nothing from the legacy library.
+**Goal:** `strycker/trading-crab` holds a working, deliberately naive platform end to end: data build → features → allocation → weekly page, run by `tradingcrab` and one end-to-end notebook, with CI green and the KISS rules, decisions and learnings in the repo (G-17, G-18, G-19).
+**Mode:** mvp
 **Depends on:** Phase 08.5
 **Requirements:** MIG-01
-**Module files:** `config.py`, `checkpoints.py`, `snapshots.py`, `state.py` (the state tool, G-12); the four P0 seams vendored (CheckpointManager, multpl and macrotrends scraper helpers, email helpers; `MIGRATION-PLAN.md` P0). From M8: `honesty/registry.py` (the ledger reader and append, one file), because `state.py` reads `total_trial_count` (G-15, amended 2026-10-12).
-**Notebook:** none
+**Module files:** written fresh in the target repo, the simplest version of each layer: M0 (config, parquet checkpoints, code line G-16, CLI, CI), a naive M1 (a small free-source build with publication lags from config and the 2021+ holdout fence), a naive M2 (a handful of causal features), a naive M3/M4 (a simple core mix and the weekly page; a naive backtest against SPY if it fits). Reference only: `claude-scratch-work/src/trading_crab_lib/platform/`. Removed from the target: legacy quarterly code, tracked data, pickles.
+**Notebook:** one end-to-end notebook (build → features → weights → page), with a sign-off cell
 **Success Criteria** (what must be TRUE):
-  1. `tradingcrab --help` runs.
-  2. CI is green.
-  3. The legacy-import ratchet reads 0 (`MAX_LEGACY_IMPORT_SITES = 0`).
-  4. The suite is green on Mac and Linux.
-  5. Glenn signs off.
+  1. From a fresh clone of `strycker/trading-crab`: install both packages, run `tradingcrab build` and `tradingcrab weekly`, and get a page; the end-to-end notebook runs top to bottom.
+  2. CI is green (Python 3.10 and 3.13), and both packages build (`python -m build .` and `python -m build src/trading_crab_lib`); nothing is published in 9.1.
+  3. Nothing generated or legacy is tracked: no `data/`, `outputs/` or pickles, no quarterly pipeline; nothing imports from `claude-scratch-work`.
+  4. CLAUDE.md (KISS P-07, honesty and hard rules), DECISIONS.md, MODULE-MAP.md and LEARNINGS.md are in the repo.
+  5. Every layer is present, naive, and small enough for Glenn to read in one sitting; every run prints its code line (G-16).
+  6. Glenn signs the end-to-end notebook.
 **Plans:** 0 plans (at most 3)
 
 ### Phase 9.2: M1 Data spine
 
-**Goal:** raw sources → `monthly_raw` with publication lags applied once at ingestion, a fail-loud build and the 2021+ holdout fence.
+**Goal:** upgrade the skeleton's data build to the full spine: raw sources → `monthly_raw` with publication lags applied once at ingestion, a fail-loud build and the 2021+ holdout fence.
 **Depends on:** Phase 9.1
 **Requirements:** MIG-01
 **Module files:** `ingestion/{alfred,eodhd,macro_daily,macro_monthly,norgate,prices_daily,publication_lags,tiingo}.py` (free sources kept; paid-provider adapters stay placeholders), `splice.py`, `transforms_monthly.py`, `scripts/build_platform_data.py`; from M8: `honesty/{holdout,walkforward}.py` (G-15).
@@ -954,7 +960,7 @@ with M3 (9.4) (G-15, amended 2026-10-12). M9+
 **Goal:** `monthly_raw` → `monthly_features`, causal only, in the lean named taxonomy.
 **Depends on:** Phase 9.2
 **Requirements:** MIG-01
-**Module files:** `taxonomy.py` (ported as is)
+**Module files:** `taxonomy.py` (reference)
 **Notebook:** `P2_features_taxonomy.ipynb`
 **Success Criteria** (what must be TRUE):
   1. The taxonomy table renders.
@@ -986,7 +992,7 @@ with M3 (9.4) (G-15, amended 2026-10-12). M9+
 **Goal:** latest data + weights + holdings → the weekly markdown page; MVP-1 in the new repo.
 **Depends on:** Phase 9.4
 **Requirements:** MIG-01
-**Module files:** `report/{weekly,serving,holdings,scoreboard}.py` (ported as is)
+**Module files:** `report/{weekly,serving,holdings,scoreboard}.py` (reference)
 **Notebook:** `P7_serving_report.ipynb` (N4)
 **Success Criteria** (what must be TRUE):
   1. The page on real data is identical run 2 vs run 3 apart from the run date (D-06 as amended 2026-10-12).
@@ -1071,7 +1077,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | Complete (verified 13/13; Mac UAT 4/4 passed; D-09 gold source) | 2026-10-09 |
 | 08.5 Clean-Slate Reset & Learnings (INSERTED) | 3/3 | Complete (verified 11/12, human_needed: 6 month-end realdata tests await an off-VPN build; Mac gate passed on the VPN) | 2026-10-12 |
 | 9. Migration to Public Repo | 0/TBD | Umbrella (9.1–9.8) | - |
-| 9.1 M0 Skeleton | 0/TBD | Not started | - |
+| 9.1 Fully operational skeleton | 0/TBD | Not started | - |
 | 9.2 M1 Data spine | 0/TBD | Not started | - |
 | 9.3 M2 Features | 0/TBD | Not started | - |
 | 9.4 M3 Allocator + backtest | 0/TBD | Not started | - |

@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 08.5
-current_phase_name: Clean-Slate Reset & Learnings Before Migration
-status: complete
-stopped_at: Phase 08.5 complete
+current_phase: 9.1
+current_phase_name: Fully operational skeleton
+status: ready_to_plan
+stopped_at: Phase 9.1 context gathered (G-17–G-19)
 last_updated: "2026-10-12T21:30:00.000Z"
 progress:
   total_phases: 13
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 08.5 — Clean-Slate Reset & Learnings Before Migration
+**Current focus:** Phase 9.1 — Fully operational skeleton (in `strycker/trading-crab`)
 
 ## Current Position
 
-Phase: 08.5 (Clean-Slate Reset & Learnings Before Migration) — COMPLETE
-Status: Phase 08.5 complete; next is Phase 9.1 (M0 skeleton) after Glenn merges the 8.5 PR
+Phase: 9.1 (Fully operational skeleton) — READY TO PLAN
+Status: 8.5 merged (#163, 2026-10-12). 9.1 context gathered: one production repo (G-17), rules travel (G-18), lean-startup skeleton first (G-19)
 
 **Phase 08.5 closed 2026-10-12.** Nothing generated is tracked (tag model/pre-reset-2026-10 holds the old tree);
 registry true-zero epoch (ADR-0005, 48 trials archived); Phase 9 is 9.1–9.8 (G-15, registry with M0); every run prints
