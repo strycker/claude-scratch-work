@@ -185,6 +185,8 @@ class TestScoreboardTable:
         text = "\n".join(scoreboard.format_scoreboard(board))
         assert "## Scoreboard (static — last budgeted run)" in text
         assert "Scoreboard: not yet measured" in text  # 08.4 (2026-10-05): wording per K-10/D-T7
+        assert "no budgeted run has written its record here yet; missing backtest_kpi_table.parquet" in text
+        assert "tracked" not in text  # 08.5: outputs/ is untracked
         assert "python -m trading_crab_lib.platform.evaluation.report" in text
         assert scoreboard.E07_CAVEAT in text
 

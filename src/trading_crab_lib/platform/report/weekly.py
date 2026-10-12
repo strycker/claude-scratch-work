@@ -126,6 +126,7 @@ from trading_crab_lib.platform.assets.returns import (
     tradable_asset_returns,
 )
 from trading_crab_lib.platform.checkpoints import get_platform_checkpoint_manager
+from trading_crab_lib.platform.code_version import code_version
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty.holdout import load_full_span
 from trading_crab_lib.platform.ingestion.publication_lags import DERIVED
@@ -1372,6 +1373,7 @@ def main(argv: list[str] | None = None) -> int:
         "--send-email", action="store_true", help="Send the report via SMTP (opt-in, D-02)"
     )
     args = parser.parse_args(argv)
+    print(code_version())
 
     logging.basicConfig(level=logging.INFO)
 

@@ -122,7 +122,7 @@ def scoreboard_table(
             scoreboard_trial_tag``).
         cm: checkpoint manager holding ``monthly_raw`` (default: the platform namespace).
         reports_dir: where the KPI table and curves live (default ``PLATFORM_REPORT_DIR``,
-            i.e. ``OUTPUT_DIR/reports/platform``: the tracked outputs, read at call time).
+            i.e. ``OUTPUT_DIR/reports/platform``: the local run record, read at call time).
         registry_path: the trial registry (default: the live ledger), read only.
 
     Returns a dict: ``available`` / ``reason``; ``legs`` (one dict per leg in page order:
@@ -143,8 +143,13 @@ def scoreboard_table(
         curves = {leg: pd.read_parquet(reports / name)["return"] for leg, name in _CURVE_FILES.items()}
         own = {leg: (float(kpi.loc[leg, "terminal_log_wealth"]), float(kpi.loc[leg, "max_drawdown"]))
                for leg, _ in LEG_LABELS}
-    except (FileNotFoundError, KeyError) as exc:
-        board["reason"] = f"the tracked backtest outputs under {reports} cannot be read ({exc!r})"
+    except FileNotFoundError as exc:
+        # Normal since the 08.5 reset: outputs/ is untracked, so a machine has no record until it runs one.
+        board["reason"] = f"no budgeted run has written its record here yet; missing {Path(exc.filename or reports).name}"
+        log.info("scoreboard not yet measured: %s", board["reason"])
+        return board
+    except KeyError as exc:
+        board["reason"] = f"the backtest outputs under {reports} are incomplete ({exc!r})"
         log.warning("scoreboard unavailable: %s", board["reason"])
         return board
 

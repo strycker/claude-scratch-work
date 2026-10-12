@@ -58,7 +58,8 @@ ruff check src/ tests/                                 # lint
 jupyter lab notebooks/platform/
 ```
 
-The weekly page lands in `outputs/reports/platform/weekly_report.md`.
+The weekly page lands in `outputs/reports/platform/weekly_report.md`. Every CLI and pytest print
+`Code: <branch> @ <commit> — <checkout>` (G-16): check it before trusting a run.
 
 ## Honesty rules (do not break)
 

@@ -71,6 +71,7 @@ from trading_crab_lib.platform.assets.returns import (
 )
 from trading_crab_lib.platform.backtest.driver import fit_l2_nowcaster
 from trading_crab_lib.platform.checkpoints import CheckpointManager, get_platform_checkpoint_manager
+from trading_crab_lib.platform.code_version import code_version
 from trading_crab_lib.platform.config import load_platform_config
 from trading_crab_lib.platform.honesty import registry
 from trading_crab_lib.platform.honesty.holdout import DEFAULT_HOLDOUT_CUTOFF, split_by_holdout_boundary
@@ -276,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     parser.parse_args(argv)
+    print(code_version())
 
     logging.basicConfig(level=logging.INFO)
 

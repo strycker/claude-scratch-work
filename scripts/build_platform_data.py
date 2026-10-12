@@ -70,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
         help="raw source columns this run may go without (the build error names them); each class falls back",
     )
     args = parser.parse_args(argv)
+    from trading_crab_lib.platform.code_version import code_version
+
+    print(code_version())
 
     logging.basicConfig(
         level=logging.INFO,

@@ -529,7 +529,8 @@ trading-crab re-evaluation checklist. Current version: v1.7 (2026-07-08).
 #### Fresh clone (start here)
 
 Since Phase 8.5 nothing generated is tracked (no `data/`, no `outputs/`, no notebook outputs), so a clone
-starts empty and you build everything yourself:
+starts empty and you build everything yourself. Every command (and pytest, next to its result line) first prints
+`Code: <branch> @ <commit> — <checkout>`; check it names the branch you meant to test (G-16).
 
 ```bash
 git clone https://github.com/strycker/claude-scratch-work tc-fresh && cd tc-fresh

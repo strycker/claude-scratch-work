@@ -26,6 +26,13 @@ def pytest_report_header(config: pytest.Config) -> str | None:
     return None
 
 
+def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Config) -> None:
+    """Name the code under test next to the result line; unlike the header, it survives -q (2026-10-12)."""
+    from trading_crab_lib.platform.code_version import code_version
+
+    terminalreporter.write_line(code_version())
+
+
 # ---------------------------------------------------------------------------
 # realdata marker (08.5, D-04): tests that read the built platform data under data/
 # ---------------------------------------------------------------------------
