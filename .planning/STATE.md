@@ -9,9 +9,9 @@ stopped_at: "Phase 08.5 PLANNED 2026-10-12 — 3 plans in 3 waves (tests without
 last_updated: "2026-10-12T16:12:45.367Z"
 progress:
   total_phases: 13
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 81
-  completed_plans: 77
+  completed_plans: 78
 last_activity: 2026-10-12
 last_activity_desc: "Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
 ---
@@ -42,7 +42,6 @@ then macrotrends, then IAU, with month-end P&L via `pnl_splice`**. Suite 2283. R
 - **08.4-01:** fail-loud build. A lost or all-NaN source, or a fallback splice, stops the build before any write.
   Derived splice columns are replaced on save. A failed FRED daily fetch exits 1. The no_regime page runs without
   any regime model.
-
 - **08.4-02:** `platform/state.py`, a single module with archive, list, reset, restore and promote.
 
 Suite 2263. Registry 48 (0 rows spent). Mac UAT is pending. The KISS cleanup on 2026-10-05 retired the parked
