@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 08.2: Lean MVP — Simplify, Modularize, Notebook-Gate** *(INSERTED 2026-09-29)* - A usable weekly product first; module map M0–M7; notebook gate per module; lean planning (completed 2026-10-02)
 - [x] **Phase 08.3: Regime Rebuild I — month-end returns (E-07) and re-measure** *(INSERTED 2026-10-02)* - Scoreboard re-measured on month-end returns a trader could earn; decides whether MVP-1's core mix stands (completed 2026-10-05)
 - [x] **Phase 08.4: Cold-Start Tooling — Archive, Reset, Restore & Fail-Loud Build** *(INSERTED 2026-10-02; re-scoped 2026-10-05)* - Archive/reset/restore/promote state at will, tagged model archives under git; the build fails loud and runs from empty (completed 2026-10-09)
-- [ ] **Phase 08.5: Clean-Slate Reset & Learnings Before Migration** *(INSERTED 2026-10-05)* - Use the 8.4 tooling for the production reset (everything generated out of git, registry true-zero epoch), MVP-1 from a fresh clone, learnings and the Phase 9.x rebuild order
+- [x] **Phase 08.5: Clean-Slate Reset & Learnings Before Migration** *(INSERTED 2026-10-05)* - Use the 8.4 tooling for the production reset (everything generated out of git, registry true-zero epoch), MVP-1 from a fresh clone, learnings and the Phase 9.x rebuild order
 - [ ] **Phase 9: Migration to Public Repo** - Platform decoupled and migrated to `strycker/trading-crab`, tests green in CI, docs updated
 
 ## Phase Details
@@ -864,7 +864,7 @@ discussion). Budget: 0 rows of measurement, plus the deliberate epoch reset.
 **Depends on:** Phase 08.4
 **Blocks:** Phase 9 (Migration): its order and scope come from 8.5's learnings.
 **UI hint**: no (the "weekly page" is a generated markdown report, not a frontend)
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -877,7 +877,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2: the learnings and the Mac gate need the reset)*
 
-- [ ] 08.5-03-PLAN.md — **Learnings, Phase 9.x and the Mac gate (D-01, D-05, D-06, D-07).** Phase 9 becomes 9.1–9.8 (one module each; M8 moves with M1/M3, DECISIONS G-15); DECISIONS G-14, G-15, H-12; guide, MODULE-MAP, MIGRATION-PLAN. Human checkpoint: Glenn pushes the tag and runs the fresh-clone gate (build, page three times with runs 2 and 3 identical but for the run date — D-06 as amended 2026-10-12 — then `pytest -m realdata`; a VPN result of 8 passed + 6 skipped closes with the skips recorded as unverified)
+- [x] 08.5-03-PLAN.md — **Learnings, Phase 9.x and the Mac gate (D-01, D-05, D-06, D-07).** Phase 9 becomes 9.1–9.8 (one module each; M8 moves with M1/M3, DECISIONS G-15); DECISIONS G-14, G-15, H-12; guide, MODULE-MAP, MIGRATION-PLAN. Human checkpoint: Glenn pushes the tag and runs the fresh-clone gate (build, page three times with runs 2 and 3 identical but for the run date — D-06 as amended 2026-10-12 — then `pytest -m realdata`; a VPN result of 8 passed + 6 skipped closes with the skips recorded as unverified)
 
 ### Phase 9: Migration to Public Repo
 
@@ -1069,7 +1069,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 08.2 Lean MVP — Simplify, Modularize, Notebook-Gate (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off) | 2026-10-02 |
 | 08.3 Regime Rebuild I — month-end returns (E-07) (INSERTED) | 3/3 | Complete (verified; Mac run passed; P7–P9 signed off; Mac data commit reverted, D-08) | 2026-10-05 |
 | 08.4 Cold-Start Tooling — Archive/Reset/Restore (INSERTED) | 2/2 | Complete (verified 13/13; Mac UAT 4/4 passed; D-09 gold source) | 2026-10-09 |
-| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 2/3 | In Progress|  |
+| 08.5 Clean-Slate Reset & Learnings (INSERTED) | 3/3 | Complete (verified 11/12, human_needed: 6 month-end realdata tests await an off-VPN build; Mac gate passed on the VPN) | 2026-10-12 |
 | 9. Migration to Public Repo | 0/TBD | Umbrella (9.1–9.8) | - |
 | 9.1 M0 Skeleton | 0/TBD | Not started | - |
 | 9.2 M1 Data spine | 0/TBD | Not started | - |

@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 08.5
 current_phase_name: Clean-Slate Reset & Learnings Before Migration
-status: executing
-stopped_at: Completed 08.5-02-PLAN.md
-last_updated: "2026-10-12T18:20:00.000Z"
+status: complete
+stopped_at: Phase 08.5 complete
+last_updated: "2026-10-12T21:30:00.000Z"
 progress:
   total_phases: 13
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 81
-  completed_plans: 80
+  completed_plans: 81
 last_activity: 2026-10-12
-last_activity_desc: "Phase 08.5 plan 02 executed (88 generated files out of git, registry true-zero epoch ADR-0005 approved by Glenn 2026-10-12, notebooks stripped; fresh clone 2247 passed + 14 skipped on pandas 3 and 2). Plan 01 executed (suite green with no data: 2247 passed + 14 skipped aside, 2261 with data). Earlier: Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
+last_activity_desc: "Phase 08.5 closed 2026-10-12: Glenn's Mac gate passed on the VPN (build OK, run 2 = run 3, realdata 8 passed + 6 month-end skips, unverified until an off-VPN build); verified 11/12; review 0 critical, fixes in 08.5-REVIEW-FIX.md; G-16 code line on every run. Plan 02 executed (88 generated files out of git, registry true-zero epoch ADR-0005 approved by Glenn 2026-10-12, notebooks stripped; fresh clone 2247 passed + 14 skipped on pandas 3 and 2). Plan 01 executed (suite green with no data: 2247 passed + 14 skipped aside, 2261 with data). Earlier: Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
 ---
 
 # Project State
@@ -28,8 +28,14 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 08.5 (Clean-Slate Reset & Learnings Before Migration) — EXECUTING
-Status: Executing Phase 08.5
+Phase: 08.5 (Clean-Slate Reset & Learnings Before Migration) — COMPLETE
+Status: Phase 08.5 complete; next is Phase 9.1 (M0 skeleton) after Glenn merges the 8.5 PR
+
+**Phase 08.5 closed 2026-10-12.** Nothing generated is tracked (tag model/pre-reset-2026-10 holds the old tree);
+registry true-zero epoch (ADR-0005, 48 trials archived); Phase 9 is 9.1–9.8 (G-15, registry with M0); every run prints
+its code line (G-16). Glenn's Mac gate on the VPN: build OK, run 2 = run 3, realdata 8 passed + 6 skipped; the 6
+month-end P&L tests (E-08) stay unverified until an off-VPN build (after WR-08, expect 9 passed + 5 skipped on the VPN).
+Suite 2271 (2257 passed + 14 realdata skipped with no data). Registry 0.
 
 **Phase 08.4 closed 2026-10-09.** Verified 13/13; Glenn's Mac UAT passed 4/4 on the corporate VPN (build from
 empty + bogus-key drill, no-model page, archive → reset → restore with an identical page, promote with the real
@@ -548,6 +554,7 @@ numeric evidence void. See `.planning/UAT-AUDIT-2026-09-09.md`.
 | Phase 08.4 P01 | 1 session | 3 tasks | 11 files |
 | Phase 08.5 P01 | 21min | 3 tasks | 16 files |
 | Phase 08.5 P02 | 1 session | 3 tasks | 100 files |
+| Phase 08.5 P03 | 1 session | 3 tasks | 30 files |
 
 *Durations were not recorded for Phase 05 P07 or Phase 06 P02–P07.*
 *Updated after each plan completion.*
@@ -816,8 +823,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-12T18:20:00.000Z
-Stopped at: Completed 08.5-02-PLAN.md
+Last session: 2026-10-12T21:30:00.000Z
+Stopped at: Phase 08.5 complete
 Resume file: None
 
 Older resume pointer (Phase 7 era):
