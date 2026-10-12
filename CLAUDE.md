@@ -53,6 +53,7 @@ python scripts/build_platform_data.py                  # fetch + build platform 
 python -m trading_crab_lib.platform.report.weekly      # write the weekly page
 python -m trading_crab_lib.platform.report.serving     # fit the served regime model (regime_tilt mode only)
 pytest tests/ -q -p no:cacheprovider                   # full suite (offline, ~8 min)
+pytest -m realdata -q -p no:cacheprovider              # real-data tests, after a build into the repo's own data/
 ruff check src/ tests/                                 # lint
 jupyter lab notebooks/platform/
 ```
@@ -62,13 +63,15 @@ The weekly page lands in `outputs/reports/platform/weekly_report.md`.
 ## Honesty rules (do not break)
 
 - **The 2021+ holdout is locked.** Development, tuning and model selection use data through 2020-12 only.
-- **The trial registry (`registry/trials.jsonl`) is append-only.** Every evaluated configuration is a row. A
-  wiring or verification run uses `--smoke`, which writes no row. Each phase declares its row budget (ADR-0004).
+- **The trial registry (`registry/trials.jsonl`) is append-only.** Exception: Glenn's D-03 true-zero epoch (2026-10,
+  ADR-0005): the prior ledger is archived byte-identical in `registry/archive/` and the new ledger starts with a
+  provenance header; append-only from there on. Every evaluated configuration is a row. A wiring or verification
+  run uses `--smoke`, which writes no row. Each phase declares its row budget (ADR-0004).
 - **Point-in-time data.** Every raw series carries a `publication_lags` entry in config, applied once at ingestion.
   Supervised features are causal only. No look-ahead.
 - **P&L uses month-end prices** (E-08). Monthly-average prices are model inputs only.
 - **Never re-run the budgeted backtest** (`python -m trading_crab_lib.platform.evaluation.report`) just to
-  refresh a page. It rewrites the tracked record.
+  refresh a page. It spends registry rows and rewrites the run record under outputs/.
 
 ## Hard rules
 
@@ -78,8 +81,9 @@ The weekly page lands in `outputs/reports/platform/weekly_report.md`.
   locally.
 - Live weekly and serving state (executed weights, belief, allocation mode, …) is machine-local and gitignored
   (G-11).
-- Data and output files change in git only through a deliberate migration or a budgeted run, never as a side
-  effect of a verification run.
+- Nothing generated is tracked: `data/`, `outputs/` and notebook outputs stay out of git (08.5). The pre-reset tree
+  is the tag `model/pre-reset-2026-10`; read it with
+  `git restore --source=model/pre-reset-2026-10 --worktree -- data outputs`.
 - Branches: `claude/<description>`. Never push to `main`. Commits use the conventional format (`feat:`, `fix:`,
   `docs:`, `test:`, `refactor:`, `chore:`).
 

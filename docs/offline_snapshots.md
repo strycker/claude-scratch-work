@@ -7,7 +7,7 @@
 
 A **snapshot** is a frozen copy of one or more platform checkpoints
 (`daily_raw`, `monthly_raw`, `monthly_features` by default), captured at a
-stated moment and committed to the repo. It exists so a developer with no
+stated moment and kept locally. It exists so a developer with no
 network access can restore a working platform checkpoint set and run the
 report/backtest machinery offline.
 
@@ -26,21 +26,12 @@ A snapshot is **not** live data, and is never treated as a substitute for it:
   constructing its checkpoint manager and logs a WARNING for any checkpoint
   that is still snapshot-backed once its build attempt has finished.
 
-## Committed location
+## Location
 
-`data/snapshots/platform/` — a narrow, deliberate exception to `.gitignore`
-(only this subtree; nothing else under `data/` is un-ignored by it). This is
-the *only* location the export/restore CLI defaults to, and it is
-repo-relative (`trading_crab_lib.ROOT`-based, honors `TC_ROOT_DIR`) so the
-files are committable regardless of where `DATA_DIR` has been overridden to.
-
-No snapshot parquet is committed by Task 3 itself — only
-`data/snapshots/platform/.gitkeep` exists to reserve the location. The
-`daily_raw` checkpoint present in this container at the time Task 3 was
-written is a destroyed 0×0 frame (the exact bug Task 1 now prevents);
-capturing it as the first snapshot would enshrine that bug into git history.
-**The first real snapshot should be captured by running `export` from a
-machine that has just completed a successful `build_platform_data.py` run.**
+`data/snapshots/platform/`, created on export. It is the only location the export/restore CLI defaults to, and it
+is repo-relative (`trading_crab_lib.ROOT`-based, honors `TC_ROOT_DIR`). Since Phase 8.5 `data/` is ignored
+wholesale, so snapshots are local only and never committed. Capture one by running `export` on a machine that has
+just finished a successful `build_platform_data.py` run.
 
 ## Commands
 
@@ -107,13 +98,9 @@ write a set larger than that budget and names the file that blew it —
 nothing is written if the budget is exceeded, so a runaway export can never
 leave a partial snapshot behind.
 
-**~2.2 MB was judged committable** for the default set, so it was made
-available — but it was **not made the default export target**. Every
-refresh of a snapshot **permanently adds roughly that much to git history**
-(git does not deduplicate binary blob deltas the way it does for text), so
-snapshots should be refreshed rarely and deliberately, not on every build.
+Snapshots stay out of git (Phase 8.5: `data/` is ignored wholesale), so a refresh costs only local disk.
 Use `--daily-start` (or the `daily_start=` kwarg) to bound `daily_raw` to a
-recent window if you want a smaller, cheaper-to-refresh snapshot instead of
+recent window if you want a smaller snapshot instead of
 the full 1962+ history.
 
 ## Provenance and honesty

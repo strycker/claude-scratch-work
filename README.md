@@ -526,6 +526,29 @@ trading-crab re-evaluation checklist. Current version: v1.7 (2026-07-08).
 
 ### Running the platform weekly report
 
+#### Fresh clone (start here)
+
+Since Phase 8.5 nothing generated is tracked (no `data/`, no `outputs/`, no notebook outputs), so a clone
+starts empty and you build everything yourself:
+
+```bash
+git clone https://github.com/strycker/claude-scratch-work tc-fresh && cd tc-fresh
+python -m venv .venv && . .venv/bin/activate
+pip install -e "src/trading_crab_lib/[all,dev]" && pip install -e ".[dev]"   # [all] pulls openpyxl (World Bank gold)
+cp .env.example .env                       # add FRED_API_KEY
+# Build into the clone's own data/: the realdata tests read only that.
+unset TC_ROOT_DIR TC_CONFIG_DIR TC_DATA_DIR TC_OUTPUT_DIR TC_CHECKPOINT_DIR
+python scripts/build_platform_data.py      # on a VPN that blocks them: --allow-missing gold_spot,wti_crude,sp500_close_me
+# The page three times, keeping a copy after each run.
+python -m trading_crab_lib.platform.report.weekly && cp outputs/reports/platform/weekly_report.md /tmp/p1.md
+python -m trading_crab_lib.platform.report.weekly && cp outputs/reports/platform/weekly_report.md /tmp/p2.md
+python -m trading_crab_lib.platform.report.weekly && cp outputs/reports/platform/weekly_report.md /tmp/p3.md
+diff /tmp/p2.md /tmp/p3.md   # identical apart from the run-date line; any other difference fails (D-06, amended 2026-10-12)
+diff /tmp/p1.md /tmp/p2.md   # only the first-run effect: run 1 has no previous book, so "Last week %" reads n/a and a
+                             # mode note may show; record and explain any other difference
+pytest -m realdata -q -p no:cacheprovider -rs   # 14 tests; 6 skip on a build without month-end columns
+```
+
 Three commands, in this order:
 
 ```bash
@@ -581,11 +604,15 @@ What the page shows now (Phase 8.2):
   on the common 1972–2020 window, own-span values in a footnote, the run date, and the E-07
   caveat. Returns are month-end to month-end (E-08); the one exception, named in the caveat, is
   oil before 1986, which uses monthly-average WTI.
+  After the 08.5 reset the page prints "Scoreboard: not yet measured" until the first Phase 9 budgeted
+  run (D-05).
 
 Notebooks P7 (serving and the weekly page, built twice in scratch), P8 (the filtered belief vs
 the served posterior) and P9 (does the regime layer pay rent) are the review gates for this page;
 each ends in a sign-off cell. Run one headless with
 `jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=900 --inplace notebooks/platform/P7_serving_report.ipynb`.
+Notebooks are committed without outputs; clear them with
+`jupyter nbconvert --clear-output --inplace notebooks/platform/P*.ipynb` before committing.
 
 To also see trades implied against your real holdings (optional; the file is gitignored and
 never committed):
@@ -618,9 +645,11 @@ python -m trading_crab_lib.platform.state promote NAME                # commit a
   commits the rest under `archives/promoted/NAME/` and tags `model/NAME`. It refuses a dirty tree and anything over
   50 MB, and never pushes; it prints `git push origin model/NAME` for you to run.
 
-Clean-slate order (Phase 8.5): `archive` -> `promote` -> `git push origin model/NAME` -> `reset --yes` -> build ->
-weekly page. `reset` leaves tracked files deleted, so `promote` refuses after it; promote first. On another machine,
-`git checkout model/NAME -- archives/promoted/NAME` then `restore NAME`.
+The Phase 8.5 clean-slate reset is done. The pre-reset tree is the tag `model/pre-reset-2026-10`; read it with
+`git restore --source=model/pre-reset-2026-10 --worktree -- data outputs` (working tree only, nothing staged;
+archive your own `data/` first, because same-named files are overwritten). Before pulling 8.5 into an existing
+clone, run `python -m trading_crab_lib.platform.state archive pre-reset-2026-10` to keep the live book (G-11). For
+a promoted archive on another machine: `git checkout model/NAME -- archives/promoted/NAME`, then `restore NAME`.
 
 ---
 
