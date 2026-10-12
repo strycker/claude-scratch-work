@@ -909,7 +909,8 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
      legacy quarterly pipeline.
 **Plans**: none of its own; delivered by Phases 9.1–9.8, one module each, in `strycker/trading-crab`.
 **M8 and M9+:** M8 (honesty) has no phase of its own (DECISIONS G-15): its code moves with the first module that
-imports it, the holdout fence and walk-forward with M1 (9.2), the registry, budgets and DSR with M3 (9.4). M9+
+imports it: the registry module with M0 (9.1), the holdout fence and walk-forward with M1 (9.2), budgets and DSR
+with M3 (9.4) (G-15, amended 2026-10-12). M9+
 (tripwire upgrades, A-03 hysteresis thresholds, REG-01) stays backlog until MVP-2.
 **Detailed step plan**: `MIGRATION-PLAN.md` (P0–P6, a checklist); order and module files: `platform_design/MODULE-MAP.md`
 
@@ -918,7 +919,7 @@ imports it, the holdout fence and walk-forward with M1 (9.2), the registry, budg
 **Goal:** the two-package skeleton in `strycker/trading-crab`: config, checkpoint manager, CLI, CI and the state tool, importing nothing from the legacy library.
 **Depends on:** Phase 08.5
 **Requirements:** MIG-01
-**Module files:** `config.py`, `checkpoints.py`, `snapshots.py`, `state.py` (the state tool, G-12); the four P0 seams vendored (CheckpointManager, multpl and macrotrends scraper helpers, email helpers; `MIGRATION-PLAN.md` P0). Note: `state.py` reads `honesty/registry.py::total_trial_count` today; the 9.1 plan decides how that read waits for 9.4 (G-15).
+**Module files:** `config.py`, `checkpoints.py`, `snapshots.py`, `state.py` (the state tool, G-12); the four P0 seams vendored (CheckpointManager, multpl and macrotrends scraper helpers, email helpers; `MIGRATION-PLAN.md` P0). From M8: `honesty/registry.py` (the ledger reader and append, one file), because `state.py` reads `total_trial_count` (G-15, amended 2026-10-12).
 **Notebook:** none
 **Success Criteria** (what must be TRUE):
   1. `tradingcrab --help` runs.
@@ -968,7 +969,7 @@ imports it, the holdout fence and walk-forward with M1 (9.2), the registry, budg
 **Goal:** returns → vol-targeted weights → walk-forward curve vs SPY, 60/40 and Faber, net of costs; the first budgeted run after the reset.
 **Depends on:** Phase 9.3
 **Requirements:** MIG-01
-**Module files:** `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` (keep KPIs, sojourn/lag, churn; drop one-off diagnostics); from M8: `honesty/{registry,gating}.py`, `evaluation/deflated_sharpe.py` (registry, budgets and DSR; report, don't gate, before MVP-2; G-15).
+**Module files:** `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` (keep KPIs, sojourn/lag, churn; drop one-off diagnostics); from M8: `honesty/gating.py`, `evaluation/deflated_sharpe.py` (budgets and DSR; the registry arrived in 9.1; report, don't gate, before MVP-2; G-15).
 **Notebook:** `P5_assets_allocation.ipynb`, `P6_backtest_evaluation.ipynb`
 **Success Criteria** (what must be TRUE):
   1. The scoreboard table renders.

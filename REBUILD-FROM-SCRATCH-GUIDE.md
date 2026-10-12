@@ -146,7 +146,7 @@ interface, one notebook that shows its data and outputs to a human, and one gate
 Current file mapping: `platform_design/MODULE-MAP.md` (08.2-02).
 
 **Phases:** M0–M7 are ROADMAP Phases 9.1–9.8 (M0 = 9.1 … M7 = 9.8), one module each. M8 has no phase of its
-own: its code moves with M1 (9.2) and M3 (9.4). M9+ is backlog until MVP-2 (DECISIONS G-15).
+own: its code moves with M0 (9.1), M1 (9.2) and M3 (9.4). M9+ is backlog until MVP-2 (DECISIONS G-15).
 
 **Notebook coverage today:** P1–P9 cover M1–M7 (P7 = N4 serving, P8 = N6 filtered belief, P9 = N7 "does the
 regime layer pay rent?", added in 08.2). Since 08.5 they are committed without outputs; run them after a build.
@@ -161,7 +161,7 @@ Steps 1–8 are ROADMAP Phases 9.1–9.8 (G-15). Every phase starts from a fresh
 in git: the build makes the data, and nothing it makes is committed (G-14).
 
 1. **M0 skeleton, in the target repo (9.1).** Two-package layout, config, checkpoints, the state
-   tool, CI. Import nothing from the legacy library.
+   tool and the registry module it reads (from M8, G-15), CI. Import nothing from the legacy library.
 2. **M1 data spine, with publication lags applied from the start (9.2).**
    - A `publication_lag_months` entry for every series in config, plus the point-in-time test.
    - A build that fails loud on a missing source (D-08).
@@ -171,7 +171,7 @@ in git: the build makes the data, and nothing it makes is committed (G-14).
 4. **M3 baseline allocator and backtest harness (9.4).**
    - Vol-targeted core mix, the vol target on month-end returns (E-11); SPY / 60-40 / Faber
      baselines; 10 bps costs; P&L on month-end prices (E-08).
-   - Append-only registry, budgets and DSR, reported, not gating (from M8, G-15). The first
+   - Budgets and DSR over the append-only registry (9.1), reported, not gating (from M8, G-15). The first
      budgeted run sets the new baseline and its DSR line carries the ADR-0005 epoch note.
    - Relative float tolerances in every test.
    - Notebook N3 with the scoreboard.
@@ -198,7 +198,7 @@ in git: the build makes the data, and nothing it makes is committed (G-14).
    - Notebook N7.
    - **→ MVP-2.**
 9. **M8 honesty upgrade**, once there are candidates to choose between. Its code already moved
-   with M1 and M3 (G-15); this step turns the reports into gates:
+   with M0, M1 and M3 (G-15); this step turns the reports into gates:
    - trial budgets per phase (ADR-0004);
    - the DSR hurdle (ADR-0003);
    - the single 2021+ holdout evaluation at design freeze.
