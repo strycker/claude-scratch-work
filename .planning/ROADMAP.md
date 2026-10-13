@@ -913,8 +913,8 @@ two-package repo, ready for continued development outside the heavy-dev workbenc
 "Module files" name the `claude-scratch-work` code to learn from, not to copy: each module is rewritten to the simplest
 version that meets its gate, with LEARNINGS.md as the guard. Legacy code, tracked data and pickles do not migrate.
 **M8 and M9+:** M8 (honesty) has no phase of its own (DECISIONS G-15): its code moves with the first module that
-imports it: the registry module with M0 (9.1), the holdout fence and walk-forward with M1 (9.2), budgets and DSR
-with M3 (9.4) (G-15, amended 2026-10-12). M9+
+imports it: the holdout fence with the skeleton's data build (9.1), walk-forward with the full data spine (9.2), the
+registry, budgets and DSR with M3 (9.4) (G-15, amended 2026-10-13); the state tool arrives with its first real need. M9+
 (tripwire upgrades, A-03 hysteresis thresholds, REG-01) stays backlog until MVP-2.
 **Detailed step plan**: `MIGRATION-PLAN.md` (P0–P6, a checklist); order and module files: `platform_design/MODULE-MAP.md`
 
@@ -975,7 +975,7 @@ with M3 (9.4) (G-15, amended 2026-10-12). M9+
 **Goal:** returns → vol-targeted weights → walk-forward curve vs SPY, 60/40 and Faber, net of costs; the first budgeted run after the reset.
 **Depends on:** Phase 9.3
 **Requirements:** MIG-01
-**Module files:** `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` (keep KPIs, sojourn/lag, churn; drop one-off diagnostics); from M8: `honesty/gating.py`, `evaluation/deflated_sharpe.py` (budgets and DSR; the registry arrived in 9.1; report, don't gate, before MVP-2; G-15).
+**Module files:** `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` (keep KPIs, sojourn/lag, churn; drop one-off diagnostics); from M8: `honesty/gating.py`, `evaluation/deflated_sharpe.py` (registry, budgets and DSR; report, don't gate, before MVP-2; G-15).
 **Notebook:** `P5_assets_allocation.ipynb`, `P6_backtest_evaluation.ipynb`
 **Success Criteria** (what must be TRUE):
   1. The scoreboard table renders.

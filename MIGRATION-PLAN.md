@@ -26,7 +26,7 @@
 > - **§6 reference numbers retired:** their record lives in tag `model/pre-reset-2026-10`. The first budgeted
 >   run in the new repo (Phase 9.4) sets new reference numbers, with the ADR-0005 epoch note on its DSR line.
 > - **Order:** ROADMAP Phases 9.1–9.8, one module each (M0..M7, `platform_design/MODULE-MAP.md`); M8 moves with
->   M0 (the registry), M1 and M3 (DECISIONS G-15, amended 2026-10-12).
+>   the skeleton (the holdout fence), M1 and M3 (DECISIONS G-15, amended 2026-10-13).
 > - **P0–P6 below stay a checklist** for what each module's phase must carry; they no longer set the order.
 
 > ## Status 2026-09-29 — read before using this plan
