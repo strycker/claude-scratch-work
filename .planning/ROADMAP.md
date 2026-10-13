@@ -920,6 +920,7 @@ registry, budgets and DSR with M3 (9.4) (G-15, amended 2026-10-13); the state to
 
 ### Phase 9.1: Fully operational skeleton
 
+**UI hint**: no (the "weekly page" is a generated markdown report, not a frontend)
 **Goal:** `strycker/trading-crab` holds a working, deliberately naive platform end to end: data build → features → allocation → weekly page, run by `tradingcrab` and one end-to-end notebook, with CI green and the KISS rules, decisions and learnings in the repo (G-17, G-18, G-19).
 **Mode:** mvp
 **Depends on:** Phase 08.5
