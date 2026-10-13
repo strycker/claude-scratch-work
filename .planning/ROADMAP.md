@@ -934,7 +934,12 @@ registry, budgets and DSR with M3 (9.4) (G-15, amended 2026-10-13); the state to
   4. CLAUDE.md (KISS P-07, honesty and hard rules), DECISIONS.md, MODULE-MAP.md and LEARNINGS.md are in the repo.
   5. Every layer is present, naive, and small enough for Glenn to read in one sitting; every run prints its code line (G-16).
   6. Glenn signs the end-to-end notebook.
-**Plans:** 0 plans (at most 3)
+**Plans:** 3 plans
+
+Plans:
+- [ ] 09.1-01-PLAN.md — reset the target, M0 (paths, config, code line, checkpoints with the fence), `tradingcrab build`/`weekly` on constant data, wheel smoke, CI, CLAUDE/DECISIONS/MODULE-MAP/LEARNINGS (Glenn approves the dependency list first)
+- [ ] 09.1-02-PLAN.md — naive M1 (FRED + Tiingo month-ends, lags once, fail loud, keys redacted) and M2 (five causal features, truncation test) on the page; the `realdata` gate
+- [ ] 09.1-03-PLAN.md — naive M3 (inverse-vol, 10% vol target) and the M4 page, the end-to-end notebook, pointer README and scratch banner, then Glenn's real-data gate and sign-off
 
 ### Phase 9.2: M1 Data spine
 
