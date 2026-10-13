@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 9.1
 current_phase_name: Fully operational skeleton
-status: ready_to_plan
-stopped_at: Phase 9.1 context gathered (G-17–G-19)
-last_updated: "2026-10-12T21:30:00.000Z"
+status: ready_to_execute
+stopped_at: Phase 9.1 planned (3 plans; checker 0 blockers after 3 rounds)
+last_updated: "2026-10-13T19:52:18.847Z"
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 13
-  total_plans: 81
+  total_plans: 84
   completed_plans: 81
-last_activity: 2026-10-12
-last_activity_desc: "Phase 08.5 closed 2026-10-12: Glenn's Mac gate passed on the VPN (build OK, run 2 = run 3, realdata 8 passed + 6 month-end skips, unverified until an off-VPN build); verified 11/12; review 0 critical, fixes in 08.5-REVIEW-FIX.md; G-16 code line on every run. Plan 02 executed (88 generated files out of git, registry true-zero epoch ADR-0005 approved by Glenn 2026-10-12, notebooks stripped; fresh clone 2247 passed + 14 skipped on pandas 3 and 2). Plan 01 executed (suite green with no data: 2247 passed + 14 skipped aside, 2261 with data). Earlier: Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
+last_activity: 2026-10-13
+last_activity_desc: "Phase 9.1 planned 2026-10-13: 3 plans in strycker/trading-crab on one branch claude/phase-9.1-skeleton (01 reset + rules + M0 + tracer + CI; 02 FRED/Tiingo data, lags, holdout fence, 5 causal features; 03 inverse-vol mix, page, notebook, pointer README, Glenn's Mac gate). Research decisions D-07..D-10 (no backtest, registry deferred, live decision log G-20, one PR). Earlier: Phase 08.5 closed 2026-10-12: Glenn's Mac gate passed on the VPN (build OK, run 2 = run 3, realdata 8 passed + 6 month-end skips, unverified until an off-VPN build); verified 11/12; review 0 critical, fixes in 08.5-REVIEW-FIX.md; G-16 code line on every run. Plan 02 executed (88 generated files out of git, registry true-zero epoch ADR-0005 approved by Glenn 2026-10-12, notebooks stripped; fresh clone 2247 passed + 14 skipped on pandas 3 and 2). Plan 01 executed (suite green with no data: 2247 passed + 14 skipped aside, 2261 with data). Earlier: Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
 ---
 
 # Project State
@@ -28,7 +28,7 @@ avoided drawdowns — never fooled by its own backtest.
 
 ## Current Position
 
-Phase: 9.1 (Fully operational skeleton) — READY TO PLAN
+Phase: 9.1 (Fully operational skeleton) — READY TO EXECUTE
 Status: 8.5 merged (#163, 2026-10-12). 9.1 context gathered: one production repo (G-17), rules travel (G-18), lean-startup skeleton first (G-19)
 
 **Phase 08.5 closed 2026-10-12.** Nothing generated is tracked (tag model/pre-reset-2026-10 holds the old tree);

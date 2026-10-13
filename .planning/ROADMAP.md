@@ -928,17 +928,27 @@ registry, budgets and DSR with M3 (9.4) (G-15, amended 2026-10-13); the state to
 **Module files:** written fresh in the target repo, the simplest version of each layer: M0 (config, parquet checkpoints, code line G-16, CLI, CI), a naive M1 (a small free-source build with publication lags from config and the 2021+ holdout fence), a naive M2 (a handful of causal features), a naive M3/M4 (a simple core mix and the weekly page; a naive backtest against SPY if it fits). Reference only: `claude-scratch-work/src/trading_crab_lib/platform/`. Removed from the target: legacy quarterly code, tracked data, pickles.
 **Notebook:** one end-to-end notebook (build → features → weights → page), with a sign-off cell
 **Success Criteria** (what must be TRUE):
+
   1. From a fresh clone of `strycker/trading-crab`: install both packages, run `tradingcrab build` and `tradingcrab weekly`, and get a page; the end-to-end notebook runs top to bottom.
   2. CI is green (Python 3.10 and 3.13), and both packages build (`python -m build .` and `python -m build src/trading_crab_lib`); nothing is published in 9.1.
   3. Nothing generated or legacy is tracked: no `data/`, `outputs/` or pickles, no quarterly pipeline; nothing imports from `claude-scratch-work`.
   4. CLAUDE.md (KISS P-07, honesty and hard rules), DECISIONS.md, MODULE-MAP.md and LEARNINGS.md are in the repo.
   5. Every layer is present, naive, and small enough for Glenn to read in one sitting; every run prints its code line (G-16).
   6. Glenn signs the end-to-end notebook.
+
 **Plans:** 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 09.1-01-PLAN.md — reset the target, M0 (paths, config, code line, checkpoints with the fence), `tradingcrab build`/`weekly` on constant data, wheel smoke, CI, CLAUDE/DECISIONS/MODULE-MAP/LEARNINGS (Glenn approves the dependency list first)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 09.1-02-PLAN.md — naive M1 (FRED + Tiingo month-ends, lags once, fail loud, keys redacted) and M2 (five causal features, truncation test) on the page; the `realdata` gate
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 09.1-03-PLAN.md — naive M3 (inverse-vol, 10% vol target) and the M4 page, the end-to-end notebook, pointer README and scratch banner, then Glenn's real-data gate, the required green CI read and sign-off
 
 ### Phase 9.2: M1 Data spine
@@ -949,6 +959,7 @@ Plans:
 **Module files:** `ingestion/{alfred,eodhd,macro_daily,macro_monthly,norgate,prices_daily,publication_lags,tiingo}.py` (free sources kept; paid-provider adapters stay placeholders), `splice.py`, `transforms_monthly.py`, `scripts/build_platform_data.py`; from M8: `honesty/{holdout,walkforward}.py` (G-15).
 **Notebook:** `P1_data_spine.ipynb`
 **Success Criteria** (what must be TRUE):
+
   1. The coverage plot renders.
   2. Point-in-time test passes.
   3. Splices are continuous.
@@ -959,6 +970,7 @@ Plans:
   8. P1 runs and Glenn signs its one sign-off cell.
   9. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
   10. The suite is green on Mac and Linux.
+
 **Plans:** 0 plans (at most 3)
 
 ### Phase 9.3: M2 Features
@@ -969,11 +981,13 @@ Plans:
 **Module files:** `taxonomy.py` (reference)
 **Notebook:** `P2_features_taxonomy.ipynb`
 **Success Criteria** (what must be TRUE):
+
   1. The taxonomy table renders.
   2. No centred smoothing in causal features.
   3. P2 runs and Glenn signs its one sign-off cell.
   4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
   5. The suite is green on Mac and Linux.
+
 **Plans:** 0 plans (at most 3)
 
 ### Phase 9.4: M3 Allocator + backtest
@@ -984,6 +998,7 @@ Plans:
 **Module files:** `assets/{returns,vol}.py`, `allocation/tilt.py`, `allocation/hysteresis.py::execute_rebalance`, `backtest/{driver,baselines,costs}.py`, `evaluation/{kpis,report}.py` (keep KPIs, sojourn/lag, churn; drop one-off diagnostics); from M8: `honesty/gating.py`, `evaluation/deflated_sharpe.py` (registry, budgets and DSR; report, don't gate, before MVP-2; G-15).
 **Notebook:** `P5_assets_allocation.ipynb`, `P6_backtest_evaluation.ipynb`
 **Success Criteria** (what must be TRUE):
+
   1. The scoreboard table renders.
   2. Costs are applied.
   3. P&L uses month-end prices (E-08) and the vol target uses month-end returns (E-11).
@@ -991,6 +1006,7 @@ Plans:
   5. P5 and P6 run and Glenn signs their sign-off cells.
   6. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
   7. The suite is green on Mac and Linux.
+
 **Plans:** 0 plans (at most 3)
 
 ### Phase 9.5: M4 Weekly report
@@ -1001,12 +1017,14 @@ Plans:
 **Module files:** `report/{weekly,serving,holdings,scoreboard}.py` (reference)
 **Notebook:** `P7_serving_report.ipynb` (N4)
 **Success Criteria** (what must be TRUE):
+
   1. The page on real data is identical run 2 vs run 3 apart from the run date (D-06 as amended 2026-10-12).
   2. The as-of date is shown.
   3. P7 runs and Glenn signs its one sign-off cell.
   4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
   5. The suite is green on Mac and Linux.
   6. **MVP-1:** Glenn trades from it.
+
 **Plans:** 0 plans (at most 3)
 
 ### Phase 9.6: M5 Regime labeler
@@ -1017,6 +1035,7 @@ Plans:
 **Module files:** `labeling/{jump_model,diagnostics}.py` (simplified: add cross-refit alignment, CR-02, Hungarian matching on centroids by default)
 **Notebook:** `P3_regime_labeling.ipynb`
 **Success Criteria** (what must be TRUE):
+
   1. The regime timeline is checked against recessions.
   2. Occupancy is reported.
   3. Profiles make sense.
@@ -1024,6 +1043,7 @@ Plans:
   5. P3 runs and Glenn signs its one sign-off cell.
   6. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
   7. The suite is green on Mac and Linux.
+
 **Plans:** 0 plans (at most 3)
 
 ### Phase 9.7: M6 Nowcaster + filter
@@ -1034,11 +1054,13 @@ Plans:
 **Module files:** `prediction/{nowcaster,regime_filter,transition_matrix}.py` (simplified: the L2 recipe, a fixed long-history feature set; calibration only if it earns it); purged CV `honesty/cv.py` comes with its first importer
 **Notebook:** `P4_nowcaster.ipynb`, `P8_filtered_belief.ipynb` (N6)
 **Success Criteria** (what must be TRUE):
+
   1. The distinct-output count is above 1.
   2. The truncation (no look-ahead) test passes.
   3. P4 and P8 run and Glenn signs their sign-off cells.
   4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
   5. The suite is green on Mac and Linux.
+
 **Plans:** 0 plans (at most 3)
 
 ### Phase 9.8: M7 Regime tilt vs ablation
@@ -1049,12 +1071,14 @@ Plans:
 **Module files:** `allocation/tilt.py`, `backtest/driver.py` (tilt-off ablation leg)
 **Notebook:** `P9_does_regime_pay.ipynb` (N7)
 **Success Criteria** (what must be TRUE):
+
   1. The tilt beats the ablation net of costs, or it stays advisory (G-06).
   2. Full rigor applies here (decision-bearing numbers).
   3. P9 runs and Glenn signs its one sign-off cell.
   4. The real-data → report smoke and the module's `realdata` tests pass on the Mac after a build.
   5. The suite is green on Mac and Linux.
   6. **MVP-2.**
+
 **Plans:** 0 plans (at most 3)
 
 ## Progress
