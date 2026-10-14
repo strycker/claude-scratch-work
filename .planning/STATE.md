@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 09.1
 current_phase_name: Fully operational skeleton
 status: executing
-stopped_at: Phase 9.1 planned (3 plans; checker 0 blockers after 3 rounds)
-last_updated: "2026-10-14T18:46:20.633Z"
+stopped_at: Completed 09.1-01-PLAN.md (pushed 1f4d349; CI read pending)
+last_updated: "2026-10-14T21:40:00.000Z"
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 84
-  completed_plans: 81
-last_activity: 2026-10-13
-last_activity_desc: "Phase 9.1 planned 2026-10-13: 3 plans in strycker/trading-crab on one branch claude/phase-9.1-skeleton (01 reset + rules + M0 + tracer + CI; 02 FRED/Tiingo data, lags, holdout fence, 5 causal features; 03 inverse-vol mix, page, notebook, pointer README, Glenn's Mac gate). Research decisions D-07..D-10 (no backtest, registry deferred, live decision log G-20, one PR). Earlier: Phase 08.5 closed 2026-10-12: Glenn's Mac gate passed on the VPN (build OK, run 2 = run 3, realdata 8 passed + 6 month-end skips, unverified until an off-VPN build); verified 11/12; review 0 critical, fixes in 08.5-REVIEW-FIX.md; G-16 code line on every run. Plan 02 executed (88 generated files out of git, registry true-zero epoch ADR-0005 approved by Glenn 2026-10-12, notebooks stripped; fresh clone 2247 passed + 14 skipped on pandas 3 and 2). Plan 01 executed (suite green with no data: 2247 passed + 14 skipped aside, 2261 with data). Earlier: Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
+  completed_plans: 82
+last_activity: 2026-10-14
+last_activity_desc: "09.1-01 executed 2026-10-14 in strycker/trading-crab (claude/phase-9.1-skeleton @ 1f4d349, 7 commits): legacy frozen in legacy/ (41 byte-identical moves), 0.2.0 wheels carry code, M0 paths/config/code line/fenced checkpoints, offline tracer build -> weekly, rules at the root (G-21..G-23), CI rewritten; 36 tests, 385 source lines; CI read pending (orchestrator). Phase 9.1 planned 2026-10-13: 3 plans in strycker/trading-crab on one branch claude/phase-9.1-skeleton (01 reset + rules + M0 + tracer + CI; 02 FRED/Tiingo data, lags, holdout fence, 5 causal features; 03 inverse-vol mix, page, notebook, pointer README, Glenn's Mac gate). Research decisions D-07..D-10 (no backtest, registry deferred, live decision log G-20, one PR). Earlier: Phase 08.5 closed 2026-10-12: Glenn's Mac gate passed on the VPN (build OK, run 2 = run 3, realdata 8 passed + 6 month-end skips, unverified until an off-VPN build); verified 11/12; review 0 critical, fixes in 08.5-REVIEW-FIX.md; G-16 code line on every run. Plan 02 executed (88 generated files out of git, registry true-zero epoch ADR-0005 approved by Glenn 2026-10-12, notebooks stripped; fresh clone 2247 passed + 14 skipped on pandas 3 and 2). Plan 01 executed (suite green with no data: 2247 passed + 14 skipped aside, 2261 with data). Earlier: Phase 08.5 planned — 3 plans: realdata marker + record pins retired; reset (data/outputs out of git, registry true-zero ADR-0005, notebooks stripped); learnings + Phase 9.x + Mac gate. Tag model/pre-reset-2026-10 pushed by Glenn 2026-10-10 (on 4e49652)."
 ---
 
 # Project State
@@ -29,7 +29,7 @@ avoided drawdowns — never fooled by its own backtest.
 ## Current Position
 
 Phase: 09.1 (Fully operational skeleton) — EXECUTING
-Status: Executing Phase 09.1
+Status: Executing Phase 09.1 (plan 01 of 3 done 2026-10-14: pushed 1f4d349 to claude/phase-9.1-skeleton; CI read pending before 09.1-02)
 
 **Phase 08.5 closed 2026-10-12.** Nothing generated is tracked (tag model/pre-reset-2026-10 holds the old tree);
 registry true-zero epoch (ADR-0005, 48 trials archived); Phase 9 is 9.1–9.8 (G-15, registry with M0); every run prints
