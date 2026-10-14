@@ -1,3 +1,6 @@
+> **Moved:** releases now publish from strycker/trading-crab with Trusted Publishing (DECISIONS G-24);
+> this runbook is historical.
+
 # Releasing to PyPI
 
 The single source of truth for releasing `trading-crab` (the app) and
