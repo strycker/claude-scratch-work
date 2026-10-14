@@ -949,7 +949,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 09.1-03-PLAN.md — naive M3 (inverse-vol, 10% vol target) and the M4 page, the end-to-end notebook, pointer README and scratch banner, then Glenn's real-data gate, the required green CI read and sign-off
+- [ ] 09.1-03-PLAN.md — naive M3 (inverse-vol, 10% vol target) and the M4 page, the end-to-end notebook, the tag-triggered release pipeline with PyPI Trusted Publishing and RELEASING.md (scratch publish workflow retired; nothing published), pointer README and scratch banner, then Glenn's legacy tag, Trusted Publishing setup, real-data gate, the required green CI read and sign-off
 
 ### Phase 9.2: M1 Data spine
 
