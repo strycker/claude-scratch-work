@@ -975,6 +975,8 @@ Plans:
 
 **First item (Glenn 2026-10-14, carried from 9.1):** settle the `trading-crab-lib` / `trading-crab` boundary before the first 0.2.0 publish: all code in the lib, the implementation (ingestion runs, notebooks as templates, weekly runs, email) in the app; record it as a DECISIONS row (09.1-CONTEXT Deferred Ideas).
 
+**Carried from the 9.1 code review (`09.1-REVIEW.md`, Glenn 2026-10-14):** WR-03 a real holdout fence (no row after the cutoff reachable except by the weekly page; the guard test sees more than one literal), WR-06 atomic checkpoint writes (dev, holdout and meta together), WR-08 the build meta records the cutoff, series ids and tickers and the page refuses a mismatch; info items IN-01..IN-09 and IN-11 (IN-04 SHA-pinned publish actions goes to 9.4 with the first release).
+
 ### Phase 9.3: M2 Features
 
 **Goal:** `monthly_raw` → `monthly_features`, causal only, in the lean named taxonomy.
