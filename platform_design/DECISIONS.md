@@ -1,3 +1,5 @@
+> **Moved (DECISIONS G-20):** after the Phase 9.1 merge the live decision log is DECISIONS.md in https://github.com/strycker/trading-crab; rows G-21 and later live only there. This copy is history.
+
 # Platform Decision Register
 
 **One line per decision, all phases, human-editable.** This is the index. The long-form
