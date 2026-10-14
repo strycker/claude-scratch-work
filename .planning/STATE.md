@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 9.1
+current_phase: 09.1
 current_phase_name: Fully operational skeleton
-status: ready_to_execute
+status: executing
 stopped_at: Phase 9.1 planned (3 plans; checker 0 blockers after 3 rounds)
-last_updated: "2026-10-13T19:52:18.847Z"
+last_updated: "2026-10-14T18:46:20.633Z"
 progress:
   total_phases: 14
   completed_phases: 13
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-07-09)
 
 **Core value:** Honest, regime-aware weekly guidance that beats buy-and-hold SPY net of
 avoided drawdowns — never fooled by its own backtest.
-**Current focus:** Phase 9.1 — Fully operational skeleton (in `strycker/trading-crab`)
+**Current focus:** Phase 09.1 — Fully operational skeleton (in `strycker/trading-crab`)
 
 ## Current Position
 
-Phase: 9.1 (Fully operational skeleton) — READY TO EXECUTE
-Status: 8.5 merged (#163, 2026-10-12). 9.1 context gathered: one production repo (G-17), rules travel (G-18), lean-startup skeleton first (G-19)
+Phase: 09.1 (Fully operational skeleton) — EXECUTING
+Status: Executing Phase 09.1
 
 **Phase 08.5 closed 2026-10-12.** Nothing generated is tracked (tag model/pre-reset-2026-10 holds the old tree);
 registry true-zero epoch (ADR-0005, 48 trials archived); Phase 9 is 9.1–9.8 (G-15, registry with M0); every run prints
