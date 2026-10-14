@@ -973,6 +973,8 @@ Plans:
 
 **Plans:** 0 plans (at most 3)
 
+**First item (Glenn 2026-10-14, carried from 9.1):** settle the `trading-crab-lib` / `trading-crab` boundary before the first 0.2.0 publish: all code in the lib, the implementation (ingestion runs, notebooks as templates, weekly runs, email) in the app; record it as a DECISIONS row (09.1-CONTEXT Deferred Ideas).
+
 ### Phase 9.3: M2 Features
 
 **Goal:** `monthly_raw` → `monthly_features`, causal only, in the lean named taxonomy.
